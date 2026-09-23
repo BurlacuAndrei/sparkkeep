@@ -1,0 +1,5 @@
+sparkkeep.db
+*.db-wal
+*.db-shm
+sparkkeep
+*.log
