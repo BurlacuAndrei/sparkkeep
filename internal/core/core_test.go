@@ -1,0 +1,461 @@
+package core
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"sparkkeep/internal/analyze"
+	"sparkkeep/internal/capture"
+	"sparkkeep/internal/config"
+	"sparkkeep/internal/port"
+	"sparkkeep/internal/research"
+)
+
+// --- stubs -----------------------------------------------------------------
+
+// stubStore is an in-memory port.Store.
+type stubStore struct {
+	cards      map[int64]port.Card
+	researches map[int64]port.Research
+	nextCard   int64
+	nextRes    int64
+}
+
+func newStubStore() *stubStore {
+	return &stubStore{cards: map[int64]port.Card{}, researches: map[int64]port.Research{}}
+}
+
+func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
+	s.nextCard++
+	c.ID = s.nextCard
+	c.CreatedAt = time.Now().UTC()
+	c.UpdatedAt = c.CreatedAt
+	s.cards[c.ID] = c
+	return c, nil
+}
+
+func (s *stubStore) GetCard(_ context.Context, id int64) (port.Card, error) {
+	c, ok := s.cards[id]
+	if !ok {
+		return port.Card{}, port.ErrNotFound
+	}
+	return c, nil
+}
+
+func (s *stubStore) ListCards(context.Context, port.CardFilter) ([]port.Card, error) {
+	return nil, nil
+}
+
+func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (port.Card, error) {
+	c, ok := s.cards[id]
+	if !ok {
+		return port.Card{}, port.ErrNotFound
+	}
+	if p.Status != nil {
+		c.Status = *p.Status
+	}
+	if p.Horizon != nil {
+		c.Horizon = *p.Horizon
+	}
+	if p.Note != nil {
+		c.SourceNote = *p.Note
+	}
+	c.UpdatedAt = time.Now().UTC()
+	s.cards[id] = c
+	return c, nil
+}
+
+func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) error {
+	c, ok := s.cards[id]
+	if !ok {
+		return port.ErrNotFound
+	}
+	c.Tags = tags
+	s.cards[id] = c
+	return nil
+}
+
+func (s *stubStore) ListTags(context.Context) ([]port.Tag, error) {
+	return nil, nil
+}
+
+func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string) (port.Research, error) {
+	s.nextRes++
+	r := port.Research{ID: s.nextRes, CardID: cardID, Status: "queued", Query: query, CreatedAt: time.Now().UTC()}
+	s.researches[r.ID] = r
+	return r, nil
+}
+
+func (s *stubStore) SetResearch(_ context.Context, id int64, status, findings, errMsg string) (port.Research, error) {
+	r, ok := s.researches[id]
+	if !ok {
+		return port.Research{}, port.ErrNotFound
+	}
+	r.Status, r.Findings, r.Error = status, findings, errMsg
+	s.researches[id] = r
+	return r, nil
+}
+
+func (s *stubStore) GetResearch(_ context.Context, id int64) (port.Research, error) {
+	r, ok := s.researches[id]
+	if !ok {
+		return port.Research{}, port.ErrNotFound
+	}
+	return r, nil
+}
+
+func (s *stubStore) ListResearch(context.Context) ([]port.Research, error) {
+	return nil, nil
+}
+
+func (s *stubStore) Close() error { return nil }
+
+// stubChannel records notifications; when err is set Notify returns it.
+type stubChannel struct {
+	notifies []port.Notification
+	err      error
+}
+
+func (c *stubChannel) Notify(_ context.Context, n port.Notification) error {
+	c.notifies = append(c.notifies, n)
+	return c.err
+}
+
+// stubFetcher is a scriptable capture.Fetcher.
+type stubFetcher struct {
+	recognize func(raw string) capture.Share
+	fetch     func(s capture.Share) capture.Fetched
+	mediaMeta func(s capture.Share) capture.Fetched
+}
+
+func (f stubFetcher) Recognize(raw string) capture.Share        { return f.recognize(raw) }
+func (f stubFetcher) Fetch(s capture.Share) capture.Fetched     { return f.fetch(s) }
+func (f stubFetcher) MediaMeta(s capture.Share) capture.Fetched { return f.mediaMeta(s) }
+
+// textFetcher recognizes via the real capturer and returns caption-as-text
+// fetches (no HTTP anywhere).
+func textFetcher() capture.Fetcher {
+	return stubFetcher{
+		recognize: capture.Recognize,
+		fetch: func(s capture.Share) capture.Fetched {
+			return capture.Fetched{Name: s.Name, URL: s.URL, Caption: s.Caption, Text: s.Caption}
+		},
+		mediaMeta: func(s capture.Share) capture.Fetched {
+			return capture.Fetched{Name: s.Name, URL: s.URL, Caption: s.Caption, Text: s.Caption}
+		},
+	}
+}
+
+// llmStub answers /chat/completions with a canned content (200) or a bare
+// status, for the strict-JSON Analyze path.
+func llmStub(status int, content string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
+	}))
+}
+
+// researchLLM answers Ask calls: query-build gets a one-line query, the
+// synthesis prompt is echoed back so the report carries "## Findings".
+func researchLLM() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.Unmarshal(body, &req)
+		last := ""
+		if n := len(req.Messages); n > 0 {
+			last = req.Messages[n-1].Content
+		}
+		content := last
+		if strings.Contains(last, "web search query") {
+			content = "cli-fi reading list"
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
+	}))
+}
+
+// analyzeClient returns a real client pointed at the stub server.
+func analyzeClient(llm *httptest.Server) *analyze.Client {
+	return analyze.New(config.Config{LLMBase: llm.URL, LLMModel: "stub"}, llm.Client())
+}
+
+// baseSvc returns a Service wired to the stubs; tests override Fetcher and
+// Runner as needed.
+func baseSvc(t *testing.T, st port.Store, ch *stubChannel, llm *httptest.Server) *Service {
+	t.Helper()
+	ac := analyzeClient(llm)
+	return &Service{
+		Store:   st,
+		Channel: ch,
+		Fetcher: capture.Capture{},
+		Analyze: ac,
+		Runner:  research.New(config.Config{}, ac),
+		Logf:    t.Logf,
+	}
+}
+
+// --- Capture ----------------------------------------------------------------
+
+func TestCaptureTextSingleIdea(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{"title":"Do X","summary":"do it soon","horizon":"lifetime","tags":["go","x"],"links":[]}]`)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	ids, err := s.Capture(context.Background(), "a cool idea")
+	if err != nil {
+		t.Fatalf("Capture err: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want one card", ids)
+	}
+	c, err := st.GetCard(context.Background(), ids[0])
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if c.Title != "Do X" || c.Horizon != port.HorizonLifetime {
+		t.Fatalf("card = %+v", c)
+	}
+	if len(c.Tags) != 2 || c.Tags[0] != "go" || c.Tags[1] != "x" {
+		t.Fatalf("tags = %v", c.Tags)
+	}
+	if len(ch.notifies) != 1 || ch.notifies[0].Kind != "created" || ch.notifies[0].Card.ID != ids[0] {
+		t.Fatalf("notifies = %+v", ch.notifies)
+	}
+}
+
+func TestCaptureMultiIdeaSplits(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{"title":"A","summary":"a","horizon":"short-term","tags":[],"links":[]},{"title":"B","summary":"b","horizon":"short-term","tags":[],"links":[]},{"title":"C","summary":"c","horizon":"short-term","tags":[],"links":[]}]`)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	ids, err := s.Capture(context.Background(), "three ideas")
+	if err != nil {
+		t.Fatalf("Capture err: %v", err)
+	}
+	if len(ids) != 3 {
+		t.Fatalf("ids = %v, want three cards", ids)
+	}
+	if len(ch.notifies) != 3 {
+		t.Fatalf("notifies = %d, want 3", len(ch.notifies))
+	}
+	for _, n := range ch.notifies {
+		if n.Kind != "created" {
+			t.Fatalf("notify kind = %q, want created", n.Kind)
+		}
+	}
+}
+
+func TestCaptureAnalysisFailDegrades(t *testing.T) {
+	llm := llmStub(http.StatusInternalServerError, "")
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	ids, err := s.Capture(context.Background(), "unlucky post")
+	if err != nil {
+		t.Fatalf("Capture err = %v, want nil (pipeline must survive LLM failure)", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want one degradation card", ids)
+	}
+	c, _ := st.GetCard(context.Background(), ids[0])
+	if c.Title != "Analysis failed" {
+		t.Fatalf("title = %q, want Analysis failed", c.Title)
+	}
+	if len(ch.notifies) != 1 || ch.notifies[0].Kind != "analysis_failed" {
+		t.Fatalf("notifies = %+v", ch.notifies)
+	}
+}
+
+// TestCaptureZeroIdeasDegrades pins the reachable behavior for an empty
+// model answer: analyze (task 030) maps `[]` to ErrInvalidResponse, so the
+// spec's "Analyze success with zero ideas" short-circuit in Capture is dead
+// code with the shipped client. The observable outcome is the graceful
+// degradation card, not a hard error.
+func TestCaptureZeroIdeasDegrades(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[]`)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	ids, err := s.Capture(context.Background(), "nothing to see")
+	if err != nil {
+		t.Fatalf("Capture err = %v, want nil", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want degradation card", ids)
+	}
+}
+
+func TestCaptureTextIsSourceNote(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{"title":"T","summary":"s","horizon":"short-term","tags":[],"links":[]}]`)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	raw := "some pasted caption, not a url"
+	ids, err := s.Capture(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("Capture err: %v", err)
+	}
+	c, _ := st.GetCard(context.Background(), ids[0])
+	if c.SourceNote != raw {
+		t.Fatalf("SourceNote = %q, want %q", c.SourceNote, raw)
+	}
+	if c.SourceURL != "" {
+		t.Fatalf("SourceURL = %q, want empty", c.SourceURL)
+	}
+}
+
+func TestCaptureNotifyErrorStillStores(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{"title":"A","summary":"a","horizon":"short-term","tags":[],"links":[]},{"title":"B","summary":"b","horizon":"short-term","tags":[],"links":[]}]`)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{err: errors.New("transport exploded")}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	ids, err := s.Capture(context.Background(), "still persists")
+	if err != nil {
+		t.Fatalf("Capture err = %v, want nil despite notify errors", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("ids = %v, want two cards stored", ids)
+	}
+}
+
+// --- Retry ------------------------------------------------------------------
+
+func TestRetrySuccessUpdatesCard(t *testing.T) {
+	fail := llmStub(http.StatusInternalServerError, "")
+	defer fail.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s1 := baseSvc(t, st, ch, fail)
+	s1.Fetcher = textFetcher()
+
+	raw := "retry me"
+	ids, err := s1.Capture(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("Capture err: %v", err)
+	}
+	before, err := st.GetCard(context.Background(), ids[0])
+	if err != nil || before.Title != "Analysis failed" {
+		t.Fatalf("failed card = %+v, err %v", before, err)
+	}
+
+	work := llmStub(http.StatusOK, `[{"title":"Fixed","summary":"now works","horizon":"short-term","tags":["t"],"links":[]}]`)
+	defer work.Close()
+	s2 := baseSvc(t, st, ch, work)
+	s2.Fetcher = textFetcher()
+
+	updated, err := s2.Retry(context.Background(), ids[0])
+	if err != nil {
+		t.Fatalf("Retry err: %v", err)
+	}
+	if updated.Title != "Fixed" || updated.Summary != "now works" || updated.Horizon != port.HorizonShortTerm {
+		t.Fatalf("updated card = %+v", updated)
+	}
+	if len(updated.Tags) != 1 || updated.Tags[0] != "t" {
+		t.Fatalf("updated tags = %v", updated.Tags)
+	}
+	if n := len(ch.notifies); n == 0 || ch.notifies[n-1].Kind != "done" {
+		t.Fatalf("notifies = %+v, want last done", ch.notifies)
+	}
+}
+
+// --- Research ---------------------------------------------------------------
+
+func TestResearchSuccessNotifyDone(t *testing.T) {
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "source text here")
+	}))
+	defer src.Close()
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"results":[{"url":%q}]}`, src.URL)
+	}))
+	defer search.Close()
+	llm := researchLLM()
+	defer llm.Close()
+
+	st := newStubStore()
+	st.cards[7] = port.Card{ID: 7, Title: "T", Summary: "S"}
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	r := research.New(config.Config{SearchURL: search.URL}, analyzeClient(llm))
+	r.Timeout = 5 * time.Second
+	s.Runner = r
+
+	if err := s.Research(context.Background(), 7); err != nil {
+		t.Fatalf("Research err: %v", err)
+	}
+	row, err := st.GetResearch(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetResearch: %v", err)
+	}
+	if row.Status != "done" || strings.TrimSpace(row.Findings) == "" {
+		t.Fatalf("row = %+v", row)
+	}
+	n := ch.notifies[len(ch.notifies)-1]
+	if n.Kind != "research_done" || n.Text != "Research complete" {
+		t.Fatalf("notify = %+v", n)
+	}
+	if n.Res == nil || n.Res.Status != "done" {
+		t.Fatalf("notify.Res = %+v, want done row", n.Res)
+	}
+}
+
+func TestResearchFailNotifyFailed(t *testing.T) {
+	llm := llmStub(http.StatusInternalServerError, "")
+	defer llm.Close()
+	st := newStubStore()
+	st.cards[7] = port.Card{ID: 7, Title: "T", Summary: "S"}
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+
+	if err := s.Research(context.Background(), 7); err == nil {
+		t.Fatal("Research err = nil, want run error")
+	}
+	row, err := st.GetResearch(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetResearch: %v", err)
+	}
+	if row.Status != "failed" || row.Error == "" {
+		t.Fatalf("row = %+v", row)
+	}
+	n := ch.notifies[len(ch.notifies)-1]
+	if n.Kind != "research_failed" || n.Text == "" {
+		t.Fatalf("notify = %+v", n)
+	}
+	if n.Res == nil || n.Res.Status != "failed" {
+		t.Fatalf("notify.Res = %+v, want failed row", n.Res)
+	}
+}
