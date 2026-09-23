@@ -31,7 +31,8 @@ type Fetched struct {
 	Title       string
 	Description string
 	Text        string
-	Err         error // nil unless fetch failed
+	Caption     string // pasted caption (text shares / link-with-caption)
+	Err         error  // nil unless fetch failed
 }
 
 var (
@@ -72,7 +73,7 @@ func Recognize(raw string) Share {
 // error: failures surface as Fetched.Err with empty Text. Text shares
 // short-circuit to their caption.
 func Fetch(share Share) Fetched {
-	f := Fetched{Name: share.Name, URL: share.URL}
+	f := Fetched{Name: share.Name, URL: share.URL, Caption: share.Caption}
 	if share.Name == "text" {
 		f.Text = share.Caption
 		return f
