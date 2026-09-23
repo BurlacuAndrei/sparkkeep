@@ -143,3 +143,14 @@ func TestHorizonConstraint(t *testing.T) {
 		t.Fatalf("err = %v, want ErrInvalidResponse", err)
 	}
 }
+
+func TestDefaultClientBoundedDial(t *testing.T) {
+	c := New(config.Config{LLMBase: "http://127.0.0.1:1", LLMModel: "stub"}, nil)
+	tr, ok := c.HTTP.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("default client Transport = %T, want *http.Transport", c.HTTP.Transport)
+	}
+	if tr.DialContext == nil {
+		t.Fatal("default client Transport has no DialContext: response time is intentionally unbounded, but connection establishment must still be bounded so a dead endpoint fails at connect")
+	}
+}

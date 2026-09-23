@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
@@ -46,11 +48,15 @@ func New(cfg config.Config, forceClient *http.Client) *Client {
 		APIKey:    cfg.LLMKey,
 		Model:     cfg.LLMModel,
 		MaxTokens: cfg.MaxAnalyzeTokens,
-		// No client-level timeout: a local CPU-only Ollama model can take
-		// far longer than any fixed bound, and this service tolerates
+		// No client-level response timeout: a local CPU-only Ollama model can
+		// take far longer than any fixed bound, and this service tolerates
 		// waiting. Ask() is bounded by the caller's ctx (research run has a
-		// 1500s context); Analyze() is intentionally unbounded.
-		HTTP: &http.Client{},
+		// 1500s context); Analyze() is intentionally unbounded on response.
+		// Connection establishment is still bounded so a dead endpoint fails
+		// at connect instead of hanging a goroutine forever.
+		HTTP: &http.Client{Transport: &http.Transport{
+			DialContext: (&net.Dialer{Timeout: 30 * time.Second}).DialContext,
+		}},
 	}
 	if forceClient != nil {
 		c.HTTP = forceClient
