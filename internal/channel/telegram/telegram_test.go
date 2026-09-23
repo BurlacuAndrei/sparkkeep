@@ -388,6 +388,63 @@ func TestReactionStarLifetime(t *testing.T) {
 
 // --- outbound -------------------------------------------------------------------
 
+func TestCardButtonsIncludeDismiss(t *testing.T) {
+	bot := newFakeBot(t, nil)
+	srv := httptest.NewServer(bot.handler())
+	defer srv.Close()
+	a := &Adapter{Token: "TOKEN", OwnerID: 1, Logf: t.Logf, baseURL: srv.URL}
+	if err := a.Notify(context.Background(), port.Notification{
+		Kind: "created",
+		Card: port.Card{ID: 5, Title: "T", Summary: "S", Horizon: port.HorizonLifetime},
+	}); err != nil {
+		t.Fatalf("Notify err: %v", err)
+	}
+	body := bot.lastBody("sendMessage")
+	for _, want := range []string{`"5:dismiss"`, `"Not interested"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("sendMessage body missing %s: %s", want, body)
+		}
+	}
+}
+
+func TestCallbackDismiss(t *testing.T) {
+	bot := newFakeBot(t, nil)
+	srv := httptest.NewServer(bot.handler())
+	defer srv.Close()
+	st := newStubStore()
+	st.cards[5] = port.Card{ID: 5, Title: "T"}
+	a := &Adapter{Token: "TOKEN", OwnerID: 1, Store: st, Logf: t.Logf, baseURL: srv.URL}
+	a.handleUpdate(update{ID: 2, CB: &callbackQuery{
+		ID: "cq1", From: &user{ID: 1}, Data: "5:dismiss",
+		Message: &message{MessageID: 50, Chat: &chat{ID: 1}},
+	}})
+	if got := st.cards[5].Status; got != port.StatusDismissed {
+		t.Fatalf("card status = %q, want dismissed", got)
+	}
+	if !bot.saw("editMessageReplyMarkup") {
+		t.Fatalf("expected keyboard cleared; calls=%+v", bot.calls)
+	}
+}
+
+func TestResearchMessageHasButtons(t *testing.T) {
+	bot := newFakeBot(t, nil)
+	srv := httptest.NewServer(bot.handler())
+	defer srv.Close()
+	a := &Adapter{Token: "TOKEN", OwnerID: 1, Logf: t.Logf, baseURL: srv.URL}
+	if err := a.Notify(context.Background(), port.Notification{
+		Kind: "research_done", Text: "Research complete",
+		Res: &port.Research{ID: 7, CardID: 5},
+	}); err != nil {
+		t.Fatalf("Notify err: %v", err)
+	}
+	body := bot.lastBody("sendMessage")
+	for _, want := range []string{`"5:dismiss"`, `"5:doing"`, "/api/v1/research/7"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("sendMessage body missing %s: %s", want, body)
+		}
+	}
+}
+
 func TestNotifySendsKeyboard(t *testing.T) {
 	bot := newFakeBot(t, nil)
 	srv := httptest.NewServer(bot.handler())

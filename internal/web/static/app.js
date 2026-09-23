@@ -46,6 +46,7 @@
         '<button data-act="shelve">Shelve</button>' +
         '<button data-act="research">Research</button>' +
         (failed ? '<button data-act="retry">Retry</button>' : '') +
+        '<button data-act="dismissed">Not interested</button>' +
       '</div>';
     return el;
   }

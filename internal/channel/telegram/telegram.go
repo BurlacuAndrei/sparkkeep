@@ -215,6 +215,8 @@ func cardButtons(id int64, retry bool) [][]button {
 		{Text: "Done", CallbackData: fmt.Sprintf("%d:done", id)},
 		{Text: "Research", CallbackData: fmt.Sprintf("%d:research", id)},
 		{Text: "Shelve", CallbackData: fmt.Sprintf("%d:shelve", id)},
+	}, {
+		{Text: "Not interested", CallbackData: fmt.Sprintf("%d:dismiss", id)},
 	}}
 	if retry {
 		btns[0] = append(btns[0], button{Text: "Retry", CallbackData: fmt.Sprintf("%d:retry", id)})
@@ -234,10 +236,16 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 		base = "http://localhost:8080"
 	}
 	link := strings.TrimRight(base, "/") + "/api/v1/research/"
+	var (
+		buttons [][]button
+		cardID  int64
+	)
 	if n.Res != nil {
 		link += strconv.FormatInt(n.Res.ID, 10)
+		cardID = n.Res.CardID
+		buttons = cardButtons(cardID, false)
 	}
-	_, err := a.sendMessage(ctx, text+"\n"+link, 0, nil)
+	_, err := a.sendMessage(ctx, text+"\n"+link, cardID, buttons)
 	return err
 }
 
@@ -338,6 +346,8 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 		a.setStatus(ctx, id, port.StatusDone, cb)
 	case "shelve":
 		a.setStatus(ctx, id, port.StatusShelved, cb)
+	case "dismiss":
+		a.setStatus(ctx, id, port.StatusDismissed, cb)
 	case "research":
 		a.ackCallback(cb.ID)
 		go func() {
@@ -373,7 +383,7 @@ func (a *Adapter) setStatus(ctx context.Context, id int64, status string, cb *ca
 		a.logf("telegram: UpdateCard(%d, %s): %v", id, status, err)
 	}
 	a.ackCallback(cb.ID)
-	if (status == port.StatusDoing || status == port.StatusDone) && cb.Message != nil && cb.Message.MessageID != 0 && cb.Message.Chat != nil {
+	if (status == port.StatusDoing || status == port.StatusDone || status == port.StatusDismissed) && cb.Message != nil && cb.Message.MessageID != 0 && cb.Message.Chat != nil {
 		a.editReplyMarkup(ctx, cb.Message.Chat.ID, cb.Message.MessageID)
 	}
 	if status == port.StatusDoing || status == port.StatusDone {

@@ -6,10 +6,11 @@ const (
 	HorizonShortTerm = "short-term"
 	HorizonLifetime  = "lifetime"
 
-	StatusInbox   = "inbox"
-	StatusDoing   = "doing"
-	StatusDone    = "done"
-	StatusShelved = "shelved"
+	StatusInbox     = "inbox"
+	StatusDoing     = "doing"
+	StatusDone      = "done"
+	StatusShelved   = "shelved"
+	StatusDismissed = "dismissed"
 )
 
 type Card struct {
