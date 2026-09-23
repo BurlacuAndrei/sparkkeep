@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
@@ -31,13 +30,6 @@ type Idea struct {
 // array of idea objects. Callers can retry.
 var ErrInvalidResponse = errors.New("analyze: invalid model response")
 
-// defaultHTTP bounds every LLM call.
-// defaultHTTPTimeout must cover a full non-streamed generation. A CPU-only
-// local model (this box: gemma3:4b at ~3 tok/s, large analysis/synthesis
-// inputs) takes 10+ min for synthesis over real sources. ponytail: hardcoded
-// knob; expose via config if GPUs replace the CPU box and the ceiling matters.
-const defaultHTTPTimeout = 900 * time.Second
-
 type Client struct {
 	BaseURL   string
 	APIKey    string
@@ -47,14 +39,18 @@ type Client struct {
 }
 
 // New returns a client bound to the endpoint/key/model. A non-nil
-// forceClient (tests) replaces the default time-boxed client.
+// forceClient (tests) replaces the default client.
 func New(cfg config.Config, forceClient *http.Client) *Client {
 	c := &Client{
 		BaseURL:   cfg.LLMBase,
 		APIKey:    cfg.LLMKey,
 		Model:     cfg.LLMModel,
 		MaxTokens: cfg.MaxAnalyzeTokens,
-		HTTP:      &http.Client{Timeout: defaultHTTPTimeout},
+		// No client-level timeout: a local CPU-only Ollama model can take
+		// far longer than any fixed bound, and this service tolerates
+		// waiting. Ask() is bounded by the caller's ctx (research run has a
+		// 1500s context); Analyze() is intentionally unbounded.
+		HTTP: &http.Client{},
 	}
 	if forceClient != nil {
 		c.HTTP = forceClient
