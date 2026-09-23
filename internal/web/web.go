@@ -8,6 +8,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"html/template"
 	"io/fs"
 	"net/http"
 	"sort"
@@ -20,6 +21,32 @@ import (
 
 //go:embed static/*
 var staticFS embed.FS
+
+// researchReport renders a single research row as a readable page for the
+// link Telegram sends. Findings are model markdown, kept as escaped
+// pre-wrapped text — no markdown renderer dependency.
+const researchReportHTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sparkkeep · research #{{.ID}}</title>
+<style>
+  body { margin: 0 auto; max-width: 46rem; padding: 24px; font-family: system-ui, sans-serif; background: #111; color: #eee; }
+  a { color: #9cdcfe; }
+  .meta { color: #aaa; font-size: 13px; margin-bottom: 16px; }
+  pre { white-space: pre-wrap; word-wrap: break-word; color: #ddd; font-family: inherit; line-height: 1.5; }
+  .error { color: #ff8a8a; }
+</style>
+</head>
+<body>
+  <p><a href="/">&larr; sparkkeep dashboard</a></p>
+  <h2>Research #{{.ID}} <span class="meta">[{{.Status}}]</span></h2>
+  {{if .Query}}<p><strong>Query:</strong> {{.Query}}</p>{{end}}
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <pre>{{.Findings}}</pre>
+</body>
+</html>`
 
 // api routes the mux to the injected Store and Service. publicURL is
 // accepted for the dashboard's absolute links (e.g. research reports).
@@ -46,6 +73,7 @@ func New(store port.Store, svc *core.Service, publicURL string) http.Handler {
 	mux.HandleFunc("GET /api/v1/digest", a.weeklyDigest)
 	mux.HandleFunc("GET /api/v1/research", a.listResearch)
 	mux.HandleFunc("POST /api/v1/research", a.triggerResearch)
+	mux.HandleFunc("GET /api/v1/research/{id}", a.getResearch)
 	return mux
 }
 
@@ -313,6 +341,30 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 	}
 	go a.svc.Research(context.Background(), b.CardID)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "accepted": true})
+}
+
+// getResearch serves the single-row report as HTML for the Telegram link.
+func (a *api) getResearch(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	row, err := a.store.GetResearch(r.Context(), id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	tmpl, err := template.New("research").Parse(researchReportHTML)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tmpl.Execute(w, row); err != nil {
+		a.fail(w, err)
+		return
+	}
 }
 
 // --- plumbing ---------------------------------------------------------------

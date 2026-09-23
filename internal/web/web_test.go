@@ -443,6 +443,41 @@ func TestResearchTrigger(t *testing.T) {
 	}
 }
 
+func TestGetResearchReport(t *testing.T) {
+	st := newStubStore()
+	st.researches[7] = port.Research{
+		ID: 7, CardID: 5, Status: "done",
+		Query: "cli-fi reading list", Findings: "# Found\n\nSome **markdown** & <raw> text.",
+	}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/research/7", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Fatalf("Content-Type = %q, want text/html", ct)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "cli-fi reading list") {
+		t.Fatalf("report missing query: %s", body)
+	}
+	if !strings.Contains(body, "&lt;raw&gt;") {
+		t.Fatalf("findings not HTML-escaped: %s", body)
+	}
+	if strings.Contains(body, "<raw>") {
+		t.Fatalf("findings injected raw html: %s", body)
+	}
+}
+
+func TestGetResearchNotFound(t *testing.T) {
+	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/research/99", "")
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rr.Code)
+	}
+}
+
 // --- static ------------------------------------------------------------------
 
 func TestStaticIndexServed(t *testing.T) {
