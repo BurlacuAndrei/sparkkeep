@@ -33,10 +33,10 @@ var ErrInvalidResponse = errors.New("analyze: invalid model response")
 
 // defaultHTTP bounds every LLM call.
 // defaultHTTPTimeout must cover a full non-streamed generation. A CPU-only
-// local model (this box: gemma3:4b at ~3 tok/s) takes ~4.5min for a 600-word
-// synthesis. ponytail: hardcoded knob; expose via config if GPUs replace the
-// CPU box and the ceiling matters.
-const defaultHTTPTimeout = 600 * time.Second
+// local model (this box: gemma3:4b at ~3 tok/s, large analysis/synthesis
+// inputs) takes 10+ min for synthesis over real sources. ponytail: hardcoded
+// knob; expose via config if GPUs replace the CPU box and the ceiling matters.
+const defaultHTTPTimeout = 900 * time.Second
 
 type Client struct {
 	BaseURL   string
