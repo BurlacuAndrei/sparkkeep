@@ -26,7 +26,9 @@ import (
 const (
 	defaultMaxResults = 6
 	defaultClipChars  = 8000
-	defaultTimeout    = 120 * time.Second
+	// Whole-run ceiling: includes two LLM calls (query ~1.5min, synthesis
+	// ~4.5min) plus search+fetch. CPU-only boxes need the headroom.
+	defaultTimeout = 900 * time.Second
 )
 
 // searchResp mirrors the SearXNG JSON API slice the pipeline consumes.
