@@ -1,4 +1,4 @@
-.PHONY: build test fmt vet
+.PHONY: build test fmt vet docker
 
 build:
 	go build ./...
@@ -11,3 +11,6 @@ fmt:
 
 vet:
 	go vet ./...
+
+docker:
+	docker compose up -d --build

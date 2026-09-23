@@ -3,3 +3,4 @@ sparkkeep.db
 *.db-shm
 /sparkkeep
 *.log
+.env

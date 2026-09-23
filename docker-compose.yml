@@ -1,0 +1,12 @@
+services:
+  sparkkeep:
+    build: .
+    container_name: sparkkeep
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${SPARKKEEP_HTTP_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach host Ollama
