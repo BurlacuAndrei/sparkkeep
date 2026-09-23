@@ -5,6 +5,7 @@ package analyze
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -113,6 +114,61 @@ func (c *Client) Analyze(payload capture.Fetched) ([]Idea, error) {
 		return nil, ErrInvalidResponse
 	}
 	return ExtractJSON(chat.Choices[0].Message.Content)
+}
+
+// Ask issues one chat completion for a free-text prompt and returns the raw
+// message content. Research uses this for its query-build and synthesis
+// calls, where the strict-JSON Analyze pipeline does not apply.
+func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
+	reqBody, err := json.Marshal(map[string]any{
+		"model": c.Model,
+		"messages": []map[string]string{
+			{"role": "system", "content": "You are a rigorous research assistant."},
+			{"role": "user", "content": prompt},
+		},
+		"max_tokens":  c.MaxTokens,
+		"temperature": 0.3,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/chat/completions", bytes.NewReader(reqBody))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("analyze: LLM status %d", resp.StatusCode)
+	}
+
+	var chat struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(raw, &chat); err != nil {
+		return "", err
+	}
+	if len(chat.Choices) == 0 || chat.Choices[0].Message.Content == "" {
+		return "", ErrInvalidResponse
+	}
+	return chat.Choices[0].Message.Content, nil
 }
 
 // ExtractJSON parses the model's answer into ideas. It tolerates backtick
