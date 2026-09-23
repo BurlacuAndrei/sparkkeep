@@ -10,3 +10,10 @@ services:
       - ./data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"   # reach host Ollama
+    networks:
+      - default
+      - proxy_net   # reach the internal SearXNG (searxng)
+
+networks:
+  proxy_net:
+    external: true

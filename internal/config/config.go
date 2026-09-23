@@ -21,6 +21,11 @@ type Config struct {
 	SearchURL        string
 }
 
+// DefaultSearchURL is the public SearXNG instance used when
+// SPARKKEEP_SEARCH_URL is unset. Override per deployment (SPARKKEEP_SEARCH_URL
+// takes precedence in Load).
+const DefaultSearchURL = "https://searx.be"
+
 func Load() (Config, error) {
 	cfg := Config{
 		DB:               getenv("SPARKKEEP_DB", "./sparkkeep.db"),
@@ -31,7 +36,7 @@ func Load() (Config, error) {
 		LLMModel:         os.Getenv("SPARKKEEP_LLM_MODEL"),
 		MaxAnalyzeTokens: 2048,
 		TGToken:          os.Getenv("SPARKKEEP_TG_TOKEN"),
-		SearchURL:        os.Getenv("SPARKKEEP_SEARCH_URL"),
+		SearchURL:        getenv("SPARKKEEP_SEARCH_URL", DefaultSearchURL),
 	}
 
 	if v := os.Getenv("SPARKKEEP_MAX_ANALYZE_TOKENS"); v != "" {

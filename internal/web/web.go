@@ -10,7 +10,9 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"sort"
 	"strconv"
+	"time"
 
 	"sparkkeep/internal/core"
 	"sparkkeep/internal/port"
@@ -41,6 +43,7 @@ func New(store port.Store, svc *core.Service, publicURL string) http.Handler {
 	mux.HandleFunc("PATCH /api/v1/cards/{id}", a.patchCard)
 	mux.HandleFunc("POST /api/v1/cards/{id}/retry", a.retryCard)
 	mux.HandleFunc("GET /api/v1/tags", a.listTags)
+	mux.HandleFunc("GET /api/v1/digest", a.weeklyDigest)
 	mux.HandleFunc("GET /api/v1/research", a.listResearch)
 	mux.HandleFunc("POST /api/v1/research", a.triggerResearch)
 	return mux
@@ -209,6 +212,64 @@ func (a *api) retryCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": card})
+}
+
+// weeklyDigest groups cards created in the last 7 calendar days by day,
+// newest first, with a total and per-status count.
+// ponytail: full-table scan per digest call, fine for thousands of rows; add a
+// created_at filter to port.CardFilter/ListCards when it stops being fine.
+func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
+	cards, err := a.store.ListCards(r.Context(), port.CardFilter{})
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+
+	const days = 7
+	now := time.Now().UTC()
+	key := func(t time.Time) string { return t.Format("2006-01-02") }
+
+	window := map[string]bool{}
+	ordered := make([]string, 0, days)
+	for i := 0; i < days; i++ {
+		d := now.AddDate(0, 0, -i).Format("2006-01-02")
+		window[d] = true
+		ordered = append(ordered, d)
+	}
+
+	byDay := map[string][]port.Card{}
+	byStatus := map[string]int{}
+	var total int
+	for _, c := range cards {
+		dk := key(c.CreatedAt)
+		if !window[dk] {
+			continue
+		}
+		byDay[dk] = append(byDay[dk], c)
+		byStatus[c.Status]++
+		total++
+	}
+
+	type dayGroup struct {
+		Date  string      `json:"date"`
+		Cards []port.Card `json:"cards"`
+	}
+	groups := make([]dayGroup, 0, len(ordered))
+	for _, d := range ordered {
+		cs, ok := byDay[d]
+		if !ok {
+			continue
+		}
+		sort.Slice(cs, func(i, j int) bool { return cs[i].CreatedAt.After(cs[j].CreatedAt) })
+		groups = append(groups, dayGroup{Date: d, Cards: cs})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"week_total": total,
+		"by_status":  byStatus,
+		"days":       groups,
+	})
 }
 
 func (a *api) listTags(w http.ResponseWriter, r *http.Request) {

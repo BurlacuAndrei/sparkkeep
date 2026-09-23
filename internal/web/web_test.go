@@ -212,6 +212,48 @@ func doJSON(t *testing.T, h http.Handler, method, path string, body string) *htt
 
 // --- API tests ---------------------------------------------------------------
 
+func TestWeeklyDigest(t *testing.T) {
+	st := newStubStore()
+	now := time.Now().UTC()
+	st.cards[1] = port.Card{ID: 1, Title: "old", Status: port.StatusInbox, CreatedAt: now.AddDate(0, 0, -20)}
+	st.cards[2] = port.Card{ID: 2, Title: "two days ago", Status: port.StatusDone, CreatedAt: now.AddDate(0, 0, -2)}
+	st.cards[3] = port.Card{ID: 3, Title: "today", Status: port.StatusInbox, CreatedAt: now}
+	st.cards[4] = port.Card{ID: 4, Title: "same day as 2", Status: port.StatusDoing, CreatedAt: now.AddDate(0, 0, -2).Add(time.Hour)}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/digest", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	var body struct {
+		OK        bool           `json:"ok"`
+		WeekTotal int            `json:"week_total"`
+		ByStatus  map[string]int `json:"by_status"`
+		Days      []struct {
+			Date  string      `json:"date"`
+			Cards []port.Card `json:"cards"`
+		} `json:"days"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !body.OK {
+		t.Fatalf("ok = false, want true")
+	}
+	if body.WeekTotal != 3 {
+		t.Fatalf("week_total = %d, want 3 (old card excluded)", body.WeekTotal)
+	}
+	if body.ByStatus["inbox"] != 1 || body.ByStatus["done"] != 1 || body.ByStatus["doing"] != 1 {
+		t.Fatalf("by_status = %v, want inbox:1 done:1 doing:1", body.ByStatus)
+	}
+	if len(body.Days) != 2 {
+		t.Fatalf("days = %d, want 2", len(body.Days))
+	}
+	if body.Days[0].Date != now.Format("2006-01-02") {
+		t.Fatalf("days[0].date = %q, want today", body.Days[0].Date)
+	}
+}
+
 func TestHealth(t *testing.T) {
 	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
 	rr := doJSON(t, h, http.MethodGet, "/api/v1/health", "")

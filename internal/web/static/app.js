@@ -2,7 +2,7 @@
 // delegation — no framework. ponytail: single file app.js, DOM-built cards; a
 // framework only if the dashboard grows past one route.
 (function () {
-  const state = { horizon: '', status: '', tag: '', q: '', tags: [] };
+  const state = { horizon: '', status: '', tag: '', q: '', tags: [], digest: false };
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -56,6 +56,24 @@
     cards.forEach((c) => grid.appendChild(cardEl(c)));
   }
 
+  function renderDigest(grid, d) {
+    grid.textContent = '';
+    if (!d.days.length) { grid.textContent = 'No cards this week.'; return; }
+    const statuses = Object.entries(d.by_status || {}).map(([k, v]) => k + ': ' + v).join(' · ');
+    const head = document.createElement('p');
+    head.textContent = d.week_total + ' cards this week — ' + statuses;
+    grid.appendChild(head);
+    d.days.forEach((day) => {
+      const h = document.createElement('h3');
+      h.textContent = day.date + ' (' + day.cards.length + ')';
+      grid.appendChild(h);
+      const inner = document.createElement('div');
+      inner.className = 'grid';
+      day.cards.forEach((c) => inner.appendChild(cardEl(c)));
+      grid.appendChild(inner);
+    });
+  }
+
   function renderRail() {
     const box = $('#rail-tags');
     box.querySelectorAll('.chip').forEach((el) => el.remove());
@@ -78,6 +96,13 @@
   }
 
   async function loadMain() {
+    if (state.digest) {
+      try {
+        const d = await api('/api/v1/digest');
+        renderDigest($('#main-grid'), d);
+      } catch (e) { flash(e.message); }
+      return;
+    }
     const p = new URLSearchParams();
     if (state.horizon) p.set('horizon', state.horizon);
     if (state.status) p.set('status', state.status);
@@ -127,6 +152,13 @@
     }
     if (e.target.closest('#new-card-btn')) {
       $('#new-card-form').classList.toggle('hidden');
+      return;
+    }
+    if (e.target.closest('#digest-btn')) {
+      state.digest = !state.digest;
+      $('#digest-btn').classList.toggle('on', state.digest);
+      $('#main-heading').textContent = state.digest ? 'Weekly digest' : 'Main grid';
+      loadMain();
       return;
     }
     if (e.target.closest('#cancel-new')) {

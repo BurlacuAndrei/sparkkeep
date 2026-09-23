@@ -28,10 +28,17 @@ Open `:8080` (`SPARKKEEP_HTTP_PORT` to change the published port).
 | `SPARKKEEP_LLM_MODEL` | `` | required |
 | `SPARKKEEP_TG_TOKEN` | `` | empty = Telegram off |
 | `SPARKKEEP_TG_CHAT_ID` | `` | owner chat id |
-| `SPARKKEEP_SEARCH_URL` | `` | SearXNG JSON search; empty = research disabled |
+| `SPARKKEEP_SEARCH_URL` | `https://searx.be` | SearXNG JSON search; set your own instance to override |
 | `SPARKKEEP_MAX_ANALYZE_TOKENS` | `2048` | cap analysis output |
 
 See `.env.example` for the full list.
+
+## Weekly digest
+
+The dashboard has a **Weekly digest** view (top bar button): cards captured in
+the last 7 days grouped by day with per-status counts. A Telegram `/digest`
+bot command that pushes the same digest to chat is planned (see
+`docs/design.md` §9); it isn't wired up yet.
 
 ## Layout
 

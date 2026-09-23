@@ -21,6 +21,7 @@
   }
   .topbar button, form button { cursor: pointer; }
   .topbar button:hover, .card button:hover { background: #333; }
+  #digest-btn.on { background: #2d4a57; border-color: #9cdcfe; }
   #flash { color: #8ab4f8; font-size: 13px; }
   .layout { display: grid; grid-template-columns: 200px 1fr; gap: 16px; padding: 16px; }
   .rail { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
@@ -62,6 +63,7 @@
   <h1>sparkkeep</h1>
   <input id="q" type="search" placeholder="search title/summary…">
   <button id="new-card-btn" type="button">+ New card</button>
+  <button id="digest-btn" type="button">Weekly digest</button>
   <input id="research-id" type="number" min="1" placeholder="card id">
   <button id="research-btn" type="button">Research</button>
   <span id="flash"></span>
@@ -106,7 +108,7 @@
       <button type="submit">Save</button>
       <button type="button" id="cancel-new">Cancel</button>
     </form>
-    <h2>Main grid</h2>
+    <h2 id="main-heading">Main grid</h2>
     <div id="main-grid" class="grid"></div>
     <div class="boards">
       <section><h2>Action queue</h2><div id="action-board" class="grid"></div></section>

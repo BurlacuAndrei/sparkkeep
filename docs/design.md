@@ -273,8 +273,11 @@ NAS; Telegram long-poll and HTTP server both live in it.
 
 - App name (sparkkeep? final call).
 - Telegram bot username will be one you register — placeholder now.
-- Which SearXNG instance: your NAS sidecar, or a public one (e.g.
-  searx.be) for initial dev.
-- Whether the weekly digest (from your ask) is a dashboard view or a real
-  Telegram push — decide before planning (default: dashboard view + a
-  `/digest` bot command later).
+- Which SearXNG instance **resolved:** configurable via `SPARKKEEP_SEARCH_URL`,
+  default is a public instance (`https://searx.be`); the NAS deployment
+  overrides it to the local `searxng` instance (compose joins
+  the external `proxy_net`).
+- Weekly digest **resolved:** shipped as a dashboard view (`GET
+  /api/v1/digest` + top-bar toggle). The Telegram `/digest` bot command
+  (push the same digest to chat) is documented but not implemented — do it
+  when a push channel is wanted.

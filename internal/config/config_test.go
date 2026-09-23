@@ -47,7 +47,7 @@ func TestLoadDefaults(t *testing.T) {
 		{"TGToken", cfg.TGToken, ""},
 		{"TGChatID", cfg.TGChatID, int64(0)},
 		{"OffsetFile", cfg.OffsetFile, "bot_offset.json"},
-		{"SearchURL", cfg.SearchURL, ""},
+		{"SearchURL", cfg.SearchURL, DefaultSearchURL},
 	}
 	for _, tc := range cases {
 		if tc.got != tc.want {
