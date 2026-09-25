@@ -55,6 +55,19 @@ func (s *stubStore) GetCard(_ context.Context, id int64) (port.Card, error) {
 	return c, nil
 }
 
+func (s *stubStore) GetCardBySourceURL(_ context.Context, url string) (port.Card, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return port.Card{}, port.ErrNotFound
+	}
+	for _, c := range s.cards {
+		if c.SourceURL == url {
+			return c, nil
+		}
+	}
+	return port.Card{}, port.ErrNotFound
+}
+
 func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card, error) {
 	s.lastFilter = f
 	var out []port.Card
@@ -69,6 +82,9 @@ func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card
 			continue
 		}
 		if f.Query != "" && !strings.Contains(strings.ToLower(c.Title), strings.ToLower(f.Query)) {
+			continue
+		}
+		if !f.Since.IsZero() && c.CreatedAt.Before(f.Since) {
 			continue
 		}
 		out = append(out, c)
@@ -120,6 +136,17 @@ func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string
 	r := port.Research{ID: s.nextRes, CardID: cardID, Status: "queued", Query: query, CreatedAt: time.Now().UTC()}
 	s.researches[r.ID] = r
 	return r, nil
+}
+
+func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range s.researches {
+		if r.CardID == cardID && (r.Status == "queued" || r.Status == "running") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *stubStore) SetResearch(_ context.Context, id int64, status, findings, errMsg string) (port.Research, error) {
@@ -443,6 +470,64 @@ func TestResearchTrigger(t *testing.T) {
 	}
 }
 
+func TestResearchTriggerActiveConflict(t *testing.T) {
+	llm := llmStub(http.StatusInternalServerError, "")
+	defer llm.Close()
+	st := newStubStore()
+	st.cards[7] = port.Card{ID: 7, Title: "T"}
+	st.researches[1] = port.Research{ID: 1, CardID: 7, Status: "queued", CreatedAt: time.Now().UTC()}
+	st.nextRes = 1
+	svc := &core.Service{Store: st, Runner: research.New(config.Config{}, analyzeClient(llm)), Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/research", `{"card_id":7}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body = %s; want 409", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if body.OK || !strings.Contains(body.Error, "research already running") {
+		t.Fatalf("body = %+v, want error mentioning research already running", body)
+	}
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if st.nextRes > 1 {
+			t.Fatal("second research row created despite conflict")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestCreateCardDuplicateSourceURLConflict(t *testing.T) {
+	st := newStubStore()
+	st.cards[3] = port.Card{ID: 3, Title: "Existing", SourceURL: "https://x.test/a"}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards",
+		`{"title":"Copy","source_url":" https://x.test/a "}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body = %s; want 409", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if body.OK || !strings.Contains(body.Error, "already captured") {
+		t.Fatalf("body = %+v, want error mentioning already captured", body)
+	}
+	if len(st.cards) != 1 {
+		t.Fatalf("cards = %d, want 1 (no duplicate created)", len(st.cards))
+	}
+}
+
 func TestGetResearchReport(t *testing.T) {
 	st := newStubStore()
 	st.researches[7] = port.Research{
@@ -509,3 +594,94 @@ func TestStaticAssetCached(t *testing.T) {
 		t.Fatalf("Cache-Control = %q, want public, max-age=3600", cc)
 	}
 }
+
+func TestOversizedRequestBodyRejected(t *testing.T) {
+	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
+
+	// Generate payload > maxBodyBytes (1 MB)
+	largeTitle := strings.Repeat("A", 1<<20+100)
+	body := fmt.Sprintf(`{"title":%q}`, largeTitle)
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards", body)
+	if rr.Code != http.StatusBadRequest && rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 400 or 413", rr.Code)
+	}
+}
+
+func TestValidation(t *testing.T) {
+	st := newStubStore()
+	st.cards[1] = port.Card{ID: 1, Title: "Existing", Status: port.StatusInbox, Horizon: port.HorizonShortTerm}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	// Empty title
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards", `{"title":"   "}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("empty title: got status %d, want 400", rr.Code)
+	}
+
+	// Invalid status on create
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/cards", `{"title":"Test","status":"banana"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("invalid status create: got status %d, want 400", rr.Code)
+	}
+
+	// Invalid horizon on create
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/cards", `{"title":"Test","horizon":"banana"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("invalid horizon create: got status %d, want 400", rr.Code)
+	}
+
+	// Invalid status on patch
+	rr = doJSON(t, h, http.MethodPatch, "/api/v1/cards/1", `{"status":"banana"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("invalid status patch: got status %d, want 400", rr.Code)
+	}
+
+	// Invalid horizon on patch
+	rr = doJSON(t, h, http.MethodPatch, "/api/v1/cards/1", `{"horizon":"banana"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("invalid horizon patch: got status %d, want 400", rr.Code)
+	}
+}
+
+func TestCreateCard_BadRequest(t *testing.T) {
+	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards", `{"title": not-json}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestWeeklyDigest_Empty(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/digest", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	var body struct {
+		OK        bool  `json:"ok"`
+		WeekTotal int   `json:"week_total"`
+		Days      []any `json:"days"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !body.OK || body.WeekTotal != 0 || len(body.Days) != 0 {
+		t.Fatalf("empty digest: got %+v", body)
+	}
+}
+
+func TestTriggerResearch_DuplicateRejects(t *testing.T) {
+	st := newStubStore()
+	st.cards[5] = port.Card{ID: 5, Title: "Card"}
+	st.researches[1] = port.Research{ID: 1, CardID: 5, Status: "queued"}
+	h := webHandler(st, &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/research", `{"card_id":5}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 Conflict", rr.Code)
+	}
+}
+
+

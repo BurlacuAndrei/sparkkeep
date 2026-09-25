@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -64,10 +65,16 @@ func (s *Store) upsertTag(ctx context.Context, tx *sql.Tx, name string) (int64, 
 
 func (s *Store) CreateCard(ctx context.Context, c port.Card) (port.Card, error) {
 	ts := now()
+	actionsJSON := "[]"
+	if len(c.ProposedActions) > 0 {
+		if b, err := json.Marshal(c.ProposedActions); err == nil {
+			actionsJSON = string(b)
+		}
+	}
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO cards (title, summary, horizon, status, source_url, source_note, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.Title, c.Summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, ts, ts)
+		`INSERT INTO cards (title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.Title, c.Summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, c.ExecutiveSummary, c.ValueProposition, actionsJSON, ts, ts)
 	if err != nil {
 		return port.Card{}, err
 	}
@@ -78,6 +85,9 @@ func (s *Store) CreateCard(ctx context.Context, c port.Card) (port.Card, error) 
 	c.ID = id
 	c.CreatedAt, _ = parseTime(ts)
 	c.UpdatedAt = c.CreatedAt
+	if c.ProposedActions == nil {
+		c.ProposedActions = []string{}
+	}
 	if len(c.Tags) > 0 {
 		if err := s.SetCardTags(ctx, id, c.Tags); err != nil {
 			return port.Card{}, err
@@ -88,11 +98,12 @@ func (s *Store) CreateCard(ctx context.Context, c port.Card) (port.Card, error) 
 
 func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, title, summary, horizon, status, source_url, source_note, created_at, updated_at
+		`SELECT id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at
 		 FROM cards WHERE id = ?`, id)
 	var c port.Card
 	var created, updated string
-	err := row.Scan(&c.ID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &created, &updated)
+	var actionsRaw string
+	err := row.Scan(&c.ID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Card{}, port.ErrNotFound
 	}
@@ -101,12 +112,39 @@ func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	}
 	c.CreatedAt, _ = parseTime(created)
 	c.UpdatedAt, _ = parseTime(updated)
+	if actionsRaw != "" {
+		_ = json.Unmarshal([]byte(actionsRaw), &c.ProposedActions)
+	}
+	if c.ProposedActions == nil {
+		c.ProposedActions = []string{}
+	}
 	tags, err := s.cardTags(ctx, id)
 	if err != nil {
 		return port.Card{}, err
 	}
 	c.Tags = tags
 	return c, nil
+}
+
+// GetCardBySourceURL returns the oldest card bearing url (trimmed) or
+// ErrNotFound. The dedup check that calls it only compares the exact,
+// trimmed source URL — no canonicalization, comma-twins are a manual merge.
+func (s *Store) GetCardBySourceURL(ctx context.Context, url string) (port.Card, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return port.Card{}, port.ErrNotFound
+	}
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id FROM cards WHERE source_url = ? ORDER BY id LIMIT 1`, url)
+	var id int64
+	err := row.Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return port.Card{}, port.ErrNotFound
+	}
+	if err != nil {
+		return port.Card{}, err
+	}
+	return s.GetCard(ctx, id)
 }
 
 func (s *Store) cardTags(ctx context.Context, cardID int64) ([]string, error) {
@@ -145,14 +183,18 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	}
 	if f.Query != "" {
 		q := "%" + strings.ToLower(f.Query) + "%"
-		where = append(where, "(LOWER(title) LIKE ? OR LOWER(summary) LIKE ?)")
-		args = append(args, q, q)
+		where = append(where, "(LOWER(title) LIKE ? OR LOWER(summary) LIKE ? OR LOWER(executive_summary) LIKE ?)")
+		args = append(args, q, q, q)
+	}
+	if !f.Since.IsZero() {
+		where = append(where, "created_at >= ?")
+		args = append(args, f.Since.Format(timeLayout))
 	}
 	limit := f.Limit
 	if limit <= 0 {
 		limit = defaultLimit
 	}
-	sqlq := `SELECT id, title, summary, horizon, status, source_url, source_note, created_at, updated_at FROM cards`
+	sqlq := `SELECT id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at FROM cards`
 	if len(where) > 0 {
 		sqlq += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -168,22 +210,54 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	for rows.Next() {
 		var c port.Card
 		var created, updated string
-		if err := rows.Scan(&c.ID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &created, &updated); err != nil {
+		var actionsRaw string
+		if err := rows.Scan(&c.ID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &created, &updated); err != nil {
 			return nil, err
 		}
 		c.CreatedAt, _ = parseTime(created)
 		c.UpdatedAt, _ = parseTime(updated)
+		if actionsRaw != "" {
+			_ = json.Unmarshal([]byte(actionsRaw), &c.ProposedActions)
+		}
+		if c.ProposedActions == nil {
+			c.ProposedActions = []string{}
+		}
 		cards = append(cards, c)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	for i := range cards {
-		tags, err := s.cardTags(ctx, cards[i].ID)
-		if err != nil {
+	if len(cards) == 0 {
+		return cards, nil
+	}
+
+	cardIDs := make([]any, len(cards))
+	placeholders := make([]string, len(cards))
+	for i, c := range cards {
+		cardIDs[i] = c.ID
+		placeholders[i] = "?"
+	}
+	tagQuery := fmt.Sprintf(`SELECT ct.card_id, t.name FROM cards_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.card_id IN (%s) ORDER BY t.name`, strings.Join(placeholders, ","))
+	tagRows, err := s.db.QueryContext(ctx, tagQuery, cardIDs...)
+	if err != nil {
+		return nil, err
+	}
+	defer tagRows.Close()
+
+	tagsByCard := make(map[int64][]string, len(cards))
+	for tagRows.Next() {
+		var cid int64
+		var name string
+		if err := tagRows.Scan(&cid, &name); err != nil {
 			return nil, err
 		}
-		cards[i].Tags = tags
+		tagsByCard[cid] = append(tagsByCard[cid], name)
+	}
+	if err := tagRows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range cards {
+		cards[i].Tags = tagsByCard[cards[i].ID]
 	}
 	return cards, nil
 }
@@ -202,6 +276,22 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 	if p.Note != nil {
 		sets = append(sets, "source_note = ?")
 		args = append(args, *p.Note)
+	}
+	if p.ExecutiveSummary != nil {
+		sets = append(sets, "executive_summary = ?")
+		args = append(args, *p.ExecutiveSummary)
+	}
+	if p.ValueProposition != nil {
+		sets = append(sets, "value_proposition = ?")
+		args = append(args, *p.ValueProposition)
+	}
+	if p.ProposedActions != nil {
+		actionsJSON := "[]"
+		if b, err := json.Marshal(*p.ProposedActions); err == nil {
+			actionsJSON = string(b)
+		}
+		sets = append(sets, "proposed_actions = ?")
+		args = append(args, actionsJSON)
 	}
 	if len(sets) == 0 {
 		return port.Card{}, port.ErrNotFound
@@ -260,16 +350,30 @@ func (s *Store) ListTags(ctx context.Context) ([]port.Tag, error) {
 
 func (s *Store) CreateResearch(ctx context.Context, cardID int64, query string) (port.Research, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO research (card_id, status, query, findings, error, created_at) VALUES (?, 'queued', ?, '', '', ?)`,
-		cardID, query, now())
+		`INSERT INTO research (card_id, status, query, findings, error, created_at)
+		 SELECT ?, 'queued', ?, '', '', ?
+		 WHERE NOT EXISTS (SELECT 1 FROM research WHERE card_id = ? AND status IN ('queued', 'running'))`,
+		cardID, query, now(), cardID)
 	if err != nil {
 		return port.Research{}, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return port.Research{}, err
+	} else if n == 0 {
+		return port.Research{}, port.ErrResearchActive
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
 		return port.Research{}, err
 	}
 	return s.GetResearch(ctx, id)
+}
+
+func (s *Store) HasActiveResearch(ctx context.Context, cardID int64) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM research WHERE card_id = ? AND status IN ('queued', 'running')`, cardID).Scan(&n)
+	return n > 0, err
 }
 
 func (s *Store) SetResearch(ctx context.Context, id int64, status, findings, errMsg string) (port.Research, error) {

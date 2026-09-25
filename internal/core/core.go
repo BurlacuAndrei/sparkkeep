@@ -6,8 +6,10 @@ package core
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
+	"sync"
 
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/capture"
@@ -26,6 +28,26 @@ type Service struct {
 	Analyze *analyze.Client
 	Runner  *research.Runner // field named Runner: Research collided with the method
 	Logf    func(format string, args ...any)
+	WG      sync.WaitGroup
+	Ctx     context.Context
+}
+
+// GoResearch runs Research in a background goroutine tracked by s.WG.
+func (s *Service) GoResearch(ctx context.Context, cardID int64) {
+	bgCtx := ctx
+	if bgCtx == nil {
+		bgCtx = s.Ctx
+	}
+	if bgCtx == nil {
+		bgCtx = context.Background()
+	}
+	s.WG.Add(1)
+	go func() {
+		defer s.WG.Done()
+		if err := s.Research(bgCtx, cardID); err != nil && !errors.Is(err, port.ErrResearchActive) {
+			s.Logf("core: background research %d: %v", cardID, err)
+		}
+	}()
 }
 
 // New constructs a Service with the default capture adapter, an analyze
@@ -33,8 +55,12 @@ type Service struct {
 func New(st port.Store, cfg config.Config, logf func(format string, args ...any)) *Service {
 	llm := analyze.New(cfg, nil)
 	s := &Service{
-		Store:   st,
-		Fetcher: capture.Capture{},
+		Store: st,
+		Fetcher: capture.Capture{
+			HeadlessEnabled: cfg.HeadlessEnabled,
+			ChromeBin:       cfg.ChromeBin,
+			YtDlpBin:        cfg.YtDlpBin,
+		},
 		Analyze: llm,
 		Runner:  research.New(cfg, llm),
 		Logf:    logf,
@@ -51,26 +77,53 @@ func New(st port.Store, cfg config.Config, logf func(format string, args ...any)
 // button survive. All cards are stored even if a later notify fails.
 func (s *Service) Capture(ctx context.Context, raw string) ([]int64, error) {
 	share := s.Fetcher.Recognize(raw)
+	if share.Name == "link" && strings.TrimSpace(share.URL) != "" {
+		if existing, err := s.Store.GetCardBySourceURL(ctx, share.URL); err == nil {
+			if nerr := s.notify(ctx, port.Notification{Kind: "duplicate", Card: existing, Text: "Already captured: " + existing.Title}); nerr != nil {
+				s.Logf("core: notify duplicate: %v", nerr)
+			}
+			return []int64{}, nil
+		} else if !errors.Is(err, port.ErrNotFound) {
+			return nil, err
+		}
+	}
+
 	fetched := s.fetchContent(share)
 
-	ideas, err := s.Analyze.Analyze(fetched)
+	res, err := s.Analyze.Analyze(ctx, fetched)
 	if err != nil {
 		return s.failCard(ctx, fetched, raw)
 	}
-	if len(ideas) == 0 {
+	if len(res.Cards) == 0 {
 		return []int64{}, nil
 	}
 
 	var ids []int64
-	for _, idea := range ideas {
+	for _, idea := range res.Cards {
+		execSummary := idea.ExecutiveSummary
+		if execSummary == "" {
+			execSummary = res.ExecutiveSummary
+		}
+		valProp := idea.ValueProposition
+		if valProp == "" {
+			valProp = res.ValueProposition
+		}
+		actions := idea.ProposedActions
+		if len(actions) == 0 {
+			actions = res.ProposedActions
+		}
+
 		card := port.Card{
-			Title:      idea.Title,
-			Summary:    idea.Summary,
-			Horizon:    idea.Horizon,
-			Tags:       idea.Tags,
-			SourceURL:  firstURL(fetched, idea.Links),
-			SourceNote: fetched.Caption,
-			Status:     port.StatusInbox,
+			Title:            idea.Title,
+			Summary:          idea.Summary,
+			Horizon:          idea.Horizon,
+			Tags:             idea.Tags,
+			SourceURL:        firstURL(fetched, idea.Links),
+			SourceNote:       fetched.Caption,
+			Status:           port.StatusInbox,
+			ExecutiveSummary: execSummary,
+			ValueProposition: valProp,
+			ProposedActions:  actions,
 		}
 		created, err := s.Store.CreateCard(ctx, card)
 		if err != nil {
@@ -91,6 +144,11 @@ func (s *Service) Research(ctx context.Context, cardID int64) error {
 	card, err := s.Store.GetCard(ctx, cardID)
 	if err != nil {
 		return err
+	}
+	if active, err := s.Store.HasActiveResearch(ctx, cardID); err != nil {
+		return err
+	} else if active {
+		return port.ErrResearchActive
 	}
 	row, err := s.Store.CreateResearch(ctx, cardID, "")
 	if err != nil {
@@ -132,25 +190,45 @@ func (s *Service) Retry(ctx context.Context, cardID int64) (port.Card, error) {
 		Title:   card.Title,
 		Caption: card.SourceNote,
 	}
-	ideas, err := s.Analyze.Analyze(fetched)
+	res, err := s.Analyze.Analyze(ctx, fetched)
 	if err != nil {
 		return card, err
 	}
-	if len(ideas) == 0 {
+	if len(res.Cards) == 0 {
 		return card, nil
 	}
-	idea := ideas[0]
+	idea := res.Cards[0]
+	execSummary := idea.ExecutiveSummary
+	if execSummary == "" {
+		execSummary = res.ExecutiveSummary
+	}
+	valProp := idea.ValueProposition
+	if valProp == "" {
+		valProp = res.ValueProposition
+	}
+	actions := idea.ProposedActions
+	if len(actions) == 0 {
+		actions = res.ProposedActions
+	}
+
 	created, err := s.Store.CreateCard(ctx, port.Card{
-		Title:      idea.Title,
-		Summary:    idea.Summary,
-		Horizon:    idea.Horizon,
-		Tags:       idea.Tags,
-		SourceURL:  card.SourceURL,
-		SourceNote: card.SourceNote,
-		Status:     port.StatusInbox,
+		Title:            idea.Title,
+		Summary:          idea.Summary,
+		Horizon:          idea.Horizon,
+		Tags:             idea.Tags,
+		SourceURL:        card.SourceURL,
+		SourceNote:       card.SourceNote,
+		Status:           port.StatusInbox,
+		ExecutiveSummary: execSummary,
+		ValueProposition: valProp,
+		ProposedActions:  actions,
 	})
 	if err != nil {
 		return port.Card{}, err
+	}
+	dismissed := port.StatusDismissed
+	if _, err := s.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &dismissed}); err != nil {
+		s.Logf("core: dismiss original failed card %d: %v", cardID, err)
 	}
 	if nerr := s.notify(ctx, port.Notification{Kind: "done", Card: created}); nerr != nil {
 		s.Logf("core: notify retry done: %v", nerr)

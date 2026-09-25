@@ -13,6 +13,15 @@ services:
     networks:
       - default
       - proxy_net   # reach the internal SearXNG (searxng)
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sparkkeep.rule=Host(`spark.example.com`)"
+      - "traefik.http.routers.sparkkeep.entrypoints=websecure"
+      - "traefik.http.routers.sparkkeep.tls=true"
+      - "traefik.http.routers.sparkkeep.tls.certresolver=le"
+      - "traefik.http.routers.sparkkeep.middlewares=authelia@docker"
+      - "traefik.http.services.sparkkeep.loadbalancer.server.port=8080"
+      - "traefik.docker.network=proxy_net"
 
 networks:
   proxy_net:

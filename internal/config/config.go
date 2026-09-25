@@ -19,6 +19,9 @@ type Config struct {
 	TGChatID         int64
 	OffsetFile       string
 	SearchURL        string
+	HeadlessEnabled  bool
+	ChromeBin        string
+	YtDlpBin         string
 }
 
 // DefaultSearchURL is the public SearXNG instance used when
@@ -37,7 +40,16 @@ func Load() (Config, error) {
 		MaxAnalyzeTokens: 2048,
 		TGToken:          os.Getenv("SPARKKEEP_TG_TOKEN"),
 		SearchURL:        getenv("SPARKKEEP_SEARCH_URL", DefaultSearchURL),
+		HeadlessEnabled:  true, // overridden below if env var is set
+		ChromeBin:        os.Getenv("SPARKKEEP_CHROME_BIN"),
+		YtDlpBin:         getenv("SPARKKEEP_YTDLP", "yt-dlp"),
 	}
+
+	headless, err := getenvBool("SPARKKEEP_HEADLESS_ENABLED", true)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.HeadlessEnabled = headless
 
 	if v := os.Getenv("SPARKKEEP_MAX_ANALYZE_TOKENS"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -74,3 +86,16 @@ func getenv(key, def string) string {
 	}
 	return def
 }
+
+func getenvBool(key string, def bool) (bool, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return def, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def, fmt.Errorf("config: %s=%q: %w", key, v, err)
+	}
+	return b, nil
+}
+

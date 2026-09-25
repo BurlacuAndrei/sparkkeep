@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"sparkkeep/internal/analyze"
+	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/port"
 )
@@ -199,3 +200,27 @@ func TestSearchJSONParse(t *testing.T) {
 		t.Fatalf("urls = %v, want [http://a]", urls)
 	}
 }
+
+type stubFetcher struct {
+	text string
+}
+
+func (s stubFetcher) Recognize(raw string) capture.Share { return capture.Share{URL: raw} }
+func (s stubFetcher) Fetch(share capture.Share) capture.Fetched {
+	return capture.Fetched{URL: share.URL, Text: s.text}
+}
+func (s stubFetcher) MediaMeta(share capture.Share) capture.Fetched {
+	return capture.Fetched{URL: share.URL, Text: s.text}
+}
+
+func TestFetchAndClipWithInjectedFetcher(t *testing.T) {
+	r := &Runner{
+		Fetcher:   stubFetcher{text: "stubbed content "},
+		ClipChars: 30,
+	}
+	got := r.fetchAndClip([]string{"http://a", "http://b", "http://c"})
+	if got != "stubbed content stubbed conten" {
+		t.Fatalf("got %q, want %q", got, "stubbed content stubbed conten")
+	}
+}
+

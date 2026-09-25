@@ -9,9 +9,12 @@ type Fetcher interface {
 	MediaMeta(share Share) Fetched
 }
 
-// Capture is the default Fetcher, a thin adapter over the package functions.
-type Capture struct{}
+// Capture is the default Fetcher with configurable headless/binary paths.
+type Capture struct {
+	HeadlessEnabled bool
+	ChromeBin       string
+	YtDlpBin        string
+}
 
-func (Capture) Recognize(raw string) Share    { return Recognize(raw) }
-func (Capture) Fetch(share Share) Fetched     { return Fetch(share) }
-func (Capture) MediaMeta(share Share) Fetched { return MediaMeta(share) }
+func (Capture) Recognize(raw string) Share { return Recognize(raw) }
+

@@ -1,0 +1,3 @@
+ALTER TABLE cards ADD COLUMN executive_summary TEXT NOT NULL DEFAULT '';
+ALTER TABLE cards ADD COLUMN value_proposition TEXT NOT NULL DEFAULT '';
+ALTER TABLE cards ADD COLUMN proposed_actions TEXT NOT NULL DEFAULT '[]';

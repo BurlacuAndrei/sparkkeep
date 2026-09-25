@@ -149,6 +149,21 @@ func (s *stubStore) GetCard(_ context.Context, id int64) (port.Card, error) {
 	return c, nil
 }
 
+func (s *stubStore) GetCardBySourceURL(_ context.Context, url string) (port.Card, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return port.Card{}, port.ErrNotFound
+	}
+	for _, c := range s.cards {
+		if c.SourceURL == url {
+			return c, nil
+		}
+	}
+	return port.Card{}, port.ErrNotFound
+}
+
 func (s *stubStore) ListCards(context.Context, port.CardFilter) ([]port.Card, error) { return nil, nil }
 
 func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (port.Card, error) {
@@ -182,6 +197,17 @@ func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string
 	r := port.Research{ID: s.nextRes, CardID: cardID, Status: "queued", Query: query, CreatedAt: time.Now().UTC()}
 	s.researches[r.ID] = r
 	return r, nil
+}
+
+func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range s.researches {
+		if r.CardID == cardID && (r.Status == "queued" || r.Status == "running") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *stubStore) SetResearch(_ context.Context, id int64, status, findings, errMsg string) (port.Research, error) {
@@ -358,6 +384,31 @@ func TestCallbackResearch(t *testing.T) {
 	})
 }
 
+func TestCallbackResearchActiveAcksWithNotice(t *testing.T) {
+	llm, _ := recLLM("cli-fi reading list")
+	defer llm.Close()
+	bot := newFakeBot(t, nil)
+	srv := httptest.NewServer(bot.handler())
+	defer srv.Close()
+	st := newStubStore()
+	st.cards[5] = port.Card{ID: 5, Title: "T", Summary: "S"}
+	st.researches[1] = port.Research{ID: 1, CardID: 5, Status: "queued", CreatedAt: time.Now().UTC()}
+	st.nextRes = 1
+	a := &Adapter{Token: "TOKEN", OwnerID: 1, Service: stubService(t, llm, st), Store: st, Logf: t.Logf, baseURL: srv.URL}
+	a.handleUpdate(update{ID: 2, CB: &callbackQuery{ID: "cq1", From: &user{ID: 1}, Data: "5:research"}})
+
+	if !bot.saw("answerCallbackQuery") {
+		t.Fatalf("expected answerCallbackQuery; calls=%+v", bot.calls)
+	}
+	if body := bot.lastBody("answerCallbackQuery"); !strings.Contains(body, "already running") {
+		t.Fatalf("ack = %s, want notice about already running", body)
+	}
+	time.Sleep(100 * time.Millisecond) // give any (wrong) goroutine time to insert
+	if rows := st.researchRows(); len(rows) != 1 {
+		t.Fatalf("research rows = %d, want 1 (no second row)", len(rows))
+	}
+}
+
 // --- inbound: reactions ---------------------------------------------------------
 
 func TestReactionStarLifetime(t *testing.T) {
@@ -423,6 +474,24 @@ func TestCallbackDismiss(t *testing.T) {
 	}
 	if !bot.saw("editMessageReplyMarkup") {
 		t.Fatalf("expected keyboard cleared; calls=%+v", bot.calls)
+	}
+}
+
+func TestNotifyDuplicateSendsNotice(t *testing.T) {
+	bot := newFakeBot(t, nil)
+	srv := httptest.NewServer(bot.handler())
+	defer srv.Close()
+	a := &Adapter{Token: "TOKEN", OwnerID: 1, Logf: t.Logf, baseURL: srv.URL}
+	if err := a.Notify(context.Background(), port.Notification{
+		Kind: "duplicate",
+		Card: port.Card{ID: 5, Title: "Existing"},
+		Text: "Already captured: Existing",
+	}); err != nil {
+		t.Fatalf("Notify err: %v", err)
+	}
+	body := bot.lastBody("sendMessage")
+	if !strings.Contains(body, "Already captured") {
+		t.Fatalf("sendMessage missing duplicate notice: %s", body)
 	}
 }
 

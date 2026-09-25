@@ -51,6 +51,19 @@ func (s *stubStore) GetCard(_ context.Context, id int64) (port.Card, error) {
 	return c, nil
 }
 
+func (s *stubStore) GetCardBySourceURL(_ context.Context, url string) (port.Card, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return port.Card{}, port.ErrNotFound
+	}
+	for _, c := range s.cards {
+		if c.SourceURL == url {
+			return c, nil
+		}
+	}
+	return port.Card{}, port.ErrNotFound
+}
+
 func (s *stubStore) ListCards(context.Context, port.CardFilter) ([]port.Card, error) {
 	return nil, nil
 }
@@ -93,6 +106,15 @@ func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string
 	r := port.Research{ID: s.nextRes, CardID: cardID, Status: "queued", Query: query, CreatedAt: time.Now().UTC()}
 	s.researches[r.ID] = r
 	return r, nil
+}
+
+func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {
+	for _, r := range s.researches {
+		if r.CardID == cardID && (r.Status == "queued" || r.Status == "running") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *stubStore) SetResearch(_ context.Context, id int64, status, findings, errMsg string) (port.Research, error) {
@@ -242,6 +264,47 @@ func TestCaptureTextSingleIdea(t *testing.T) {
 	}
 }
 
+func TestCaptureBriefing(t *testing.T) {
+	briefingJSON := `{
+		"executive_summary": "Action Engine V2 transforms bookmarks into actions.",
+		"value_proposition": "Automated briefings and next steps.",
+		"proposed_actions": ["Review queue", "Archive old notes"],
+		"cards": [
+			{"title":"Action Engine","summary":"V2 engine","horizon":"short-term","tags":["v2"],"links":[]}
+		]
+	}`
+	llm := llmStub(http.StatusOK, briefingJSON)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	ids, err := s.Capture(context.Background(), "https://sparkkeep.local")
+	if err != nil {
+		t.Fatalf("Capture err: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want 1", ids)
+	}
+	c, err := st.GetCard(context.Background(), ids[0])
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if c.ExecutiveSummary != "Action Engine V2 transforms bookmarks into actions." {
+		t.Errorf("c.ExecutiveSummary = %q", c.ExecutiveSummary)
+	}
+	if c.ValueProposition != "Automated briefings and next steps." {
+		t.Errorf("c.ValueProposition = %q", c.ValueProposition)
+	}
+	if len(c.ProposedActions) != 2 || c.ProposedActions[0] != "Review queue" {
+		t.Errorf("c.ProposedActions = %+v", c.ProposedActions)
+	}
+	if len(ch.notifies) != 1 || ch.notifies[0].Card.ExecutiveSummary != c.ExecutiveSummary {
+		t.Errorf("notified card missing briefing: %+v", ch.notifies)
+	}
+}
+
 func TestCaptureMultiIdeaSplits(t *testing.T) {
 	llm := llmStub(http.StatusOK, `[{"title":"A","summary":"a","horizon":"short-term","tags":[],"links":[]},{"title":"B","summary":"b","horizon":"short-term","tags":[],"links":[]},{"title":"C","summary":"c","horizon":"short-term","tags":[],"links":[]}]`)
 	defer llm.Close()
@@ -352,6 +415,69 @@ func TestCaptureNotifyErrorStillStores(t *testing.T) {
 	}
 }
 
+func TestCaptureDuplicateLinkSkipsAndNotifies(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{"title":"Dup","summary":"s","horizon":"short-term","tags":[],"links":[]}]`)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	raw := "https://example.com/same-post"
+	first, err := s.Capture(context.Background(), raw)
+	if err != nil || len(first) != 1 {
+		t.Fatalf("first Capture = %v, %v; want one id", first, err)
+	}
+	created := len(ch.notifies)
+
+	second, err := s.Capture(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("second Capture err: %v", err)
+	}
+	if len(second) != 0 {
+		t.Fatalf("second Capture ids = %v, want none", second)
+	}
+	if len(ch.notifies) != created+1 {
+		t.Fatalf("notifies = %d, want %d (one duplicate notice)", len(ch.notifies), created+1)
+	}
+	n := ch.notifies[len(ch.notifies)-1]
+	if n.Kind != "duplicate" || n.Card.ID != first[0] {
+		t.Fatalf("last notify = %+v, want duplicate for card %d", n, first[0])
+	}
+}
+
+func TestCaptureDifferentLinksBothCreate(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{"title":"Idea","summary":"s","horizon":"short-term","tags":[],"links":[]}]`)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	if ids, err := s.Capture(context.Background(), "https://example.com/one"); err != nil || len(ids) != 1 {
+		t.Fatalf("first = %v, %v", ids, err)
+	}
+	if ids, err := s.Capture(context.Background(), "https://example.com/two"); err != nil || len(ids) != 1 {
+		t.Fatalf("second = %v, %v; want a new card for a different link", ids, err)
+	}
+}
+
+func TestCaptureTextSharesNeverDedup(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{"title":"Note","summary":"s","horizon":"short-term","tags":[],"links":[]}]`)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	if ids, err := s.Capture(context.Background(), "just a thought"); err != nil || len(ids) != 1 {
+		t.Fatalf("first = %v, %v", ids, err)
+	}
+	if ids, err := s.Capture(context.Background(), "just a thought"); err != nil || len(ids) != 1 {
+		t.Fatalf("second = %v, %v; text shares have no source_url, must not dedup", ids, err)
+	}
+}
+
 // --- Retry ------------------------------------------------------------------
 
 func TestRetrySuccessUpdatesCard(t *testing.T) {
@@ -389,6 +515,13 @@ func TestRetrySuccessUpdatesCard(t *testing.T) {
 	}
 	if n := len(ch.notifies); n == 0 || ch.notifies[n-1].Kind != "done" {
 		t.Fatalf("notifies = %+v, want last done", ch.notifies)
+	}
+	origCard, err := st.GetCard(context.Background(), ids[0])
+	if err != nil {
+		t.Fatalf("get original card: %v", err)
+	}
+	if origCard.Status != port.StatusDismissed {
+		t.Fatalf("original card status = %q, want %q", origCard.Status, port.StatusDismissed)
 	}
 }
 
@@ -457,5 +590,58 @@ func TestResearchFailNotifyFailed(t *testing.T) {
 	}
 	if n.Res == nil || n.Res.Status != "failed" {
 		t.Fatalf("notify.Res = %+v, want failed row", n.Res)
+	}
+}
+
+func TestResearchBlockedWhileActive(t *testing.T) {
+	llm := llmStub(http.StatusInternalServerError, "")
+	defer llm.Close()
+	st := newStubStore()
+	st.cards[7] = port.Card{ID: 7, Title: "T", Summary: "S"}
+	if _, err := st.CreateResearch(context.Background(), 7, "q"); err != nil {
+		t.Fatalf("seed research: %v", err)
+	}
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+
+	if err := s.Research(context.Background(), 7); !errors.Is(err, port.ErrResearchActive) {
+		t.Fatalf("Research err = %v, want ErrResearchActive", err)
+	}
+	if len(st.researches) != 1 {
+		t.Fatalf("research rows = %d, want 1 (no second row)", len(st.researches))
+	}
+	if len(ch.notifies) != 0 {
+		t.Fatalf("notifies = %+v, want none", ch.notifies)
+	}
+}
+
+func TestResearchAllowedAfterFinished(t *testing.T) {
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "source text here")
+	}))
+	defer src.Close()
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"results":[{"url":%q}]}`, src.URL)
+	}))
+	defer search.Close()
+	llm := researchLLM()
+	defer llm.Close()
+
+	st := newStubStore()
+	st.cards[7] = port.Card{ID: 7, Title: "T", Summary: "S"}
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	r := research.New(config.Config{SearchURL: search.URL}, analyzeClient(llm))
+	s.Runner = r
+
+	if err := s.Research(context.Background(), 7); err != nil {
+		t.Fatalf("first Research: %v", err)
+	}
+	// finished (done) row must not block a later pass
+	if err := s.Research(context.Background(), 7); err != nil {
+		t.Fatalf("second Research after done: %v", err)
+	}
+	if len(st.researches) != 2 {
+		t.Fatalf("research rows = %d, want 2", len(st.researches))
 	}
 }

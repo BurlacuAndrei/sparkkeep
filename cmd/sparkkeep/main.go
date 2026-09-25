@@ -28,18 +28,20 @@ func main() {
 	}
 	defer st.Close()
 
-	svc := core.New(st, cfg, logger)
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	svc := core.New(st, cfg, logger)
+	svc.Ctx = ctx
+
 	if cfg.TGToken != "" {
 		tg := &telegram.Adapter{
-			Token:   cfg.TGToken,
-			OwnerID: cfg.TGChatID,
-			Service: svc,
-			Store:   st,
-			Logf:    logger,
+			Token:     cfg.TGToken,
+			OwnerID:   cfg.TGChatID,
+			PublicURL: cfg.PublicURL,
+			Service:   svc,
+			Store:     st,
+			Logf:      logger,
 		}
 		svc.Channel = tg // telegram fills the channel once it is attached
 		go func() {
@@ -67,6 +69,16 @@ func main() {
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			logger("shutdown: %v", err)
+		}
+		waitDone := make(chan struct{})
+		go func() {
+			svc.WG.Wait()
+			close(waitDone)
+		}()
+		select {
+		case <-waitDone:
+		case <-time.After(5 * time.Second):
+			logger("shutdown: timed out waiting for background tasks")
 		}
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {

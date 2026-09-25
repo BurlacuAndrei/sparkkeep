@@ -12,6 +12,7 @@ func setenv(t *testing.T, kv map[string]string) {
 		"SPARKKEEP_LLM_BASE", "SPARKKEEP_LLM_KEY", "SPARKKEEP_LLM_MODEL",
 		"SPARKKEEP_MAX_ANALYZE_TOKENS", "SPARKKEEP_TG_TOKEN",
 		"SPARKKEEP_TG_CHAT_ID", "SPARKKEEP_OFFSET_FILE", "SPARKKEEP_SEARCH_URL",
+		"SPARKKEEP_HEADLESS_ENABLED", "SPARKKEEP_CHROME_BIN", "SPARKKEEP_YTDLP",
 	} {
 		if err := os.Setenv(k, ""); err != nil {
 			t.Fatal(err)
@@ -48,6 +49,9 @@ func TestLoadDefaults(t *testing.T) {
 		{"TGChatID", cfg.TGChatID, int64(0)},
 		{"OffsetFile", cfg.OffsetFile, "bot_offset.json"},
 		{"SearchURL", cfg.SearchURL, DefaultSearchURL},
+		{"HeadlessEnabled", cfg.HeadlessEnabled, true},
+		{"ChromeBin", cfg.ChromeBin, ""},
+		{"YtDlpBin", cfg.YtDlpBin, "yt-dlp"},
 	}
 	for _, tc := range cases {
 		if tc.got != tc.want {
@@ -77,6 +81,9 @@ func TestLoadFull(t *testing.T) {
 		"SPARKKEEP_TG_CHAT_ID":         "123456789",
 		"SPARKKEEP_OFFSET_FILE":        "/data/offset.json",
 		"SPARKKEEP_SEARCH_URL":         "https://searx.example.com/search",
+		"SPARKKEEP_HEADLESS_ENABLED":   "false",
+		"SPARKKEEP_CHROME_BIN":         "/usr/bin/google-chrome",
+		"SPARKKEEP_YTDLP":              "/usr/bin/yt-dlp",
 	})
 
 	cfg, err := Load()
@@ -100,6 +107,9 @@ func TestLoadFull(t *testing.T) {
 		{"TGChatID", cfg.TGChatID, int64(123456789)},
 		{"OffsetFile", cfg.OffsetFile, "/data/offset.json"},
 		{"SearchURL", cfg.SearchURL, "https://searx.example.com/search"},
+		{"HeadlessEnabled", cfg.HeadlessEnabled, false},
+		{"ChromeBin", cfg.ChromeBin, "/usr/bin/google-chrome"},
+		{"YtDlpBin", cfg.YtDlpBin, "/usr/bin/yt-dlp"},
 	}
 	for _, tc := range cases {
 		if tc.got != tc.want {

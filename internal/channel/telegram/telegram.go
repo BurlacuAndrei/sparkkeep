@@ -33,23 +33,28 @@ var _ port.Channel = (*Adapter)(nil)
 // loop. Service and Store are injected; callback/reaction handling uses the
 // injected Store directly, inbound messages go through Service.Capture.
 type Adapter struct {
-	Token   string
-	OwnerID int64 // configured TG_CHAT_ID; everyone else is ignored
-	Service *core.Service
-	Store   port.Store
-	Logf    func(format string, args ...any)
+	Token     string
+	OwnerID   int64 // configured TG_CHAT_ID; everyone else is ignored
+	PublicURL string
+	Service   *core.Service
+	Store     port.Store
+	Logf      func(format string, args ...any)
 
 	baseURL string          // unexported: httptest server in tests, else apiBase
 	httpc   *http.Client    // unexported: default client unless tests override
 	msgCard map[int64]int64 // bot message_id → card_id, for reactions
 	msgMu   sync.Mutex
-	offsetP string // unexported: offset file override for tests
+	offsetP string          // unexported: offset file override for tests
+	sem     chan struct{}   // concurrency limiter
 }
 
 // Run blocks long-polling getUpdates until ctx is cancelled. Each update is
 // dispatched to its own goroutine; after each batch the confirmed offset is
 // persisted so a restart resumes with only unconfirmed updates.
 func (a *Adapter) Run(ctx context.Context) error {
+	if a.sem == nil {
+		a.sem = make(chan struct{}, 3)
+	}
 	offset := a.readOffset()
 	for {
 		if ctx.Err() != nil {
@@ -102,7 +107,15 @@ func (a *Adapter) Run(ctx context.Context) error {
 			if u.ID > maxID {
 				maxID = u.ID
 			}
-			go a.handleUpdate(u)
+			go func(u update) {
+				select {
+				case a.sem <- struct{}{}:
+					defer func() { <-a.sem }()
+					a.handleUpdate(u)
+				case <-ctx.Done():
+					return
+				}
+			}(u)
 		}
 		offset = maxID
 		a.writeOffset(offset)
@@ -118,6 +131,9 @@ func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
 		return a.sendFailed(ctx, n.Card)
 	case "research_done", "research_failed":
 		return a.sendResearch(ctx, n)
+	case "duplicate":
+		_, err := a.sendMessage(ctx, n.Text, 0, nil)
+		return err
 	default: // done / retry / hello: plain card summary
 		_, err := a.sendMessage(ctx, fmt.Sprintf("%s\n%s", n.Card.Title, n.Card.Summary), 0, nil)
 		return err
@@ -195,7 +211,11 @@ func (a *Adapter) sendMessage(ctx context.Context, text string, cardID int64, bu
 
 // sendCard renders a created card as caption text + the four action buttons.
 func (a *Adapter) sendCard(ctx context.Context, c port.Card) error {
-	caption := fmt.Sprintf("%s\n\n%s\n[%s]", c.Title, c.Summary, c.Horizon)
+	body := c.Summary
+	if c.ExecutiveSummary != "" {
+		body = c.ExecutiveSummary
+	}
+	caption := fmt.Sprintf("%s\n\n%s\n[%s]", c.Title, body, c.Horizon)
 	if len(c.Tags) > 0 {
 		caption += "\n#" + strings.Join(c.Tags, " #")
 	}
@@ -231,7 +251,7 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 	if text == "" {
 		text = "Research failed"
 	}
-	base := os.Getenv("SPARKKEEP_PUBLIC_URL")
+	base := a.PublicURL
 	if base == "" {
 		base = "http://localhost:8080"
 	}
@@ -349,14 +369,16 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 	case "dismiss":
 		a.setStatus(ctx, id, port.StatusDismissed, cb)
 	case "research":
-		a.ackCallback(cb.ID)
-		go func() {
-			if err := a.Service.Research(ctx, id); err != nil {
-				a.logf("telegram: research %d: %v", id, err)
-			}
-		}()
+		if active, err := a.Store.HasActiveResearch(ctx, id); err != nil {
+			a.logf("telegram: HasActiveResearch(%d): %v", id, err)
+		} else if active {
+			a.ackCallback(cb.ID, "Research already running")
+			return
+		}
+		a.ackCallback(cb.ID, "")
+		a.Service.GoResearch(ctx, id)
 	case "retry":
-		a.ackCallback(cb.ID)
+		a.ackCallback(cb.ID, "")
 		if _, err := a.Service.Retry(ctx, id); err != nil {
 			a.logf("telegram: retry %d: %v", id, err)
 		}
@@ -382,7 +404,7 @@ func (a *Adapter) setStatus(ctx context.Context, id int64, status string, cb *ca
 	if err != nil {
 		a.logf("telegram: UpdateCard(%d, %s): %v", id, status, err)
 	}
-	a.ackCallback(cb.ID)
+	a.ackCallback(cb.ID, "")
 	if (status == port.StatusDoing || status == port.StatusDone || status == port.StatusDismissed) && cb.Message != nil && cb.Message.MessageID != 0 && cb.Message.Chat != nil {
 		a.editReplyMarkup(ctx, cb.Message.Chat.ID, cb.Message.MessageID)
 	}
@@ -396,14 +418,19 @@ func (a *Adapter) setStatus(ctx context.Context, id int64, status string, cb *ca
 }
 
 // ackCallback stops Telegram's button-spinner even when the action itself is
-// handled async (research) or fails.
-func (a *Adapter) ackCallback(id string) {
+// handled async (research) or fails. text (optional) shows as a toast next
+// to the button; empty sends a bare ack.
+func (a *Adapter) ackCallback(id, text string) {
 	if id == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if _, err := a.call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": id}); err != nil {
+	body := map[string]any{"callback_query_id": id}
+	if text != "" {
+		body["text"] = text
+	}
+	if _, err := a.call(ctx, "answerCallbackQuery", body); err != nil {
 		a.logf("telegram: answerCallbackQuery: %v", err)
 	}
 }
@@ -450,6 +477,10 @@ func (a *Adapter) handleReaction(r *messageReaction) {
 	}
 }
 
+// maxTrackedMessages bounds the in-memory message→card map so it doesn't
+// grow without limit over months of use.
+const maxTrackedMessages = 500
+
 func (a *Adapter) trackMessage(msgID, cardID int64) {
 	if msgID == 0 || cardID == 0 {
 		return
@@ -457,6 +488,13 @@ func (a *Adapter) trackMessage(msgID, cardID int64) {
 	a.msgMu.Lock()
 	if a.msgCard == nil {
 		a.msgCard = map[int64]int64{}
+	}
+	if len(a.msgCard) >= maxTrackedMessages {
+		// Evict one arbitrary entry to stay within budget.
+		for k := range a.msgCard {
+			delete(a.msgCard, k)
+			break
+		}
 	}
 	a.msgCard[msgID] = cardID
 	a.msgMu.Unlock()

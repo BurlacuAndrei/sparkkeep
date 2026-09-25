@@ -42,6 +42,7 @@ type Runner struct {
 	SearchURL  string          // e.g. http://localhost:8080/search or cleared for dev
 	Client     *http.Client    // search client
 	LLM        *analyze.Client // LLM reuse
+	Fetcher    capture.Fetcher // fetcher for scraping search result URLs
 	MaxResults int             // 6
 	ClipChars  int             // 8000
 	Timeout    time.Duration   // 120s
@@ -54,6 +55,7 @@ func New(cfg config.Config, llm *analyze.Client) *Runner {
 		SearchURL:  cfg.SearchURL,
 		Client:     &http.Client{Timeout: defaultTimeout},
 		LLM:        llm,
+		Fetcher:    capture.Capture{HeadlessEnabled: cfg.HeadlessEnabled, ChromeBin: cfg.ChromeBin, YtDlpBin: cfg.YtDlpBin},
 		MaxResults: defaultMaxResults,
 		ClipChars:  defaultClipChars,
 		Timeout:    defaultTimeout,
@@ -172,6 +174,13 @@ func parseSearch(body []byte) ([]string, error) {
 // text to a buffer capped at ClipChars total. Fetch errors are skipped, not
 // fatal. ponytail: one flat budget, no per-source balancing — fine for a
 // handful of sources.
+func (r *Runner) fetcher() capture.Fetcher {
+	if r.Fetcher != nil {
+		return r.Fetcher
+	}
+	return capture.Capture{HeadlessEnabled: true}
+}
+
 func (r *Runner) fetchAndClip(urls []string) string {
 	remaining := r.ClipChars
 	if remaining <= 0 {
@@ -182,7 +191,7 @@ func (r *Runner) fetchAndClip(urls []string) string {
 		if remaining <= 0 {
 			break
 		}
-		f := capture.Fetch(capture.Share{Name: "link", URL: u})
+		f := r.fetcher().Fetch(capture.Share{Name: "link", URL: u})
 		if f.Err != nil || f.Text == "" {
 			continue
 		}

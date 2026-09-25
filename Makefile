@@ -1,6 +1,11 @@
-.PHONY: build test fmt vet docker
+.PHONY: build build-frontend build-go test fmt vet docker
 
-build:
+build: build-frontend build-go
+
+build-frontend:
+	cd frontend && npm install && npm run build
+
+build-go:
 	go build ./...
 
 test:

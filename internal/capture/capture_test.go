@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -92,9 +93,8 @@ func TestMediaMetaYTDLPStub(t *testing.T) {
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho '{\"title\":\"T\",\"description\":\"D\"}'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SPARKKEEP_YTDLP", script)
-
-	f := MediaMeta(Share{Name: "link", URL: "https://youtube.com/watch?v=x"})
+	c := Capture{YtDlpBin: script}
+	f := c.MediaMeta(Share{Name: "link", URL: "https://youtube.com/watch?v=x"})
 	if f.Err != nil {
 		t.Fatalf("MediaMeta err: %v", f.Err)
 	}
@@ -115,3 +115,60 @@ func TestStripTags(t *testing.T) {
 		t.Fatalf("blank lines not collapsed: %q", got)
 	}
 }
+
+func TestGatedDomainRecognition(t *testing.T) {
+	cases := []struct {
+		url   string
+		gated bool
+	}{
+		{"https://instagram.com/p/C_abc123", true},
+		{"https://www.facebook.com/reel/123", true},
+		{"https://twitter.com/user/status/456", true},
+		{"https://x.com/user/status/789", true},
+		{"https://threads.net/@user/post/xyz", true},
+		{"https://github.com/torvalds/linux", false},
+		{"https://news.ycombinator.com", false},
+	}
+
+	for _, tc := range cases {
+		if got := isGatedDomain(tc.url); got != tc.gated {
+			t.Errorf("isGatedDomain(%q) = %v, want %v", tc.url, got, tc.gated)
+		}
+	}
+}
+
+func TestNeedsHeadlessFallback(t *testing.T) {
+	// Gated domain triggers fallback
+	if !needsHeadlessFallback(Share{URL: "https://instagram.com/p/123"}, Fetched{}) {
+		t.Error("expected gated domain to need fallback")
+	}
+
+	// 403 Forbidden error triggers fallback
+	if !needsHeadlessFallback(Share{URL: "https://example.com"}, Fetched{Err: fmt.Errorf("status 403")}) {
+		t.Error("expected 403 to need fallback")
+	}
+
+	// Bot wall keyword triggers fallback
+	if !needsHeadlessFallback(Share{URL: "https://example.com"}, Fetched{Text: "Please verify you are human to access the page."}) {
+		t.Error("expected bot verification to need fallback")
+	}
+
+	// Normal content does not trigger fallback
+	normalText := strings.Repeat("A comprehensive guide to distributed systems architecture and consensus protocols. ", 5)
+	if needsHeadlessFallback(Share{URL: "https://example.com"}, Fetched{Text: normalText}) {
+		t.Error("expected normal text not to need fallback")
+	}
+}
+
+func TestHeadlessEnabledConfig(t *testing.T) {
+	c1 := Capture{HeadlessEnabled: false}
+	if c1.HeadlessEnabled {
+		t.Error("want false")
+	}
+
+	c2 := Capture{HeadlessEnabled: true}
+	if !c2.HeadlessEnabled {
+		t.Error("want true")
+	}
+}
+

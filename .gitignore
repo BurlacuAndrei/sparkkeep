@@ -4,3 +4,5 @@ sparkkeep.db
 /sparkkeep
 *.log
 .env
+data/
+.opencode/

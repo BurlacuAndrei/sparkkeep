@@ -4,7 +4,6 @@
 package web
 
 import (
-	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -13,14 +12,15 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"sparkkeep/internal/core"
 	"sparkkeep/internal/port"
 )
 
-//go:embed static/*
-var staticFS embed.FS
+//go:embed dist/*
+var distFS embed.FS
 
 // researchReport renders a single research row as a readable page for the
 // link Telegram sends. Findings are model markdown, kept as escaped
@@ -47,6 +47,10 @@ const researchReportHTML = `<!doctype html>
   <pre>{{.Findings}}</pre>
 </body>
 </html>`
+
+// researchTmpl is the parsed template for the research report page.
+// Parsed once at init — never changes between requests.
+var researchTmpl = template.Must(template.New("research").Parse(researchReportHTML))
 
 // api routes the mux to the injected Store and Service. publicURL is
 // accepted for the dashboard's absolute links (e.g. research reports).
@@ -77,10 +81,10 @@ func New(store port.Store, svc *core.Service, publicURL string) http.Handler {
 	return mux
 }
 
-// staticFiles roots the embed at the static/ subdirectory so /assets/app.js
-// resolves to static/app.js.
+// staticFiles roots the embed at the dist/assets subdirectory so /assets/app.js
+// resolves to dist/assets/app.js.
 func staticFiles() http.Handler {
-	sub, err := fs.Sub(staticFS, "static")
+	sub, err := fs.Sub(distFS, "dist/assets")
 	if err != nil {
 		panic(err)
 	}
@@ -101,7 +105,7 @@ func (a *api) index(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	b, err := staticFS.ReadFile("static/index.html")
+	b, err := distFS.ReadFile("dist/index.html")
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -140,29 +144,58 @@ func (a *api) listCards(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Title      string   `json:"title"`
-		Summary    string   `json:"summary"`
-		Horizon    string   `json:"horizon"`
-		Status     string   `json:"status"`
-		SourceURL  string   `json:"source_url"`
-		SourceNote string   `json:"source_note"`
-		Tags       []string `json:"tags"`
+		Title            string   `json:"title"`
+		Summary          string   `json:"summary"`
+		Horizon          string   `json:"horizon"`
+		Status           string   `json:"status"`
+		SourceURL        string   `json:"source_url"`
+		SourceNote       string   `json:"source_note"`
+		Tags             []string `json:"tags"`
+		ExecutiveSummary string   `json:"executive_summary"`
+		ValueProposition string   `json:"value_proposition"`
+		ProposedActions  []string `json:"proposed_actions"`
 	}
-	if err := decodeJSON(r, &b); err != nil {
+	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(b.Title) == "" {
+		writeErr(w, http.StatusBadRequest, "title is required")
 		return
 	}
 	if b.Status == "" {
 		b.Status = port.StatusInbox
+	} else if !port.ValidStatus(b.Status) {
+		writeErr(w, http.StatusBadRequest, "invalid status: "+b.Status)
+		return
+	}
+	if b.Horizon == "" {
+		b.Horizon = port.HorizonShortTerm
+	} else if !port.ValidHorizon(b.Horizon) {
+		writeErr(w, http.StatusBadRequest, "invalid horizon: "+b.Horizon)
+		return
+	}
+	if u := strings.TrimSpace(b.SourceURL); u != "" {
+		if existing, err := a.store.GetCardBySourceURL(r.Context(), u); err == nil {
+			writeErr(w, http.StatusConflict, "already captured: "+existing.Title)
+			return
+		} else if !errors.Is(err, port.ErrNotFound) {
+			a.fail(w, err)
+			return
+		}
+		b.SourceURL = u
 	}
 	card, err := a.store.CreateCard(r.Context(), port.Card{
-		Title:      b.Title,
-		Summary:    b.Summary,
-		Horizon:    b.Horizon,
-		Status:     b.Status,
-		SourceURL:  b.SourceURL,
-		SourceNote: b.SourceNote,
-		Tags:       b.Tags,
+		Title:            b.Title,
+		Summary:          b.Summary,
+		Horizon:          b.Horizon,
+		Status:           b.Status,
+		SourceURL:        b.SourceURL,
+		SourceNote:       b.SourceNote,
+		Tags:             b.Tags,
+		ExecutiveSummary: b.ExecutiveSummary,
+		ValueProposition: b.ValueProposition,
+		ProposedActions:  b.ProposedActions,
 	})
 	if err != nil {
 		a.fail(w, err)
@@ -192,13 +225,24 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Status  *string  `json:"status"`
-		Horizon *string  `json:"horizon"`
-		Note    *string  `json:"note"`
-		Tags    []string `json:"tags"`
+		Status           *string   `json:"status"`
+		Horizon          *string   `json:"horizon"`
+		Note             *string   `json:"note"`
+		Tags             []string  `json:"tags"`
+		ExecutiveSummary *string   `json:"executive_summary"`
+		ValueProposition *string   `json:"value_proposition"`
+		ProposedActions  *[]string `json:"proposed_actions"`
 	}
-	if err := decodeJSON(r, &b); err != nil {
+	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	if b.Status != nil && !port.ValidStatus(*b.Status) {
+		writeErr(w, http.StatusBadRequest, "invalid status: "+*b.Status)
+		return
+	}
+	if b.Horizon != nil && !port.ValidHorizon(*b.Horizon) {
+		writeErr(w, http.StatusBadRequest, "invalid horizon: "+*b.Horizon)
 		return
 	}
 	card, err := a.store.GetCard(r.Context(), id)
@@ -206,8 +250,15 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	patch := port.CardPatch{Status: b.Status, Horizon: b.Horizon, Note: b.Note}
-	if patch.Status != nil || patch.Horizon != nil || patch.Note != nil {
+	patch := port.CardPatch{
+		Status:           b.Status,
+		Horizon:          b.Horizon,
+		Note:             b.Note,
+		ExecutiveSummary: b.ExecutiveSummary,
+		ValueProposition: b.ValueProposition,
+		ProposedActions:  b.ProposedActions,
+	}
+	if patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil {
 		card, err = a.store.UpdateCard(r.Context(), id, patch)
 		if err != nil {
 			a.fail(w, err)
@@ -244,17 +295,15 @@ func (a *api) retryCard(w http.ResponseWriter, r *http.Request) {
 
 // weeklyDigest groups cards created in the last 7 calendar days by day,
 // newest first, with a total and per-status count.
-// ponytail: full-table scan per digest call, fine for thousands of rows; add a
-// created_at filter to port.CardFilter/ListCards when it stops being fine.
 func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
-	cards, err := a.store.ListCards(r.Context(), port.CardFilter{})
+	const days = 7
+	now := time.Now().UTC()
+	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Since: now.AddDate(0, 0, -days)})
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
 
-	const days = 7
-	now := time.Now().UTC()
 	key := func(t time.Time) string { return t.Format("2006-01-02") }
 
 	window := map[string]bool{}
@@ -331,7 +380,7 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		CardID int64 `json:"card_id"`
 	}
-	if err := decodeJSON(r, &b); err != nil {
+	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
 		return
 	}
@@ -339,7 +388,14 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad card_id")
 		return
 	}
-	go a.svc.Research(context.Background(), b.CardID)
+	if active, err := a.store.HasActiveResearch(r.Context(), b.CardID); err != nil {
+		a.fail(w, err)
+		return
+	} else if active {
+		writeErr(w, http.StatusConflict, "research already running")
+		return
+	}
+	a.svc.GoResearch(nil, b.CardID)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "accepted": true})
 }
 
@@ -355,11 +411,7 @@ func (a *api) getResearch(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	tmpl, err := template.New("research").Parse(researchReportHTML)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
+	tmpl := researchTmpl
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.Execute(w, row); err != nil {
 		a.fail(w, err)
@@ -374,7 +426,11 @@ func pathID(r *http.Request) (int64, bool) {
 	return id, err == nil && id > 0
 }
 
-func decodeJSON(r *http.Request, v any) error {
+// maxBodyBytes is the limit on request body size for JSON endpoints.
+const maxBodyBytes = 1 << 20 // 1 MB
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	defer r.Body.Close()
 	return json.NewDecoder(r.Body).Decode(v)
 }
