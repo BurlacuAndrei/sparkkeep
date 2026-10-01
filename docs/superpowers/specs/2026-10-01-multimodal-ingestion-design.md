@@ -283,7 +283,7 @@ A card is always created, and it never claims content it does not have.
 
 | key | default | purpose |
 |-----|---------|---------|
-| `SPARKKEEP_ASR_URL` | `http://whisper:9000` | whisper base; empty disables ASR |
+| `SPARKKEEP_ASR_URL` | `http://whisper:9000` | whisper base; an unreachable URL degrades to an `audio not transcribed` note |
 | `SPARKKEEP_ASR_MODEL` | `` | server-side default when blank |
 | `SPARKKEEP_VISION_MODEL` | = `SPARKKEEP_LLM_MODEL` | model for image reads |
 | `SPARKKEEP_COOKIES_FILE` | `` | Netscape `cookies.txt` for yt-dlp |
@@ -293,7 +293,9 @@ A card is always created, and it never claims content it does not have.
 
 `SPARKKEEP_ASR_URL` defaults to the deployed whisper container because it is
 verified reachable from the sparkkeep container on `proxy_net`. Point it
-elsewhere or leave it empty to disable ASR.
+elsewhere to use a different whisper server. There is no disable switch: an
+unreachable or misconfigured URL degrades to an `audio not transcribed` note
+and the card is still created.
 
 ## 6. Testing
 
