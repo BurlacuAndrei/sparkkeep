@@ -22,12 +22,25 @@ type Config struct {
 	HeadlessEnabled  bool
 	ChromeBin        string
 	YtDlpBin         string
+	ASRURL           string
+	ASRModel         string
+	VisionModel      string
+	CookiesFile      string
+	UploadDir        string
+	MaxUploadMB      int
+	TranscriptLangs  string
 }
 
 // DefaultSearchURL is the public SearXNG instance used when
 // SPARKKEEP_SEARCH_URL is unset. Override per deployment (SPARKKEEP_SEARCH_URL
 // takes precedence in Load).
 const DefaultSearchURL = "https://searx.be"
+
+// DefaultASRURL points at the deployed whisper container on proxy_net, used when
+// SPARKKEEP_ASR_URL is unset. Override per deployment (SPARKKEEP_ASR_URL takes
+// precedence in Load). Note: getenv treats an empty value as unset, so ASRURL is
+// never empty — callers that must skip transcription need their own switch.
+const DefaultASRURL = "http://whisper:9000"
 
 func Load() (Config, error) {
 	cfg := Config{
@@ -43,6 +56,11 @@ func Load() (Config, error) {
 		HeadlessEnabled:  true, // overridden below if env var is set
 		ChromeBin:        os.Getenv("SPARKKEEP_CHROME_BIN"),
 		YtDlpBin:         getenv("SPARKKEEP_YTDLP", "yt-dlp"),
+		ASRURL:           getenv("SPARKKEEP_ASR_URL", DefaultASRURL),
+		ASRModel:         os.Getenv("SPARKKEEP_ASR_MODEL"),
+		CookiesFile:      os.Getenv("SPARKKEEP_COOKIES_FILE"),
+		MaxUploadMB:      25, // overridden below if env var is set
+		TranscriptLangs:  getenv("SPARKKEEP_TRANSCRIPT_LANGS", "en.*,en"),
 	}
 
 	headless, err := getenvBool("SPARKKEEP_HEADLESS_ENABLED", true)
@@ -50,6 +68,23 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg.HeadlessEnabled = headless
+
+	if v := os.Getenv("SPARKKEEP_VISION_MODEL"); v != "" {
+		cfg.VisionModel = v
+	} else {
+		cfg.VisionModel = cfg.LLMModel
+	}
+	if v := os.Getenv("SPARKKEEP_MAX_UPLOAD_MB"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: SPARKKEEP_MAX_UPLOAD_MB: %w", err)
+		}
+		cfg.MaxUploadMB = n
+	}
+	cfg.UploadDir = os.Getenv("SPARKKEEP_UPLOAD_DIR")
+	if cfg.UploadDir == "" {
+		cfg.UploadDir = filepath.Join(filepath.Dir(cfg.DB), "uploads")
+	}
 
 	if v := os.Getenv("SPARKKEEP_MAX_ANALYZE_TOKENS"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -98,4 +133,3 @@ func getenvBool(key string, def bool) (bool, error) {
 	}
 	return b, nil
 }
-

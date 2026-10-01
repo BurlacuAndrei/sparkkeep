@@ -13,6 +13,9 @@ func setenv(t *testing.T, kv map[string]string) {
 		"SPARKKEEP_MAX_ANALYZE_TOKENS", "SPARKKEEP_TG_TOKEN",
 		"SPARKKEEP_TG_CHAT_ID", "SPARKKEEP_OFFSET_FILE", "SPARKKEEP_SEARCH_URL",
 		"SPARKKEEP_HEADLESS_ENABLED", "SPARKKEEP_CHROME_BIN", "SPARKKEEP_YTDLP",
+		"SPARKKEEP_ASR_URL", "SPARKKEEP_ASR_MODEL", "SPARKKEEP_VISION_MODEL",
+		"SPARKKEEP_COOKIES_FILE", "SPARKKEEP_UPLOAD_DIR", "SPARKKEEP_MAX_UPLOAD_MB",
+		"SPARKKEEP_TRANSCRIPT_LANGS",
 	} {
 		if err := os.Setenv(k, ""); err != nil {
 			t.Fatal(err)
@@ -115,5 +118,65 @@ func TestLoadFull(t *testing.T) {
 		if tc.got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
 		}
+	}
+}
+
+func TestLoadMultimodalDefaults(t *testing.T) {
+	t.Setenv("SPARKKEEP_LLM_MODEL", "gemma3:4b")
+	for _, k := range []string{
+		"SPARKKEEP_ASR_URL", "SPARKKEEP_ASR_MODEL", "SPARKKEEP_VISION_MODEL",
+		"SPARKKEEP_COOKIES_FILE", "SPARKKEEP_UPLOAD_DIR", "SPARKKEEP_MAX_UPLOAD_MB",
+		"SPARKKEEP_TRANSCRIPT_LANGS", "SPARKKEEP_DB",
+	} {
+		t.Setenv(k, "")
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ASRURL != DefaultASRURL {
+		t.Errorf("ASRURL = %q, want %q", cfg.ASRURL, DefaultASRURL)
+	}
+	if cfg.ASRModel != "" {
+		t.Errorf("ASRModel = %q, want empty", cfg.ASRModel)
+	}
+	if cfg.VisionModel != "gemma3:4b" {
+		t.Errorf("VisionModel = %q, want the LLM model", cfg.VisionModel)
+	}
+	if cfg.CookiesFile != "" {
+		t.Errorf("CookiesFile = %q, want empty", cfg.CookiesFile)
+	}
+	if cfg.UploadDir == "" {
+		t.Error("UploadDir is empty, want <dir(DB)>/uploads")
+	}
+	if cfg.MaxUploadMB != 25 {
+		t.Errorf("MaxUploadMB = %d, want 25", cfg.MaxUploadMB)
+	}
+	if cfg.TranscriptLangs != "en.*,en" {
+		t.Errorf("TranscriptLangs = %q, want %q", cfg.TranscriptLangs, "en.*,en")
+	}
+}
+
+func TestLoadMultimodalOverrides(t *testing.T) {
+	t.Setenv("SPARKKEEP_LLM_MODEL", "gemma3:4b")
+	t.Setenv("SPARKKEEP_ASR_URL", "http://elsewhere:9000")
+	t.Setenv("SPARKKEEP_MAX_UPLOAD_MB", "5")
+	t.Setenv("SPARKKEEP_TRANSCRIPT_LANGS", "ro,en")
+	t.Setenv("SPARKKEEP_COOKIES_FILE", "/data/cookies.txt")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ASRURL != "http://elsewhere:9000" || cfg.MaxUploadMB != 5 ||
+		cfg.TranscriptLangs != "ro,en" || cfg.CookiesFile != "/data/cookies.txt" {
+		t.Errorf("override not applied: %+v", cfg)
+	}
+}
+
+func TestLoadBadMaxUploadMB(t *testing.T) {
+	t.Setenv("SPARKKEEP_LLM_MODEL", "gemma3:4b")
+	t.Setenv("SPARKKEEP_MAX_UPLOAD_MB", "lots")
+	if _, err := Load(); err == nil {
+		t.Fatal("want error for non-numeric SPARKKEEP_MAX_UPLOAD_MB")
 	}
 }
