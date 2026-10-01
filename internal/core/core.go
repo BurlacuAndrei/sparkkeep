@@ -279,7 +279,9 @@ func (s *Service) fetchContent(share capture.Share) capture.Fetched {
 }
 
 // mergeFetched copies non-empty fields of b into a (URL, title, description,
-// text, caption). Used to layer a plain fetch over empty media metadata.
+// text, caption, Transcript, ImageDigest, Kind) and appends b.Notes to a.Notes
+// (unioning warnings from both sources). Used to layer a plain fetch over
+// empty media metadata.
 func mergeFetched(a, b capture.Fetched) capture.Fetched {
 	if b.URL != "" {
 		a.URL = b.URL
@@ -295,6 +297,18 @@ func mergeFetched(a, b capture.Fetched) capture.Fetched {
 	}
 	if b.Caption != "" {
 		a.Caption = b.Caption
+	}
+	if b.Transcript != "" {
+		a.Transcript = b.Transcript
+	}
+	if b.ImageDigest != "" {
+		a.ImageDigest = b.ImageDigest
+	}
+	if b.Kind != "" {
+		a.Kind = b.Kind
+	}
+	if len(b.Notes) > 0 {
+		a.Notes = append(a.Notes, b.Notes...)
 	}
 	return a
 }

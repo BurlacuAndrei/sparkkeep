@@ -645,3 +645,44 @@ func TestResearchAllowedAfterFinished(t *testing.T) {
 		t.Fatalf("research rows = %d, want 2", len(st.researches))
 	}
 }
+
+// --- fetchContent merge ------------------------------------------------------
+
+// A plain Fetch layered over empty MediaMeta must not lose extraction
+// warnings, a transcript, or an image digest: those are the fields the
+// analyzer qualifies the card from.
+func TestFetchContentMergeKeepsNotes(t *testing.T) {
+	share := capture.Share{Kind: capture.KindLink, URL: "https://example.com/x"}
+	s := &Service{Fetcher: stubFetcher{
+		recognize: func(string) capture.Share { return share },
+		// MediaMeta came back with no description and no text, which is what
+		// triggers the merge in fetchContent.
+		mediaMeta: func(capture.Share) capture.Fetched {
+			return capture.Fetched{Kind: capture.KindLink, URL: share.URL, Notes: []string{"yt-dlp: gated, no metadata"}}
+		},
+		fetch: func(capture.Share) capture.Fetched {
+			return capture.Fetched{
+				Kind:        capture.KindLink,
+				URL:         share.URL,
+				Text:        "extracted body",
+				Transcript:  "spoken words",
+				ImageDigest: "sha256:abc",
+				Notes:       []string{"login wall, fell back to plain fetch"},
+			}
+		},
+	}}
+
+	f := s.fetchContent(share)
+	if f.Text != "extracted body" || f.Transcript != "spoken words" || f.ImageDigest != "sha256:abc" {
+		t.Errorf("merged content lost: %+v", f)
+	}
+	want := []string{"yt-dlp: gated, no metadata", "login wall, fell back to plain fetch"}
+	if len(f.Notes) != len(want) {
+		t.Fatalf("Notes = %q, want %q", f.Notes, want)
+	}
+	for i, n := range want {
+		if f.Notes[i] != n {
+			t.Errorf("Notes[%d] = %q, want %q", i, f.Notes[i], n)
+		}
+	}
+}
