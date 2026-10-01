@@ -191,7 +191,7 @@ func (r *Runner) fetchAndClip(urls []string) string {
 		if remaining <= 0 {
 			break
 		}
-		f := r.fetcher().Fetch(capture.Share{Name: "link", URL: u})
+		f := r.fetcher().Fetch(capture.Share{Kind: capture.KindLink, URL: u})
 		if f.Err != nil || f.Text == "" {
 			continue
 		}

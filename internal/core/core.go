@@ -77,7 +77,7 @@ func New(st port.Store, cfg config.Config, logf func(format string, args ...any)
 // button survive. All cards are stored even if a later notify fails.
 func (s *Service) Capture(ctx context.Context, raw string) ([]int64, error) {
 	share := s.Fetcher.Recognize(raw)
-	if share.Name == "link" && strings.TrimSpace(share.URL) != "" {
+	if share.Kind == capture.KindLink && strings.TrimSpace(share.URL) != "" {
 		if existing, err := s.Store.GetCardBySourceURL(ctx, share.URL); err == nil {
 			if nerr := s.notify(ctx, port.Notification{Kind: "duplicate", Card: existing, Text: "Already captured: " + existing.Title}); nerr != nil {
 				s.Logf("core: notify duplicate: %v", nerr)
@@ -261,15 +261,15 @@ func (s *Service) failCard(ctx context.Context, fetched capture.Fetched, raw str
 // go straight through Fetch (which returns just the caption).
 func (s *Service) fetchContent(share capture.Share) capture.Fetched {
 	var f capture.Fetched
-	switch share.Name {
-	case "link":
+	switch share.Kind {
+	case capture.KindLink:
 		f = s.Fetcher.MediaMeta(share)
 		if strings.TrimSpace(f.Description) == "" && strings.TrimSpace(f.Text) == "" {
 			if fetched := s.Fetcher.Fetch(share); fetched.Err == nil {
 				f = mergeFetched(f, fetched)
 			}
 		}
-	case "text":
+	case capture.KindText:
 		f = s.Fetcher.Fetch(share)
 	}
 	if f.Caption == "" {

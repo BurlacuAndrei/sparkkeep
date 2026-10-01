@@ -14,7 +14,10 @@ type Capture struct {
 	HeadlessEnabled bool
 	ChromeBin       string
 	YtDlpBin        string
+	// CookiesFile is an optional Netscape cookie jar used for gated media.
+	CookiesFile string
+	// TranscriptLangs is a whisper language hint (e.g. "en", "auto").
+	TranscriptLangs string
 }
 
 func (Capture) Recognize(raw string) Share { return Recognize(raw) }
-

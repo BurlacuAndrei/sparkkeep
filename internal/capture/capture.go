@@ -21,20 +21,47 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
+// Kind classifies what the user handed us. Recognize sets text/link; the
+// channel and web adapters set the media kinds directly.
+const (
+	KindText  = "text"
+	KindLink  = "link"
+	KindImage = "image"
+	KindAudio = "audio"
+	KindVideo = "video"
+	KindFile  = "file"
+)
+
+// File is one media payload handed to the pipeline. Data is in memory: both
+// callers (Telegram getFile, multipart upload) already hold the bytes, and
+// uploads are size-capped, so there is no temp file to manage.
+type File struct {
+	Name string
+	Mime string
+	Data []byte
+}
+
 type Share struct {
-	Name    string // "link" | "text"
+	Kind    string
 	URL     string
-	Caption string // full raw text (pasted-caption path)
+	Caption string
+	Files   []File
 }
 
 type Fetched struct {
-	Name        string // matches Share.Name
+	Kind        string
 	URL         string
 	Title       string
 	Description string
 	Text        string
-	Caption     string // pasted caption (text shares / link-with-caption)
-	Err         error  // nil unless fetch failed
+	Caption     string
+	Transcript  string
+	ImageDigest string
+	// Notes are extraction warnings, never content. Anything we could not
+	// read lands here so the analyzer can qualify the card instead of
+	// inventing content from a login wall or an error page.
+	Notes []string
+	Err   error
 }
 
 var (
@@ -73,14 +100,14 @@ var httpClient = &http.Client{
 
 // Recognize classifies raw as a link (single http(s) URL) or as text.
 // A single URL is extracted into Share.URL; any trailing caption is kept
-// verbatim in Share.Caption. A bare non-URL string yields Name=="text".
+// verbatim in Share.Caption. A bare non-URL string yields Kind==KindText.
 func Recognize(raw string) Share {
 	urls := urlRe.FindAllString(raw, -1)
 	if len(urls) != 1 {
-		return Share{Name: "text", Caption: raw}
+		return Share{Kind: KindText, Caption: raw}
 	}
 	caption := strings.TrimSpace(strings.Replace(raw, urls[0], "", 1))
-	return Share{Name: "link", URL: urls[0], Caption: caption}
+	return Share{Kind: KindLink, URL: urls[0], Caption: caption}
 }
 
 // Fetch returns a Fetched for the given share. It NEVER returns a hard
@@ -103,8 +130,8 @@ func MediaMeta(share Share) Fetched {
 // short-circuit to their caption. Gated or bot-blocked sites fall back
 // to headless browser extraction when enabled.
 func (c Capture) Fetch(share Share) Fetched {
-	f := Fetched{Name: share.Name, URL: share.URL, Caption: share.Caption}
-	if share.Name == "text" {
+	f := Fetched{Kind: share.Kind, URL: share.URL, Caption: share.Caption}
+	if share.Kind == KindText {
 		f.Text = share.Caption
 		return f
 	}
@@ -152,7 +179,7 @@ func (c Capture) Fetch(share Share) Fetched {
 // to the plain HTTP fetch. If yt-dlp fails on gated media (e.g. Instagram login wall),
 // it falls back to headless extraction.
 func (c Capture) MediaMeta(share Share) Fetched {
-	f := Fetched{Name: share.Name, URL: share.URL}
+	f := Fetched{Kind: share.Kind, URL: share.URL}
 	u, err := url.Parse(share.URL)
 	if err != nil {
 		f.Err = err
@@ -265,24 +292,7 @@ func needsHeadlessFallback(share Share, f Fetched) bool {
 	if len(strings.TrimSpace(f.Text)) < 80 {
 		return true
 	}
-	textLower := strings.ToLower(f.Text)
-	botIndicators := []string{
-		"enable javascript",
-		"javascript is required",
-		"please turn javascript on",
-		"just a moment...",
-		"security check",
-		"verify you are human",
-		"cloudflare",
-		"access denied",
-		"bot detection",
-	}
-	for _, ind := range botIndicators {
-		if strings.Contains(textLower, ind) {
-			return true
-		}
-	}
-	return false
+	return isLoginWall(f.Text)
 }
 
 func httpFetch(share Share, f Fetched) Fetched {

@@ -13,14 +13,14 @@ import (
 
 func TestRecognizeLink(t *testing.T) {
 	s := Recognize("https://example.com/foo")
-	if s.Name != "link" || s.URL != "https://example.com/foo" || s.Caption != "" {
+	if s.Kind != KindLink || s.URL != "https://example.com/foo" || s.Caption != "" {
 		t.Fatalf("got %+v", s)
 	}
 }
 
 func TestRecognizeLinkWithCaption(t *testing.T) {
 	s := Recognize("https://example.com/foo check this out")
-	if s.Name != "link" || s.URL != "https://example.com/foo" || s.Caption != "check this out" {
+	if s.Kind != KindLink || s.URL != "https://example.com/foo" || s.Caption != "check this out" {
 		t.Fatalf("got %+v", s)
 	}
 }
@@ -28,7 +28,7 @@ func TestRecognizeLinkWithCaption(t *testing.T) {
 func TestRecognizeText(t *testing.T) {
 	raw := "just some notes, no url"
 	s := Recognize(raw)
-	if s.Name != "text" || s.Caption != raw {
+	if s.Kind != KindText || s.Caption != raw {
 		t.Fatalf("got %+v", s)
 	}
 }
@@ -39,7 +39,7 @@ func TestFetchText(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := Fetch(Share{Name: "link", URL: srv.URL})
+	f := Fetch(Share{Kind: KindLink, URL: srv.URL})
 	if f.Err != nil {
 		t.Fatalf("Fetch err: %v", f.Err)
 	}
@@ -62,7 +62,7 @@ func TestFetchTimeoutPeerError(t *testing.T) {
 	defer func() { fetchTimeout = old }()
 
 	start := time.Now()
-	f := Fetch(Share{Name: "link", URL: srv.URL})
+	f := Fetch(Share{Kind: KindLink, URL: srv.URL})
 	elapsed := time.Since(start)
 
 	if f.Err == nil {
@@ -79,7 +79,7 @@ func TestFetchNonHTML(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := Fetch(Share{Name: "link", URL: srv.URL})
+	f := Fetch(Share{Kind: KindLink, URL: srv.URL})
 	if f.Err != nil {
 		t.Fatalf("Fetch err: %v", f.Err)
 	}
@@ -94,7 +94,7 @@ func TestMediaMetaYTDLPStub(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := Capture{YtDlpBin: script}
-	f := c.MediaMeta(Share{Name: "link", URL: "https://youtube.com/watch?v=x"})
+	f := c.MediaMeta(Share{Kind: KindLink, URL: "https://youtube.com/watch?v=x"})
 	if f.Err != nil {
 		t.Fatalf("MediaMeta err: %v", f.Err)
 	}
@@ -172,3 +172,60 @@ func TestHeadlessEnabledConfig(t *testing.T) {
 	}
 }
 
+func TestRecognizeSetsKind(t *testing.T) {
+	if got := Recognize("just some text").Kind; got != KindText {
+		t.Errorf("Kind = %q, want %q", got, KindText)
+	}
+	if got := Recognize("look at https://example.com/x").Kind; got != KindLink {
+		t.Errorf("Kind = %q, want %q", got, KindLink)
+	}
+}
+
+func TestKindForMime(t *testing.T) {
+	cases := map[string]string{
+		"image/jpeg":      KindImage,
+		"image/png":       KindImage,
+		"image/webp":      KindImage,
+		"audio/ogg":       KindAudio,
+		"audio/mpeg":      KindAudio,
+		"audio/webm":      KindAudio,
+		"video/mp4":       KindVideo,
+		"video/quicktime": KindVideo,
+		"application/pdf": KindFile,
+		"text/plain":      KindFile,
+	}
+	for mime, want := range cases {
+		if got := KindForMime(mime); got != want {
+			t.Errorf("KindForMime(%q) = %q, want %q", mime, got, want)
+		}
+	}
+	if got := KindForMime("application/octet-stream"); got != KindFile {
+		t.Errorf("unknown mime should be a file, got %q", got)
+	}
+}
+
+func TestLoginWallTextIsNotContent(t *testing.T) {
+	for _, wall := range []string{
+		"Log in to Instagram\nNice photo! From your friends on Instagram.",
+		"Please enable JavaScript to continue",
+		"Just a moment...\nChecking your browser before accessing.",
+	} {
+		if !isLoginWall(wall) {
+			t.Errorf("isLoginWall(%q) = false, want true", wall)
+		}
+	}
+	if isLoginWall("An interesting article about distributed systems.") {
+		t.Error("isLoginWall gave a false positive on real content")
+	}
+}
+
+func TestParseVTTStripsCues(t *testing.T) {
+	vtt := "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nhello there\n\n00:00:04.000 --> 00:00:07.000\ngeneral kenobi\n"
+	got := ParseVTT(vtt)
+	if strings.Contains(got, "-->") || strings.Contains(got, "WEBVTT") {
+		t.Errorf("timestamps survived: %q", got)
+	}
+	if !strings.Contains(got, "hello there") || !strings.Contains(got, "general kenobi") {
+		t.Errorf("cue text missing: %q", got)
+	}
+}

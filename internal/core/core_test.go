@@ -169,10 +169,10 @@ func textFetcher() capture.Fetcher {
 	return stubFetcher{
 		recognize: capture.Recognize,
 		fetch: func(s capture.Share) capture.Fetched {
-			return capture.Fetched{Name: s.Name, URL: s.URL, Caption: s.Caption, Text: s.Caption}
+			return capture.Fetched{Kind: s.Kind, URL: s.URL, Caption: s.Caption, Text: s.Caption}
 		},
 		mediaMeta: func(s capture.Share) capture.Fetched {
-			return capture.Fetched{Name: s.Name, URL: s.URL, Caption: s.Caption, Text: s.Caption}
+			return capture.Fetched{Kind: s.Kind, URL: s.URL, Caption: s.Caption, Text: s.Caption}
 		},
 	}
 }
