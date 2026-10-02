@@ -212,6 +212,7 @@ func (s stubFetcher) Fetch(share capture.Share) capture.Fetched {
 func (s stubFetcher) MediaMeta(share capture.Share) capture.Fetched {
 	return capture.Fetched{URL: share.URL, Text: s.text}
 }
+func (s stubFetcher) Subtitles(share capture.Share) string { return "" }
 
 func TestFetchAndClipWithInjectedFetcher(t *testing.T) {
 	r := &Runner{
@@ -223,4 +224,3 @@ func TestFetchAndClipWithInjectedFetcher(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, "stubbed content stubbed conten")
 	}
 }
-

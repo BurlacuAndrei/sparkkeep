@@ -142,10 +142,7 @@ func (c Capture) Fetch(share Share) Fetched {
 		defer cancel()
 		title, desc, text, err := HeadlessExtract(ctx, share.URL, c.ChromeBin)
 		if err == nil && (title != "" || text != "") {
-			f.Title = title
-			f.Description = desc
-			f.Text = text
-			return f
+			return applyHeadless(f, title, desc, text)
 		}
 	}
 
@@ -158,15 +155,7 @@ func (c Capture) Fetch(share Share) Fetched {
 		defer cancel()
 		title, desc, text, err := HeadlessExtract(ctx, share.URL, c.ChromeBin)
 		if err == nil && (title != "" || text != "") {
-			if title != "" {
-				f.Title = title
-			}
-			if desc != "" {
-				f.Description = desc
-			}
-			if text != "" {
-				f.Text = text
-			}
+			f = applyHeadless(f, title, desc, text)
 			f.Err = nil
 		}
 	}
@@ -195,19 +184,28 @@ func (c Capture) MediaMeta(share Share) Fetched {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bin,
-		"--skip-download", "--dump-json", "--no-warnings", share.URL).Output()
+	args := []string{"--skip-download", "--dump-json", "--no-warnings"}
+	if c.CookiesFile != "" {
+		args = append(args, "--cookies", c.CookiesFile)
+	}
+	args = append(args, share.URL)
+	out, err := exec.CommandContext(ctx, bin, args...).Output()
 	if err != nil {
+		f.Notes = append(f.Notes, "metadata unavailable")
+		if embed := InstagramEmbedURL(share.URL); embed != "" && f.Caption == "" {
+			if caption := c.embedCaption(embed); caption != "" {
+				f.Caption = caption
+			} else {
+				f.Notes = append(f.Notes, "instagram caption unavailable")
+			}
+		}
 		// Fallback to headless browser if yt-dlp failed and headless is enabled
 		if c.HeadlessEnabled {
 			hctx, hcancel := context.WithTimeout(context.Background(), headlessTimeout)
 			defer hcancel()
 			title, desc, text, herr := HeadlessExtract(hctx, share.URL, c.ChromeBin)
 			if herr == nil && (title != "" || text != "") {
-				f.Title = title
-				f.Description = desc
-				f.Text = text
-				return f
+				return applyHeadless(f, title, desc, text)
 			}
 		}
 		f.Err = fmt.Errorf("capture: yt-dlp: %w", err)
@@ -292,7 +290,7 @@ func needsHeadlessFallback(share Share, f Fetched) bool {
 	if len(strings.TrimSpace(f.Text)) < 80 {
 		return true
 	}
-	return isLoginWall(f.Text)
+	return IsLoginWall(f.Text)
 }
 
 func httpFetch(share Share, f Fetched) Fetched {

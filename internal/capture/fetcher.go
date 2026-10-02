@@ -7,6 +7,7 @@ type Fetcher interface {
 	Recognize(raw string) Share
 	Fetch(share Share) Fetched
 	MediaMeta(share Share) Fetched
+	Subtitles(share Share) string
 }
 
 // Capture is the default Fetcher with configurable headless/binary paths.

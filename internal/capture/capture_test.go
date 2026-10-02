@@ -210,12 +210,12 @@ func TestLoginWallTextIsNotContent(t *testing.T) {
 		"Please enable JavaScript to continue",
 		"Just a moment...\nChecking your browser before accessing.",
 	} {
-		if !isLoginWall(wall) {
-			t.Errorf("isLoginWall(%q) = false, want true", wall)
+		if !IsLoginWall(wall) {
+			t.Errorf("IsLoginWall(%q) = false, want true", wall)
 		}
 	}
-	if isLoginWall("An interesting article about distributed systems.") {
-		t.Error("isLoginWall gave a false positive on real content")
+	if IsLoginWall("An interesting article about distributed systems.") {
+		t.Error("IsLoginWall gave a false positive on real content")
 	}
 }
 
