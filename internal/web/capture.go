@@ -19,14 +19,21 @@ import (
 func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, a.maxUpload+(1<<20))
 	if err := r.ParseMultipartForm(4 << 20); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeErr(w, http.StatusRequestEntityTooLarge, "upload too large")
+			return
+		}
 		writeErr(w, http.StatusBadRequest, "bad multipart: "+err.Error())
 		return
 	}
 	defer r.MultipartForm.RemoveAll()
 
-	raw := strings.TrimSpace(r.FormValue("url"))
+	url := strings.TrimSpace(r.FormValue("url"))
+	text := strings.TrimSpace(r.FormValue("text"))
+	raw := url
 	if raw == "" {
-		raw = strings.TrimSpace(r.FormValue("text"))
+		raw = text
 	}
 
 	files, ferr := a.readFiles(r.MultipartForm)
@@ -44,6 +51,11 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case raw != "":
 		share = capture.Recognize(raw)
+		if text != "" && text != raw {
+			// Both url and text were supplied; keep the text as the caption
+			// instead of silently dropping it.
+			share.Caption = text
+		}
 		if len(files) > 0 {
 			// A link with an attached image: keep the link, add the file so
 			// its visual content is read too.
@@ -76,26 +88,27 @@ func (a *api) readFiles(f *multipart.Form) ([]capture.File, error) {
 		return nil, nil
 	}
 	var out []capture.File
-	for _, headers := range f.File {
-		for _, h := range headers {
-			fh, err := h.Open()
-			if err != nil {
-				return nil, err
-			}
-			data, rerr := io.ReadAll(io.LimitReader(fh, a.maxUpload+1))
-			fh.Close()
-			if rerr != nil {
-				return nil, rerr
-			}
-			if int64(len(data)) > a.maxUpload {
-				return nil, &tooLargeError{name: h.Filename}
-			}
-			out = append(out, capture.File{
-				Name: filepath.Base(h.Filename),
-				Mime: h.Header.Get("Content-Type"),
-				Data: data,
-			})
+	for _, h := range f.File["file"] {
+		fh, err := h.Open()
+		if err != nil {
+			return nil, err
 		}
+		data, rerr := io.ReadAll(io.LimitReader(fh, a.maxUpload+1))
+		fh.Close()
+		if rerr != nil {
+			return nil, rerr
+		}
+		if int64(len(data)) > a.maxUpload {
+			return nil, &tooLargeError{name: h.Filename}
+		}
+		if len(data) == 0 {
+			continue // an empty part is not a capture
+		}
+		out = append(out, capture.File{
+			Name: filepath.Base(h.Filename),
+			Mime: h.Header.Get("Content-Type"),
+			Data: data,
+		})
 	}
 	return out, nil
 }
@@ -111,12 +124,15 @@ func (e *tooLargeError) Error() string {
 // file directly inside uploadDir.
 func (a *api) media(w http.ResponseWriter, r *http.Request) {
 	name := filepath.Base(r.PathValue("name"))
-	if name == "" || name == "." || name == "/" || a.uploadDir == "" {
+	if name == "" || name == "." || name == ".." || name == "/" || a.uploadDir == "" {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
 	full := filepath.Join(a.uploadDir, name)
-	if _, err := os.Stat(full); err != nil {
+	// Lstat, not Stat: reject directories and symlinks so a planted link cannot
+	// escape uploadDir, and avoid the Stat/Open TOCTOU pair.
+	fi, err := os.Lstat(full)
+	if err != nil || fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
@@ -126,9 +142,16 @@ func (a *api) media(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	if ct := ctByExt(name); ct != "" {
-		w.Header().Set("Content-Type", ct)
+	// Never let ServeContent sniff an executable type (SVG/HTML inline =
+	// stored XSS). Known media types are served inline; everything else is an
+	// opaque download.
+	ct := ctByExt(name)
+	if ct == "" {
+		ct = "application/octet-stream"
+		w.Header().Set("Content-Disposition", "attachment")
 	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, name, time.Time{}, f)
 }
 
