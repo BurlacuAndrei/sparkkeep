@@ -161,8 +161,10 @@ func (c Capture) Fetch(share Share) Fetched {
 	}
 
 	// With headless disabled, wall text from httpFetch would otherwise land in
-	// Text. Keep the "non-content never in Text" invariant regardless of config.
-	if IsLoginWall(f.Text) {
+	// Text. When headless is on, needsHeadlessFallback + applyHeadless already
+	// handled the wall, and a second guard here would wrongly wipe real content
+	// that merely mentions a wall marker (e.g. an article about Cloudflare).
+	if !c.HeadlessEnabled && IsLoginWall(f.Text) {
 		f.Text = ""
 		f.Notes = append(f.Notes, "login wall — content unavailable")
 	}

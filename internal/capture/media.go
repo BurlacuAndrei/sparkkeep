@@ -211,7 +211,20 @@ func (c Capture) Subtitles(share Share) string {
 		b.Write(data)
 		b.WriteByte('\n')
 	}
-	return ParseVTT(b.String())
+	// `--sub-langs en.*,en` can yield both a manual and an auto track, so the
+	// concatenation duplicates every cue. Drop exact-repeat lines.
+	// ponytail: dedup is lossy if a cue genuinely repeats verbatim; acceptable
+	// for best-effort transcript text.
+	seen := map[string]bool{}
+	var cues []string
+	for _, ln := range strings.Split(ParseVTT(b.String()), "\n") {
+		if ln == "" || seen[ln] {
+			continue
+		}
+		seen[ln] = true
+		cues = append(cues, ln)
+	}
+	return strings.Join(cues, "\n")
 }
 
 // embedCaption best-effort-fetches an Instagram captioned-embed page and
