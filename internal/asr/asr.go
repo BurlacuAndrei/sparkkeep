@@ -12,7 +12,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -94,6 +93,3 @@ func (c *Client) Transcribe(ctx context.Context, f capture.File) (string, error)
 	}
 	return strings.TrimSpace(out.Text), nil
 }
-
-// Ext is a convenience for callers that only have a file extension.
-func Ext(name string) string { return strings.TrimPrefix(filepath.Ext(name), ".") }
