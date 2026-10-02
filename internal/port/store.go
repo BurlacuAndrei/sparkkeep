@@ -13,6 +13,8 @@ var ErrNotFound = errors.New("not found")
 // that already has one queued/running.
 var ErrResearchActive = errors.New("research already running")
 
+// Store provides CRUD for cards, research, and tags. TagCoOccurrence is an
+// additional query for the knowledge graph.
 type Store interface {
 	CreateCard(ctx context.Context, c Card) (Card, error)
 	GetCard(ctx context.Context, id int64) (Card, error)
@@ -27,4 +29,5 @@ type Store interface {
 	GetResearch(ctx context.Context, id int64) (Research, error)
 	ListResearch(ctx context.Context) ([]Research, error)
 	Close() error
+	TagCoOccurrence(ctx context.Context, minWeight int) ([]TagPair, error)
 }

@@ -19,6 +19,7 @@ var _ port.Store = (*Store)(nil)
 const (
 	timeLayout   = time.RFC3339
 	defaultLimit = 100
+	maxTagPairs  = 400
 )
 
 type Store struct {
@@ -421,5 +422,36 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 		r.CreatedAt, _ = parseTime(created)
 		list = append(list, r)
 	}
-	return list, rows.Err()
+		return list, rows.Err()
 }
+
+func (s *Store) TagCoOccurrence(ctx context.Context, minWeight int) ([]port.TagPair, error) {
+	if minWeight < 1 {
+		minWeight = 1
+	}
+	const q = `
+		SELECT ta.name, tb.name, COUNT(*) AS w
+		FROM cards_tags ca
+		JOIN cards_tags cb ON ca.card_id = cb.card_id AND ca.tag_id < cb.tag_id
+		JOIN tags ta ON ta.id = ca.tag_id
+		JOIN tags tb ON tb.id = cb.tag_id
+		GROUP BY ta.name, tb.name
+		HAVING w >= ?
+		ORDER BY w DESC, ta.name, tb.name
+		LIMIT ?`
+	rows, err := s.db.QueryContext(ctx, q, minWeight, maxTagPairs)
+	if err != nil {
+		return nil, fmt.Errorf("store: tag co-occurrence: %w", err)
+	}
+	defer rows.Close()
+	var out []port.TagPair
+	for rows.Next() {
+		var p port.TagPair
+		if err := rows.Scan(&p.A, &p.B, &p.Weight); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+

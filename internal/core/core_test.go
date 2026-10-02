@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sort"
 	"testing"
 	"time"
 
@@ -143,6 +144,44 @@ func (s *stubStore) ListResearch(context.Context) ([]port.Research, error) {
 }
 
 func (s *stubStore) Close() error { return nil }
+
+// TagCoOccurrence computes tag pairs from the in-memory cards, mirroring the
+// store's aggregation: distinct tag pairs sharing at least minWeight cards.
+func (s *stubStore) TagCoOccurrence(ctx context.Context, minWeight int) ([]port.TagPair, error) {
+	if minWeight < 1 {
+		minWeight = 1
+	}
+	counts := map[[2]string]int{}
+	for _, c := range s.cards {
+		if c.Status == port.StatusDismissed || c.Status == port.StatusShelved {
+			continue
+		}
+		sorted := append([]string(nil), c.Tags...)
+		sort.Strings(sorted)
+		for i := range sorted {
+			for j := i + 1; j < len(sorted); j++ {
+				counts[[2]string{sorted[i], sorted[j]}]++
+			}
+		}
+	}
+	var out []port.TagPair
+	for k, w := range counts {
+		if w >= minWeight {
+			out = append(out, port.TagPair{A: k[0], B: k[1], Weight: w})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Weight != out[j].Weight {
+			return out[i].Weight > out[j].Weight
+		}
+		if out[i].A != out[j].A {
+			return out[i].A < out[j].A
+		}
+		return out[i].B < out[j].B
+	})
+	return out, nil
+}
+
 
 // stubChannel records notifications; when err is set Notify returns it.
 type stubChannel struct {
