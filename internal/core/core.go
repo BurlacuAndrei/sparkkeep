@@ -5,31 +5,57 @@
 package core
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
 	"sparkkeep/internal/analyze"
+	"sparkkeep/internal/asr"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
 )
 
+// Describer reads an image and returns a text digest. Satisfied by
+// *analyze.Client.
+type Describer interface {
+	Describe(ctx context.Context, img capture.File, hint string) (string, error)
+}
+
+// Transcriber turns audio into text. Satisfied by *asr.Client.
+type Transcriber interface {
+	Transcribe(ctx context.Context, f capture.File) (string, error)
+}
+
+var tagStripRe = regexp.MustCompile(`<[^>]*>`)
+
 // Service wires the pipeline together. Channel is left nil until the
 // channel adapter attaches it (web/main wiring); a nil Channel is a no-op
 // in Notify.
 type Service struct {
-	Store   port.Store
-	Channel port.Channel
-	Fetcher capture.Fetcher // recognize+fetch (field named Fetcher: Capture collided with the method)
-	Analyze *analyze.Client
-	Runner  *research.Runner // field named Runner: Research collided with the method
-	Logf    func(format string, args ...any)
-	WG      sync.WaitGroup
-	Ctx     context.Context
+	Store     port.Store
+	Channel   port.Channel
+	Fetcher   capture.Fetcher // recognize+fetch (field named Fetcher: Capture collided with the method)
+	Analyze   *analyze.Client
+	Vision    Describer        // nil disables image digests
+	ASR       Transcriber      // nil disables transcription
+	Runner    *research.Runner // field named Runner: Research collided with the method
+	UploadDir string           // "" disables upload retention
+	FFmpegBin string           // "" disables video audio extraction
+	Logf      func(format string, args ...any)
+	WG        sync.WaitGroup
+	Ctx       context.Context
 }
 
 // GoResearch runs Research in a background goroutine tracked by s.WG.
@@ -60,10 +86,16 @@ func New(st port.Store, cfg config.Config, logf func(format string, args ...any)
 			HeadlessEnabled: cfg.HeadlessEnabled,
 			ChromeBin:       cfg.ChromeBin,
 			YtDlpBin:        cfg.YtDlpBin,
+			CookiesFile:     cfg.CookiesFile,
+			TranscriptLangs: cfg.TranscriptLangs,
 		},
-		Analyze: llm,
-		Runner:  research.New(cfg, llm),
-		Logf:    logf,
+		Analyze:   llm,
+		Vision:    llm,
+		ASR:       asr.New(cfg),
+		Runner:    research.New(cfg, llm),
+		UploadDir: cfg.UploadDir,
+		FFmpegBin: ffmpegBin(cfg),
+		Logf:      logf,
 	}
 	if s.Logf == nil {
 		s.Logf = log.Printf
@@ -71,12 +103,35 @@ func New(st port.Store, cfg config.Config, logf func(format string, args ...any)
 	return s
 }
 
-// Capture runs the full pipeline for an incoming share and returns the ids
+// ffmpegBin returns a usable ffmpeg path or "" when it is not installed.
+// Video input without ffmpeg degrades to a Note rather than a failure.
+func ffmpegBin(cfg config.Config) string {
+	if v := os.Getenv("SPARKKEEP_FFMPEG_BIN"); v != "" {
+		return v
+	}
+	for _, candidate := range []string{cfg.FFmpegBin, "ffmpeg"} {
+		if candidate == "" {
+			continue
+		}
+		if p, err := exec.LookPath(candidate); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// Capture recognizes raw and runs the full pipeline. It is a convenience
+// wrapper kept for the text/link path so existing callers and tests are
+// unaffected by the switch to CaptureShare.
+func (s *Service) Capture(ctx context.Context, raw string) ([]int64, error) {
+	return s.CaptureShare(ctx, s.Fetcher.Recognize(raw))
+}
+
+// CaptureShare runs the full pipeline for an incoming share and returns the ids
 // of the created cards. It never breaks on an LLM failure: the failure
 // degrades into a stored "Analysis failed" card so the source + retry
 // button survive. All cards are stored even if a later notify fails.
-func (s *Service) Capture(ctx context.Context, raw string) ([]int64, error) {
-	share := s.Fetcher.Recognize(raw)
+func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
 	if share.Kind == capture.KindLink && strings.TrimSpace(share.URL) != "" {
 		if existing, err := s.Store.GetCardBySourceURL(ctx, share.URL); err == nil {
 			if nerr := s.notify(ctx, port.Notification{Kind: "duplicate", Card: existing, Text: "Already captured: " + existing.Title}); nerr != nil {
@@ -88,11 +143,11 @@ func (s *Service) Capture(ctx context.Context, raw string) ([]int64, error) {
 		}
 	}
 
-	fetched := s.fetchContent(share)
+	fetched := s.resolve(ctx, share)
 
 	res, err := s.Analyze.Analyze(ctx, fetched)
 	if err != nil {
-		return s.failCard(ctx, fetched, raw)
+		return s.failCard(ctx, fetched, share.URL)
 	}
 	if len(res.Cards) == 0 {
 		return []int64{}, nil
@@ -234,6 +289,202 @@ func (s *Service) Retry(ctx context.Context, cardID int64) (port.Card, error) {
 		s.Logf("core: notify retry done: %v", nerr)
 	}
 	return created, nil
+}
+
+// resolve turns a share into a Fetched. Link and text shares go through the
+// fetcher; media shares are read locally. Nothing here fails hard — every
+// unreadable input becomes a Note so a card is still produced.
+func (s *Service) resolve(ctx context.Context, share capture.Share) capture.Fetched {
+	switch share.Kind {
+	case capture.KindText, capture.KindLink:
+		f := s.fetchContent(share)
+		f.Kind = share.Kind
+		if share.Kind == capture.KindLink {
+			if f.Transcript == "" {
+				if tr := s.Fetcher.Subtitles(share); tr != "" {
+					f.Transcript = tr
+				} else if isVideoHost(f.URL) {
+					f.Notes = append(f.Notes, "no transcript available")
+				}
+			}
+		}
+		return f
+	default:
+		return s.resolveMedia(ctx, share)
+	}
+}
+
+// resolveMedia reads image, audio, video, and file payloads.
+func (s *Service) resolveMedia(ctx context.Context, share capture.Share) capture.Fetched {
+	f := capture.Fetched{
+		Kind:    share.Kind,
+		URL:     share.URL,
+		Caption: share.Caption,
+	}
+	if len(share.Files) == 0 {
+		f.Notes = append(f.Notes, "no file content received")
+		return f
+	}
+	file := share.Files[0]
+	f.Title = file.Name
+
+	if f.URL == "" {
+		if name := s.persistUpload(file); name != "" {
+			f.URL = "/api/v1/media/" + name
+		}
+	}
+
+	if share.Kind == capture.KindImage {
+		if s.Vision == nil {
+			f.Notes = append(f.Notes, "image unreadable")
+			return f
+		}
+		digest, err := s.Vision.Describe(ctx, file, "")
+		if err != nil {
+			s.Logf("core: vision %s: %v", file.Name, err)
+			f.Notes = append(f.Notes, "image unreadable")
+			return f
+		}
+		f.ImageDigest = digest
+		return f
+	}
+
+	if share.Kind == capture.KindVideo {
+		audio, err := s.extractAudio(ctx, file)
+		if err != nil {
+			s.Logf("core: extract audio %s: %v", file.Name, err)
+			f.Notes = append(f.Notes, "video: audio extraction unavailable")
+			return f
+		}
+		if tr, terr := s.transcribe(ctx, audio); terr == nil && tr != "" {
+			f.Transcript = tr
+			return f
+		} else if terr != nil {
+			s.Logf("core: transcribe %s: %v", file.Name, terr)
+		}
+		f.Notes = append(f.Notes, "audio not transcribed")
+		return f
+	}
+
+	if share.Kind == capture.KindAudio {
+		tr, err := s.transcribe(ctx, file)
+		if err != nil {
+			s.Logf("core: transcribe %s: %v", file.Name, err)
+			f.Notes = append(f.Notes, "audio not transcribed")
+			return f
+		}
+		if tr == "" {
+			f.Notes = append(f.Notes, "audio not transcribed")
+			return f
+		}
+		f.Transcript = tr
+		return f
+	}
+
+	// KindFile: read text-like content, otherwise record the filename only.
+	if txt, ok := readTextFile(file); ok {
+		f.Text = txt
+		return f
+	}
+	if file.Mime == "application/pdf" {
+		f.Notes = append(f.Notes, "pdf: text not extracted")
+	} else {
+		f.Notes = append(f.Notes, "file: content not extractable")
+	}
+	return f
+}
+
+// isVideoHost reports whether a URL points at a platform that has subtitles
+// worth asking for.
+func isVideoHost(raw string) bool {
+	low := strings.ToLower(raw)
+	return strings.Contains(low, "youtube.com") || strings.Contains(low, "youtu.be")
+}
+
+func (s *Service) transcribe(ctx context.Context, f capture.File) (string, error) {
+	if s.ASR == nil {
+		return "", nil
+	}
+	return s.ASR.Transcribe(ctx, f)
+}
+
+// extractAudio converts a video file to 16kHz mono wav via ffmpeg. Returns
+// an error when ffmpeg is unavailable, which the caller turns into a Note.
+func (s *Service) extractAudio(ctx context.Context, in capture.File) (capture.File, error) {
+	if s.FFmpegBin == "" {
+		return capture.File{}, fmt.Errorf("core: ffmpeg not installed")
+	}
+	tmp, err := os.CreateTemp("", "sparkkeep-audio-*.wav")
+	if err != nil {
+		return capture.File{}, err
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Close()
+	cmd := exec.CommandContext(ctx, s.FFmpegBin,
+		"-i", "pipe:0", "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", tmp.Name())
+	cmd.Stdin = bytes.NewReader(in.Data)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return capture.File{}, fmt.Errorf("core: ffmpeg: %w: %s", err, clipText(string(out), 200))
+	}
+	wav, err := os.ReadFile(tmp.Name())
+	if err != nil {
+		return capture.File{}, err
+	}
+	return capture.File{Name: "audio.wav", Mime: "audio/wav", Data: wav}, nil
+}
+
+func clipText(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+// readTextFile returns file contents when the mime is text-like. HTML is
+// stripped so a saved web page reads as prose.
+func readTextFile(f capture.File) (string, bool) {
+	m := strings.ToLower(f.Mime)
+	if !strings.HasPrefix(m, "text/") && m != "application/json" && m != "application/xml" {
+		return "", false
+	}
+	s := strings.TrimSpace(string(f.Data))
+	if strings.Contains(m, "html") {
+		s = strings.TrimSpace(stripHTML(s))
+	}
+	if len(s) > 4000 {
+		s = string([]rune(s)[:4000])
+	}
+	return s, s != ""
+}
+
+func stripHTML(s string) string {
+	re := regexp.MustCompile(`(?s)<(script|style)[^>]*>.*?</\1>`)
+	s = re.ReplaceAllString(s, " ")
+	return tagStripRe.ReplaceAllString(s, "")
+}
+
+// persistUpload stores f under UploadDir named by its content hash and
+// returns the filename, or "" when storage is unavailable. Storage is
+// best-effort: capture must not fail because a directory is missing.
+func (s *Service) persistUpload(f capture.File) string {
+	if s.UploadDir == "" || len(f.Data) == 0 {
+		return ""
+	}
+	if err := os.MkdirAll(s.UploadDir, 0o755); err != nil {
+		s.Logf("core: mkdir uploads: %v", err)
+		return ""
+	}
+	sum := sha256.Sum256(f.Data)
+	ext := strings.ToLower(filepath.Ext(f.Name))
+	if ext == "" || len(ext) > 8 {
+		ext = ""
+	}
+	name := hex.EncodeToString(sum[:])[:16] + ext
+	if err := os.WriteFile(filepath.Join(s.UploadDir, name), f.Data, 0o644); err != nil {
+		s.Logf("core: write upload: %v", err)
+		return ""
+	}
+	return name
 }
 
 // failCard stores the "analysis failed, see source / retry" card. It is the

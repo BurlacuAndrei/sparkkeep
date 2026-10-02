@@ -29,6 +29,7 @@ type Config struct {
 	UploadDir        string
 	MaxUploadMB      int
 	TranscriptLangs  string
+	FFmpegBin        string
 }
 
 // DefaultSearchURL is the public SearXNG instance used when
@@ -61,6 +62,7 @@ func Load() (Config, error) {
 		CookiesFile:      os.Getenv("SPARKKEEP_COOKIES_FILE"),
 		MaxUploadMB:      25, // overridden below if env var is set
 		TranscriptLangs:  getenv("SPARKKEEP_TRANSCRIPT_LANGS", "en.*,en"),
+		FFmpegBin:        os.Getenv("SPARKKEEP_FFMPEG_BIN"),
 	}
 
 	headless, err := getenvBool("SPARKKEEP_HEADLESS_ENABLED", true)

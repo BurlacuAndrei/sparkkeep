@@ -8,12 +8,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"sparkkeep/internal/analyze"
+	"sparkkeep/internal/asr"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/port"
@@ -234,9 +237,72 @@ func baseSvc(t *testing.T, st port.Store, ch *stubChannel, llm *httptest.Server)
 		Channel: ch,
 		Fetcher: capture.Capture{},
 		Analyze: ac,
+		Vision:  ac,
+		ASR:     asr.New(config.Config{}),
 		Runner:  research.New(config.Config{}, ac),
 		Logf:    t.Logf,
 	}
+}
+
+// promptSpy records the last curator prompt it was sent and answers with a
+// one-card analysis.
+type promptSpy struct {
+	mu     sync.Mutex
+	prompt string
+}
+
+func (p *promptSpy) server(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		for _, m := range body.Messages {
+			if m.Role != "user" {
+				continue
+			}
+			var text string
+			if json.Unmarshal(m.Content, &text) == nil {
+				p.mu.Lock()
+				p.prompt = text
+				p.mu.Unlock()
+			}
+		}
+		io.WriteString(w, `{"choices":[{"message":{"content":`+
+			`"{\"executive_summary\":\"s\",\"value_proposition\":\"v\",`+
+			`\"proposed_actions\":[\"a\"],\"cards\":[{\"title\":\"t\",`+
+			`\"summary\":\"s\",\"horizon\":\"short-term\",\"tags\":[],\"links\":[]}]}"`+
+			`}}]}`)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func (p *promptSpy) last() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.prompt
+}
+
+// fakeVision returns a canned image digest.
+type fakeVision struct{ digest string }
+
+func (f *fakeVision) Describe(ctx context.Context, img capture.File, hint string) (string, error) {
+	return f.digest, nil
+}
+
+// fakeASR returns a canned transcript.
+type fakeASR struct{ text string }
+
+func (f *fakeASR) Transcribe(ctx context.Context, ffile capture.File) (string, error) {
+	return f.text, nil
 }
 
 // --- Capture ----------------------------------------------------------------
@@ -691,5 +757,143 @@ func TestFetchContentMergeKeepsNotes(t *testing.T) {
 		if f.Notes[i] != n {
 			t.Errorf("Notes[%d] = %q, want %q", i, f.Notes[i], n)
 		}
+	}
+}
+
+func TestCaptureShareAudioTranscribes(t *testing.T) {
+	spy := &promptSpy{}
+	s := baseSvc(t, newStubStore(), &stubChannel{}, spy.server(t))
+	s.Fetcher = stubFetcher{}
+	s.ASR = &fakeASR{text: "the spoken words of the voice note"}
+	s.UploadDir = ""
+
+	ids, err := s.CaptureShare(context.Background(), capture.Share{
+		Kind:    capture.KindAudio,
+		Caption: "my idea",
+		Files:   []capture.File{{Name: "v.ogg", Mime: "audio/ogg", Data: []byte("OggS")}},
+	})
+	if err != nil {
+		t.Fatalf("CaptureShare: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want one card", ids)
+	}
+	if !strings.Contains(spy.last(), "the spoken words of the voice note") {
+		t.Errorf("transcript never reached the prompt:\n%s", spy.last())
+	}
+}
+
+func TestCaptureShareImageUsesVision(t *testing.T) {
+	spy := &promptSpy{}
+	s := baseSvc(t, newStubStore(), &stubChannel{}, spy.server(t))
+	s.Fetcher = stubFetcher{}
+	s.Vision = &fakeVision{digest: "a chart of quarterly revenue by quarter"}
+
+	_, err := s.CaptureShare(context.Background(), capture.Share{
+		Kind:  capture.KindImage,
+		Files: []capture.File{{Name: "c.png", Mime: "image/png", Data: []byte("\x89PNG")}},
+	})
+	if err != nil {
+		t.Fatalf("CaptureShare: %v", err)
+	}
+	if !strings.Contains(spy.last(), "quarterly revenue") {
+		t.Errorf("image digest never reached the prompt:\n%s", spy.last())
+	}
+}
+
+func TestCaptureShareVideoWithoutFFmpegStillCreatesCard(t *testing.T) {
+	spy := &promptSpy{}
+	s := baseSvc(t, newStubStore(), &stubChannel{}, spy.server(t))
+	s.Fetcher = stubFetcher{}
+	s.FFmpegBin = ""
+
+	ids, err := s.CaptureShare(context.Background(), capture.Share{
+		Kind:  capture.KindVideo,
+		Files: []capture.File{{Name: "v.mp4", Mime: "video/mp4", Data: []byte("\x00\x00\x00\x20ftyp")}},
+	})
+	if err != nil {
+		t.Fatalf("CaptureShare: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want the card to still be created", ids)
+	}
+	if !strings.Contains(spy.last(), "video: audio extraction unavailable") {
+		t.Errorf("missing ffmpeg note in prompt:\n%s", spy.last())
+	}
+}
+
+// Review Focus: a YouTube link with no subtitles must still produce a card
+// carrying the note, never a fabricated transcript and never an empty card.
+func TestCaptureShareVideoNoSubtitlesNotesAndKeepsTitle(t *testing.T) {
+	spy := &promptSpy{}
+	s := baseSvc(t, newStubStore(), &stubChannel{}, spy.server(t))
+	s.Fetcher = stubFetcher{
+		mediaMeta: func(sh capture.Share) capture.Fetched {
+			return capture.Fetched{
+				Kind: sh.Kind, URL: sh.URL,
+				Title: "A talk about Go", Description: "the description",
+			}
+		},
+		subtitles: func(capture.Share) string { return "" },
+	}
+	ids, err := s.CaptureShare(context.Background(),
+		capture.Share{Kind: capture.KindLink, URL: "https://www.youtube.com/watch?v=abc"})
+	if err != nil {
+		t.Fatalf("CaptureShare: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want a card despite no subtitles", ids)
+	}
+	p := spy.last()
+	if !strings.Contains(p, "no transcript available") {
+		t.Errorf("missing transcript note:\n%s", p)
+	}
+	if !strings.Contains(p, "A talk about Go") {
+		t.Errorf("title was dropped:\n%s", p)
+	}
+	if strings.Contains(p, "TRANSCRIPT: the actual") {
+		t.Error("a transcript was fabricated")
+	}
+}
+
+// Review Focus: an unreachable whisper degrades to a note, not a failure.
+func TestCaptureShareAudioASRFailureNotes(t *testing.T) {
+	spy := &promptSpy{}
+	s := baseSvc(t, newStubStore(), &stubChannel{}, spy.server(t))
+	s.Fetcher = stubFetcher{}
+	s.ASR = &fakeASR{text: ""}
+	ids, err := s.CaptureShare(context.Background(), capture.Share{
+		Kind:  capture.KindAudio,
+		Files: []capture.File{{Name: "v.ogg", Mime: "audio/ogg", Data: []byte("OggS")}},
+	})
+	if err != nil {
+		t.Fatalf("CaptureShare: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want the card to still be created", ids)
+	}
+	if !strings.Contains(spy.last(), "audio not transcribed") {
+		t.Errorf("missing ASR note:\n%s", spy.last())
+	}
+}
+
+func TestPersistUploadDeduplicatesByContent(t *testing.T) {
+	dir := t.TempDir()
+	s := &Service{UploadDir: dir, Logf: t.Logf}
+	f := capture.File{Name: "photo.jpg", Mime: "image/jpeg", Data: []byte("same-bytes")}
+	a := s.persistUpload(f)
+	b := s.persistUpload(capture.File{Name: "other-name.jpg", Mime: "image/jpeg", Data: []byte("same-bytes")})
+	if a == "" || a != b {
+		t.Errorf("persistUpload names %q and %q for identical content, want one name", a, b)
+	}
+	if a == "" {
+		t.Fatal("no name returned")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("wrote %d files, want 1", len(entries))
 	}
 }
