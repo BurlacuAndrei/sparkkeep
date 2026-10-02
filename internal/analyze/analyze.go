@@ -6,9 +6,13 @@ package analyze
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/jpeg"
+	_ "image/png" // registers PNG decoding for Telegram screenshots
 	"io"
 	"net"
 	"net/http"
@@ -43,11 +47,12 @@ type AnalysisResult struct {
 var ErrInvalidResponse = errors.New("analyze: invalid model response")
 
 type Client struct {
-	BaseURL   string
-	APIKey    string
-	Model     string
-	MaxTokens int
-	HTTP      *http.Client
+	BaseURL     string
+	APIKey      string
+	Model       string
+	VisionModel string
+	MaxTokens   int
+	HTTP        *http.Client
 }
 
 // New returns a client bound to the endpoint/key/model. A non-nil
@@ -74,7 +79,95 @@ func New(cfg config.Config, forceClient *http.Client) *Client {
 	if c.MaxTokens <= 0 {
 		c.MaxTokens = 2048
 	}
+	c.VisionModel = cfg.VisionModel
+	if c.VisionModel == "" {
+		c.VisionModel = c.Model
+	}
 	return c
+}
+
+// visionMaxEdge bounds the long edge of an image before it is sent to a
+// vision model. A 12MP phone photo through a 4B model on CPU is minutes of
+// wall clock; 768px is legible for captions and screenshots.
+const visionMaxEdge = 768
+
+// minDigestChars is the floor for a usable image description. Below it the
+// model returned nothing, and a card built on that would be a fabrication.
+const minDigestChars = 20
+
+// Describe asks the vision model what an image contains. It returns
+// ("", error) when the image cannot be decoded or the model is unreachable;
+// the caller turns that into an "image unreadable" Note.
+func (c *Client) Describe(ctx context.Context, img capture.File, hint string) (string, error) {
+	enc, mime, err := encodeForVision(img.Data)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(hint) == "" {
+		hint = "Describe this image. Transcribe any visible text verbatim. State clearly if the image is unreadable or contains no useful information."
+	}
+	content, err := c.doCompletion(ctx, map[string]any{
+		"model": c.VisionModel,
+		"messages": []map[string]any{{
+			"role": "user",
+			"content": []map[string]any{
+				{"type": "text", "text": hint},
+				{"type": "image_url", "image_url": map[string]string{
+					"url": "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(enc),
+				}},
+			},
+		}},
+		"max_tokens":  512,
+		"temperature": 0.1,
+	})
+	if err != nil {
+		return "", err
+	}
+	content = strings.TrimSpace(content)
+	if len(content) < minDigestChars {
+		return "", fmt.Errorf("analyze: vision reply too short (%d chars)", len(content))
+	}
+	return content, nil
+}
+
+// encodeForVision downscales raw image bytes to visionMaxEdge and re-encodes
+// as JPEG. Decoding is stdlib (the jpeg and blank-imported png packages
+// register their decoders) and scaling is a nearest-neighbour loop over
+// image.Image, so no dependency.
+func encodeForVision(raw []byte) ([]byte, string, error) {
+	img, _, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return nil, "", fmt.Errorf("analyze: decode image: %w", err)
+	}
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w <= 0 || h <= 0 {
+		return nil, "", fmt.Errorf("analyze: empty image %dx%d", w, h)
+	}
+	if w > visionMaxEdge || h > visionMaxEdge {
+		scale := float64(visionMaxEdge) / float64(max(w, h))
+		nw, nh := int(float64(w)*scale), int(float64(h)*scale)
+		if nw < 1 {
+			nw = 1
+		}
+		if nh < 1 {
+			nh = 1
+		}
+		dst := image.NewRGBA(image.Rect(0, 0, nw, nh))
+		for y := 0; y < nh; y++ {
+			for x := 0; x < nw; x++ {
+				sx := b.Min.X + x*w/nw
+				sy := b.Min.Y + y*h/nh
+				dst.Set(x, y, img.At(sx, sy))
+			}
+		}
+		img = dst
+	}
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: 80}); err != nil {
+		return nil, "", fmt.Errorf("analyze: encode jpeg: %w", err)
+	}
+	return out.Bytes(), "image/jpeg", nil
 }
 
 // doCompletion performs a single OpenAI-compatible chat completion call and
@@ -128,9 +221,9 @@ func (c *Client) doCompletion(ctx context.Context, body map[string]any) (string,
 func (c *Client) Analyze(ctx context.Context, payload capture.Fetched) (AnalysisResult, error) {
 	content, err := c.doCompletion(ctx, map[string]any{
 		"model": c.Model,
-		"messages": []map[string]string{
+		"messages": []map[string]any{
 			{"role": "system", "content": "You are a curator that returns strict JSON."},
-			{"role": "user", "content": promptFor(payload)},
+			{"role": "user", "content": PromptFor(payload)},
 		},
 		"response_format": map[string]string{"type": "json_object"},
 		"max_tokens":      c.MaxTokens,
@@ -148,7 +241,7 @@ func (c *Client) Analyze(ctx context.Context, payload capture.Fetched) (Analysis
 func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
 	return c.doCompletion(ctx, map[string]any{
 		"model": c.Model,
-		"messages": []map[string]string{
+		"messages": []map[string]any{
 			{"role": "system", "content": "You are a rigorous research assistant."},
 			{"role": "user", "content": prompt},
 		},
@@ -256,9 +349,24 @@ func stripFences(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-func promptFor(payload capture.Fetched) string {
-	return fmt.Sprintf(`You receive a captured internet post. You are the Sparkkeep Action Engine curator.
-Your mission is to provide a concise "So What?" briefing and split the content into actionable idea cards.
+// PromptFor builds the curator prompt. Notes are labelled explicitly as
+// extraction warnings so the model qualifies the card instead of treating a
+// login wall or a missing transcript as content.
+func PromptFor(payload capture.Fetched) string {
+	notes := "(none)"
+	if len(payload.Notes) > 0 {
+		notes = strings.Join(payload.Notes, "; ")
+	}
+	transcript := payload.Transcript
+	if strings.TrimSpace(transcript) == "" {
+		transcript = "(none)"
+	}
+	digest := payload.ImageDigest
+	if strings.TrimSpace(digest) == "" {
+		digest = "(none)"
+	}
+	return fmt.Sprintf(`You receive captured content of kind %q. You are the Sparkkeep Action Engine curator.
+Give a concise "So What?" briefing and split the content into actionable idea cards.
 Return ONLY a valid JSON object matching this schema:
 {
   "executive_summary": "1-3 sentences answering 'What is this?'",
@@ -276,13 +384,30 @@ Return ONLY a valid JSON object matching this schema:
 }
 
 Rules:
-- horizon must be "short-term" (actionable now/soon) or "lifetime" (long-horizon bucket item/trip/vision).
+- horizon must be "short-term" (actionable now/soon) or "lifetime" (long-horizon bucket item).
 - One card per distinct idea or tool; if one idea, exactly one card; never merge; never drop.
-- If media metadata exists, incorporate it into the briefing and cards.
+- EXTRACTION NOTES are warnings about what could NOT be read. Never present a note's
+  subject as content you learned. If content is missing, say so plainly in the summary.
+- If the source is thin, produce one honest card rather than padding to look substantial.
 
-Source:
 TITLE: %s
 DESCRIPTION: %s
 BODY: %s
-CAPTION: %s`, payload.Title, payload.Description, payload.Text, payload.Caption)
+CAPTION: %s
+TRANSCRIPT: %s
+IMAGE READING: %s
+EXTRACTION NOTES: %s`,
+		payload.Kind,
+		clip(payload.Title, 300), clip(payload.Description, 600),
+		clip(payload.Text, 4000), clip(payload.Caption, 2000),
+		clip(transcript, 6000), clip(digest, 2000), notes)
+}
+
+// clip truncates at a rune boundary so a long transcript cannot split a
+// multi-byte character.
+func clip(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return string([]rune(s)[:max]) + "\n[truncated]"
 }

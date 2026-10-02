@@ -1,9 +1,15 @@
 package analyze
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -147,7 +153,7 @@ func TestExtractJSONWrapper(t *testing.T) {
 }
 
 func TestPromptForContainsBriefing(t *testing.T) {
-	p := promptFor(capture.Fetched{Title: "Test Title", Caption: "my caption text"})
+	p := PromptFor(capture.Fetched{Title: "Test Title", Caption: "my caption text"})
 	if !strings.Contains(p, "executive_summary") || !strings.Contains(p, "value_proposition") || !strings.Contains(p, "proposed_actions") {
 		t.Fatalf("prompt missing briefing schema:\n%s", p)
 	}
@@ -196,5 +202,133 @@ func TestDefaultClientBoundedDial(t *testing.T) {
 	}
 	if tr.DialContext == nil {
 		t.Fatal("default client Transport has no DialContext: response time is intentionally unbounded, but connection establishment must still be bounded so a dead endpoint fails at connect")
+	}
+}
+
+// tinyJPEG encodes a real n×n JPEG so the test exercises the same decode path
+// Describe uses. Hand-written JPEG magic bytes are not decodable.
+func tinyJPEG(t *testing.T, n int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, n, n))
+	for y := 0; y < n; y++ {
+		for x := 0; x < n; x++ {
+			img.Set(x, y, color.RGBA{R: uint8(x * 7), G: uint8(y * 7), B: 0x40, A: 0xff})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestDescribeSendsImageDataURL(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		io.WriteString(w, `{"choices":[{"message":{"content":"A dog on a skateboard."}}]}`)
+	}))
+	defer srv.Close()
+
+	c := New(config.Config{LLMBase: srv.URL, LLMModel: "gemma3:4b", VisionModel: "gemma3:4b"}, srv.Client())
+	got, err := c.Describe(context.Background(), capture.File{
+		Name: "dog.jpg", Mime: "image/jpeg", Data: tinyJPEG(t, 64),
+	}, "Describe this image.")
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	if got != "A dog on a skateboard." {
+		t.Errorf("digest = %q", got)
+	}
+	if body["model"] != "gemma3:4b" {
+		t.Errorf("model = %v, want the vision model", body["model"])
+	}
+	msgs, _ := body["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("messages = %v, want one user message", body["messages"])
+	}
+	parts, _ := msgs[0].(map[string]any)["content"].([]any)
+	if len(parts) != 2 {
+		t.Fatalf("content parts = %v, want text + image", parts[0])
+	}
+	imgPart, _ := parts[1].(map[string]any)
+	if imgPart["type"] != "image_url" {
+		t.Fatalf("second part = %v, want image_url", imgPart)
+	}
+	url, _ := imgPart["image_url"].(map[string]any)["url"].(string)
+	if !strings.HasPrefix(url, "data:image/jpeg;base64,") {
+		t.Errorf("image url = %.40q, want a data: URL", url)
+	}
+}
+
+// Review Focus: a 12MP phone photo must be downscaled, not sent at full size.
+// Build the large image cheaply as a flat colour so the test stays fast.
+func TestEncodeForVisionDownscalesLargePhoto(t *testing.T) {
+	raw := tinyJPEG(t, 3000)
+	enc, mime, err := encodeForVision(raw)
+	if err != nil {
+		t.Fatalf("encodeForVision: %v", err)
+	}
+	if mime != "image/jpeg" {
+		t.Errorf("mime = %q, want image/jpeg", mime)
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(enc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Width > visionMaxEdge || cfg.Height > visionMaxEdge {
+		t.Errorf("encoded %dx%d, want both edges <= %d", cfg.Width, cfg.Height, visionMaxEdge)
+	}
+	// Aspect ratio must survive the nearest-neighbour scale.
+	wantRatio := 1.0
+	if got := float64(cfg.Width) / float64(cfg.Height); got < wantRatio*0.95 || got > wantRatio*1.05 {
+		t.Errorf("aspect ratio %.3f, want ~1.0 for a square source", got)
+	}
+	// And the downscale must actually shrink the payload.
+	if len(enc) >= len(raw) {
+		t.Errorf("downscaled %d bytes from %d, expected smaller", len(enc), len(raw))
+	}
+}
+
+func TestEncodeForVisionLeavesSmallImageAlone(t *testing.T) {
+	enc, _, err := encodeForVision(tinyJPEG(t, 128))
+	if err != nil {
+		t.Fatalf("encodeForVision: %v", err)
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(enc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Width != 128 || cfg.Height != 128 {
+		t.Errorf("got %dx%d, want 128x128 untouched", cfg.Width, cfg.Height)
+	}
+}
+
+func TestDescribeSkipsUnusableImage(t *testing.T) {
+	// Bytes that are not an image cannot be decoded, so Describe must decline
+	// rather than send garbage and invite a hallucination.
+	c := New(config.Config{LLMBase: "http://127.0.0.1:1/v1", LLMModel: "m", VisionModel: "m"}, &http.Client{})
+	got, err := c.Describe(context.Background(), capture.File{
+		Name: "x.jpg", Mime: "image/jpeg", Data: []byte("not an image"),
+	}, "")
+	if err == nil {
+		t.Fatal("want an error for undecodable image data")
+	}
+	if got != "" {
+		t.Errorf("digest = %q, want empty on error", got)
+	}
+}
+
+func TestPromptForCarriesTranscriptAndNotes(t *testing.T) {
+	p := PromptFor(capture.Fetched{
+		Kind:       capture.KindVideo,
+		Title:      "Some talk",
+		Transcript: "the actual spoken words",
+		Notes:      []string{"no transcript available"},
+	})
+	for _, want := range []string{"the actual spoken words", "no transcript available", "EXTRACTION NOTES"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prompt missing %q", want)
+		}
 	}
 }
