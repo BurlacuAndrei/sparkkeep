@@ -484,19 +484,19 @@ func TestExpiredFileIDIsDropped(t *testing.T) {
 	}
 }
 
-// The download is bounded: a response larger than the cap is truncated, not
-// buffered whole.
-func TestDownloadFileIsSizeBounded(t *testing.T) {
+// The download is bounded: a response larger than the cap is rejected, not
+// buffered whole and not truncated into partial media.
+func TestDownloadFileRejectsOversized(t *testing.T) {
 	bot := newFakeBot(t, nil).withFile("big.bin", make([]byte, maxTelegramFile+1024))
 	srv := httptest.NewServer(bot.handler())
 	defer srv.Close()
 	a := &Adapter{Token: "TOKEN", Logf: t.Logf, baseURL: srv.URL}
 	data, err := a.downloadFile("big")
-	if err != nil {
-		t.Fatalf("downloadFile: %v", err)
+	if err == nil {
+		t.Fatalf("oversized download must error, got %d bytes", len(data))
 	}
-	if len(data) != maxTelegramFile {
-		t.Fatalf("downloaded %d bytes, want the %d cap", len(data), maxTelegramFile)
+	if data != nil {
+		t.Fatalf("oversized download must return no data, got %d bytes", len(data))
 	}
 }
 

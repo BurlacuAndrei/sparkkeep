@@ -485,7 +485,17 @@ func (a *Adapter) downloadFile(fileID string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("telegram: download %s: status %d", meta.FilePath, resp.StatusCode)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, maxTelegramFile))
+	// Reject oversized files rather than truncating: a partial image/audio
+	// handed to Vision/ASR is worse than a clean drop. Read one byte past the
+	// limit to detect the overage.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxTelegramFile+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxTelegramFile {
+		return nil, fmt.Errorf("telegram: %s exceeds %d bytes", meta.FilePath, maxTelegramFile)
+	}
+	return data, nil
 }
 
 // handleCallback maps `<card_id>:<action>` data to store updates / research:
