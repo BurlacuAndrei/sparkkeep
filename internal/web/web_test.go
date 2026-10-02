@@ -220,7 +220,7 @@ func analyzeClient(llm *httptest.Server) *analyze.Client {
 }
 
 func webHandler(st port.Store, svc *core.Service) http.Handler {
-	return New(st, svc, "http://localhost:8080")
+	return New(st, svc, "http://localhost:8080", config.Config{MaxUploadMB: 25})
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path string, body string) *httptest.ResponseRecorder {
@@ -683,5 +683,3 @@ func TestTriggerResearch_DuplicateRejects(t *testing.T) {
 		t.Fatalf("status = %d, want 409 Conflict", rr.Code)
 	}
 }
-
-

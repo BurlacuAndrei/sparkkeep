@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
 	"sparkkeep/internal/port"
 )
@@ -55,15 +56,24 @@ var researchTmpl = template.Must(template.New("research").Parse(researchReportHT
 // api routes the mux to the injected Store and Service. publicURL is
 // accepted for the dashboard's absolute links (e.g. research reports).
 type api struct {
-	store  port.Store
-	svc    *core.Service
-	public string
+	store     port.Store
+	svc       *core.Service
+	public    string
+	uploadDir string
+	maxUpload int64
 }
 
 // New returns a http.Handler routing /api/v1/* and the /assets static files
 // (/ serves index.html).
-func New(store port.Store, svc *core.Service, publicURL string) http.Handler {
-	a := &api{store: store, svc: svc, public: publicURL}
+func New(store port.Store, svc *core.Service, publicURL string, cfg config.Config) http.Handler {
+	a := &api{
+		store: store, svc: svc, public: publicURL,
+		uploadDir: cfg.UploadDir,
+		maxUpload: int64(cfg.MaxUploadMB) << 20,
+	}
+	if a.maxUpload <= 0 {
+		a.maxUpload = 25 << 20
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", a.index)
 	mux.Handle("GET /assets/", cacheAsssets(http.StripPrefix("/assets/", staticFiles())))
@@ -78,6 +88,8 @@ func New(store port.Store, svc *core.Service, publicURL string) http.Handler {
 	mux.HandleFunc("GET /api/v1/research", a.listResearch)
 	mux.HandleFunc("POST /api/v1/research", a.triggerResearch)
 	mux.HandleFunc("GET /api/v1/research/{id}", a.getResearch)
+	mux.HandleFunc("POST /api/v1/capture", a.capture)
+	mux.HandleFunc("GET /api/v1/media/{name}", a.media)
 	return mux
 }
 
