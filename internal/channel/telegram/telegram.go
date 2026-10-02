@@ -1,10 +1,10 @@
 // Package telegram is the first port.Channel implementation: a stdlib
 // long-poll Telegram adapter (no bot library). Inbound: owner messages →
-// core.Service.Capture, inline-button callback queries → status/research/
-// retry, emoji reactions → horizon refinement. Outbound: Notify renders
-// created cards as caption text + inline keyboard and research reports as a
-// public-URL link. Config is passed field-by-field (Token, OwnerID) so the
-// loop is easy to wire in tests.
+// core.Service.CaptureShare (text, links and downloaded media),
+// inline-button callback queries → status/research/retry, emoji reactions →
+// horizon refinement. Outbound: Notify renders created cards as caption text
+// + inline keyboard and research reports as a public-URL link. Config is
+// passed field-by-field (Token, OwnerID) so the loop is easy to wire in tests.
 package telegram
 
 import (
@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"sparkkeep/internal/capture"
 	"sparkkeep/internal/core"
 	"sparkkeep/internal/port"
 )
@@ -44,8 +45,8 @@ type Adapter struct {
 	httpc   *http.Client    // unexported: default client unless tests override
 	msgCard map[int64]int64 // bot message_id → card_id, for reactions
 	msgMu   sync.Mutex
-	offsetP string          // unexported: offset file override for tests
-	sem     chan struct{}   // concurrency limiter
+	offsetP string        // unexported: offset file override for tests
+	sem     chan struct{} // concurrency limiter
 }
 
 // Run blocks long-polling getUpdates until ctx is cancelled. Each update is
@@ -285,10 +286,37 @@ type message struct {
 	Text      string      `json:"text"`
 	Caption   string      `json:"caption"`
 	Photo     []photoSize `json:"photo"`
+	Voice     *voiceNote  `json:"voice"`
+	Audio     *audioFile  `json:"audio"`
+	Document  *document   `json:"document"`
+	Video     *videoFile  `json:"video"`
 }
 
 type photoSize struct {
 	FileID string `json:"file_id"`
+}
+
+type voiceNote struct {
+	FileID   string `json:"file_id"`
+	MimeType string `json:"mime_type"`
+	Duration int    `json:"duration"`
+}
+
+type audioFile struct {
+	FileID   string `json:"file_id"`
+	MimeType string `json:"mime_type"`
+}
+
+type document struct {
+	FileID   string `json:"file_id"`
+	FileName string `json:"file_name"`
+	MimeType string `json:"mime_type"`
+}
+
+type videoFile struct {
+	FileID   string `json:"file_id"`
+	MimeType string `json:"mime_type"`
+	Duration int    `json:"duration"`
 }
 
 type chat struct {
@@ -328,23 +356,136 @@ func (a *Adapter) handleUpdate(u update) {
 	}
 }
 
-// handleMessage funnels anything with text/caption into Capture. Photos and
-// stickers without a caption have nothing to analyze and are dropped; so is
-// anything from a chat that is not the owner.
+// handleMessage funnels text, links and media into CaptureShare. A message
+// with neither text nor a downloadable payload is dropped; so is anything
+// from a chat that is not the owner.
 func (a *Adapter) handleMessage(m *message) {
 	if m.Chat == nil || m.Chat.ID != a.OwnerID {
 		return // owner lock: single-user bot ignores everyone else
 	}
-	raw := m.Text
-	if raw == "" {
-		raw = m.Caption
-	}
-	if strings.TrimSpace(raw) == "" {
+	share, ok := ShareFromUpdate(m, func(fileID string) ([]byte, error) {
+		data, err := a.downloadFile(fileID)
+		if err != nil {
+			// Telegram file_ids expire after ~an hour, so this is the
+			// expected failure path, not an edge case: log it, because
+			// ShareFromUpdate reports it only as "drop the update".
+			a.logf("telegram: download %s: %v", fileID, err)
+		}
+		return data, err
+	})
+	if !ok {
 		return
 	}
-	if _, err := a.Service.Capture(context.Background(), raw); err != nil {
+	if _, err := a.Service.CaptureShare(context.Background(), share); err != nil {
 		a.logf("telegram: capture: %v", err)
 	}
+}
+
+// ShareFromUpdate maps a Telegram message to a capture.Share, downloading
+// the first media payload when bytesFn is non-nil. ok is false when the
+// message carries neither text nor media, which is the only case the caller
+// should drop.
+//
+// A photo is the largest of Photo's sizes; Telegram orders them ascending, so
+// the last entry is the full-resolution original.
+func ShareFromUpdate(m *message, bytesFn func(string) ([]byte, error)) (capture.Share, bool) {
+	caption := m.Caption
+	text := m.Text
+
+	if f, name, mime, ok := firstMedia(m); ok {
+		var data []byte
+		if bytesFn != nil {
+			var err error
+			data, err = bytesFn(f)
+			if err != nil {
+				return capture.Share{}, false
+			}
+		}
+		return capture.Share{
+			Kind:    capture.KindForMime(mime),
+			Caption: caption,
+			Files:   []capture.File{{Name: name, Mime: mime, Data: data}},
+		}, true
+	}
+
+	raw := text
+	if raw == "" {
+		raw = caption
+	}
+	if strings.TrimSpace(raw) == "" {
+		return capture.Share{}, false
+	}
+	return capture.Recognize(raw), true
+}
+
+// firstMedia returns the file id, filename, and mime of the first media
+// payload on the message, preferring video then document then audio then
+// photo, since a reel arrives as video and a saved file as a document.
+func firstMedia(m *message) (fileID, name, mime string, ok bool) {
+	switch {
+	case m.Video != nil:
+		return m.Video.FileID, "video.mp4", orMime(m.Video.MimeType, "video/mp4"), true
+	case m.Document != nil:
+		name = m.Document.FileName
+		if name == "" {
+			name = "document"
+		}
+		return m.Document.FileID, name, orMime(m.Document.MimeType, "application/octet-stream"), true
+	case m.Voice != nil:
+		return m.Voice.FileID, "voice.ogg", orMime(m.Voice.MimeType, "audio/ogg"), true
+	case m.Audio != nil:
+		return m.Audio.FileID, "audio.m4a", orMime(m.Audio.MimeType, "audio/mpeg"), true
+	case len(m.Photo) > 0:
+		last := m.Photo[len(m.Photo)-1]
+		return last.FileID, "photo.jpg", "image/jpeg", true
+	}
+	return "", "", "", false
+}
+
+func orMime(v, def string) string {
+	if strings.TrimSpace(v) == "" {
+		return def
+	}
+	return v
+}
+
+// maxTelegramFile caps a downloaded Telegram payload. Telegram bots accept
+// up to 20MB via getFile; the cap keeps a malformed response from exhausting
+// memory.
+const maxTelegramFile = 20 << 20
+
+// downloadFile fetches a file's bytes through the getFile endpoint. The URL
+// it returns is only valid briefly, so it is fetched immediately.
+func (a *Adapter) downloadFile(fileID string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	raw, err := a.call(ctx, "getFile", map[string]any{"file_id": fileID})
+	if err != nil {
+		return nil, err
+	}
+	var meta struct {
+		FilePath string `json:"file_path"`
+	}
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return nil, err
+	}
+	if meta.FilePath == "" {
+		return nil, fmt.Errorf("telegram: getFile returned no path for %s", fileID)
+	}
+	durl := fmt.Sprintf("%s/file/bot%s/%s", a.apiBase(), a.Token, meta.FilePath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, durl, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := a.httpClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("telegram: download %s: status %d", meta.FilePath, resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, maxTelegramFile))
 }
 
 // handleCallback maps `<card_id>:<action>` data to store updates / research:

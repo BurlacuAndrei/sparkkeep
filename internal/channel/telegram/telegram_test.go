@@ -1,9 +1,12 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,13 +33,17 @@ const jsonIdea = `[{"title":"T","summary":"s","horizon":"short-term","tags":[],"
 // fakeBot emulates the Bot API: it records every request and serves queued
 // getUpdates batches; once the queue is dry, getUpdates blocks until the
 // request context is cancelled. sendMessage returns a monotonically
-// increasing message_id (used to link reactions to cards).
+// increasing message_id (used to link reactions to cards). fileBody, when
+// set, is served by getFile + the file endpoint; nil makes getFile answer
+// ok:false the way an expired or unknown file_id does.
 type fakeBot struct {
-	mu      sync.Mutex
-	calls   []call
-	updates [][]update
-	block   chan struct{}
-	msgID   int64
+	mu       sync.Mutex
+	calls    []call
+	updates  [][]update
+	block    chan struct{}
+	msgID    int64
+	filePath string
+	fileBody []byte
 }
 
 type call struct {
@@ -49,15 +56,38 @@ func newFakeBot(t *testing.T, updates [][]update) *fakeBot {
 	return &fakeBot{updates: updates, block: make(chan struct{})}
 }
 
+// withFile makes getFile resolve to filePath and serves fileBody as its bytes.
+func (f *fakeBot) withFile(filePath string, fileBody []byte) *fakeBot {
+	f.filePath, f.fileBody = filePath, fileBody
+	return f
+}
+
 func (f *fakeBot) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		f.mu.Lock()
 		f.calls = append(f.calls, call{path: r.URL.Path, body: string(body)})
+		path, content := f.filePath, f.fileBody
 		f.mu.Unlock()
+		if strings.HasPrefix(r.URL.Path, "/file/botTOKEN/") {
+			// only the exact path getFile handed out resolves, so a
+			// wrong file_path surfaces as a 404 rather than a false pass.
+			if content == nil || r.URL.Path != "/file/botTOKEN/"+path {
+				http.Error(w, "gone", http.StatusNotFound)
+				return
+			}
+			w.Write(content)
+			return
+		}
 		switch strings.TrimPrefix(r.URL.Path, "/botTOKEN/") {
 		case "getUpdates":
 			f.serveUpdates(w, r)
+		case "getFile":
+			if content == nil {
+				fmt.Fprint(w, `{"ok":false,"description":"Bad Request: file reference has expired"}`)
+				return
+			}
+			fmt.Fprintf(w, `{"ok":true,"result":{"file_path":%q}}`, path)
 		case "sendMessage":
 			f.mu.Lock()
 			f.msgID++
@@ -269,6 +299,7 @@ func stubService(t *testing.T, llm *httptest.Server, st *stubStore) *core.Servic
 		Store:   st,
 		Fetcher: capture.Capture{},
 		Analyze: ac,
+		Vision:  ac, // same recording server: the vision call shows up in bodies
 		Runner:  research.New(config.Config{}, ac),
 		Logf:    t.Logf,
 	}
@@ -317,29 +348,155 @@ func TestMessageCapturesText(t *testing.T) {
 	}
 }
 
-func TestPhotoWithCaptionFallsToText(t *testing.T) {
+// tinyJPEG returns a valid 2x2 JPEG: the vision path decodes with stdlib
+// image/jpeg, so the end-to-end photo test needs real bytes, not a stub.
+func tinyJPEG(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2)), nil); err != nil {
+		t.Fatalf("encode jpeg: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestPhotoWithCaptionIngestsImage(t *testing.T) {
 	llm, bodies := recLLM(jsonIdea)
 	defer llm.Close()
+	bot := newFakeBot(t, nil).withFile("photos/file_1.jpg", tinyJPEG(t))
+	srv := httptest.NewServer(bot.handler())
+	defer srv.Close()
 	st := newStubStore()
-	a := &Adapter{Token: "TOKEN", OwnerID: 1, Service: stubService(t, llm, st), Store: st, Logf: t.Logf}
+	a := &Adapter{Token: "TOKEN", OwnerID: 1, Service: stubService(t, llm, st), Store: st, Logf: t.Logf, baseURL: srv.URL}
 	a.handleUpdate(update{ID: 1, Msg: &message{
 		Chat:    &chat{ID: 1},
-		Caption: "x",
+		Caption: "look at this",
 		Photo:   []photoSize{{FileID: "p1"}},
 	}})
-	if n := len(*bodies); n != 1 || !strings.Contains((*bodies)[0], "x") {
-		t.Fatalf("want one capture with caption, bodies=%q", *bodies)
+	if !bot.saw("getFile") {
+		t.Fatalf("expected a getFile download; calls=%+v", bot.calls)
+	}
+	if n := len(*bodies); n != 2 {
+		t.Fatalf("LLM calls = %d, want 2 (vision + curator), bodies=%q", n, *bodies)
+	}
+	var sawImage, sawCaption bool
+	for _, b := range *bodies {
+		sawImage = sawImage || strings.Contains(b, "image_url")
+		sawCaption = sawCaption || strings.Contains(b, "look at this")
+	}
+	if !sawImage || !sawCaption {
+		t.Fatalf("want the image in the vision call and the caption in the curator prompt: %q", *bodies)
 	}
 }
 
-func TestNoTextNoAction(t *testing.T) {
+func TestEmptyUpdateIsDropped(t *testing.T) {
 	llm, bodies := recLLM(jsonIdea)
 	defer llm.Close()
+	bot := newFakeBot(t, nil)
+	srv := httptest.NewServer(bot.handler())
+	defer srv.Close()
 	st := newStubStore()
-	a := &Adapter{Token: "TOKEN", OwnerID: 1, Service: stubService(t, llm, st), Store: st, Logf: t.Logf}
-	a.handleUpdate(update{ID: 1, Msg: &message{Chat: &chat{ID: 1}, Photo: []photoSize{{FileID: "p1"}}}})
+	a := &Adapter{Token: "TOKEN", OwnerID: 1, Service: stubService(t, llm, st), Store: st, Logf: t.Logf, baseURL: srv.URL}
+	a.handleUpdate(update{ID: 1, Msg: &message{Chat: &chat{ID: 1}}})
 	if len(*bodies) != 0 {
 		t.Fatalf("Capture called %d times, want 0", len(*bodies))
+	}
+	if bot.saw("getFile") {
+		t.Fatalf("nothing to download, want no getFile; calls=%+v", bot.calls)
+	}
+}
+
+// --- inbound: media -------------------------------------------------------------
+
+func TestShareFromUpdateText(t *testing.T) {
+	m := &message{Chat: &chat{ID: 1}, Text: "https://example.com/x"}
+	sh, ok := ShareFromUpdate(m, nil)
+	if !ok || sh.Kind != capture.KindLink || sh.URL != "https://example.com/x" {
+		t.Errorf("share = %+v ok=%v", sh, ok)
+	}
+}
+
+func TestShareFromUpdatePhoto(t *testing.T) {
+	m := &message{
+		Chat:    &chat{ID: 1},
+		Caption: "look at this",
+		Photo:   []photoSize{{FileID: "abc"}},
+	}
+	sh, ok := ShareFromUpdate(m, func(id string) ([]byte, error) {
+		if id != "abc" {
+			t.Errorf("file id = %q, want abc", id)
+		}
+		return []byte{0xff, 0xd8, 0xff}, nil
+	})
+	if !ok || sh.Kind != capture.KindImage || sh.Caption != "look at this" {
+		t.Fatalf("share = %+v ok=%v", sh, ok)
+	}
+	if len(sh.Files) != 1 || sh.Files[0].Mime != "image/jpeg" {
+		t.Errorf("files = %+v, want one jpeg", sh.Files)
+	}
+}
+
+func TestShareFromUpdateVoice(t *testing.T) {
+	m := &message{Chat: &chat{ID: 1}, Voice: &voiceNote{FileID: "v1", MimeType: "audio/ogg"}}
+	sh, ok := ShareFromUpdate(m, func(string) ([]byte, error) { return []byte("OggS"), nil })
+	if !ok || sh.Kind != capture.KindAudio {
+		t.Fatalf("share = %+v ok=%v", sh, ok)
+	}
+}
+
+func TestShareFromUpdateDocument(t *testing.T) {
+	m := &message{Chat: &chat{ID: 1}, Document: &document{
+		FileID: "d1", FileName: "notes.pdf", MimeType: "application/pdf",
+	}}
+	sh, ok := ShareFromUpdate(m, func(string) ([]byte, error) { return []byte("%PDF"), nil })
+	if !ok || sh.Kind != capture.KindFile || sh.Files[0].Name != "notes.pdf" {
+		t.Fatalf("share = %+v ok=%v", sh, ok)
+	}
+}
+
+func TestShareFromUpdateEmptyIsDropped(t *testing.T) {
+	if _, ok := ShareFromUpdate(&message{Chat: &chat{ID: 1}}, nil); ok {
+		t.Error("an update with neither text nor media should be dropped")
+	}
+}
+
+// An expired or unknown file_id makes getFile answer ok:false; the update is
+// dropped instead of panicking on the missing path.
+func TestExpiredFileIDIsDropped(t *testing.T) {
+	llm, bodies := recLLM(jsonIdea)
+	defer llm.Close()
+	bot := newFakeBot(t, nil) // no withFile: getFile answers ok:false
+	srv := httptest.NewServer(bot.handler())
+	defer srv.Close()
+	st := newStubStore()
+	a := &Adapter{Token: "TOKEN", OwnerID: 1, Service: stubService(t, llm, st), Store: st, Logf: t.Logf, baseURL: srv.URL}
+	a.handleUpdate(update{ID: 1, Msg: &message{
+		Chat:    &chat{ID: 1},
+		Caption: "gone",
+		Document: &document{
+			FileID: "d1", FileName: "notes.pdf", MimeType: "application/pdf",
+		},
+	}})
+	if !bot.saw("getFile") {
+		t.Fatalf("expected a getFile attempt; calls=%+v", bot.calls)
+	}
+	if len(*bodies) != 0 {
+		t.Fatalf("an undownloadable file must be dropped, got %d LLM calls", len(*bodies))
+	}
+}
+
+// The download is bounded: a response larger than the cap is truncated, not
+// buffered whole.
+func TestDownloadFileIsSizeBounded(t *testing.T) {
+	bot := newFakeBot(t, nil).withFile("big.bin", make([]byte, maxTelegramFile+1024))
+	srv := httptest.NewServer(bot.handler())
+	defer srv.Close()
+	a := &Adapter{Token: "TOKEN", Logf: t.Logf, baseURL: srv.URL}
+	data, err := a.downloadFile("big")
+	if err != nil {
+		t.Fatalf("downloadFile: %v", err)
+	}
+	if len(data) != maxTelegramFile {
+		t.Fatalf("downloaded %d bytes, want the %d cap", len(data), maxTelegramFile)
 	}
 }
 
