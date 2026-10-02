@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -301,6 +302,27 @@ func TestEncodeForVisionLeavesSmallImageAlone(t *testing.T) {
 	}
 	if cfg.Width != 128 || cfg.Height != 128 {
 		t.Errorf("got %dx%d, want 128x128 untouched", cfg.Width, cfg.Height)
+	}
+}
+
+func TestEncodeForVisionFlattensAlphaOntoWhite(t *testing.T) {
+	transparent := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	var pngBuf bytes.Buffer
+	if err := png.Encode(&pngBuf, transparent); err != nil {
+		t.Fatal(err)
+	}
+	enc, _, err := encodeForVision(pngBuf.Bytes())
+	if err != nil {
+		t.Fatalf("encodeForVision: %v", err)
+	}
+	got, _, err := image.Decode(bytes.NewReader(enc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, g, b, _ := got.At(4, 4).RGBA()
+	if r < 0xf000 || g < 0xf000 || b < 0xf000 {
+		t.Errorf("transparent pixel encoded as (%d,%d,%d), want near-white",
+			r>>8, g>>8, b>>8)
 	}
 }
 

@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/draw"
+	_ "image/gif" // registers GIF decoding
 	"image/jpeg"
 	_ "image/png" // registers PNG decoding for Telegram screenshots
 	"io"
@@ -163,6 +165,13 @@ func encodeForVision(raw []byte) ([]byte, string, error) {
 		}
 		img = dst
 	}
+	// JPEG has no alpha; composite onto white so transparent PNG regions do not
+	// encode as black (common for screenshots).
+	b = img.Bounds()
+	flat := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(flat, flat.Bounds(), image.White, image.Point{}, draw.Src)
+	draw.Draw(flat, flat.Bounds(), img, b.Min, draw.Over)
+	img = flat
 	var out bytes.Buffer
 	if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: 80}); err != nil {
 		return nil, "", fmt.Errorf("analyze: encode jpeg: %w", err)
