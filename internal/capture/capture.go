@@ -160,6 +160,13 @@ func (c Capture) Fetch(share Share) Fetched {
 		}
 	}
 
+	// With headless disabled, wall text from httpFetch would otherwise land in
+	// Text. Keep the "non-content never in Text" invariant regardless of config.
+	if IsLoginWall(f.Text) {
+		f.Text = ""
+		f.Notes = append(f.Notes, "login wall — content unavailable")
+	}
+
 	return f
 }
 
@@ -168,7 +175,7 @@ func (c Capture) Fetch(share Share) Fetched {
 // to the plain HTTP fetch. If yt-dlp fails on gated media (e.g. Instagram login wall),
 // it falls back to headless extraction.
 func (c Capture) MediaMeta(share Share) Fetched {
-	f := Fetched{Kind: share.Kind, URL: share.URL}
+	f := Fetched{Kind: share.Kind, URL: share.URL, Caption: share.Caption}
 	u, err := url.Parse(share.URL)
 	if err != nil {
 		f.Err = err

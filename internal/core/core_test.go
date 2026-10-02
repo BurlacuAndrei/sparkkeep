@@ -163,7 +163,12 @@ type stubFetcher struct {
 func (f stubFetcher) Recognize(raw string) capture.Share        { return f.recognize(raw) }
 func (f stubFetcher) Fetch(s capture.Share) capture.Fetched     { return f.fetch(s) }
 func (f stubFetcher) MediaMeta(s capture.Share) capture.Fetched { return f.mediaMeta(s) }
-func (f stubFetcher) Subtitles(s capture.Share) string          { return f.subtitles(s) }
+func (f stubFetcher) Subtitles(s capture.Share) string {
+	if f.subtitles == nil {
+		return ""
+	}
+	return f.subtitles(s)
+}
 
 // textFetcher recognizes via the real capturer and returns caption-as-text
 // fetches (no HTTP anywhere).

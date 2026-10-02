@@ -2,12 +2,20 @@ package capture
 
 import (
 	"context"
+	"html"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
+
+// subtitlesTimeout is generous: a yt-dlp extractor run plus a timedtext fetch
+// routinely exceeds the 5s fetchTimeout.
+var subtitlesTimeout = 30 * time.Second
 
 // KindForMime maps a mime type to a Share kind. Unknown types are files, so
 // an unexpected upload still gets captured and read rather than dropped.
@@ -93,6 +101,7 @@ var (
 	igRe        = regexp.MustCompile(`(?i)^(?:https?://)?(?:www\.)?instagram\.com/(p|reel|reels|tv)/([A-Za-z0-9_-]+)`)
 	igCaptionRe = regexp.MustCompile(`(?is)<div[^>]*class="[^"]*Caption\b[^"]*"[^>]*>(.*?)</div>`)
 	igOGDescRe  = regexp.MustCompile(`(?is)<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']*)["']`)
+	igOGDescRe2 = regexp.MustCompile(`(?is)<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:description["']`)
 )
 
 // InstagramEmbedURL returns the captioned-embed URL for an Instagram post,
@@ -111,15 +120,22 @@ func InstagramEmbedURL(rawURL string) string {
 
 // ExtractInstagramCaption pulls the caption out of a rendered embed page.
 // The Caption div is preferred; og:description is the guaranteed fallback
-// because it survives in the server-rendered shell.
-func ExtractInstagramCaption(html string) string {
-	if m := igCaptionRe.FindStringSubmatch(html); m != nil {
+// because it survives in the server-rendered shell. og:description is tried
+// in both attribute orders (Instagram emits either).
+//
+// ponytail: the Caption-div regex stops at the first </div>, so a caption
+// with nested markup is truncated — the og:description fallback carries the
+// full text. Swap in an HTML parser only if that proves insufficient.
+func ExtractInstagramCaption(page string) string {
+	if m := igCaptionRe.FindStringSubmatch(page); m != nil {
 		if t := strings.TrimSpace(stripTagsAndCondense(m[1])); t != "" {
 			return t
 		}
 	}
-	if m := igOGDescRe.FindStringSubmatch(html); m != nil {
-		return strings.TrimSpace(m[1])
+	for _, re := range []*regexp.Regexp{igOGDescRe, igOGDescRe2} {
+		if m := re.FindStringSubmatch(page); m != nil {
+			return strings.TrimSpace(html.UnescapeString(m[1]))
+		}
 	}
 	return ""
 }
@@ -157,23 +173,45 @@ func (c Capture) Subtitles(share Share) string {
 	if langs == "" {
 		langs = "en.*,en"
 	}
+	// yt-dlp's subtitle writers cannot stream to stdout (`--output -` writes a
+	// file literally named "-.en.vtt"), so write into a temp dir and read back.
+	dir, err := os.MkdirTemp("", "sparkkeep-subs")
+	if err != nil {
+		return ""
+	}
+	defer os.RemoveAll(dir)
 	args := []string{
 		"--skip-download", "--no-warnings",
 		"--write-auto-subs", "--write-subs",
 		"--sub-langs", langs, "--sub-format", "vtt",
-		"--output", "-",
+		"--paths", dir, "--output", "sub.%(ext)s",
 	}
 	if c.CookiesFile != "" {
 		args = append(args, "--cookies", c.CookiesFile)
 	}
 	args = append(args, share.URL)
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), subtitlesTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, args...).Output()
+	if _, err := exec.CommandContext(ctx, bin, args...).Output(); err != nil {
+		return ""
+	}
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return ""
 	}
-	return ParseVTT(string(out))
+	var b strings.Builder
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".vtt") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		b.Write(data)
+		b.WriteByte('\n')
+	}
+	return ParseVTT(b.String())
 }
 
 // embedCaption best-effort-fetches an Instagram captioned-embed page and
