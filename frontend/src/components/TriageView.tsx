@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from '../types';
-import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw } from 'lucide-react';
+import * as api from '../api';
+import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw, AlertTriangle } from 'lucide-react';
+
+// A card is stale once nothing has touched it for a month.
+const STALE_DAYS = 30;
+
+function idleDays(card: Card): number {
+  const ts = Date.parse(card.updated_at || card.created_at || '');
+  if (Number.isNaN(ts)) return 0;
+  return Math.floor((Date.now() - ts) / 86_400_000);
+}
 
 interface TriageViewProps {
   cards: Card[];
@@ -8,6 +18,7 @@ interface TriageViewProps {
   onResearch: (id: number) => void;
   onRetry: (id: number) => void;
   onOpenCardDetail: (card: Card) => void;
+  onRefresh?: () => void;
 }
 
 export const TriageView: React.FC<TriageViewProps> = ({
@@ -16,10 +27,16 @@ export const TriageView: React.FC<TriageViewProps> = ({
   onResearch,
   onRetry,
   onOpenCardDetail,
+  onRefresh,
 }) => {
   // Focus primarily on inbox cards first, or all cards
   const inboxCards = cards.filter((c) => c.status === 'inbox');
-  const triageCards = inboxCards.length > 0 ? inboxCards : cards;
+  const baseCards = inboxCards.length > 0 ? inboxCards : cards;
+  const [staleOnly, setStaleOnly] = useState(false);
+  const [shelveMsg, setShelveMsg] = useState('');
+  const triageCards = staleOnly
+    ? baseCards.filter((c) => idleDays(c) >= STALE_DAYS)
+    : baseCards;
   const [currentIndex, setCurrentIndex] = useState(0);
 
   // Keep index in range
@@ -30,6 +47,20 @@ export const TriageView: React.FC<TriageViewProps> = ({
   }, [triageCards.length, currentIndex]);
 
   const currentCard = triageCards[currentIndex];
+  const currentIdleDays = currentCard ? idleDays(currentCard) : 0;
+  const isStale = currentIdleDays >= STALE_DAYS;
+
+  const handleShelveStale = useCallback(async () => {
+    if (!window.confirm(`Shelve every inbox/doing card untouched for more than ${STALE_DAYS} days?`)) return;
+    try {
+      const res = await api.batchShelveStale(STALE_DAYS);
+      setShelveMsg(`Shelved ${res.shelved_count} stale card${res.shelved_count === 1 ? '' : 's'}.`);
+      setCurrentIndex(0);
+      onRefresh?.();
+    } catch (err: any) {
+      setShelveMsg(err.message);
+    }
+  }, [onRefresh]);
 
   const handleAction = useCallback((status: string) => {
     if (!currentCard) return;
@@ -67,9 +98,40 @@ export const TriageView: React.FC<TriageViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentCard, handleAction, onResearch]);
 
+  const staleControls = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <button
+        type="button"
+        className="icon-btn"
+        onClick={() => {
+          setStaleOnly((v) => !v);
+          setCurrentIndex(0);
+        }}
+        title={`Only show cards untouched for more than ${STALE_DAYS} days`}
+        style={staleOnly ? { borderColor: '#fbbf24', color: '#fbbf24' } : undefined}
+      >
+        <AlertTriangle size={14} />
+        <span>Review Stale (&gt;{STALE_DAYS}d)</span>
+      </button>
+      <button
+        type="button"
+        className="icon-btn"
+        onClick={handleShelveStale}
+        title={`Shelve every inbox/doing card untouched for more than ${STALE_DAYS} days`}
+      >
+        <Archive size={14} />
+        <span>Shelve Stale Cards</span>
+      </button>
+      {shelveMsg && <span style={{ fontSize: 12, color: '#fbbf24' }}>{shelveMsg}</span>}
+    </div>
+  );
+
   if (!currentCard) {
     return (
       <div className="triage-container" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+          {staleControls}
+        </div>
         <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
           <CheckCircle2 size={36} />
         </div>
@@ -86,10 +148,11 @@ export const TriageView: React.FC<TriageViewProps> = ({
   return (
     <div className="triage-container">
       <div className="triage-progress">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, color: '#38bdf8' }}>Focus Triage</span>
           <span style={{ color: '#64748b' }}>·</span>
           <span>Card {currentIndex + 1} of {triageCards.length}</span>
+          {staleControls}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button
@@ -116,11 +179,24 @@ export const TriageView: React.FC<TriageViewProps> = ({
       <div className="triage-card">
         <div className="triage-header">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span className={`horizon-pill ${currentCard.horizon}`}>
                 {currentCard.horizon}
               </span>
               <span style={{ fontSize: 12, color: '#64748b' }}>ID #{currentCard.id}</span>
+              {isStale && (
+                <span
+                  className="horizon-pill"
+                  style={{
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    color: '#fbbf24',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                  }}
+                  title={`No activity since ${currentCard.updated_at || currentCard.created_at}`}
+                >
+                  ⚠️ Stale ({currentIdleDays} days inactive)
+                </span>
+              )}
             </div>
             <h2 className="triage-title">{currentCard.title}</h2>
           </div>

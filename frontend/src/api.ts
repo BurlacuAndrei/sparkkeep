@@ -15,6 +15,7 @@ export async function fetchCards(filter: CardFilter = {}): Promise<Card[]> {
   if (filter.status) params.set('status', filter.status);
   if (filter.tag) params.set('tag', filter.tag);
   if (filter.q) params.set('q', filter.q);
+  if (filter.stale_days) params.set('stale_days', String(filter.stale_days));
 
   const res = await request<{ ok: boolean; cards: Card[] }>(`/api/v1/cards?${params.toString()}`);
   return res.cards || [];
@@ -48,6 +49,15 @@ export async function retryCard(id: number): Promise<Card> {
     method: 'POST',
   });
   return res.data;
+}
+
+// batchShelveStale shelves every inbox/doing card untouched for more than
+// `days` (server default 30) and returns how many were archived.
+export async function batchShelveStale(days?: number): Promise<{ ok: boolean; shelved_count: number }> {
+  return request<{ ok: boolean; shelved_count: number }>(
+    `/api/v1/cards/batch-shelve-stale?days=${days || 30}`,
+    { method: 'POST' }
+  );
 }
 
 export async function fetchTags(): Promise<Tag[]> {

@@ -157,6 +157,8 @@ func (s *stubStore) GetResearchFindings(_ context.Context, id int64) (string, er
 	return r.Findings, nil
 }
 
+func (s *stubStore) ShelveStale(context.Context, int) (int64, error) { return 0, nil }
+
 func (s *stubStore) Close() error { return nil }
 
 // stubChannel records notifications; when err is set Notify returns it.

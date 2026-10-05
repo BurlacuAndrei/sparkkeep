@@ -51,6 +51,13 @@ func parseTime(s string) (time.Time, error) {
 	return time.Parse(timeLayout, s)
 }
 
+// staleCutoff is the RFC3339 timestamp a card's updated_at must precede to
+// count as stale — the single definition shared by the list filter and the
+// batch shelve, so the two can't drift.
+func staleCutoff(days int) string {
+	return time.Now().UTC().AddDate(0, 0, -days).Format(timeLayout)
+}
+
 // upsertTag returns the id for name, inserting if absent.
 func (s *Store) upsertTag(ctx context.Context, tx *sql.Tx, name string) (int64, error) {
 	if _, err := tx.ExecContext(ctx,
@@ -217,6 +224,10 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		where = append(where, "created_at >= ?")
 		args = append(args, f.Since.Format(timeLayout))
 	}
+	if f.StaleDays > 0 {
+		where = append(where, "updated_at < ?")
+		args = append(args, staleCutoff(f.StaleDays))
+	}
 	limit := f.Limit
 	if limit <= 0 {
 		limit = defaultLimit
@@ -334,6 +345,18 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 		return port.Card{}, port.ErrNotFound
 	}
 	return s.GetCard(ctx, id)
+}
+
+// ShelveStale shelves every inbox/doing card untouched for more than days in
+// one statement and returns the number of rows changed.
+func (s *Store) ShelveStale(ctx context.Context, days int) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE cards SET status = ?, updated_at = ? WHERE status IN (?, ?) AND updated_at < ?`,
+		port.StatusShelved, now(), port.StatusInbox, port.StatusDoing, staleCutoff(days))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (s *Store) SetCardTags(ctx context.Context, id int64, tags []string) error {
