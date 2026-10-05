@@ -7,6 +7,16 @@
   "orientation": "portrait-primary",
   "background_color": "#0b0f19",
   "theme_color": "#0f172a",
+  "share_target": {
+    "action": "/api/v1/capture",
+    "method": "POST",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/icon.svg",

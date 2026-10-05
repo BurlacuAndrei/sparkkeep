@@ -17,6 +17,10 @@ import (
 // optional `file` part and an optional `text` or `url` field. At least one
 // is required. Everything runs through the same core pipeline as Telegram.
 func (a *api) capture(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		a.captureShare(w, r)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, a.maxUpload+(1<<20))
 	if err := r.ParseMultipartForm(4 << 20); err != nil {
 		var mbe *http.MaxBytesError
@@ -78,6 +82,48 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "card_ids": ids})
+}
+
+// captureShare handles the PWA Web Share Target post: a form-encoded
+// title/text/url from the OS share sheet. There is no page to render the
+// response in, so it redirects back to the dashboard with ?captured=true and
+// the SPA confirms + reloads. A client that asked for JSON still gets it.
+func (a *api) captureShare(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad form: "+err.Error())
+		return
+	}
+	targetURL := strings.TrimSpace(r.FormValue("url"))
+	title := strings.TrimSpace(r.FormValue("title"))
+	text := strings.TrimSpace(r.FormValue("text"))
+
+	var share capture.Share
+	if targetURL != "" {
+		caption := text
+		// The share sheet duplicates the URL as the title often enough that
+		// repeating it in the caption would be noise.
+		if title != "" && title != targetURL {
+			if caption == "" {
+				caption = title
+			} else {
+				caption = title + " — " + caption
+			}
+		}
+		share = capture.Share{Kind: capture.KindLink, URL: targetURL, Caption: caption}
+	} else {
+		share = a.svc.Fetcher.Recognize(text)
+	}
+
+	ids, err := a.svc.CaptureShare(r.Context(), share)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "cards": ids})
+		return
+	}
+	http.Redirect(w, r, "/?captured=true", http.StatusSeeOther)
 }
 
 // readFiles extracts every uploaded file part, rejecting anything over the
