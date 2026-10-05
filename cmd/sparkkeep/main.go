@@ -35,12 +35,15 @@ func main() {
 
 	if cfg.TGToken != "" {
 		tg := &telegram.Adapter{
-			Token:     cfg.TGToken,
-			OwnerID:   cfg.TGChatID,
-			PublicURL: cfg.PublicURL,
-			Service:   svc,
-			Store:     st,
-			Logf:      logger,
+			Token:             cfg.TGToken,
+			OwnerID:           cfg.TGChatID,
+			PublicURL:         cfg.PublicURL,
+			Service:           svc,
+			Store:             st,
+			Logf:              logger,
+			DigestPushEnabled: cfg.DigestPushEnabled,
+			DigestPushDay:     time.Weekday(cfg.DigestPushDay),
+			DigestPushHour:    cfg.DigestPushHour,
 		}
 		svc.Channel = tg // telegram fills the channel once it is attached
 		go func() {

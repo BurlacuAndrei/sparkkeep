@@ -274,6 +274,32 @@ func TestDigestCommandSendsCountsWithoutCapturing(t *testing.T) {
 	}
 }
 
+// The scheduled push fires exactly once at the configured weekday/hour, stays
+// quiet for the rest of that day, and fires again the following week.
+func TestDigestScheduler_TriggersAtScheduledTime(t *testing.T) {
+	st := newStubStore()
+	sent := stubTelegram(t, func() *Adapter {
+		return &Adapter{Token: "tok", OwnerID: 1, Store: st, DigestPushDay: time.Wednesday, DigestPushHour: 19}
+	}, func(a *Adapter) {
+		wednesday := time.Date(2026, 10, 7, 0, 0, 0, 0, time.Local)
+		at := func(day time.Weekday, hour int) time.Time {
+			return wednesday.AddDate(0, 0, int(day)-int(wednesday.Weekday())).
+				Add(time.Duration(hour) * time.Hour)
+		}
+		ctx := context.Background()
+		a.digestTick(ctx, at(time.Wednesday, 19)) // on time: fires
+		a.digestTick(ctx, at(time.Wednesday, 19)) // same minute again: suppressed
+		a.digestTick(ctx, at(time.Wednesday, 19).Add(30*time.Minute))
+		a.digestTick(ctx, at(time.Thursday, 19))                   // wrong day: silent
+		a.digestTick(ctx, at(time.Wednesday, 20))                  // wrong hour: silent
+		a.digestTick(ctx, at(time.Wednesday, 19).AddDate(0, 0, 7)) // next week: fires
+	})
+
+	if len(sent) != 2 {
+		t.Fatalf("sent %d digests, want 2 (one per week): %v", len(sent), sent)
+	}
+}
+
 // /help answers with the how-to text and never captures.
 func TestHelpCommandSendsHelpWithoutCapturing(t *testing.T) {
 	st := newStubStore()
