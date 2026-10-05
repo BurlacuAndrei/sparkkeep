@@ -3,14 +3,11 @@ import { Card } from '../types';
 import { X, Plus, FileText, Lightbulb, CheckCircle2 } from 'lucide-react';
 
 interface NewCardModalProps {
-  isOpen: boolean;
   onClose: () => void;
   onCreate: (card: Partial<Card>) => void;
 }
 
-export const NewCardModal: React.FC<NewCardModalProps> = ({ isOpen, onClose, onCreate }) => {
-  if (!isOpen) return null;
-
+export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCreate }) => {
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [executiveSummary, setExecutiveSummary] = useState('');

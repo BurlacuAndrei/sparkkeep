@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from '../types';
-import { ArrowLeft, ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw } from 'lucide-react';
+import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw } from 'lucide-react';
 
 interface TriageViewProps {
   cards: Card[];

@@ -39,7 +39,8 @@ func TestFetchText(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := Fetch(Share{Kind: KindLink, URL: srv.URL})
+	c := Capture{}
+	f := c.Fetch(Share{Kind: KindLink, URL: srv.URL})
 	if f.Err != nil {
 		t.Fatalf("Fetch err: %v", f.Err)
 	}
@@ -61,8 +62,9 @@ func TestFetchTimeoutPeerError(t *testing.T) {
 	fetchTimeout = 50 * time.Millisecond
 	defer func() { fetchTimeout = old }()
 
+	c := Capture{}
 	start := time.Now()
-	f := Fetch(Share{Kind: KindLink, URL: srv.URL})
+	f := c.Fetch(Share{Kind: KindLink, URL: srv.URL})
 	elapsed := time.Since(start)
 
 	if f.Err == nil {
@@ -79,7 +81,8 @@ func TestFetchNonHTML(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := Fetch(Share{Kind: KindLink, URL: srv.URL})
+	c := Capture{}
+	f := c.Fetch(Share{Kind: KindLink, URL: srv.URL})
 	if f.Err != nil {
 		t.Fatalf("Fetch err: %v", f.Err)
 	}

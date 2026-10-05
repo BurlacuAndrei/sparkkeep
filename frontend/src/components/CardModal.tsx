@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card } from '../types';
-import { X, Sparkles, ExternalLink, RefreshCw, Save, Check, FileText, Lightbulb, CheckCircle2 } from 'lucide-react';
+import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2 } from 'lucide-react';
 
 interface CardModalProps {
   card: Card | null;
@@ -17,18 +17,18 @@ export const CardModal: React.FC<CardModalProps> = ({
   onResearch,
   onRetry,
 }) => {
-  if (!card) return null;
-
-  const [title, setTitle] = useState(card.title);
-  const [summary, setSummary] = useState(card.summary);
-  const [executiveSummary, setExecutiveSummary] = useState(card.executive_summary || '');
-  const [valueProposition, setValueProposition] = useState(card.value_proposition || '');
-  const [horizon, setHorizon] = useState(card.horizon);
-  const [status, setStatus] = useState(card.status);
-  const [note, setNote] = useState(card.source_note || '');
-  const [tagsInput, setTagsInput] = useState((card.tags || []).join(', '));
-  const [actions, setActions] = useState<string[]>(card.proposed_actions || []);
+  const [title, setTitle] = useState(card?.title || '');
+  const [_summary, _setSummary] = useState(card?.summary || '');
+  const [executiveSummary, setExecutiveSummary] = useState(card?.executive_summary || '');
+  const [valueProposition, setValueProposition] = useState(card?.value_proposition || '');
+  const [horizon, setHorizon] = useState(card?.horizon || 'short-term');
+  const [status, setStatus] = useState(card?.status || 'inbox');
+  const [note, setNote] = useState(card?.source_note || '');
+  const [tagsInput, setTagsInput] = useState((card?.tags || []).join(', '));
+  const [_actions, _setActions] = useState<string[]>(card?.proposed_actions || []);
   const [completedActions, setCompletedActions] = useState<Record<number, boolean>>({});
+
+  if (!card) return null;
 
   const toggleAction = (index: number) => {
     setCompletedActions((prev) => ({ ...prev, [index]: !prev[index] }));
@@ -38,14 +38,14 @@ export const CardModal: React.FC<CardModalProps> = ({
     e.preventDefault();
     onUpdate(card.id, {
       title,
-      summary,
+      summary: _summary,
       executive_summary: executiveSummary,
       value_proposition: valueProposition,
       horizon: horizon as 'short-term' | 'lifetime',
       status: status as any,
       source_note: note,
       tags: tagsInput.split(',').map((t) => t.trim()).filter(Boolean),
-      proposed_actions: actions,
+      proposed_actions: _actions,
     });
     onClose();
   };
@@ -107,14 +107,14 @@ export const CardModal: React.FC<CardModalProps> = ({
               />
             </div>
 
-            {actions.length > 0 && (
+            {_actions.length > 0 && (
               <div className="briefing-section">
                 <div className="briefing-heading heading-actions">
                   <CheckCircle2 size={13} />
                   <span>Proposed Actions Checklist</span>
                 </div>
                 <div className="actions-list">
-                  {actions.map((act, idx) => (
+                  {_actions.map((act, idx) => (
                     <div
                       key={idx}
                       className="action-item"

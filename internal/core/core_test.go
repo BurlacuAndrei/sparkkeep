@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sort"
 	"testing"
 	"time"
 
@@ -39,6 +38,13 @@ func newStubStore() *stubStore {
 }
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
+	if c.SourceURL != "" {
+		for _, existing := range s.cards {
+			if existing.SourceURL == c.SourceURL {
+				return port.Card{}, fmt.Errorf("UNIQUE constraint failed: idx_cards_source")
+			}
+		}
+	}
 	s.nextCard++
 	c.ID = s.nextCard
 	c.CreatedAt = time.Now().UTC()
@@ -143,45 +149,15 @@ func (s *stubStore) ListResearch(context.Context) ([]port.Research, error) {
 	return nil, nil
 }
 
-func (s *stubStore) Close() error { return nil }
-
-// TagCoOccurrence computes tag pairs from the in-memory cards, mirroring the
-// store's aggregation: distinct tag pairs sharing at least minWeight cards.
-func (s *stubStore) TagCoOccurrence(ctx context.Context, minWeight int) ([]port.TagPair, error) {
-	if minWeight < 1 {
-		minWeight = 1
+func (s *stubStore) GetResearchFindings(_ context.Context, id int64) (string, error) {
+	r, ok := s.researches[id]
+	if !ok {
+		return "", port.ErrNotFound
 	}
-	counts := map[[2]string]int{}
-	for _, c := range s.cards {
-		if c.Status == port.StatusDismissed || c.Status == port.StatusShelved {
-			continue
-		}
-		sorted := append([]string(nil), c.Tags...)
-		sort.Strings(sorted)
-		for i := range sorted {
-			for j := i + 1; j < len(sorted); j++ {
-				counts[[2]string{sorted[i], sorted[j]}]++
-			}
-		}
-	}
-	var out []port.TagPair
-	for k, w := range counts {
-		if w >= minWeight {
-			out = append(out, port.TagPair{A: k[0], B: k[1], Weight: w})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Weight != out[j].Weight {
-			return out[i].Weight > out[j].Weight
-		}
-		if out[i].A != out[j].A {
-			return out[i].A < out[j].A
-		}
-		return out[i].B < out[j].B
-	})
-	return out, nil
+	return r.Findings, nil
 }
 
+func (s *stubStore) Close() error { return nil }
 
 // stubChannel records notifications; when err is set Notify returns it.
 type stubChannel struct {
@@ -196,14 +172,21 @@ func (c *stubChannel) Notify(_ context.Context, n port.Notification) error {
 
 // stubFetcher is a scriptable capture.Fetcher.
 type stubFetcher struct {
-	recognize func(raw string) capture.Share
-	fetch     func(s capture.Share) capture.Fetched
-	mediaMeta func(s capture.Share) capture.Fetched
-	subtitles func(s capture.Share) string
+	recognize    func(raw string) capture.Share
+	fetch        func(s capture.Share) capture.Fetched
+	fetchWithCtx func(ctx context.Context, s capture.Share) capture.Fetched
+	mediaMeta    func(s capture.Share) capture.Fetched
+	subtitles    func(s capture.Share) string
 }
 
-func (f stubFetcher) Recognize(raw string) capture.Share        { return f.recognize(raw) }
-func (f stubFetcher) Fetch(s capture.Share) capture.Fetched     { return f.fetch(s) }
+func (f stubFetcher) Recognize(raw string) capture.Share    { return f.recognize(raw) }
+func (f stubFetcher) Fetch(s capture.Share) capture.Fetched { return f.fetch(s) }
+func (f stubFetcher) FetchWithContext(ctx context.Context, s capture.Share) capture.Fetched {
+	if f.fetchWithCtx != nil {
+		return f.fetchWithCtx(ctx, s)
+	}
+	return f.fetch(s)
+}
 func (f stubFetcher) MediaMeta(s capture.Share) capture.Fetched { return f.mediaMeta(s) }
 func (f stubFetcher) Subtitles(s capture.Share) string {
 	if f.subtitles == nil {

@@ -26,8 +26,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 2 {
-		t.Fatalf("version = %d, want 2", version)
+	if version != 3 {
+		t.Fatalf("version = %d, want 3", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -151,9 +151,13 @@ func TestUpdateCardPatch(t *testing.T) {
 		t.Fatalf("patch touched too much: %+v", got)
 	}
 
-	_, err = s.UpdateCard(ctx, c.ID, port.CardPatch{})
-	if !errors.Is(err, port.ErrNotFound) {
-		t.Fatalf("empty patch: err = %v, want port.ErrNotFound", err)
+	// Empty patch now returns the existing card unchanged
+	got, err = s.UpdateCard(ctx, c.ID, port.CardPatch{})
+	if err != nil {
+		t.Fatalf("empty patch: err = %v, want nil", err)
+	}
+	if got.ID != c.ID || got.Title != "Idea" {
+		t.Fatalf("empty patch returned wrong card: %+v", got)
 	}
 	_, err = s.UpdateCard(ctx, 999, port.CardPatch{Status: &status})
 	if !errors.Is(err, port.ErrNotFound) {
@@ -485,5 +489,3 @@ func TestCreateResearchDedup(t *testing.T) {
 		t.Fatalf("got err = %v, want port.ErrResearchActive", err)
 	}
 }
-
-

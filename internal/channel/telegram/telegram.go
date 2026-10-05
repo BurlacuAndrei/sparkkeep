@@ -90,6 +90,9 @@ func (a *Adapter) Run(ctx context.Context) error {
 		}
 		if resp.StatusCode != http.StatusOK {
 			a.logf("telegram: getUpdates status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+			if !sleepCtx(ctx, 3*time.Second) {
+				return nil
+			}
 			continue
 		}
 		var batch struct {
@@ -98,17 +101,22 @@ func (a *Adapter) Run(ctx context.Context) error {
 		}
 		if err := json.Unmarshal(body, &batch); err != nil || !batch.OK {
 			a.logf("telegram: bad getUpdates payload: %v", err)
+			if !sleepCtx(ctx, 3*time.Second) {
+				return nil
+			}
 			continue
 		}
 		if len(batch.Result) == 0 {
 			continue
 		}
-		maxID := offset
+		var wg sync.WaitGroup
 		for _, u := range batch.Result {
-			if u.ID > maxID {
-				maxID = u.ID
+			if u.ID > offset {
+				offset = u.ID
 			}
+			wg.Add(1)
 			go func(u update) {
+				defer wg.Done()
 				select {
 				case a.sem <- struct{}{}:
 					defer func() { <-a.sem }()
@@ -118,7 +126,7 @@ func (a *Adapter) Run(ctx context.Context) error {
 				}
 			}(u)
 		}
-		offset = maxID
+		wg.Wait()
 		a.writeOffset(offset)
 	}
 }
@@ -376,7 +384,9 @@ func (a *Adapter) handleMessage(m *message) {
 	if !ok {
 		return
 	}
-	if _, err := a.Service.CaptureShare(context.Background(), share); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if _, err := a.Service.CaptureShare(ctx, share); err != nil {
 		a.logf("telegram: capture: %v", err)
 	}
 }
@@ -509,7 +519,8 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 	if !ok {
 		return
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 	switch action {
 	case "doing":
 		a.setStatus(ctx, id, port.StatusDoing, cb)

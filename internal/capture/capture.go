@@ -112,21 +112,6 @@ func Recognize(raw string) Share {
 
 // Fetch returns a Fetched for the given share. It NEVER returns a hard
 // error: failures surface as Fetched.Err with empty Text. Text shares
-// DefaultCapture is the default Capture instance used by package-level Fetch and MediaMeta.
-var DefaultCapture = Capture{HeadlessEnabled: true}
-
-// Fetch returns a Fetched for the given share using DefaultCapture.
-func Fetch(share Share) Fetched {
-	return DefaultCapture.Fetch(share)
-}
-
-// MediaMeta enriches a media link using DefaultCapture.
-func MediaMeta(share Share) Fetched {
-	return DefaultCapture.MediaMeta(share)
-}
-
-// Fetch returns a Fetched for the given share. It NEVER returns a hard
-// error: failures surface as Fetched.Err with empty Text. Text shares
 // short-circuit to their caption. Gated or bot-blocked sites fall back
 // to headless browser extraction when enabled.
 func (c Capture) Fetch(share Share) Fetched {
@@ -169,6 +154,87 @@ func (c Capture) Fetch(share Share) Fetched {
 		f.Notes = append(f.Notes, "login wall — content unavailable")
 	}
 
+	return f
+}
+
+// FetchWithContext is like Fetch but uses the provided context for cancellation
+// instead of creating background contexts. This allows the caller's deadline
+// to interrupt slow fetches.
+func (c Capture) FetchWithContext(ctx context.Context, share Share) Fetched {
+	f := Fetched{Kind: share.Kind, URL: share.URL, Caption: share.Caption}
+	if share.Kind == KindText {
+		f.Text = share.Caption
+		return f
+	}
+
+	// For known gated platforms (Instagram, Twitter/X, etc.), try headless browser first
+	if isGatedDomain(share.URL) && c.HeadlessEnabled {
+		childCtx, cancel := context.WithTimeout(ctx, headlessTimeout)
+		defer cancel()
+		title, desc, text, err := HeadlessExtract(childCtx, share.URL, c.ChromeBin)
+		if err == nil && (title != "" || text != "") {
+			return applyHeadless(f, title, desc, text)
+		}
+	}
+
+	// Attempt standard HTTP fetch
+	f = httpFetchWithContext(ctx, share, f)
+
+	// If standard fetch was blocked or insufficient, fall back to headless browser
+	if c.HeadlessEnabled && needsHeadlessFallback(share, f) {
+		childCtx, cancel := context.WithTimeout(ctx, headlessTimeout)
+		defer cancel()
+		title, desc, text, err := HeadlessExtract(childCtx, share.URL, c.ChromeBin)
+		if err == nil && (title != "" || text != "") {
+			f = applyHeadless(f, title, desc, text)
+			f.Err = nil
+		}
+	}
+
+	// With headless disabled, wall text from httpFetch would otherwise land in
+	// Text. When headless is on, needsHeadlessFallback + applyHeadless already
+	// handled the wall, and a second guard here would wrongly wipe real content
+	// that merely mentions a wall marker (e.g. an article about Cloudflare).
+	if !c.HeadlessEnabled && IsLoginWall(f.Text) {
+		f.Text = ""
+		f.Notes = append(f.Notes, "login wall — content unavailable")
+	}
+
+	return f
+}
+
+// httpFetchWithContext is like httpFetch but uses the provided context.
+func httpFetchWithContext(ctx context.Context, share Share, f Fetched) Fetched {
+	childCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(childCtx, http.MethodGet, share.URL, nil)
+	if err != nil {
+		f.Err = err
+		return f
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		f.Err = fmt.Errorf("capture: GET %s: %w", share.URL, err)
+		return f
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		f.Err = fmt.Errorf("capture: GET %s: read body: %w", share.URL, err)
+		return f
+	}
+	if resp.StatusCode != http.StatusOK {
+		f.Err = fmt.Errorf("capture: GET %s: status %d", share.URL, resp.StatusCode)
+		return f
+	}
+	if !isTextBody(resp.Header.Get("Content-Type")) {
+		f.Err = fmt.Errorf("capture: GET %s: non-text content-type %q", share.URL, resp.Header.Get("Content-Type"))
+		return f
+	}
+	html := string(body)
+	f.Title = extractTitle(html)
+	f.Description = extractDescription(html)
+	f.Text = strings.TrimSpace(stripTagsAndCondense(html))
 	return f
 }
 

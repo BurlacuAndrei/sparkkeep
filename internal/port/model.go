@@ -75,22 +75,3 @@ type TagPair struct {
 	B      string `json:"b"`
 	Weight int    `json:"weight"`
 }
-
-type GraphNode struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Type   string `json:"type"`
-	Weight int    `json:"weight"`
-}
-
-type GraphEdge struct {
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Kind   string `json:"kind"`
-	Weight int    `json:"weight"`
-}
-
-type Graph struct {
-	Nodes []GraphNode `json:"nodes"`
-	Edges []GraphEdge `json:"edges"`
-}

@@ -29,6 +29,8 @@ const (
 	// Whole-run ceiling: includes two LLM calls (query, synthesis over real
 	// sourced text) plus search+fetch. CPU-only boxes need the headroom.
 	defaultTimeout = 1500 * time.Second
+	// Search client timeout — reasonable bound for a single HTTP request.
+	searchTimeout = 30 * time.Second
 )
 
 // searchResp mirrors the SearXNG JSON API slice the pipeline consumes.
@@ -45,7 +47,7 @@ type Runner struct {
 	Fetcher    capture.Fetcher // fetcher for scraping search result URLs
 	MaxResults int             // 6
 	ClipChars  int             // 8000
-	Timeout    time.Duration   // 120s
+	Timeout    time.Duration   // 1500s
 }
 
 // New returns a Runner with the design defaults. Tests override the knobs
@@ -53,7 +55,7 @@ type Runner struct {
 func New(cfg config.Config, llm *analyze.Client) *Runner {
 	return &Runner{
 		SearchURL:  cfg.SearchURL,
-		Client:     &http.Client{Timeout: defaultTimeout},
+		Client:     &http.Client{Timeout: searchTimeout},
 		LLM:        llm,
 		Fetcher:    capture.Capture{HeadlessEnabled: cfg.HeadlessEnabled, ChromeBin: cfg.ChromeBin, YtDlpBin: cfg.YtDlpBin},
 		MaxResults: defaultMaxResults,
@@ -83,7 +85,7 @@ func (r *Runner) Run(ctx context.Context, card port.Card) (string, error) {
 	if n := r.maxResults(); len(urls) > n {
 		urls = urls[:n]
 	}
-	clip := r.fetchAndClip(urls)
+	clip := r.fetchAndClip(ctx, urls)
 	if clip == "" {
 		return "", errors.New("research: no fetchable text")
 	}
@@ -120,7 +122,6 @@ func (r *Runner) buildQuery(ctx context.Context, card port.Card) (string, error)
 }
 
 // search queries the SearXNG JSON API and returns the result URLs. An empty
-// SearchURL falls back to the card's own source for dev-only runs. An empty
 // result set is an error — core marks the row failed.
 func (r *Runner) search(ctx context.Context, query, fallbackURL string) ([]string, error) {
 	var urls []string
@@ -146,8 +147,6 @@ func (r *Runner) search(ctx context.Context, query, fallbackURL string) ([]strin
 		if err != nil {
 			return nil, err
 		}
-	} else if fallbackURL != "" {
-		urls = []string{fallbackURL}
 	}
 	if len(urls) == 0 {
 		return nil, errors.New("no search results")
@@ -181,7 +180,7 @@ func (r *Runner) fetcher() capture.Fetcher {
 	return capture.Capture{HeadlessEnabled: true}
 }
 
-func (r *Runner) fetchAndClip(urls []string) string {
+func (r *Runner) fetchAndClip(ctx context.Context, urls []string) string {
 	remaining := r.ClipChars
 	if remaining <= 0 {
 		remaining = defaultClipChars
@@ -191,13 +190,13 @@ func (r *Runner) fetchAndClip(urls []string) string {
 		if remaining <= 0 {
 			break
 		}
-		f := r.fetcher().Fetch(capture.Share{Kind: capture.KindLink, URL: u})
+		f := r.fetcher().FetchWithContext(ctx, capture.Share{Kind: capture.KindLink, URL: u})
 		if f.Err != nil || f.Text == "" {
 			continue
 		}
 		chunk := f.Text
 		if len(chunk) > remaining {
-			chunk = chunk[:remaining]
+			chunk = string([]rune(chunk)[:remaining])
 		}
 		buf.WriteString(chunk)
 		remaining -= len(chunk)

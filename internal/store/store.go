@@ -65,6 +65,13 @@ func (s *Store) upsertTag(ctx context.Context, tx *sql.Tx, name string) (int64, 
 }
 
 func (s *Store) CreateCard(ctx context.Context, c port.Card) (port.Card, error) {
+	return s.createCard(ctx, s.db, c)
+}
+
+func (s *Store) createCard(ctx context.Context, exec interface {
+	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
+}, c port.Card) (port.Card, error) {
 	ts := now()
 	actionsJSON := "[]"
 	if len(c.ProposedActions) > 0 {
@@ -72,7 +79,7 @@ func (s *Store) CreateCard(ctx context.Context, c port.Card) (port.Card, error) 
 			actionsJSON = string(b)
 		}
 	}
-	res, err := s.db.ExecContext(ctx,
+	res, err := exec.ExecContext(ctx,
 		`INSERT INTO cards (title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.Title, c.Summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, c.ExecutiveSummary, c.ValueProposition, actionsJSON, ts, ts)
@@ -90,8 +97,27 @@ func (s *Store) CreateCard(ctx context.Context, c port.Card) (port.Card, error) 
 		c.ProposedActions = []string{}
 	}
 	if len(c.Tags) > 0 {
-		if err := s.SetCardTags(ctx, id, c.Tags); err != nil {
-			return port.Card{}, err
+		tx, ok := exec.(*sql.Tx)
+		if !ok {
+			tx, err = s.db.BeginTx(ctx, nil)
+			if err != nil {
+				return port.Card{}, err
+			}
+			defer tx.Rollback()
+		}
+		for _, name := range c.Tags {
+			tagID, err := s.upsertTag(ctx, tx, name)
+			if err != nil {
+				return port.Card{}, err
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO cards_tags (card_id, tag_id) VALUES (?, ?)`, id, tagID); err != nil {
+				return port.Card{}, err
+			}
+		}
+		if !ok {
+			if err := tx.Commit(); err != nil {
+				return port.Card{}, err
+			}
 		}
 	}
 	return c, nil
@@ -295,7 +321,7 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 		args = append(args, actionsJSON)
 	}
 	if len(sets) == 0 {
-		return port.Card{}, port.ErrNotFound
+		return s.GetCard(ctx, id)
 	}
 	sets = append(sets, "updated_at = ?")
 	args = append(args, now())
@@ -407,7 +433,7 @@ func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error
 
 func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, card_id, status, query, findings, error, created_at FROM research ORDER BY id`)
+		`SELECT id, card_id, status, query, error, created_at FROM research ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -416,42 +442,21 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	for rows.Next() {
 		var r port.Research
 		var created string
-		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &created); err != nil {
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &created); err != nil {
 			return nil, err
 		}
 		r.CreatedAt, _ = parseTime(created)
 		list = append(list, r)
 	}
-		return list, rows.Err()
+	return list, rows.Err()
 }
 
-func (s *Store) TagCoOccurrence(ctx context.Context, minWeight int) ([]port.TagPair, error) {
-	if minWeight < 1 {
-		minWeight = 1
+func (s *Store) GetResearchFindings(ctx context.Context, id int64) (string, error) {
+	var findings string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT findings FROM research WHERE id = ?`, id).Scan(&findings)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", port.ErrNotFound
 	}
-	const q = `
-		SELECT ta.name, tb.name, COUNT(*) AS w
-		FROM cards_tags ca
-		JOIN cards_tags cb ON ca.card_id = cb.card_id AND ca.tag_id < cb.tag_id
-		JOIN tags ta ON ta.id = ca.tag_id
-		JOIN tags tb ON tb.id = cb.tag_id
-		GROUP BY ta.name, tb.name
-		HAVING w >= ?
-		ORDER BY w DESC, ta.name, tb.name
-		LIMIT ?`
-	rows, err := s.db.QueryContext(ctx, q, minWeight, maxTagPairs)
-	if err != nil {
-		return nil, fmt.Errorf("store: tag co-occurrence: %w", err)
-	}
-	defer rows.Close()
-	var out []port.TagPair
-	for rows.Next() {
-		var p port.TagPair
-		if err := rows.Scan(&p.A, &p.B, &p.Weight); err != nil {
-			return nil, err
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
+	return findings, err
 }
-

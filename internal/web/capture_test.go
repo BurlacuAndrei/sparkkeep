@@ -24,13 +24,14 @@ func testHandler(t *testing.T, uploadDir string) (http.Handler, *store.Store) {
 		t.Fatalf("store.New: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	svc := core.New(st, config.Config{
+	ctx := t.Context()
+	svc := core.New(ctx, st, config.Config{
 		LLMModel: "m", LLMBase: "http://127.0.0.1:1/v1",
 		ASRURL: "", HeadlessEnabled: false,
 		UploadDir: uploadDir, // core retains uploads itself, not the web layer
 	}, t.Logf)
 	cfg := config.Config{UploadDir: uploadDir, MaxUploadMB: 1}
-	return New(st, svc, "http://localhost:8080", cfg), st
+	return New(st, svc, cfg), st
 }
 
 func multipartBody(t *testing.T, fields map[string]string, fileField, fileName, fileMime string, fileData []byte) (io.Reader, string) {

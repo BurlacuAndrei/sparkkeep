@@ -7,3 +7,5 @@ sparkkeep.db
 data/
 frontend/node_modules/
 frontend/dist/
+.opencode/
+.superpowers/

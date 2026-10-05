@@ -1,11 +1,16 @@
 package capture
 
+import (
+	"context"
+)
+
 // Fetcher is the subset of capture that core consumes: recognize the share,
 // fetch best-effort content, enrich media metadata. It is fulfilled by the
 // package functions below and is easy to stub in tests.
 type Fetcher interface {
 	Recognize(raw string) Share
 	Fetch(share Share) Fetched
+	FetchWithContext(ctx context.Context, share Share) Fetched
 	MediaMeta(share Share) Fetched
 	Subtitles(share Share) string
 }

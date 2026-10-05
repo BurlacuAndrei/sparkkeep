@@ -38,31 +38,36 @@ type Transcriber interface {
 	Transcribe(ctx context.Context, f capture.File) (string, error)
 }
 
-var tagStripRe = regexp.MustCompile(`<[^>]*>`)
+var (
+	tagStripRe    = regexp.MustCompile(`<[^>]*>`)
+	scriptStyleRe = regexp.MustCompile(`(?s)<(script|style)[^>]*>.*?</\\1>`)
+)
 
 // Service wires the pipeline together. Channel is left nil until the
 // channel adapter attaches it (web/main wiring); a nil Channel is a no-op
 // in Notify.
 type Service struct {
-	Store     port.Store
-	Channel   port.Channel
-	Fetcher   capture.Fetcher // recognize+fetch (field named Fetcher: Capture collided with the method)
-	Analyze   *analyze.Client
-	Vision    Describer        // nil disables image digests
-	ASR       Transcriber      // nil disables transcription
-	Runner    *research.Runner // field named Runner: Research collided with the method
-	UploadDir string           // "" disables upload retention
-	FFmpegBin string           // "" disables video audio extraction
-	Logf      func(format string, args ...any)
-	WG        sync.WaitGroup
-	Ctx       context.Context
+	Store            port.Store
+	Channel          port.Channel
+	Fetcher          capture.Fetcher // recognize+fetch (field named Fetcher: Capture collided with the method)
+	Analyze          *analyze.Client
+	Vision           Describer        // nil disables image digests
+	ASR              Transcriber      // nil disables transcription
+	Runner           *research.Runner // field named Runner: Research collided with the method
+	UploadDir        string           // "" disables upload retention
+	UploadMaxAgeDays int              // 0 disables age-based cleanup
+	UploadMaxSizeMB  int              // 0 disables size-based cleanup
+	FFmpegBin        string           // "" disables video audio extraction
+	Logf             func(format string, args ...any)
+	WG               sync.WaitGroup
+	ctx              context.Context
 }
 
 // GoResearch runs Research in a background goroutine tracked by s.WG.
 func (s *Service) GoResearch(ctx context.Context, cardID int64) {
 	bgCtx := ctx
 	if bgCtx == nil {
-		bgCtx = s.Ctx
+		bgCtx = s.ctx
 	}
 	if bgCtx == nil {
 		bgCtx = context.Background()
@@ -78,7 +83,7 @@ func (s *Service) GoResearch(ctx context.Context, cardID int64) {
 
 // New constructs a Service with the default capture adapter, an analyze
 // client and research runner for cfg, and logf (default log.Printf).
-func New(st port.Store, cfg config.Config, logf func(format string, args ...any)) *Service {
+func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format string, args ...any)) *Service {
 	llm := analyze.New(cfg, nil)
 	s := &Service{
 		Store: st,
@@ -89,13 +94,16 @@ func New(st port.Store, cfg config.Config, logf func(format string, args ...any)
 			CookiesFile:     cfg.CookiesFile,
 			TranscriptLangs: cfg.TranscriptLangs,
 		},
-		Analyze:   llm,
-		Vision:    llm,
-		ASR:       asr.New(cfg),
-		Runner:    research.New(cfg, llm),
-		UploadDir: cfg.UploadDir,
-		FFmpegBin: ffmpegBin(cfg),
-		Logf:      logf,
+		Analyze:          llm,
+		Vision:           llm,
+		ASR:              asr.New(cfg),
+		Runner:           research.New(cfg, llm),
+		UploadDir:        cfg.UploadDir,
+		UploadMaxAgeDays: cfg.UploadMaxAgeDays,
+		UploadMaxSizeMB:  cfg.UploadMaxSizeMB,
+		FFmpegBin:        ffmpegBin(cfg),
+		Logf:             logf,
+		ctx:              ctx,
 	}
 	if s.Logf == nil {
 		s.Logf = log.Printf
@@ -132,17 +140,6 @@ func (s *Service) Capture(ctx context.Context, raw string) ([]int64, error) {
 // degrades into a stored "Analysis failed" card so the source + retry
 // button survive. All cards are stored even if a later notify fails.
 func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
-	if share.Kind == capture.KindLink && strings.TrimSpace(share.URL) != "" {
-		if existing, err := s.Store.GetCardBySourceURL(ctx, share.URL); err == nil {
-			if nerr := s.notify(ctx, port.Notification{Kind: "duplicate", Card: existing, Text: "Already captured: " + existing.Title}); nerr != nil {
-				s.Logf("core: notify duplicate: %v", nerr)
-			}
-			return []int64{}, nil
-		} else if !errors.Is(err, port.ErrNotFound) {
-			return nil, err
-		}
-	}
-
 	fetched := s.resolve(ctx, share)
 
 	res, err := s.Analyze.Analyze(ctx, fetched)
@@ -155,33 +152,18 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 
 	var ids []int64
 	for _, idea := range res.Cards {
-		execSummary := idea.ExecutiveSummary
-		if execSummary == "" {
-			execSummary = res.ExecutiveSummary
-		}
-		valProp := idea.ValueProposition
-		if valProp == "" {
-			valProp = res.ValueProposition
-		}
-		actions := idea.ProposedActions
-		if len(actions) == 0 {
-			actions = res.ProposedActions
-		}
-
-		card := port.Card{
-			Title:            idea.Title,
-			Summary:          idea.Summary,
-			Horizon:          idea.Horizon,
-			Tags:             idea.Tags,
-			SourceURL:        firstURL(fetched, idea.Links),
-			SourceNote:       fetched.Caption,
-			Status:           port.StatusInbox,
-			ExecutiveSummary: execSummary,
-			ValueProposition: valProp,
-			ProposedActions:  actions,
-		}
+		url := firstURL(fetched, idea.Links)
+		card := cardFromIdea(idea, res, url, fetched.Caption)
 		created, err := s.Store.CreateCard(ctx, card)
 		if err != nil {
+			if isUniqueConstraint(err) {
+				if existing, gerr := s.Store.GetCardBySourceURL(ctx, card.SourceURL); gerr == nil {
+					if nerr := s.notify(ctx, port.Notification{Kind: "duplicate", Card: existing, Text: "Already captured: " + existing.Title}); nerr != nil {
+						s.Logf("core: notify duplicate: %v", nerr)
+					}
+					continue
+				}
+			}
 			return ids, err
 		}
 		ids = append(ids, created.ID)
@@ -190,6 +172,43 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 		}
 	}
 	return ids, nil
+}
+
+func isUniqueConstraint(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "UNIQUE constraint failed") ||
+		strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "idx_cards_source")
+}
+
+func cardFromIdea(idea analyze.Idea, res analyze.AnalysisResult, url, note string) port.Card {
+	execSummary := idea.ExecutiveSummary
+	if execSummary == "" {
+		execSummary = res.ExecutiveSummary
+	}
+	valProp := idea.ValueProposition
+	if valProp == "" {
+		valProp = res.ValueProposition
+	}
+	actions := idea.ProposedActions
+	if len(actions) == 0 {
+		actions = res.ProposedActions
+	}
+	return port.Card{
+		Title:            idea.Title,
+		Summary:          idea.Summary,
+		Horizon:          idea.Horizon,
+		Tags:             idea.Tags,
+		SourceURL:        url,
+		SourceNote:       note,
+		Status:           port.StatusInbox,
+		ExecutiveSummary: execSummary,
+		ValueProposition: valProp,
+		ProposedActions:  actions,
+	}
 }
 
 // Research stores a 'queued' research row, runs the bounded research
@@ -253,31 +272,7 @@ func (s *Service) Retry(ctx context.Context, cardID int64) (port.Card, error) {
 		return card, nil
 	}
 	idea := res.Cards[0]
-	execSummary := idea.ExecutiveSummary
-	if execSummary == "" {
-		execSummary = res.ExecutiveSummary
-	}
-	valProp := idea.ValueProposition
-	if valProp == "" {
-		valProp = res.ValueProposition
-	}
-	actions := idea.ProposedActions
-	if len(actions) == 0 {
-		actions = res.ProposedActions
-	}
-
-	created, err := s.Store.CreateCard(ctx, port.Card{
-		Title:            idea.Title,
-		Summary:          idea.Summary,
-		Horizon:          idea.Horizon,
-		Tags:             idea.Tags,
-		SourceURL:        card.SourceURL,
-		SourceNote:       card.SourceNote,
-		Status:           port.StatusInbox,
-		ExecutiveSummary: execSummary,
-		ValueProposition: valProp,
-		ProposedActions:  actions,
-	})
+	created, err := s.Store.CreateCard(ctx, cardFromIdea(idea, res, card.SourceURL, card.SourceNote))
 	if err != nil {
 		return port.Card{}, err
 	}
@@ -458,8 +453,7 @@ func readTextFile(f capture.File) (string, bool) {
 }
 
 func stripHTML(s string) string {
-	re := regexp.MustCompile(`(?s)<(script|style)[^>]*>.*?</\1>`)
-	s = re.ReplaceAllString(s, " ")
+	s = scriptStyleRe.ReplaceAllString(s, " ")
 	return tagStripRe.ReplaceAllString(s, "")
 }
 
@@ -484,6 +478,8 @@ func (s *Service) persistUpload(f capture.File) string {
 		s.Logf("core: write upload: %v", err)
 		return ""
 	}
+	// TODO: cleanup old uploads based on UploadMaxAgeDays / UploadMaxSizeMB
+	// Run on startup or via daily cron goroutine.
 	return name
 }
 

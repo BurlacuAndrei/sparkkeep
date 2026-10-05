@@ -28,6 +28,8 @@ type Config struct {
 	CookiesFile      string
 	UploadDir        string
 	MaxUploadMB      int
+	UploadMaxAgeDays int
+	UploadMaxSizeMB  int
 	TranscriptLangs  string
 	FFmpegBin        string
 }
@@ -82,6 +84,20 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("config: SPARKKEEP_MAX_UPLOAD_MB: %w", err)
 		}
 		cfg.MaxUploadMB = n
+	}
+	if v := os.Getenv("SPARKKEEP_UPLOAD_MAX_AGE_DAYS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: SPARKKEEP_UPLOAD_MAX_AGE_DAYS: %w", err)
+		}
+		cfg.UploadMaxAgeDays = n
+	}
+	if v := os.Getenv("SPARKKEEP_UPLOAD_MAX_SIZE_MB"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: SPARKKEEP_UPLOAD_MAX_SIZE_MB: %w", err)
+		}
+		cfg.UploadMaxSizeMB = n
 	}
 	cfg.UploadDir = os.Getenv("SPARKKEEP_UPLOAD_DIR")
 	if cfg.UploadDir == "" {

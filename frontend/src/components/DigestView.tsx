@@ -1,7 +1,7 @@
 import React from 'react';
 import { DigestData, Card } from '../types';
 import { CardItem } from './CardItem';
-import { Calendar, BarChart2, CheckCircle2, Inbox, Zap, Archive } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 
 interface DigestViewProps {
   digest: DigestData | null;

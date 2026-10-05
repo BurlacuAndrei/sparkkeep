@@ -199,21 +199,24 @@ export function App() {
       </div>
 
       {/* Card Detail Modal */}
-      <CardModal
-        key={selectedCard?.id ?? 'none'}
-        card={selectedCard}
-        onClose={() => setSelectedCard(null)}
-        onUpdate={handleUpdateCard}
-        onResearch={handleResearch}
-        onRetry={handleRetry}
-      />
+      {selectedCard && (
+        <CardModal
+          key={selectedCard.id}
+          card={selectedCard}
+          onClose={() => setSelectedCard(null)}
+          onUpdate={handleUpdateCard}
+          onResearch={handleResearch}
+          onRetry={handleRetry}
+        />
+      )}
 
       {/* New Card Modal */}
-      <NewCardModal
-        isOpen={isNewModalOpen}
-        onClose={() => setIsNewModalOpen(false)}
-        onCreate={handleCreateCard}
-      />
+      {isNewModalOpen && (
+        <NewCardModal
+          onClose={() => setIsNewModalOpen(false)}
+          onCreate={handleCreateCard}
+        />
+      )}
 
       {/* Floating Toast Notification */}
       {toastMessage && (

@@ -15,13 +15,12 @@ COPY --from=frontend /src/internal/web/dist ./internal/web/dist
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/sparkkeep ./cmd/sparkkeep
 
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates yt-dlp chromium font-noto-cjk
+RUN apk add --no-cache ca-certificates yt-dlp chromium font-noto-cjk wget su-exec \
+    && adduser -D -u 1000 appuser
 COPY --from=build /out/sparkkeep /usr/local/bin/sparkkeep
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 VOLUME /data
-ENV SPARKKEEP_DB=/data/sparkkeep.db \
-    SPARKKEEP_HTTP_ADDR=:8080 \
-    SPARKKEEP_LLM_BASE=http://host.docker.internal:11434/v1 \
-    SPARKKEEP_HEADLESS_ENABLED=true \
-    SPARKKEEP_CHROME_BIN=/usr/bin/chromium-browser
 EXPOSE 8080
-ENTRYPOINT ["sparkkeep"]
+HEALTHCHECK CMD wget -qO- localhost:8080/api/v1/health || exit 1
+ENTRYPOINT ["/entrypoint.sh"]

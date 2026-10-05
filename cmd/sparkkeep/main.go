@@ -31,8 +31,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	svc := core.New(st, cfg, logger)
-	svc.Ctx = ctx
+	svc := core.New(ctx, st, cfg, logger)
 
 	if cfg.TGToken != "" {
 		tg := &telegram.Adapter{
@@ -53,7 +52,7 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Handler:           web.New(st, svc, cfg.PublicURL, cfg),
+		Handler:           web.New(st, svc, cfg),
 		Addr:              cfg.HTTPAddr,
 		ReadHeaderTimeout: 15 * time.Second,
 	}

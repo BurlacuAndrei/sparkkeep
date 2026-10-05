@@ -209,6 +209,9 @@ func (s stubFetcher) Recognize(raw string) capture.Share { return capture.Share{
 func (s stubFetcher) Fetch(share capture.Share) capture.Fetched {
 	return capture.Fetched{URL: share.URL, Text: s.text}
 }
+func (s stubFetcher) FetchWithContext(ctx context.Context, share capture.Share) capture.Fetched {
+	return capture.Fetched{URL: share.URL, Text: s.text}
+}
 func (s stubFetcher) MediaMeta(share capture.Share) capture.Fetched {
 	return capture.Fetched{URL: share.URL, Text: s.text}
 }
@@ -219,7 +222,7 @@ func TestFetchAndClipWithInjectedFetcher(t *testing.T) {
 		Fetcher:   stubFetcher{text: "stubbed content "},
 		ClipChars: 30,
 	}
-	got := r.fetchAndClip([]string{"http://a", "http://b", "http://c"})
+	got := r.fetchAndClip(context.Background(), []string{"http://a", "http://b", "http://c"})
 	if got != "stubbed content stubbed conten" {
 		t.Fatalf("got %q, want %q", got, "stubbed content stubbed conten")
 	}

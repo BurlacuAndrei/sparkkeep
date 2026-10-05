@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Search, Plus, Calendar, Layers, CheckSquare, Zap } from 'lucide-react';
+import { Sparkles, Search, Plus, Calendar, Layers, Zap } from 'lucide-react';
 
 interface HeaderProps {
   query: string;

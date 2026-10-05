@@ -53,30 +53,25 @@ const researchReportHTML = `<!doctype html>
 // Parsed once at init — never changes between requests.
 var researchTmpl = template.Must(template.New("research").Parse(researchReportHTML))
 
-// api routes the mux to the injected Store and Service. publicURL is
-// accepted for the dashboard's absolute links (e.g. research reports).
+// api routes the mux to the injected Store and Service.
 type api struct {
 	store     port.Store
 	svc       *core.Service
-	public    string
 	uploadDir string
 	maxUpload int64
 }
 
 // New returns a http.Handler routing /api/v1/* and the /assets static files
 // (/ serves index.html).
-func New(store port.Store, svc *core.Service, publicURL string, cfg config.Config) http.Handler {
+func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	a := &api{
-		store: store, svc: svc, public: publicURL,
+		store: store, svc: svc,
 		uploadDir: cfg.UploadDir,
 		maxUpload: int64(cfg.MaxUploadMB) << 20,
 	}
-	if a.maxUpload <= 0 {
-		a.maxUpload = 25 << 20
-	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", a.index)
-	mux.Handle("GET /assets/", cacheAsssets(http.StripPrefix("/assets/", staticFiles())))
+	mux.Handle("GET /assets/", cacheAssets(http.StripPrefix("/assets/", staticFiles())))
 	mux.HandleFunc("GET /api/v1/health", a.health)
 	mux.HandleFunc("GET /api/v1/cards", a.listCards)
 	mux.HandleFunc("POST /api/v1/cards", a.createCard)
@@ -103,9 +98,9 @@ func staticFiles() http.Handler {
 	return http.FileServer(http.FS(sub))
 }
 
-// cacheAsssets marks built assets as cacheable; index.html (which can change
+// cacheAssets marks built assets as cacheable; index.html (which can change
 // between deploys) is deliberately excluded.
-func cacheAsssets(h http.Handler) http.Handler {
+func cacheAssets(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		h.ServeHTTP(w, r)
@@ -188,13 +183,6 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u := strings.TrimSpace(b.SourceURL); u != "" {
-		if existing, err := a.store.GetCardBySourceURL(r.Context(), u); err == nil {
-			writeErr(w, http.StatusConflict, "already captured: "+existing.Title)
-			return
-		} else if !errors.Is(err, port.ErrNotFound) {
-			a.fail(w, err)
-			return
-		}
 		b.SourceURL = u
 	}
 	card, err := a.store.CreateCard(r.Context(), port.Card{
@@ -210,6 +198,12 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 		ProposedActions:  b.ProposedActions,
 	})
 	if err != nil {
+		if isUniqueConstraint(err) {
+			if existing, gerr := a.store.GetCardBySourceURL(r.Context(), b.SourceURL); gerr == nil {
+				writeErr(w, http.StatusConflict, "already captured: "+existing.Title)
+				return
+			}
+		}
 		a.fail(w, err)
 		return
 	}
@@ -407,7 +401,7 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "research already running")
 		return
 	}
-	a.svc.GoResearch(nil, b.CardID)
+	a.svc.GoResearch(r.Context(), b.CardID)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "accepted": true})
 }
 
@@ -423,9 +417,8 @@ func (a *api) getResearch(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	tmpl := researchTmpl
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.Execute(w, row); err != nil {
+	if err := researchTmpl.Execute(w, row); err != nil {
 		a.fail(w, err)
 		return
 	}
@@ -466,4 +459,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{"ok": false, "error": msg})
+}
+
+func isUniqueConstraint(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "UNIQUE constraint failed") ||
+		strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "idx_cards_source")
 }

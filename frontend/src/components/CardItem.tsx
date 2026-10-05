@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card } from '../types';
-import { ArrowRight, Check, Archive, Sparkles, RefreshCw, X, FileText, CheckCircle2, ExternalLink } from 'lucide-react';
+import { ArrowRight, Check, Archive, Sparkles, RefreshCw, X, FileText, CheckCircle2 } from 'lucide-react';
 
 interface CardItemProps {
   card: Card;
@@ -18,7 +18,7 @@ export const CardItem: React.FC<CardItemProps> = ({
   onRetry,
 }) => {
   const isFailed = card.title === 'Analysis failed';
-  const hasBriefing = Boolean(card.executive_summary || (card.proposed_actions && card.proposed_actions.length > 0));
+  const _hasBriefing = Boolean(card.executive_summary || (card.proposed_actions && card.proposed_actions.length > 0));
 
   return (
     <article
