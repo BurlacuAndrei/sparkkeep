@@ -700,3 +700,33 @@ func TestTriggerResearch_DuplicateRejects(t *testing.T) {
 		t.Fatalf("status = %d, want 409 Conflict", rr.Code)
 	}
 }
+
+func TestExportMarkdown(t *testing.T) {
+	st := newStubStore()
+	st.cards[7] = port.Card{
+		ID: 7, Title: "Neural Interfaces", Status: port.StatusInbox,
+		ExecutiveSummary: "BCI is mainstreaming.", ValueProposition: "Big upside.",
+		ProposedActions: []string{"Read the paper", "Prototype a demo"},
+		SourceURL:       "https://example.com/bci", Tags: []string{"ai", "research"},
+	}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/cards/7/export.md", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	want := "# [Spark] Neural Interfaces\n\n" +
+		"**Executive Summary:** BCI is mainstreaming.\n" +
+		"**Value Proposition:** Big upside.\n\n" +
+		"### Proposed Actions\n- [ ] Read the paper\n- [ ] Prototype a demo\n\n" +
+		"**Source:** https://example.com/bci\n" +
+		"**Tags:** #ai #research\n"
+	if got := rr.Body.String(); got != want {
+		t.Fatalf("markdown:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+
+	rr = doJSON(t, h, http.MethodGet, "/api/v1/cards/999/export.md", "")
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("missing card: status = %d, want 404", rr.Code)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
@@ -78,6 +79,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/cards/{id}", a.getCard)
 	mux.HandleFunc("PATCH /api/v1/cards/{id}", a.patchCard)
 	mux.HandleFunc("POST /api/v1/cards/{id}/retry", a.retryCard)
+	mux.HandleFunc("GET /api/v1/cards/{id}/export.md", a.exportMarkdown)
 	mux.HandleFunc("GET /api/v1/tags", a.listTags)
 	mux.HandleFunc("GET /api/v1/digest", a.weeklyDigest)
 	mux.HandleFunc("GET /api/v1/research", a.listResearch)
@@ -297,6 +299,45 @@ func (a *api) retryCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": card})
+}
+
+// exportMarkdown renders a card as a markdown briefing — the payload for a
+// one-click task-manager capture or a clipboard paste.
+func (a *api) exportMarkdown(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	card, err := a.store.GetCard(r.Context(), id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	summary := card.ExecutiveSummary
+	if summary == "" {
+		summary = card.Summary
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# [Spark] %s\n\n**Executive Summary:** %s\n", card.Title, summary)
+	if card.ValueProposition != "" {
+		fmt.Fprintf(&b, "**Value Proposition:** %s\n", card.ValueProposition)
+	}
+	if len(card.ProposedActions) > 0 {
+		b.WriteString("\n### Proposed Actions\n")
+		for _, act := range card.ProposedActions {
+			fmt.Fprintf(&b, "- [ ] %s\n", act)
+		}
+	}
+	b.WriteString("\n")
+	if card.SourceURL != "" {
+		fmt.Fprintf(&b, "**Source:** %s\n", card.SourceURL)
+	}
+	if len(card.Tags) > 0 {
+		fmt.Fprintf(&b, "**Tags:** #%s\n", strings.Join(card.Tags, " #"))
+	}
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	fmt.Fprint(w, b.String())
 }
 
 // weeklyDigest groups cards created in the last 7 calendar days by day,
