@@ -1,7 +1,17 @@
 import { Card, Tag, DigestData, ResearchItem, CardFilter } from './types';
 
+// Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
+export const TOKEN_KEY = 'sparkkeep_token';
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(path, options);
+  const token = localStorage.getItem(TOKEN_KEY) || '';
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      ...(options?.headers as Record<string, string> | undefined),
+      Authorization: `Bearer ${token}`,
+    },
+  });
   const data = await res.json();
   if (!res.ok || !data.ok) {
     throw new Error(data.error || `HTTP ${res.status}`);

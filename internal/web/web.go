@@ -4,6 +4,7 @@
 package web
 
 import (
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -60,15 +61,22 @@ type api struct {
 	svc       *core.Service
 	uploadDir string
 	maxUpload int64
+	authToken string
 }
 
+// authCookie holds a token the client has already verified, so the dashboard
+// survives a reload without re-sending the Authorization header.
+const authCookie = "sparkkeep_token"
+
 // New returns a http.Handler routing /api/v1/* and the /assets static files
-// (/ serves index.html).
+// (/ serves index.html). When cfg.AuthToken is set every request must carry a
+// matching token.
 func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	a := &api{
 		store: store, svc: svc,
 		uploadDir: cfg.UploadDir,
 		maxUpload: int64(cfg.MaxUploadMB) << 20,
+		authToken: cfg.AuthToken,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", a.index)
@@ -96,7 +104,8 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/research/{id}", a.getResearch)
 	mux.HandleFunc("POST /api/v1/capture", a.capture)
 	mux.HandleFunc("GET /api/v1/media/{name}", a.media)
-	return mux
+	mux.HandleFunc("POST /api/v1/auth/verify", a.verifyToken)
+	return a.authMiddleware(mux)
 }
 
 // staticFiles roots the embed at the dist/assets subdirectory so /assets/app.js
@@ -145,6 +154,86 @@ func serveEmbedded(path, contentType string) http.HandlerFunc {
 		w.Header().Set("Content-Type", contentType)
 		w.Write(b)
 	}
+}
+
+// --- auth -------------------------------------------------------------------
+
+// isPublicPath reports a request that must stay reachable without a token: the
+// PWA shell and its assets (the SPA has to load to render the unlock prompt),
+// the health probe, the standalone research report, and verify itself. The
+// report exception is HTML-only — a JSON caller still needs the token.
+func isPublicPath(r *http.Request) bool {
+	p := r.URL.Path
+	switch p {
+	case "/api/v1/health", "/api/v1/auth/verify", "/manifest.json", "/sw.js", "/icon.svg":
+		return true
+	}
+	if strings.HasPrefix(p, "/assets/") {
+		return true
+	}
+	html := !strings.Contains(r.Header.Get("Accept"), "application/json") &&
+		r.URL.Query().Get("format") != "json"
+	return html && strings.HasPrefix(p, "/api/v1/research/")
+}
+
+// presentedToken reads the token from Authorization: Bearer, the auth cookie,
+// or ?token= (for links opened from another app).
+func presentedToken(r *http.Request) string {
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer ")
+	}
+	if c, err := r.Cookie(authCookie); err == nil {
+		return c.Value
+	}
+	return r.URL.Query().Get("token")
+}
+
+func tokenMatches(got, want string) bool {
+	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+}
+
+// authMiddleware rejects requests without the configured token. An empty
+// token leaves everything open, which is the default. An HTML request without
+// a token still gets the SPA shell so the dashboard can ask for one; the API
+// gets a 401 and the client shows the unlock modal.
+func (a *api) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if a.authToken == "" || isPublicPath(r) || tokenMatches(presentedToken(r), a.authToken) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			writeErr(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// verifyToken exchanges a token for the long-lived cookie the browser then
+// sends on every request. It stays public because the token travels in the
+// body, not a header.
+func (a *api) verifyToken(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Token string `json:"token"`
+	}
+	if err := decodeJSON(w, r, &b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	tok := b.Token
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		tok = strings.TrimPrefix(h, "Bearer ")
+	}
+	if !tokenMatches(tok, a.authToken) {
+		writeErr(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: authCookie, Value: tok, Path: "/",
+		SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // --- API handlers -----------------------------------------------------------

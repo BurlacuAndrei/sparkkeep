@@ -918,3 +918,92 @@ func TestExportMarkdown(t *testing.T) {
 		t.Fatalf("missing card: status = %d, want 404", rr.Code)
 	}
 }
+
+func TestAuthMiddleware(t *testing.T) {
+	st := newStubStore()
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25, AuthToken: "secret123"})
+
+	// do issues a request with optional header/cookie/query credentials.
+	do := func(method, path, bearer, cookie string) *httptest.ResponseRecorder {
+		t.Helper()
+		r := httptest.NewRequest(method, path, nil)
+		if bearer != "" {
+			r.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		if cookie != "" {
+			r.AddCookie(&http.Cookie{Name: authCookie, Value: cookie})
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, r)
+		return rr
+	}
+
+	// No credentials on a private endpoint → 401 JSON envelope.
+	rr := do(http.MethodGet, "/api/v1/cards", "", "")
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("no auth: status = %d, want 401", rr.Code)
+	}
+	var env struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &env); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if env.OK || env.Error != "unauthorized" {
+		t.Fatalf("body = %+v, want {ok:false error:unauthorized}", env)
+	}
+
+	// The health probe stays public so orchestrators can still see the service.
+	if rr := do(http.MethodGet, "/api/v1/health", "", ""); rr.Code != http.StatusOK {
+		t.Fatalf("health: status = %d, want 200", rr.Code)
+	}
+
+	// A wrong token is still a 401.
+	if rr := do(http.MethodGet, "/api/v1/cards", "wrong", ""); rr.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong token: status = %d, want 401", rr.Code)
+	}
+
+	// The dashboard shell loads without a token — the SPA asks for one itself.
+	rr = do(http.MethodGet, "/", "", "")
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "<html") {
+		t.Fatalf("/: status = %d body = %.40q, want the index shell", rr.Code, rr.Body.String())
+	}
+
+	for _, tc := range []struct {
+		name  string
+		bear  string
+		cooke string
+		path  string
+	}{
+		{"bearer", "secret123", "", "/api/v1/cards"},
+		{"cookie", "", "secret123", "/api/v1/cards"},
+		{"query", "secret123", "", "/api/v1/cards?token=secret123"},
+	} {
+		if rr := do(http.MethodGet, tc.path, tc.bear, tc.cooke); rr.Code != http.StatusOK {
+			t.Errorf("%s: status = %d, want 200", tc.name, rr.Code)
+		}
+	}
+
+	// A verified token is exchanged for the cookie.
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/auth/verify", `{"token":"secret123"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("verify: status = %d, want 200 (body %s)", rr.Code, rr.Body.String())
+	}
+	cookies := rr.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != authCookie || cookies[0].Value != "secret123" {
+		t.Fatalf("verify cookies = %+v, want a single %s cookie", cookies, authCookie)
+	}
+	if cookies[0].Path != "/" || cookies[0].MaxAge != 31536000 || cookies[0].SameSite != http.SameSiteLaxMode {
+		t.Errorf("cookie attrs = %+v, want Path=/ Max-Age=31536000 SameSite=Lax", cookies[0])
+	}
+
+	// A wrong token is refused without a cookie.
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/auth/verify", `{"token":"nope"}`)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("verify bad token: status = %d, want 401", rr.Code)
+	}
+	if cs := rr.Result().Cookies(); len(cs) != 0 {
+		t.Errorf("verify bad token set cookies: %+v", cs)
+	}
+}
