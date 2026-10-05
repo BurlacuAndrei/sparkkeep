@@ -73,6 +73,14 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", a.index)
 	mux.Handle("GET /assets/", cacheAssets(http.StripPrefix("/assets/", staticFiles())))
+	mux.HandleFunc("GET /manifest.json", serveEmbedded("dist/manifest.json", "application/manifest+json; charset=utf-8"))
+	sw := serveEmbedded("dist/sw.js", "application/javascript; charset=utf-8")
+	mux.HandleFunc("GET /sw.js", func(w http.ResponseWriter, r *http.Request) {
+		// Scopes the worker at the root so /assets/ and /api/ are covered.
+		w.Header().Set("Service-Worker-Allowed", "/")
+		sw(w, r)
+	})
+	mux.HandleFunc("GET /icon.svg", serveEmbedded("dist/icon.svg", "image/svg+xml"))
 	mux.HandleFunc("GET /api/v1/health", a.health)
 	mux.HandleFunc("GET /api/v1/cards", a.listCards)
 	mux.HandleFunc("POST /api/v1/cards", a.createCard)
@@ -122,6 +130,21 @@ func (a *api) index(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(b)
+}
+
+// serveEmbedded returns a handler for one PWA file copied out of
+// frontend/public/ by the Vite build. The content type is explicit because
+// the browser rejects a manifest or a worker served as octet-stream.
+func serveEmbedded(path, contentType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		b, err := distFS.ReadFile(path)
+		if err != nil {
+			http.Error(w, "pwa asset not built", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Write(b)
+	}
 }
 
 // --- API handlers -----------------------------------------------------------
