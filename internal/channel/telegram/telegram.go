@@ -220,16 +220,35 @@ func (a *Adapter) sendMessage(ctx context.Context, text string, cardID int64, bu
 
 // sendCard renders a created card as caption text + the four action buttons.
 func (a *Adapter) sendCard(ctx context.Context, c port.Card) error {
+	_, err := a.sendMessage(ctx, cardCaption(c), c.ID, cardButtons(c.ID, false))
+	return err
+}
+
+// cardCaption formats a card as Markdown: bold title, executive summary (or
+// the plain summary), the proposed actions as a "Next Steps" bullet list, then
+// horizon and tags. Parts are trimmed and blank actions dropped so a padded
+// field can't leave a stray empty line in the caption.
+func cardCaption(c port.Card) string {
 	body := c.Summary
 	if c.ExecutiveSummary != "" {
 		body = c.ExecutiveSummary
 	}
-	caption := fmt.Sprintf("%s\n\n%s\n[%s]", c.Title, body, c.Horizon)
-	if len(c.Tags) > 0 {
-		caption += "\n#" + strings.Join(c.Tags, " #")
+	var bullets []string
+	for _, a := range c.ProposedActions {
+		if a = strings.TrimSpace(a); a != "" {
+			bullets = append(bullets, "• "+a)
+		}
 	}
-	_, err := a.sendMessage(ctx, caption, c.ID, cardButtons(c.ID, false))
-	return err
+	var b strings.Builder
+	fmt.Fprintf(&b, "*%s*\n\n%s", strings.TrimSpace(c.Title), strings.TrimSpace(body))
+	if len(bullets) > 0 {
+		b.WriteString("\n\n*Next Steps:*\n" + strings.Join(bullets, "\n"))
+	}
+	fmt.Fprintf(&b, "\n\n[%s]", strings.TrimSpace(c.Horizon))
+	if len(c.Tags) > 0 {
+		b.WriteString("\n#" + strings.Join(c.Tags, " #"))
+	}
+	return b.String()
 }
 
 // sendFailed renders the analysis-failure card: same buttons plus Retry.
