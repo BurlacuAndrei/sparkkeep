@@ -71,3 +71,16 @@ export async function fetchResearchList(): Promise<ResearchItem[]> {
   const res = await request<{ ok: boolean; research: ResearchItem[] }>('/api/v1/research');
   return res.research || [];
 }
+
+export async function fetchResearchItem(id: number): Promise<ResearchItem> {
+  const res = await request<{ ok: boolean; data: ResearchItem }>(`/api/v1/research/${id}?format=json`);
+  return res.data;
+}
+
+// fetchCardResearch returns the newest research row for a card with its full
+// findings, or null when the card has never been researched.
+export async function fetchCardResearch(cardId: number): Promise<ResearchItem | null> {
+  const list = await fetchResearchList();
+  const latest = list.filter((r) => r.card_id === cardId).sort((a, b) => b.id - a.id)[0];
+  return latest ? fetchResearchItem(latest.id) : null;
+}
