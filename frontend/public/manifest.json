@@ -1,0 +1,18 @@
+{
+  "name": "Sparkkeep Action Engine",
+  "short_name": "Sparkkeep",
+  "description": "Self-hosted capture & organize action engine",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b0f19",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

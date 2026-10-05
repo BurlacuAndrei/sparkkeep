@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Sparkkeep">
+  <defs>
+    <linearGradient id="bolt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#818cf8"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="20" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="#0b0f19"/>
+  <rect width="512" height="512" fill="url(#halo)"/>
+  <path d="M296 96 168 288h72l-24 128 128-192h-72z" fill="url(#bolt)" filter="url(#glow)"/>
+  <path d="M380 132c6 30 10 40 26 46-16 6-20 16-26 46-6-30-10-40-26-46 16-6 20-16 26-46z" fill="#818cf8" opacity="0.9"/>
+</svg>

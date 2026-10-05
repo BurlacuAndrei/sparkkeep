@@ -769,6 +769,37 @@ func TestStaticAssetCached(t *testing.T) {
 	}
 }
 
+func TestPWAAssetsServed(t *testing.T) {
+	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
+
+	for _, tc := range []struct{ path, contentType, body string }{
+		{"/manifest.json", "application/manifest+json", "Sparkkeep Action Engine"},
+		{"/sw.js", "application/javascript", "addEventListener"},
+		{"/icon.svg", "image/svg+xml", "<svg"},
+	} {
+		rr := doJSON(t, h, http.MethodGet, tc.path, "")
+		if rr.Code != http.StatusOK {
+			t.Errorf("%s: status = %d, want 200", tc.path, rr.Code)
+			continue
+		}
+		if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, tc.contentType) {
+			t.Errorf("%s: Content-Type = %q, want %s", tc.path, ct, tc.contentType)
+		}
+		if !strings.Contains(rr.Body.String(), tc.body) {
+			t.Errorf("%s: body missing %q", tc.path, tc.body)
+		}
+	}
+}
+
+func TestServiceWorkerScopeHeader(t *testing.T) {
+	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodGet, "/sw.js", "")
+	if got := rr.Header().Get("Service-Worker-Allowed"); got != "/" {
+		t.Fatalf("Service-Worker-Allowed = %q, want /", got)
+	}
+}
+
 func TestOversizedRequestBodyRejected(t *testing.T) {
 	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
 
