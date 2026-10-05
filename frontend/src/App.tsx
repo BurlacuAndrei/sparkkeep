@@ -87,6 +87,16 @@ export function App() {
     }
   }, [viewMode, loadCards, loadDigest]);
 
+  // The share-sheet POST redirects back to here with ?captured=true: confirm
+  // the capture and refresh so the new card is on screen. The query is scrubbed
+  // so a reload does not toast (or refetch) a second time.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('captured') !== 'true') return;
+    showToast('Captured new spark from Share Sheet!');
+    window.history.replaceState({}, '', window.location.pathname);
+    reloadAll();
+  }, [showToast, reloadAll]);
+
   // Card status change
   const handleStatusChange = async (id: number, newStatus: string) => {
     try {

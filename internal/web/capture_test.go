@@ -134,6 +134,24 @@ func TestCaptureTextAndURL(t *testing.T) {
 	}
 }
 
+// The PWA share_target posts a form-encoded title/text/url from the OS share
+// sheet. There is no page to render a response in, so it must bounce the user
+// back to the dashboard with ?captured=true.
+func TestCaptureWebShareTargetFormUrlencoded(t *testing.T) {
+	h, _ := testHandler(t, t.TempDir())
+	req := httptest.NewRequest("POST", "/api/v1/capture",
+		strings.NewReader("url=https://example.com/test&title=Test+Title&text=Check+this+out"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("code = %d, want 303; body = %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "/?captured=true" {
+		t.Errorf("Location = %q, want /?captured=true", got)
+	}
+}
+
 func TestMediaServesUploadedFile(t *testing.T) {
 	dir := t.TempDir()
 	h, _ := testHandler(t, dir)
