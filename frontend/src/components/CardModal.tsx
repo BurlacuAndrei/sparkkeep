@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card } from '../types';
-import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2 } from 'lucide-react';
+import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare } from 'lucide-react';
 
 interface CardModalProps {
   card: Card | null;
@@ -8,6 +8,7 @@ interface CardModalProps {
   onUpdate: (id: number, patch: Partial<Card>) => void;
   onResearch: (id: number) => void;
   onRetry: (id: number) => void;
+  showToast?: (msg: string) => void;
 }
 
 export const CardModal: React.FC<CardModalProps> = ({
@@ -16,6 +17,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   onUpdate,
   onResearch,
   onRetry,
+  showToast,
 }) => {
   const [title, setTitle] = useState(card?.title || '');
   const [_summary, _setSummary] = useState(card?.summary || '');
@@ -51,6 +53,32 @@ export const CardModal: React.FC<CardModalProps> = ({
   };
 
   const isFailed = card.title === 'Analysis failed';
+
+  const fetchMarkdown = async () => {
+    const res = await fetch(`/api/v1/cards/${card.id}/export.md`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.text();
+  };
+
+  const handleCopyMarkdown = async () => {
+    try {
+      await navigator.clipboard.writeText(await fetchMarkdown());
+      showToast?.('Markdown copied to clipboard');
+    } catch (err: any) {
+      showToast?.(err.message);
+    }
+  };
+
+  const handleAddToTodoist = async () => {
+    try {
+      const md = await fetchMarkdown();
+      const q = new URLSearchParams({ text: card.title, description: md });
+      window.open(`https://todoist.com/showTask?${q.toString()}`, '_blank', 'noopener');
+      showToast?.('Opening Todoist with this spark...');
+    } catch (err: any) {
+      showToast?.(err.message);
+    }
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -233,6 +261,16 @@ export const CardModal: React.FC<CardModalProps> = ({
                   <span>Retry Extraction</span>
                 </button>
               )}
+
+              <button type="button" className="btn-secondary" onClick={handleCopyMarkdown}>
+                <ClipboardCopy size={14} color="#34d399" />
+                <span>Copy Markdown</span>
+              </button>
+
+              <button type="button" className="btn-secondary" onClick={handleAddToTodoist}>
+                <CheckSquare size={14} color="#e879f9" />
+                <span>Add to Todoist</span>
+              </button>
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>

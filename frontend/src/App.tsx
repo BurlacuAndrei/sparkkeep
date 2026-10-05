@@ -207,6 +207,7 @@ export function App() {
           onUpdate={handleUpdateCard}
           onResearch={handleResearch}
           onRetry={handleRetry}
+          showToast={showToast}
         />
       )}
 
