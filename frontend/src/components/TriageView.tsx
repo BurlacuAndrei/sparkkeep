@@ -12,6 +12,27 @@ function idleDays(card: Card): number {
   return Math.floor((Date.now() - ts) / 86_400_000);
 }
 
+// Swipe gestures mirror the arrow-key hotkeys exactly.
+const SWIPE_ACT = 100;
+const SWIPE_UP_ACT = 100;
+const SWIPE_UP_MAX_DX = 80;
+
+function swipeAction(dx: number, dy: number): string | null {
+  if (dx > SWIPE_ACT) return 'doing';
+  if (dx < -SWIPE_ACT) return 'shelved';
+  if (dy < -SWIPE_UP_ACT && Math.abs(dx) < SWIPE_UP_MAX_DX) return 'done';
+  return null;
+}
+
+function stampFor(dx: number, dy: number): 'doing' | 'shelve' | 'done' | null {
+  if (dx > 40) return 'doing';
+  if (dx < -40) return 'shelve';
+  if (dy < -50 && Math.abs(dx) < 40) return 'done';
+  return null;
+}
+
+const STAMP_LABEL = { doing: 'DOING', shelve: 'SHELVE', done: 'DONE' } as const;
+
 interface TriageViewProps {
   cards: Card[];
   onStatusChange: (id: number, status: string) => void;
@@ -66,6 +87,36 @@ export const TriageView: React.FC<TriageViewProps> = ({
     if (!currentCard) return;
     onStatusChange(currentCard.id, status);
   }, [currentCard, onStatusChange]);
+
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+
+  const resetDrag = useCallback(() => {
+    setTouchStart(null);
+    setDragOffset({ x: 0, y: 0 });
+    setIsDragging(false);
+  }, []);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (t) setTouchStart({ x: t.clientX, y: t.clientY });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (!t || !touchStart) return;
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) setIsDragging(true);
+    setDragOffset({ x: dx, y: dy });
+  };
+
+  const handleTouchEnd = () => {
+    const action = swipeAction(dragOffset.x, dragOffset.y);
+    resetDrag();
+    if (action) handleAction(action);
+  };
 
   // Keyboard navigation
   useEffect(() => {
@@ -144,6 +195,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
   }
 
   const isFailed = currentCard.title === 'Analysis failed';
+  const stamp = isDragging ? stampFor(dragOffset.x, dragOffset.y) : null;
 
   return (
     <div className="triage-container">
@@ -176,7 +228,20 @@ export const TriageView: React.FC<TriageViewProps> = ({
         </div>
       </div>
 
-      <div className="triage-card">
+      <div
+        className="triage-card"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={resetDrag}
+        style={{
+          transform: isDragging
+            ? `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0) rotate(${dragOffset.x * 0.05}deg)`
+            : undefined,
+          transition: isDragging ? 'none' : 'transform 0.25s ease-out',
+        }}
+      >
+        {stamp && <span className={`swipe-stamp ${stamp}`}>{STAMP_LABEL[stamp]}</span>}
         <div className="triage-header">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
