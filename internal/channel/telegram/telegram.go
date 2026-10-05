@@ -2,7 +2,8 @@
 // long-poll Telegram adapter (no bot library). Inbound: owner messages →
 // core.Service.CaptureShare (text, links and downloaded media),
 // inline-button callback queries → status/research/retry, emoji reactions →
-// horizon refinement. Outbound: Notify renders created cards as caption text
+// horizon refinement, replies to a card message → tag/note appending
+// (organize-by-reply). Outbound: Notify renders created cards as caption text
 // + inline keyboard and research reports as a public-URL link. Config is
 // passed field-by-field (Token, OwnerID) so the loop is easy to wire in tests.
 package telegram
@@ -16,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -308,15 +310,16 @@ type update struct {
 }
 
 type message struct {
-	MessageID int64       `json:"message_id"`
-	Chat      *chat       `json:"chat"`
-	Text      string      `json:"text"`
-	Caption   string      `json:"caption"`
-	Photo     []photoSize `json:"photo"`
-	Voice     *voiceNote  `json:"voice"`
-	Audio     *audioFile  `json:"audio"`
-	Document  *document   `json:"document"`
-	Video     *videoFile  `json:"video"`
+	MessageID      int64       `json:"message_id"`
+	Chat           *chat       `json:"chat"`
+	Text           string      `json:"text"`
+	Caption        string      `json:"caption"`
+	ReplyToMessage *message    `json:"reply_to_message"` // organize-by-reply target
+	Photo          []photoSize `json:"photo"`
+	Voice          *voiceNote  `json:"voice"`
+	Audio          *audioFile  `json:"audio"`
+	Document       *document   `json:"document"`
+	Video          *videoFile  `json:"video"`
 }
 
 type photoSize struct {
@@ -385,10 +388,26 @@ func (a *Adapter) handleUpdate(u update) {
 
 // handleMessage funnels text, links and media into CaptureShare. A message
 // with neither text nor a downloadable payload is dropped; so is anything
-// from a chat that is not the owner.
+// from a chat that is not the owner. A reply to one of the bot's own card
+// messages is the organize-by-reply signal instead of a new share.
 func (a *Adapter) handleMessage(m *message) {
 	if m.Chat == nil || m.Chat.ID != a.OwnerID {
 		return // owner lock: single-user bot ignores everyone else
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if m.ReplyToMessage != nil {
+		// A reply to a card the bot posted organizes that card. A reply to
+		// anything else (or to a card evicted from the tracked map) falls
+		// through, so the message is never lost.
+		if cardID := a.cardForMessage(m.ReplyToMessage.MessageID); cardID > 0 {
+			raw := m.Text
+			if raw == "" {
+				raw = m.Caption
+			}
+			a.organizeReply(ctx, cardID, raw)
+			return
+		}
 	}
 	share, ok := ShareFromUpdate(m, func(fileID string) ([]byte, error) {
 		data, err := a.downloadFile(fileID)
@@ -403,11 +422,69 @@ func (a *Adapter) handleMessage(m *message) {
 	if !ok {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
 	if _, err := a.Service.CaptureShare(ctx, share); err != nil {
 		a.logf("telegram: capture: %v", err)
 	}
+}
+
+// hashtagRe matches the "#tag" tokens of an organize-by-reply message.
+var hashtagRe = regexp.MustCompile(`#[a-zA-Z0-9_]+`)
+
+// organizeReply applies an organize-by-reply message to a card: its hashtags
+// merge into the card's tags and the remaining text is appended to the note,
+// then a one-line confirmation is sent back. Store failures are logged, not
+// fatal — the message is never worth losing the reply thread over.
+func (a *Adapter) organizeReply(ctx context.Context, cardID int64, raw string) {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return
+	}
+	card, err := a.Store.GetCard(ctx, cardID)
+	if err != nil {
+		a.logf("telegram: organize reply: GetCard(%d): %v", cardID, err)
+		return
+	}
+	if rest := strings.TrimSpace(hashtagRe.ReplaceAllString(text, "")); rest != "" {
+		note := rest
+		if old := strings.TrimSpace(card.SourceNote); old != "" {
+			note = old + "\n" + rest
+		}
+		if _, err := a.Store.UpdateCard(ctx, cardID, port.CardPatch{Note: &note}); err != nil {
+			a.logf("telegram: organize reply: UpdateCard(%d): %v", cardID, err)
+		}
+	}
+	tags := mergeTags(card.Tags, hashtagRe.FindAllString(text, -1))
+	if len(tags) > len(card.Tags) {
+		if err := a.Store.SetCardTags(ctx, cardID, tags); err != nil {
+			a.logf("telegram: organize reply: SetCardTags(%d): %v", cardID, err)
+		}
+	}
+	confirm := fmt.Sprintf("Updated card #%d", cardID)
+	if len(tags) > 0 {
+		confirm += "\n#" + strings.Join(tags, " #")
+	}
+	if _, err := a.sendMessage(ctx, confirm, 0, nil); err != nil {
+		a.logf("telegram: organize reply: sendMessage: %v", err)
+	}
+}
+
+// mergeTags appends the lowercased, "#"-stripped hashTags to existing,
+// preserving order and dropping duplicates (comparison is case-insensitive).
+func mergeTags(existing, hashTags []string) []string {
+	out := append([]string{}, existing...)
+	seen := make(map[string]bool, len(out))
+	for _, t := range out {
+		seen[strings.ToLower(t)] = true
+	}
+	for _, raw := range hashTags {
+		tag := strings.ToLower(strings.TrimPrefix(raw, "#"))
+		if tag == "" || seen[tag] {
+			continue
+		}
+		seen[tag] = true
+		out = append(out, tag)
+	}
+	return out
 }
 
 // ShareFromUpdate maps a Telegram message to a capture.Share, downloading
