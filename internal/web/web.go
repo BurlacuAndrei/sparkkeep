@@ -79,6 +79,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/cards/{id}", a.getCard)
 	mux.HandleFunc("PATCH /api/v1/cards/{id}", a.patchCard)
 	mux.HandleFunc("POST /api/v1/cards/{id}/retry", a.retryCard)
+	mux.HandleFunc("POST /api/v1/cards/batch-shelve-stale", a.batchShelveStale)
 	mux.HandleFunc("GET /api/v1/cards/{id}/export.md", a.exportMarkdown)
 	mux.HandleFunc("GET /api/v1/tags", a.listTags)
 	mux.HandleFunc("GET /api/v1/digest", a.weeklyDigest)
@@ -139,6 +140,9 @@ func (a *api) listCards(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := q.Get("limit"); v != "" {
 		f.Limit, _ = strconv.Atoi(v)
+	}
+	if v := q.Get("stale_days"); v != "" {
+		f.StaleDays, _ = strconv.Atoi(v)
 	}
 	cards, err := a.store.ListCards(r.Context(), f)
 	if err != nil {
@@ -299,6 +303,27 @@ func (a *api) retryCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": card})
+}
+
+// batchShelveStale shelves every inbox/doing card untouched for more than
+// ?days (default 30) and reports how many were archived.
+func (a *api) batchShelveStale(w http.ResponseWriter, r *http.Request) {
+	const defaultDays = 30
+	days := defaultDays
+	if v := r.URL.Query().Get("days"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			writeErr(w, http.StatusBadRequest, "invalid days: "+v)
+			return
+		}
+		days = n
+	}
+	n, err := a.store.ShelveStale(r.Context(), days)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "shelved_count": n})
 }
 
 // exportMarkdown renders a card as a markdown briefing — the payload for a

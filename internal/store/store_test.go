@@ -136,6 +136,112 @@ func TestListCardsFilter(t *testing.T) {
 	}
 }
 
+func TestListCardsStaleFilter(t *testing.T) {
+	s, ctx := newTestStore(t)
+	// Two cards backdated past the 30-day cutoff, two left fresh.
+	var old []port.Card
+	for _, title := range []string{"ancient", "older"} {
+		c, err := s.CreateCard(ctx, port.Card{Title: title, Status: port.StatusInbox})
+		if err != nil {
+			t.Fatalf("CreateCard: %v", err)
+		}
+		old = append(old, c)
+	}
+	for _, title := range []string{"recent", "brand new"} {
+		if _, err := s.CreateCard(ctx, port.Card{Title: title, Status: port.StatusInbox}); err != nil {
+			t.Fatalf("CreateCard: %v", err)
+		}
+	}
+	backdate := func(id int64, d time.Duration) {
+		if _, err := s.db.Exec(`UPDATE cards SET updated_at = ? WHERE id = ?`,
+			time.Now().UTC().Add(-d).Format(timeLayout), id); err != nil {
+			t.Fatalf("backdate: %v", err)
+		}
+	}
+	backdate(old[0].ID, 45*24*time.Hour)
+	backdate(old[1].ID, 31*24*time.Hour)
+
+	stale, err := s.ListCards(ctx, port.CardFilter{StaleDays: 30})
+	if err != nil {
+		t.Fatalf("ListCards stale: %v", err)
+	}
+	if len(stale) != 2 {
+		t.Fatalf("stale_days=30 returned %d cards, want 2: %+v", len(stale), stale)
+	}
+	for _, c := range stale {
+		if c.Title != "ancient" && c.Title != "older" {
+			t.Fatalf("unexpected card in stale set: %q", c.Title)
+		}
+	}
+
+	// The 31d card is stale at 7 days too; only the two untouched ones drop out.
+	fresh, err := s.ListCards(ctx, port.CardFilter{StaleDays: 7})
+	if err != nil {
+		t.Fatalf("ListCards 7d: %v", err)
+	}
+	if len(fresh) != 2 {
+		t.Fatalf("stale_days=7 returned %d cards, want 2", len(fresh))
+	}
+
+	none, err := s.ListCards(ctx, port.CardFilter{StaleDays: 400})
+	if err != nil {
+		t.Fatalf("ListCards 400d: %v", err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("stale_days=400 returned %d cards, want 0", len(none))
+	}
+}
+
+func TestShelveStale(t *testing.T) {
+	s, ctx := newTestStore(t)
+	mk := func(title, status string, age time.Duration) port.Card {
+		c, err := s.CreateCard(ctx, port.Card{Title: title, Status: status})
+		if err != nil {
+			t.Fatalf("CreateCard: %v", err)
+		}
+		if _, err := s.db.Exec(`UPDATE cards SET updated_at = ? WHERE id = ?`,
+			time.Now().UTC().Add(-age).Format(timeLayout), c.ID); err != nil {
+			t.Fatalf("backdate: %v", err)
+		}
+		return c
+	}
+	staleInbox := mk("stale inbox", port.StatusInbox, 40*24*time.Hour)
+	staleDoing := mk("stale doing", port.StatusDoing, 60*24*time.Hour)
+	freshInbox := mk("fresh inbox", port.StatusInbox, time.Hour)
+	staleDone := mk("already done", port.StatusDone, 90*24*time.Hour)
+
+	n, err := s.ShelveStale(ctx, 30)
+	if err != nil {
+		t.Fatalf("ShelveStale: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("shelved %d cards, want 2", n)
+	}
+	for _, id := range []int64{staleInbox.ID, staleDoing.ID} {
+		got, err := s.GetCard(ctx, id)
+		if err != nil {
+			t.Fatalf("GetCard: %v", err)
+		}
+		if got.Status != port.StatusShelved {
+			t.Fatalf("card %d status = %q, want shelved", id, got.Status)
+		}
+	}
+	for _, c := range []port.Card{freshInbox, staleDone} {
+		got, err := s.GetCard(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("GetCard: %v", err)
+		}
+		if got.Status != c.Status {
+			t.Fatalf("card %q status = %q, want %q untouched", c.Title, got.Status, c.Status)
+		}
+	}
+
+	// Shelfing bumps updated_at, so a second pass is a no-op.
+	if n, err := s.ShelveStale(ctx, 30); err != nil || n != 0 {
+		t.Fatalf("second pass: n=%d err=%v, want 0 nil", n, err)
+	}
+}
+
 func TestUpdateCardPatch(t *testing.T) {
 	s, ctx := newTestStore(t)
 	c, err := s.CreateCard(ctx, port.Card{Title: "Idea", Summary: "s", SourceNote: "note"})

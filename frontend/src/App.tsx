@@ -173,6 +173,7 @@ export function App() {
               onResearch={handleResearch}
               onRetry={handleRetry}
               onOpenCardDetail={setSelectedCard}
+              onRefresh={reloadAll}
             />
           )}
 

@@ -94,12 +94,30 @@ func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card
 		if !f.Since.IsZero() && c.CreatedAt.Before(f.Since) {
 			continue
 		}
+		if f.StaleDays > 0 && !c.UpdatedAt.Before(time.Now().UTC().AddDate(0, 0, -f.StaleDays)) {
+			continue
+		}
 		out = append(out, c)
 	}
 	if f.Limit > 0 && len(out) > f.Limit {
 		out = out[:f.Limit]
 	}
 	return out, nil
+}
+
+// ShelveStale mirrors the store: inbox/doing cards untouched for more than
+// days become shelved.
+func (s *stubStore) ShelveStale(_ context.Context, days int) (int64, error) {
+	cutoff := time.Now().UTC().AddDate(0, 0, -days)
+	var n int64
+	for id, c := range s.cards {
+		if (c.Status == port.StatusInbox || c.Status == port.StatusDoing) && c.UpdatedAt.Before(cutoff) {
+			c.Status, c.UpdatedAt = port.StatusShelved, time.Now().UTC()
+			s.cards[id] = c
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (port.Card, error) {
@@ -310,6 +328,104 @@ func TestHealth(t *testing.T) {
 	}
 	if body["ok"] != true {
 		t.Fatalf("body = %v, want ok:true", body)
+	}
+}
+
+func TestListCardsStaleDays(t *testing.T) {
+	st := newStubStore()
+	now := time.Now().UTC()
+	st.cards[1] = port.Card{ID: 1, Title: "ancient", Status: port.StatusInbox, UpdatedAt: now.AddDate(0, 0, -40)}
+	st.cards[2] = port.Card{ID: 2, Title: "borderline", Status: port.StatusDoing, UpdatedAt: now.AddDate(0, 0, -31)}
+	st.cards[3] = port.Card{ID: 3, Title: "recent", Status: port.StatusInbox, UpdatedAt: now.AddDate(0, 0, -2)}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/cards?stale_days=30", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if st.lastFilter.StaleDays != 30 {
+		t.Fatalf("filter StaleDays = %d, want 30", st.lastFilter.StaleDays)
+	}
+	var body struct {
+		OK    bool        `json:"ok"`
+		Cards []port.Card `json:"cards"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !body.OK {
+		t.Fatalf("ok = false, want true")
+	}
+	if len(body.Cards) != 2 {
+		t.Fatalf("cards = %d, want 2 (only the 31d+ cards)", len(body.Cards))
+	}
+	for _, c := range body.Cards {
+		if c.Title == "recent" {
+			t.Fatalf("fresh card leaked into stale filter: %+v", c)
+		}
+	}
+
+	// No stale_days param leaves the filter unset.
+	doJSON(t, h, http.MethodGet, "/api/v1/cards", "")
+	if st.lastFilter.StaleDays != 0 {
+		t.Fatalf("StaleDays = %d without the param, want 0", st.lastFilter.StaleDays)
+	}
+}
+
+func TestBatchShelveStale(t *testing.T) {
+	st := newStubStore()
+	now := time.Now().UTC()
+	st.cards[1] = port.Card{ID: 1, Title: "stale inbox", Status: port.StatusInbox, UpdatedAt: now.AddDate(0, 0, -60)}
+	st.cards[2] = port.Card{ID: 2, Title: "stale doing", Status: port.StatusDoing, UpdatedAt: now.AddDate(0, 0, -35)}
+	st.cards[3] = port.Card{ID: 3, Title: "fresh inbox", Status: port.StatusInbox, UpdatedAt: now}
+	st.cards[4] = port.Card{ID: 4, Title: "stale done", Status: port.StatusDone, UpdatedAt: now.AddDate(0, 0, -90)}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards/batch-shelve-stale", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (default days)", rr.Code)
+	}
+	var body struct {
+		OK           bool  `json:"ok"`
+		ShelvedCount int64 `json:"shelved_count"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !body.OK {
+		t.Fatalf("ok = false, want true")
+	}
+	if body.ShelvedCount != 2 {
+		t.Fatalf("shelved_count = %d, want 2", body.ShelvedCount)
+	}
+	for _, id := range []int64{1, 2} {
+		if got := st.cards[id].Status; got != port.StatusShelved {
+			t.Fatalf("card %d status = %q, want shelved", id, got)
+		}
+	}
+	for _, id := range []int64{3, 4} {
+		if st.cards[id].Status == port.StatusShelved {
+			t.Fatalf("card %d must not be shelved", id)
+		}
+	}
+
+	// Explicit days window: 100 days still matches, 200 does not.
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/cards/batch-shelve-stale?days=100", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if body.ShelvedCount != 0 {
+		t.Fatalf("shelved_count = %d, want 0", body.ShelvedCount)
+	}
+
+	for _, bad := range []string{"days=abc", "days=0", "days=-5"} {
+		rr := doJSON(t, h, http.MethodPost, "/api/v1/cards/batch-shelve-stale?"+bad, "")
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want 400", bad, rr.Code)
+		}
 	}
 }
 

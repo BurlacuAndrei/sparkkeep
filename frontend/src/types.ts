@@ -46,4 +46,5 @@ export interface CardFilter {
   status?: string;
   tag?: string;
   q?: string;
+  stale_days?: number;
 }
