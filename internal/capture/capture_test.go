@@ -1,7 +1,9 @@
 package capture
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -230,5 +232,167 @@ func TestParseVTTStripsCues(t *testing.T) {
 	}
 	if !strings.Contains(got, "hello there") || !strings.Contains(got, "general kenobi") {
 		t.Errorf("cue text missing: %q", got)
+	}
+}
+
+func TestExtractTitlePrefersCardMetadata(t *testing.T) {
+	cases := []struct {
+		name string
+		html string
+		want string
+	}{
+		{"standard title only", `<html><head><title>Real Headline</title></head></html>`, "Real Headline"},
+		{"og:title no title tag", `<html><head><meta property="og:title" content="OG Headline"></head></html>`, "OG Headline"},
+		{"og:title content first", `<html><head><meta content="OG Headline" property="og:title"></head></html>`, "OG Headline"},
+		{"og:title beats generic title", `<html><head><title>Twitter</title><meta property="og:title" content="Real Post"></head></html>`, "Real Post"},
+		{"og:title beats real title", `<html><head><title>Home</title><meta property="og:title" content="Real Post"></head></html>`, "Real Post"},
+		{"twitter:title with generic title", `<html><head><title>Instagram</title><meta name="twitter:title" content="Tweet Body"></head></html>`, "Tweet Body"},
+		{"twitter:title content first", `<html><head><meta content="Tweet Body" name="twitter:title"></head></html>`, "Tweet Body"},
+		{"single quotes", `<html><head><meta property='og:title' content='Quoted Headline'></head></html>`, "Quoted Headline"},
+		{"entities unescaped and trimmed", `<html><head><meta property="og:title" content="  Tom &amp; Jerry  "></head></html>`, "Tom & Jerry"},
+		{"nothing at all", `<html><body>no head</body></html>`, ""},
+	}
+	for _, tc := range cases {
+		if got := extractTitle(tc.html); got != tc.want {
+			t.Errorf("%s: extractTitle = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestExtractDescriptionPrecedence(t *testing.T) {
+	cases := []struct {
+		name string
+		html string
+		want string
+	}{
+		{"standard only", `<meta name="description" content="Standard Desc">`, "Standard Desc"},
+		{"standard content first", `<meta content="Standard Desc" name="description">`, "Standard Desc"},
+		{"summary fallback", `<meta name="summary" content="Summary Desc">`, "Summary Desc"},
+		{"og:description wins", `<meta name="description" content="Standard"><meta property="og:description" content="OG Desc">`, "OG Desc"},
+		{"og:description content first", `<meta content="OG Desc" property="og:description">`, "OG Desc"},
+		{"standard beats twitter:description", `<meta name="description" content="Standard"><meta name="twitter:description" content="TW Desc">`, "Standard"},
+		{"twitter:description name first", `<meta name="twitter:description" content="TW Desc">`, "TW Desc"},
+		{"twitter:description content first", `<meta content="TW Desc" name="twitter:description">`, "TW Desc"},
+		{"empty og:description skipped", `<meta property="og:description" content="  "><meta name="description" content="Standard">`, "Standard"},
+		{"none", `<html><body>hi</body></html>`, ""},
+	}
+	for _, tc := range cases {
+		if got := extractDescription(tc.html); got != tc.want {
+			t.Errorf("%s: extractDescription = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestFetchUsesCardMetadata(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><head><title>X</title><meta property="og:title" content="Card Headline">` +
+			`<meta content="Card Blurb" property="og:description"></head><body>` +
+			strings.Repeat("body text ", 40) + `</body></html>`))
+	}))
+	defer srv.Close()
+
+	f := Capture{}.Fetch(Share{Kind: KindLink, URL: srv.URL})
+	if f.Err != nil {
+		t.Fatalf("Fetch err: %v", f.Err)
+	}
+	if f.Title != "Card Headline" {
+		t.Errorf("Title = %q, want Card Headline", f.Title)
+	}
+	if f.Description != "Card Blurb" {
+		t.Errorf("Description = %q, want Card Blurb", f.Description)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// serveHTML makes httpClient answer every request with body, so gated URLs can
+// be exercised without touching the network.
+func serveHTML(t *testing.T, body string) {
+	t.Helper()
+	old := httpClient
+	httpClient = &http.Client{Timeout: 5 * time.Second, Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})}
+	t.Cleanup(func() { httpClient = old })
+}
+
+// chromeSentinel returns a fake Chrome binary that drops markerFile if it is
+// ever exec'd.
+func chromeSentinel(t *testing.T) (bin, marker string) {
+	t.Helper()
+	dir := t.TempDir()
+	bin, marker = filepath.Join(dir, "fake-chrome"), filepath.Join(dir, "chrome-ran")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin, marker
+}
+
+func TestHeadlessDisabledNeverExecsChrome(t *testing.T) {
+	serveHTML(t, `<html><head><title>Twitter</title></head><body>Log in to Twitter</body></html>`)
+	bin, marker := chromeSentinel(t)
+
+	for _, gated := range []string{"https://twitter.com/user/status/123", "https://www.instagram.com/p/C_abc"} {
+		c := Capture{HeadlessEnabled: false, ChromeBin: bin}
+
+		start := time.Now()
+		f := c.Fetch(Share{Kind: KindLink, URL: gated})
+		if elapsed := time.Since(start); elapsed > 5*time.Second {
+			t.Errorf("Fetch(%s) took %v, want the plain HTTP path", gated, elapsed)
+		}
+		if _, err := os.Stat(marker); !os.IsNotExist(err) {
+			t.Errorf("Fetch(%s) exec'd Chrome with headless disabled", gated)
+		}
+		if f.Err != nil {
+			t.Errorf("Fetch(%s) err = %v, want clean HTTP fallback", gated, f.Err)
+		}
+		// Login wall text must not become content.
+		if f.Text != "" {
+			t.Errorf("Fetch(%s) Text = %q, want empty on login wall", gated, f.Text)
+		}
+		if len(f.Notes) == 0 || !strings.Contains(f.Notes[0], "login wall") {
+			t.Errorf("Fetch(%s) Notes = %v, want login wall note", gated, f.Notes)
+		}
+	}
+}
+
+func TestHeadlessDisabledFetchWithContextNeverExecsChrome(t *testing.T) {
+	serveHTML(t, `<html><head><title>Facebook</title></head><body>Log in to Facebook</body></html>`)
+	bin, marker := chromeSentinel(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	f := Capture{HeadlessEnabled: false, ChromeBin: bin}.FetchWithContext(ctx, Share{Kind: KindLink, URL: "https://www.facebook.com/reel/1"})
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Error("FetchWithContext exec'd Chrome with headless disabled")
+	}
+	if f.Text != "" || len(f.Notes) == 0 {
+		t.Errorf("got Text=%q Notes=%v, want empty text and a note", f.Text, f.Notes)
+	}
+}
+
+func TestHeadlessDisabledMediaMetaNeverExecsChrome(t *testing.T) {
+	serveHTML(t, `<html><head><title>Instagram</title></head><body>Log in to Instagram</body></html>`)
+	bin, marker := chromeSentinel(t)
+	// yt-dlp stub that always fails, forcing the headless fallback branch.
+	script := filepath.Join(t.TempDir(), "fake-ytdlp")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	c := Capture{HeadlessEnabled: false, ChromeBin: bin, YtDlpBin: script}
+	f := c.MediaMeta(Share{Kind: KindLink, URL: "https://instagram.com/p/C_abc"})
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Error("MediaMeta exec'd Chrome with headless disabled")
+	}
+	if f.Err == nil {
+		t.Error("MediaMeta Err = nil, want the yt-dlp failure reported")
 	}
 }

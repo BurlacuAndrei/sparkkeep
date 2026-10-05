@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"mime"
 	"net"
@@ -65,17 +66,36 @@ type Fetched struct {
 }
 
 var (
-	urlRe           = regexp.MustCompile(`https?://[^\s]+`)
-	tagRe           = regexp.MustCompile(`<[^>]*>`)
-	blankRe         = regexp.MustCompile(`\n{3,}`)
-	titleRe         = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
-	descRe          = regexp.MustCompile(`(?is)<meta[^>]*name=["'](?:description|summary)["'][^>]*content=["']([^"']*)["'][^>]*>`)
-	descRe2         = regexp.MustCompile(`(?is)<meta[^>]*content=["']([^"']*)["'][^>]*name=["'](?:description|summary)["'][^>]*>`)
+	urlRe   = regexp.MustCompile(`https?://[^\s]+`)
+	tagRe   = regexp.MustCompile(`<[^>]*>`)
+	blankRe = regexp.MustCompile(`\n{3,}`)
+	titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+	descRe  = regexp.MustCompile(`(?is)<meta[^>]*name=["'](?:description|summary)["'][^>]*content=["']([^"']*)["'][^>]*>`)
+	descRe2 = regexp.MustCompile(`(?is)<meta[^>]*content=["']([^"']*)["'][^>]*name=["'](?:description|summary)["'][^>]*>`)
+	// Card metadata. og:* uses property=, twitter:* uses name=, and either may
+	// come before or after content= in the tag, so every key needs two
+	// orderings.
+	ogTitleRe       = regexp.MustCompile(`(?is)<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']*)["']`)
+	ogTitleRe2      = regexp.MustCompile(`(?is)<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:title["']`)
+	twTitleRe       = regexp.MustCompile(`(?is)<meta[^>]*name=["']twitter:title["'][^>]*content=["']([^"']*)["']`)
+	twTitleRe2      = regexp.MustCompile(`(?is)<meta[^>]*content=["']([^"']*)["'][^>]*name=["']twitter:title["']`)
+	ogDescRe        = regexp.MustCompile(`(?is)<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']*)["']`)
+	ogDescRe2       = regexp.MustCompile(`(?is)<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:description["']`)
+	twDescRe        = regexp.MustCompile(`(?is)<meta[^>]*name=["']twitter:description["'][^>]*content=["']([^"']*)["']`)
+	twDescRe2       = regexp.MustCompile(`(?is)<meta[^>]*content=["']([^"']*)["'][^>]*name=["']twitter:description["']`)
 	mediaRe         = regexp.MustCompile(`(?i)(youtube|youtu\.be|instagram|facebook)`)
 	gatedRe         = regexp.MustCompile(`(?i)(instagram\.com|facebook\.com|twitter\.com|x\.com|threads\.net)`)
 	ytdlpBin        = "yt-dlp"
 	headlessTimeout = 12 * time.Second
 )
+
+// genericTitles are bare site-name <title> values that social and gated pages
+// ship while the real headline only exists in og:title or twitter:title.
+var genericTitles = map[string]bool{
+	"twitter": true, "x": true, "x.com": true,
+	"instagram": true, "facebook": true, "threads": true,
+	"home": true, "index": true, "untitled": true,
+}
 
 // condenseMax caps extracted text for the analyzer's context budget.
 const condenseMax = 4000
@@ -110,57 +130,42 @@ func Recognize(raw string) Share {
 	return Share{Kind: KindLink, URL: urls[0], Caption: caption}
 }
 
+// headless renders targetURL in Chrome and returns title, desc, text. It is
+// the ONLY caller of HeadlessExtract: with HeadlessEnabled false it returns
+// zeros without touching chromedp, so a lightweight deploy (no chromium in
+// the image) can never exec Chrome. An empty title and text means "nothing
+// usable" to callers.
+func (c Capture) headless(ctx context.Context, targetURL string) (title, desc, text string) {
+	if !c.HeadlessEnabled {
+		return "", "", ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, headlessTimeout)
+	defer cancel()
+	title, desc, text, err := HeadlessExtract(ctx, targetURL, c.ChromeBin)
+	if err != nil {
+		return "", "", ""
+	}
+	return title, desc, text
+}
+
 // Fetch returns a Fetched for the given share. It NEVER returns a hard
 // error: failures surface as Fetched.Err with empty Text. Text shares
 // short-circuit to their caption. Gated or bot-blocked sites fall back
 // to headless browser extraction when enabled.
 func (c Capture) Fetch(share Share) Fetched {
-	f := Fetched{Kind: share.Kind, URL: share.URL, Caption: share.Caption}
-	if share.Kind == KindText {
-		f.Text = share.Caption
-		return f
-	}
-
-	// For known gated platforms (Instagram, Twitter/X, etc.), try headless browser first
-	if isGatedDomain(share.URL) && c.HeadlessEnabled {
-		ctx, cancel := context.WithTimeout(context.Background(), headlessTimeout)
-		defer cancel()
-		title, desc, text, err := HeadlessExtract(ctx, share.URL, c.ChromeBin)
-		if err == nil && (title != "" || text != "") {
-			return applyHeadless(f, title, desc, text)
-		}
-	}
-
-	// Attempt standard HTTP fetch
-	f = httpFetch(share, f)
-
-	// If standard fetch was blocked or insufficient, fall back to headless browser
-	if c.HeadlessEnabled && needsHeadlessFallback(share, f) {
-		ctx, cancel := context.WithTimeout(context.Background(), headlessTimeout)
-		defer cancel()
-		title, desc, text, err := HeadlessExtract(ctx, share.URL, c.ChromeBin)
-		if err == nil && (title != "" || text != "") {
-			f = applyHeadless(f, title, desc, text)
-			f.Err = nil
-		}
-	}
-
-	// With headless disabled, wall text from httpFetch would otherwise land in
-	// Text. When headless is on, needsHeadlessFallback + applyHeadless already
-	// handled the wall, and a second guard here would wrongly wipe real content
-	// that merely mentions a wall marker (e.g. an article about Cloudflare).
-	if !c.HeadlessEnabled && IsLoginWall(f.Text) {
-		f.Text = ""
-		f.Notes = append(f.Notes, "login wall — content unavailable")
-	}
-
-	return f
+	return c.fetch(context.Background(), share)
 }
 
 // FetchWithContext is like Fetch but uses the provided context for cancellation
 // instead of creating background contexts. This allows the caller's deadline
 // to interrupt slow fetches.
 func (c Capture) FetchWithContext(ctx context.Context, share Share) Fetched {
+	return c.fetch(ctx, share)
+}
+
+// fetch is the shared body of Fetch and FetchWithContext. Headless is only
+// reached through c.headless, which no-ops when HeadlessEnabled is false.
+func (c Capture) fetch(ctx context.Context, share Share) Fetched {
 	f := Fetched{Kind: share.Kind, URL: share.URL, Caption: share.Caption}
 	if share.Kind == KindText {
 		f.Text = share.Caption
@@ -168,11 +173,8 @@ func (c Capture) FetchWithContext(ctx context.Context, share Share) Fetched {
 	}
 
 	// For known gated platforms (Instagram, Twitter/X, etc.), try headless browser first
-	if isGatedDomain(share.URL) && c.HeadlessEnabled {
-		childCtx, cancel := context.WithTimeout(ctx, headlessTimeout)
-		defer cancel()
-		title, desc, text, err := HeadlessExtract(childCtx, share.URL, c.ChromeBin)
-		if err == nil && (title != "" || text != "") {
+	if isGatedDomain(share.URL) {
+		if title, desc, text := c.headless(ctx, share.URL); title != "" || text != "" {
 			return applyHeadless(f, title, desc, text)
 		}
 	}
@@ -181,11 +183,8 @@ func (c Capture) FetchWithContext(ctx context.Context, share Share) Fetched {
 	f = httpFetchWithContext(ctx, share, f)
 
 	// If standard fetch was blocked or insufficient, fall back to headless browser
-	if c.HeadlessEnabled && needsHeadlessFallback(share, f) {
-		childCtx, cancel := context.WithTimeout(ctx, headlessTimeout)
-		defer cancel()
-		title, desc, text, err := HeadlessExtract(childCtx, share.URL, c.ChromeBin)
-		if err == nil && (title != "" || text != "") {
+	if needsHeadlessFallback(share, f) {
+		if title, desc, text := c.headless(ctx, share.URL); title != "" || text != "" {
 			f = applyHeadless(f, title, desc, text)
 			f.Err = nil
 		}
@@ -203,7 +202,8 @@ func (c Capture) FetchWithContext(ctx context.Context, share Share) Fetched {
 	return f
 }
 
-// httpFetchWithContext is like httpFetch but uses the provided context.
+// httpFetchWithContext performs the plain HTTP GET behind fetch: status and
+// content-type are checked before the body is trusted as text.
 func httpFetchWithContext(ctx context.Context, share Share, f Fetched) Fetched {
 	childCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
@@ -274,14 +274,9 @@ func (c Capture) MediaMeta(share Share) Fetched {
 				f.Notes = append(f.Notes, "instagram caption unavailable")
 			}
 		}
-		// Fallback to headless browser if yt-dlp failed and headless is enabled
-		if c.HeadlessEnabled {
-			hctx, hcancel := context.WithTimeout(context.Background(), headlessTimeout)
-			defer hcancel()
-			title, desc, text, herr := HeadlessExtract(hctx, share.URL, c.ChromeBin)
-			if herr == nil && (title != "" || text != "") {
-				return applyHeadless(f, title, desc, text)
-			}
+		// Fallback to headless browser if yt-dlp failed (no-op when disabled)
+		if title, desc, text := c.headless(context.Background(), share.URL); title != "" || text != "" {
+			return applyHeadless(f, title, desc, text)
 		}
 		f.Err = fmt.Errorf("capture: yt-dlp: %w", err)
 		return f
@@ -368,40 +363,6 @@ func needsHeadlessFallback(share Share, f Fetched) bool {
 	return IsLoginWall(f.Text)
 }
 
-func httpFetch(share Share, f Fetched) Fetched {
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, share.URL, nil)
-	if err != nil {
-		f.Err = err
-		return f
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		f.Err = fmt.Errorf("capture: GET %s: %w", share.URL, err)
-		return f
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		f.Err = fmt.Errorf("capture: GET %s: read body: %w", share.URL, err)
-		return f
-	}
-	if resp.StatusCode != http.StatusOK {
-		f.Err = fmt.Errorf("capture: GET %s: status %d", share.URL, resp.StatusCode)
-		return f
-	}
-	if !isTextBody(resp.Header.Get("Content-Type")) {
-		f.Err = fmt.Errorf("capture: GET %s: non-text content-type %q", share.URL, resp.Header.Get("Content-Type"))
-		return f
-	}
-	html := string(body)
-	f.Title = extractTitle(html)
-	f.Description = extractDescription(html)
-	f.Text = strings.TrimSpace(stripTagsAndCondense(html))
-	return f
-}
-
 // isTextBody is liberal: absent or text/* types are acceptable HTML-ish
 // payloads; declared binary types are not.
 func isTextBody(contentType string) bool {
@@ -413,20 +374,48 @@ func isTextBody(contentType string) bool {
 	return mt == "text/html" || strings.HasPrefix(mt, "text/") || strings.Contains(mt, "html")
 }
 
-func extractTitle(html string) string {
-	if m := titleRe.FindStringSubmatch(html); m != nil {
-		return strings.TrimSpace(m[1])
+// extractTitle prefers the OpenGraph card over <title>: gated and social
+// pages put a bare site name in <title> and the real headline in og:title.
+func extractTitle(doc string) string {
+	if v := metaContent(doc, ogTitleRe, ogTitleRe2); v != "" {
+		return v
+	}
+	var title string
+	if m := titleRe.FindStringSubmatch(doc); m != nil {
+		title = cleanMeta(m[1])
+	}
+	if title != "" && !genericTitles[strings.ToLower(title)] {
+		return title
+	}
+	if v := metaContent(doc, twTitleRe, twTitleRe2); v != "" {
+		return v
+	}
+	return title
+}
+
+// extractDescription checks the card tags in precedence order: OpenGraph,
+// then the standard description/summary, then the Twitter card.
+func extractDescription(doc string) string {
+	return metaContent(doc, ogDescRe, ogDescRe2, descRe, descRe2, twDescRe, twDescRe2)
+}
+
+// metaContent returns the first non-empty content= value from the given
+// patterns, each of which must capture the value as group 1.
+func metaContent(doc string, res ...*regexp.Regexp) string {
+	for _, re := range res {
+		if m := re.FindStringSubmatch(doc); m != nil {
+			if v := cleanMeta(m[1]); v != "" {
+				return v
+			}
+		}
 	}
 	return ""
 }
 
-func extractDescription(html string) string {
-	for _, re := range []*regexp.Regexp{descRe, descRe2} {
-		if m := re.FindStringSubmatch(html); m != nil {
-			return strings.TrimSpace(m[1])
-		}
-	}
-	return ""
+// cleanMeta trims surrounding whitespace and unescapes entities: card values
+// arrive as "Tom &amp; Jerry&#10;watch now" and are useless untrimmed.
+func cleanMeta(s string) string {
+	return strings.TrimSpace(html.UnescapeString(s))
 }
 
 // stripTagsAndCondense removes HTML tags, collapses 3+ newlines, trims, caps
