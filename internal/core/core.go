@@ -158,7 +158,25 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 		if err != nil {
 			if isUniqueConstraint(err) {
 				if existing, gerr := s.Store.GetCardBySourceURL(ctx, card.SourceURL); gerr == nil {
-					if nerr := s.notify(ctx, port.Notification{Kind: "duplicate", Card: existing, Text: "Already captured: " + existing.Title}); nerr != nil {
+					text := "Already captured: " + existing.Title
+					if caption := strings.TrimSpace(card.SourceNote); caption != "" {
+						note := caption
+						if existing.SourceNote != "" {
+							note = existing.SourceNote + "\n\n" + caption
+						}
+						status := existing.Status
+						if status == port.StatusShelved || status == port.StatusDismissed {
+							status = port.StatusInbox
+						}
+						updated, uerr := s.Store.UpdateCard(ctx, existing.ID, port.CardPatch{Note: &note, Status: &status})
+						if uerr != nil {
+							s.Logf("core: append note to duplicate %d: %v", existing.ID, uerr)
+						} else {
+							existing = updated
+							text = "Already captured, note added: " + existing.Title
+						}
+					}
+					if nerr := s.notify(ctx, port.Notification{Kind: "duplicate", Card: existing, Text: text}); nerr != nil {
 						s.Logf("core: notify duplicate: %v", nerr)
 					}
 					continue
