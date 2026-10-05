@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -386,16 +387,27 @@ func (a *Adapter) handleUpdate(u update) {
 	}
 }
 
-// handleMessage funnels text, links and media into CaptureShare. A message
-// with neither text nor a downloadable payload is dropped; so is anything
-// from a chat that is not the owner. A reply to one of the bot's own card
-// messages is the organize-by-reply signal instead of a new share.
+// handleMessage funnels text, links and media into CaptureShare. Bot commands
+// (/digest, /help) answer from the store instead of capturing. A message with
+// neither text nor a downloadable payload is dropped; so is anything from a
+// chat that is not the owner. A reply to one of the bot's own card messages is
+// the organize-by-reply signal instead of a new share.
 func (a *Adapter) handleMessage(m *message) {
 	if m.Chat == nil || m.Chat.ID != a.OwnerID {
 		return // owner lock: single-user bot ignores everyone else
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+	switch commandOf(m.Text) {
+	case "digest", "weekly":
+		a.sendDigest(ctx)
+		return
+	case "help", "start":
+		if _, err := a.sendMessage(ctx, helpText, 0, nil); err != nil {
+			a.logf("telegram: help: sendMessage: %v", err)
+		}
+		return
+	}
 	if m.ReplyToMessage != nil {
 		// A reply to a card the bot posted organizes that card. A reply to
 		// anything else (or to a card evicted from the tracked map) falls
@@ -424,6 +436,84 @@ func (a *Adapter) handleMessage(m *message) {
 	}
 	if _, err := a.Service.CaptureShare(ctx, share); err != nil {
 		a.logf("telegram: capture: %v", err)
+	}
+}
+
+// --- commands ----------------------------------------------------------------
+
+// commandOf returns the bare command of a bot message ("/digest@my_bot notes"
+// → "digest"), or "" when the text is not a command.
+func commandOf(text string) string {
+	fields := strings.Fields(text)
+	if len(fields) == 0 || !strings.HasPrefix(fields[0], "/") {
+		return ""
+	}
+	return strings.ToLower(strings.SplitN(strings.TrimPrefix(fields[0], "/"), "@", 2)[0])
+}
+
+// helpText is the /help (and /start) answer: what can be shared and what the
+// digest does. Markdown, so every * is balanced.
+const helpText = "👋 *Sparkkeep* — send me anything and it becomes a card.\n\n" +
+	"*What to share:*\n" +
+	"• A link → fetched and analyzed\n" +
+	"• A photo, video or file → analyzed from the media\n" +
+	"• A voice note → transcribed, then analyzed\n" +
+	"• Plain text → captured as a note\n\n" +
+	"*What you can do:*\n" +
+	"• Tap Doing / Done / Shelve on a card\n" +
+	"• Reply to a card with text or #tags to update it in place\n" +
+	"• /digest — the last 7 days: counts by status and your 5 most recent sparks"
+
+// digestDays is the window the /digest command reports on.
+const digestDays = 7
+
+// digestRecentLimit caps the "Recent Sparks" list so a busy week doesn't
+// produce an unreadable wall of text.
+const digestRecentLimit = 5
+
+// sendDigest answers /digest with the last 7 days of captures: one line per
+// status, then the most recent titles. Dismissed cards are left out — "not
+// interested" isn't part of the week's wins.
+func (a *Adapter) sendDigest(ctx context.Context) {
+	cards, err := a.Store.ListCards(ctx, port.CardFilter{Since: time.Now().UTC().AddDate(0, 0, -digestDays)})
+	if err != nil {
+		a.logf("telegram: digest: ListCards: %v", err)
+		return
+	}
+	var inbox, doing, done, shelved int
+	recent := make([]port.Card, 0, len(cards))
+	for _, c := range cards {
+		if c.Status == port.StatusDismissed {
+			continue
+		}
+		recent = append(recent, c)
+		switch c.Status {
+		case port.StatusDoing:
+			doing++
+		case port.StatusDone:
+			done++
+		case port.StatusShelved:
+			shelved++
+		default:
+			inbox++
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "📊 *Sparkkeep Weekly Digest*\nLast %d days: %d cards captured\n\n"+
+		"• 📥 Inbox: %d\n• ⚡ Doing: %d\n• ✅ Done: %d\n• 📦 Shelved: %d",
+		digestDays, len(recent), inbox, doing, done, shelved)
+	if len(recent) > 0 {
+		slices.SortFunc(recent, func(x, y port.Card) int { return y.CreatedAt.Compare(x.CreatedAt) })
+		b.WriteString("\n\n*Recent Sparks:*")
+		for i, c := range recent[:min(digestRecentLimit, len(recent))] {
+			fmt.Fprintf(&b, "\n%d. %s [%s]", i+1, strings.TrimSpace(c.Title), c.Horizon)
+		}
+	}
+	if a.PublicURL != "" {
+		fmt.Fprintf(&b, "\n\nOpen dashboard: %s", strings.TrimRight(a.PublicURL, "/"))
+	}
+	if _, err := a.sendMessage(ctx, b.String(), 0, nil); err != nil {
+		a.logf("telegram: digest: sendMessage: %v", err)
 	}
 }
 

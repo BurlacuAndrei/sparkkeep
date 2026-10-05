@@ -36,9 +36,8 @@ See `.env.example` for the full list.
 ## Weekly digest
 
 The dashboard has a **Weekly digest** view (top bar button): cards captured in
-the last 7 days grouped by day with per-status counts. A Telegram `/digest`
-bot command that pushes the same digest to chat is planned (see
-`docs/design.md` §9); it isn't wired up yet.
+the last 7 days grouped by day with per-status counts. You can also send
+`/digest` to your Telegram bot anytime to receive your weekly summary directly in chat.
 
 ## Layout
 

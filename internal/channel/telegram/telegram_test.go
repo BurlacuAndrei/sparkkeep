@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"testing"
+	"time"
 
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/capture"
@@ -66,6 +67,17 @@ func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) erro
 	c.Tags = tags
 	s.cards[id] = c
 	return nil
+}
+
+func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card, error) {
+	var out []port.Card
+	for _, c := range s.cards {
+		if !f.Since.IsZero() && c.CreatedAt.Before(f.Since) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 // stubTelegram points the adapter built by build at a stub Telegram API
@@ -222,5 +234,61 @@ func TestOrganizeReplyUntrackedFallsThroughToCapture(t *testing.T) {
 	}
 	if len(sent) != 0 {
 		t.Errorf("sent = %v, want no organize confirmation", sent)
+	}
+}
+
+// /digest reports the last 7 days by status plus the most recent titles, and
+// must never capture itself as a card.
+func TestDigestCommandSendsCountsWithoutCapturing(t *testing.T) {
+	st := newStubStore()
+	now := time.Now().UTC()
+	st.cards = map[int64]port.Card{
+		1: {ID: 1, Title: "Inbox one", Status: port.StatusInbox, Horizon: port.HorizonShortTerm, CreatedAt: now.Add(-6 * 24 * time.Hour)},
+		2: {ID: 2, Title: "Inbox two", Status: port.StatusInbox, Horizon: port.HorizonShortTerm, CreatedAt: now.Add(-3 * 24 * time.Hour)},
+		3: {ID: 3, Title: "WIP talk", Status: port.StatusDoing, Horizon: port.HorizonShortTerm, CreatedAt: now.Add(-2 * 24 * time.Hour)},
+		4: {ID: 4, Title: "Finished book", Status: port.StatusDone, Horizon: port.HorizonLifetime, CreatedAt: now.Add(-time.Hour)},
+		5: {ID: 5, Title: "Old shelved", Status: port.StatusShelved, Horizon: port.HorizonShortTerm, CreatedAt: now.Add(-30 * 24 * time.Hour)},
+	}
+	st.nextCard = 5
+	svc := stubService(t, st, llmStub(t, `[{"title":"New","summary":"s","horizon":"short-term","tags":[],"links":[]}]`))
+
+	sent := stubTelegram(t, func() *Adapter {
+		return &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc, PublicURL: "https://spark.example/"}
+	}, func(a *Adapter) {
+		a.handleMessage(&message{MessageID: 600, Chat: &chat{ID: 1}, Text: "/digest"})
+	})
+
+	if len(st.cards) != 5 {
+		t.Fatalf("cards = %d, want 5 (/digest must not capture)", len(st.cards))
+	}
+	if len(sent) != 1 {
+		t.Fatalf("sent %d messages, want 1 digest: %v", len(sent), sent)
+	}
+	want := "📊 *Sparkkeep Weekly Digest*\nLast 7 days: 4 cards captured\n\n" +
+		"• 📥 Inbox: 2\n• ⚡ Doing: 1\n• ✅ Done: 1\n• 📦 Shelved: 0\n\n" +
+		"*Recent Sparks:*\n" +
+		"1. Finished book [lifetime]\n2. WIP talk [short-term]\n3. Inbox two [short-term]\n4. Inbox one [short-term]\n\n" +
+		"Open dashboard: https://spark.example"
+	if sent[0] != want {
+		t.Errorf("digest =\n%q\nwant\n%q", sent[0], want)
+	}
+}
+
+// /help answers with the how-to text and never captures.
+func TestHelpCommandSendsHelpWithoutCapturing(t *testing.T) {
+	st := newStubStore()
+	svc := stubService(t, st, llmStub(t, `[{"title":"New","summary":"s","horizon":"short-term","tags":[],"links":[]}]`))
+
+	sent := stubTelegram(t, func() *Adapter {
+		return &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+	}, func(a *Adapter) {
+		a.handleMessage(&message{MessageID: 601, Chat: &chat{ID: 1}, Text: "/start"})
+	})
+
+	if len(st.cards) != 0 {
+		t.Fatalf("cards = %d, want 0 (/help must not capture)", len(st.cards))
+	}
+	if len(sent) != 1 || sent[0] != helpText {
+		t.Errorf("sent = %v, want the help text", sent)
 	}
 }
