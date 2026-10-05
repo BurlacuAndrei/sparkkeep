@@ -541,6 +541,50 @@ func TestCaptureDuplicateLinkSkipsAndNotifies(t *testing.T) {
 	}
 }
 
+// Re-sharing a link with a fresh caption appends the caption to the existing
+// card's note and resurfaces a shelved/dismissed card back to the inbox,
+// instead of silently dropping the new text on the floor.
+func TestCaptureDuplicateLinkWithCaptionAppendsNote(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{"title":"Dup","summary":"s","horizon":"short-term","tags":[],"links":[]}]`)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	ctx := context.Background()
+	url := "https://example.com/same-post"
+	ids, err := s.Capture(ctx, url)
+	if err != nil || len(ids) != 1 {
+		t.Fatalf("first Capture = %v, %v; want one id", ids, err)
+	}
+	id := ids[0]
+	shelved := port.StatusShelved
+	if _, err := st.UpdateCard(ctx, id, port.CardPatch{Status: &shelved}); err != nil {
+		t.Fatalf("shelve card: %v", err)
+	}
+
+	note := "worth another look"
+	if ids, err := s.Capture(ctx, url+" "+note); err != nil || len(ids) != 0 {
+		t.Fatalf("re-capture = %v, %v; want no new card", ids, err)
+	}
+
+	c, err := st.GetCard(ctx, id)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if !strings.Contains(c.SourceNote, note) {
+		t.Errorf("SourceNote = %q, want it to contain %q", c.SourceNote, note)
+	}
+	if c.Status != port.StatusInbox {
+		t.Errorf("status = %q, want %q (resurfaced)", c.Status, port.StatusInbox)
+	}
+	n := ch.notifies[len(ch.notifies)-1]
+	if n.Kind != "duplicate" || !strings.Contains(n.Text, "note added") {
+		t.Errorf("notify = %+v, want duplicate mentioning the appended note", n)
+	}
+}
+
 func TestCaptureDifferentLinksBothCreate(t *testing.T) {
 	llm := llmStub(http.StatusOK, `[{"title":"Idea","summary":"s","horizon":"short-term","tags":[],"links":[]}]`)
 	defer llm.Close()
