@@ -600,6 +600,42 @@ body {
   flex-direction: column;
   gap: 20px;
   animation: cardFadeIn 0.3s ease;
+  /* The deck owns the gesture: without this the browser scrolls and cancels touchmove. */
+  position: relative;
+  touch-action: none;
+}
+
+/* Swipe stamps: direction mirrors the hotkeys (right = doing, left = shelved, up = done). */
+.swipe-stamp {
+  position: absolute;
+  top: 22px;
+  padding: 5px 14px;
+  border: 3px solid currentColor;
+  border-radius: var(--radius-sm);
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.swipe-stamp.doing {
+  left: 26px;
+  color: #34d399;
+  transform: rotate(-10deg);
+}
+
+.swipe-stamp.shelve {
+  right: 26px;
+  color: #fbbf24;
+  transform: rotate(10deg);
+}
+
+.swipe-stamp.done {
+  left: 50%;
+  margin-left: -58px;
+  color: var(--accent-cyan);
+  transform: rotate(-3deg);
 }
 
 @keyframes cardFadeIn {
