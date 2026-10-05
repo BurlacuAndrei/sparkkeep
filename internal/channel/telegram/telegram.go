@@ -44,12 +44,21 @@ type Adapter struct {
 	Store     port.Store
 	Logf      func(format string, args ...any)
 
+	// Scheduled weekly digest: pushed once per DigestPushDay/DigestPushHour
+	// (local time, 0=Sunday) when DigestPushEnabled.
+	DigestPushEnabled bool
+	DigestPushDay     time.Weekday
+	DigestPushHour    int
+
 	baseURL string          // unexported: httptest server in tests, else apiBase
 	httpc   *http.Client    // unexported: default client unless tests override
 	msgCard map[int64]int64 // bot message_id → card_id, for reactions
 	msgMu   sync.Mutex
 	offsetP string        // unexported: offset file override for tests
 	sem     chan struct{} // concurrency limiter
+
+	lastDigestSent string     // "2006-01-02" of the last scheduled digest
+	digestMu       sync.Mutex // guards lastDigestSent
 }
 
 // Run blocks long-polling getUpdates until ctx is cancelled. Each update is
@@ -58,6 +67,9 @@ type Adapter struct {
 func (a *Adapter) Run(ctx context.Context) error {
 	if a.sem == nil {
 		a.sem = make(chan struct{}, 3)
+	}
+	if a.DigestPushEnabled {
+		go a.runDigestScheduler(ctx)
 	}
 	offset := a.readOffset()
 	for {
@@ -515,6 +527,37 @@ func (a *Adapter) sendDigest(ctx context.Context) {
 	if _, err := a.sendMessage(ctx, b.String(), 0, nil); err != nil {
 		a.logf("telegram: digest: sendMessage: %v", err)
 	}
+}
+
+// runDigestScheduler steps digestTick once a minute until ctx is cancelled —
+// a minute of slack is irrelevant for a weekly push.
+func (a *Adapter) runDigestScheduler(ctx context.Context) {
+	for sleepCtx(ctx, time.Minute) {
+		a.digestTick(ctx, time.Now())
+	}
+}
+
+// digestTick is one scheduler step: on the configured weekday and hour it
+// sends the digest, at most once per calendar day (the minute ticker would
+// otherwise fire 60 times an hour). Split from the loop so a test can step it
+// with a chosen time.
+func (a *Adapter) digestTick(ctx context.Context, now time.Time) {
+	if now.Weekday() != a.DigestPushDay || now.Hour() != a.DigestPushHour {
+		return
+	}
+	today := now.Format("2006-01-02")
+	a.digestMu.Lock()
+	if a.lastDigestSent == today {
+		a.digestMu.Unlock()
+		return
+	}
+	a.lastDigestSent = today
+	a.digestMu.Unlock()
+
+	a.logf("telegram: sent scheduled weekly digest")
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	a.sendDigest(ctx)
 }
 
 // hashtagRe matches the "#tag" tokens of an organize-by-reply message.

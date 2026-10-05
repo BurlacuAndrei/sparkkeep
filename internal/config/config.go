@@ -32,6 +32,12 @@ type Config struct {
 	UploadMaxSizeMB  int
 	TranscriptLangs  string
 	FFmpegBin        string
+
+	// Scheduled weekly digest push over Telegram. Enabled by default once a
+	// bot token exists; Day/Hour are local time (0=Sunday, 0..23).
+	DigestPushEnabled bool
+	DigestPushDay     int
+	DigestPushHour    int
 }
 
 // DefaultSearchURL is the public SearXNG instance used when
@@ -120,6 +126,18 @@ func Load() (Config, error) {
 		cfg.TGChatID = id
 	}
 
+	digestPush, err := getenvBool("SPARKKEEP_DIGEST_PUSH_ENABLED", cfg.TGToken != "")
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.DigestPushEnabled = digestPush
+	if cfg.DigestPushDay, err = getenvInt("SPARKKEEP_DIGEST_PUSH_DAY", 0, 0, 6); err != nil {
+		return Config{}, err
+	}
+	if cfg.DigestPushHour, err = getenvInt("SPARKKEEP_DIGEST_PUSH_HOUR", 19, 0, 23); err != nil {
+		return Config{}, err
+	}
+
 	if v := os.Getenv("SPARKKEEP_OFFSET_FILE"); v != "" {
 		cfg.OffsetFile = v
 	} else {
@@ -150,4 +168,18 @@ func getenvBool(key string, def bool) (bool, error) {
 		return def, fmt.Errorf("config: %s=%q: %w", key, v, err)
 	}
 	return b, nil
+}
+
+// getenvInt reads an int from key, falling back to def when unset and
+// rejecting anything non-numeric or outside [min, max].
+func getenvInt(key string, def, min, max int) (int, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < min || n > max {
+		return def, fmt.Errorf("config: %s=%q: want an int in [%d,%d]", key, v, min, max)
+	}
+	return n, nil
 }

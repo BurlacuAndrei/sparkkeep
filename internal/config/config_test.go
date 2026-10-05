@@ -15,7 +15,8 @@ func setenv(t *testing.T, kv map[string]string) {
 		"SPARKKEEP_HEADLESS_ENABLED", "SPARKKEEP_CHROME_BIN", "SPARKKEEP_YTDLP",
 		"SPARKKEEP_ASR_URL", "SPARKKEEP_ASR_MODEL", "SPARKKEEP_VISION_MODEL",
 		"SPARKKEEP_COOKIES_FILE", "SPARKKEEP_UPLOAD_DIR", "SPARKKEEP_MAX_UPLOAD_MB",
-		"SPARKKEEP_TRANSCRIPT_LANGS",
+		"SPARKKEEP_TRANSCRIPT_LANGS", "SPARKKEEP_DIGEST_PUSH_ENABLED",
+		"SPARKKEEP_DIGEST_PUSH_DAY", "SPARKKEEP_DIGEST_PUSH_HOUR",
 	} {
 		if err := os.Setenv(k, ""); err != nil {
 			t.Fatal(err)
@@ -55,6 +56,9 @@ func TestLoadDefaults(t *testing.T) {
 		{"HeadlessEnabled", cfg.HeadlessEnabled, true},
 		{"ChromeBin", cfg.ChromeBin, ""},
 		{"YtDlpBin", cfg.YtDlpBin, "yt-dlp"},
+		{"DigestPushEnabled", cfg.DigestPushEnabled, false},
+		{"DigestPushDay", cfg.DigestPushDay, 0},
+		{"DigestPushHour", cfg.DigestPushHour, 19},
 	}
 	for _, tc := range cases {
 		if tc.got != tc.want {
@@ -73,20 +77,23 @@ func TestLoadErrorMissingModel(t *testing.T) {
 
 func TestLoadFull(t *testing.T) {
 	setenv(t, map[string]string{
-		"SPARKKEEP_DB":                 "/tmp/sk.db",
-		"SPARKKEEP_HTTP_ADDR":          ":9999",
-		"SPARKKEEP_PUBLIC_URL":         "https://sk.example.com",
-		"SPARKKEEP_LLM_BASE":           "https://llm.example.com/v1",
-		"SPARKKEEP_LLM_KEY":            "secret",
-		"SPARKKEEP_LLM_MODEL":          "gpt-4o",
-		"SPARKKEEP_MAX_ANALYZE_TOKENS": "3000",
-		"SPARKKEEP_TG_TOKEN":           "tg-token",
-		"SPARKKEEP_TG_CHAT_ID":         "123456789",
-		"SPARKKEEP_OFFSET_FILE":        "/data/offset.json",
-		"SPARKKEEP_SEARCH_URL":         "https://searx.example.com/search",
-		"SPARKKEEP_HEADLESS_ENABLED":   "false",
-		"SPARKKEEP_CHROME_BIN":         "/usr/bin/google-chrome",
-		"SPARKKEEP_YTDLP":              "/usr/bin/yt-dlp",
+		"SPARKKEEP_DB":                  "/tmp/sk.db",
+		"SPARKKEEP_HTTP_ADDR":           ":9999",
+		"SPARKKEEP_PUBLIC_URL":          "https://sk.example.com",
+		"SPARKKEEP_LLM_BASE":            "https://llm.example.com/v1",
+		"SPARKKEEP_LLM_KEY":             "secret",
+		"SPARKKEEP_LLM_MODEL":           "gpt-4o",
+		"SPARKKEEP_MAX_ANALYZE_TOKENS":  "3000",
+		"SPARKKEEP_TG_TOKEN":            "tg-token",
+		"SPARKKEEP_TG_CHAT_ID":          "123456789",
+		"SPARKKEEP_OFFSET_FILE":         "/data/offset.json",
+		"SPARKKEEP_SEARCH_URL":          "https://searx.example.com/search",
+		"SPARKKEEP_HEADLESS_ENABLED":    "false",
+		"SPARKKEEP_CHROME_BIN":          "/usr/bin/google-chrome",
+		"SPARKKEEP_YTDLP":               "/usr/bin/yt-dlp",
+		"SPARKKEEP_DIGEST_PUSH_ENABLED": "false",
+		"SPARKKEEP_DIGEST_PUSH_DAY":     "3",
+		"SPARKKEEP_DIGEST_PUSH_HOUR":    "9",
 	})
 
 	cfg, err := Load()
@@ -113,6 +120,9 @@ func TestLoadFull(t *testing.T) {
 		{"HeadlessEnabled", cfg.HeadlessEnabled, false},
 		{"ChromeBin", cfg.ChromeBin, "/usr/bin/google-chrome"},
 		{"YtDlpBin", cfg.YtDlpBin, "/usr/bin/yt-dlp"},
+		{"DigestPushEnabled", cfg.DigestPushEnabled, false},
+		{"DigestPushDay", cfg.DigestPushDay, 3},
+		{"DigestPushHour", cfg.DigestPushHour, 9},
 	}
 	for _, tc := range cases {
 		if tc.got != tc.want {
@@ -178,5 +188,42 @@ func TestLoadBadMaxUploadMB(t *testing.T) {
 	t.Setenv("SPARKKEEP_MAX_UPLOAD_MB", "lots")
 	if _, err := Load(); err == nil {
 		t.Fatal("want error for non-numeric SPARKKEEP_MAX_UPLOAD_MB")
+	}
+}
+
+// The digest push turns itself on with a bot token and off without one.
+func TestLoadDigestPushDefaultsToToken(t *testing.T) {
+	setenv(t, map[string]string{"SPARKKEEP_LLM_MODEL": "llama3"})
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.DigestPushEnabled {
+		t.Error("DigestPushEnabled = true with no TG token, want false")
+	}
+
+	setenv(t, map[string]string{"SPARKKEEP_LLM_MODEL": "llama3", "SPARKKEEP_TG_TOKEN": "tg-token"})
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.DigestPushEnabled {
+		t.Error("DigestPushEnabled = false with a TG token, want true")
+	}
+}
+
+func TestLoadBadDigestPushSchedule(t *testing.T) {
+	for _, kv := range []map[string]string{
+		{"SPARKKEEP_DIGEST_PUSH_DAY": "7"},
+		{"SPARKKEEP_DIGEST_PUSH_DAY": "mon"},
+		{"SPARKKEEP_DIGEST_PUSH_HOUR": "24"},
+		{"SPARKKEEP_DIGEST_PUSH_HOUR": "-1"},
+		{"SPARKKEEP_DIGEST_PUSH_ENABLED": "sometimes"},
+	} {
+		kv["SPARKKEEP_LLM_MODEL"] = "llama3"
+		setenv(t, kv)
+		if _, err := Load(); err == nil {
+			t.Errorf("Load() error = nil, want error for %v", kv)
+		}
 	}
 }
