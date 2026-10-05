@@ -17,6 +17,7 @@ func setenv(t *testing.T, kv map[string]string) {
 		"SPARKKEEP_COOKIES_FILE", "SPARKKEEP_UPLOAD_DIR", "SPARKKEEP_MAX_UPLOAD_MB",
 		"SPARKKEEP_TRANSCRIPT_LANGS", "SPARKKEEP_DIGEST_PUSH_ENABLED",
 		"SPARKKEEP_DIGEST_PUSH_DAY", "SPARKKEEP_DIGEST_PUSH_HOUR",
+		"SPARKKEEP_AUTH_TOKEN",
 	} {
 		if err := os.Setenv(k, ""); err != nil {
 			t.Fatal(err)
@@ -59,6 +60,7 @@ func TestLoadDefaults(t *testing.T) {
 		{"DigestPushEnabled", cfg.DigestPushEnabled, false},
 		{"DigestPushDay", cfg.DigestPushDay, 0},
 		{"DigestPushHour", cfg.DigestPushHour, 19},
+		{"AuthToken", cfg.AuthToken, ""},
 	}
 	for _, tc := range cases {
 		if tc.got != tc.want {
@@ -94,6 +96,7 @@ func TestLoadFull(t *testing.T) {
 		"SPARKKEEP_DIGEST_PUSH_ENABLED": "false",
 		"SPARKKEEP_DIGEST_PUSH_DAY":     "3",
 		"SPARKKEEP_DIGEST_PUSH_HOUR":    "9",
+		"SPARKKEEP_AUTH_TOKEN":          "secret123",
 	})
 
 	cfg, err := Load()
@@ -123,6 +126,7 @@ func TestLoadFull(t *testing.T) {
 		{"DigestPushEnabled", cfg.DigestPushEnabled, false},
 		{"DigestPushDay", cfg.DigestPushDay, 3},
 		{"DigestPushHour", cfg.DigestPushHour, 9},
+		{"AuthToken", cfg.AuthToken, "secret123"},
 	}
 	for _, tc := range cases {
 		if tc.got != tc.want {

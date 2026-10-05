@@ -33,6 +33,10 @@ type Config struct {
 	TranscriptLangs  string
 	FFmpegBin        string
 
+	// AuthToken gates the API and the dashboard when set (SPARKKEEP_AUTH_TOKEN).
+	// Empty = open, the default.
+	AuthToken string
+
 	// Scheduled weekly digest push over Telegram. Enabled by default once a
 	// bot token exists; Day/Hour are local time (0=Sunday, 0..23).
 	DigestPushEnabled bool
@@ -71,6 +75,7 @@ func Load() (Config, error) {
 		MaxUploadMB:      25, // overridden below if env var is set
 		TranscriptLangs:  getenv("SPARKKEEP_TRANSCRIPT_LANGS", "en.*,en"),
 		FFmpegBin:        os.Getenv("SPARKKEEP_FFMPEG_BIN"),
+		AuthToken:        os.Getenv("SPARKKEEP_AUTH_TOKEN"),
 	}
 
 	headless, err := getenvBool("SPARKKEEP_HEADLESS_ENABLED", true)
