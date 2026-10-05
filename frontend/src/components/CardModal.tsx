@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Card } from '../types';
-import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Card, ResearchItem } from '../types';
+import { fetchCardResearch } from '../api';
+import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus } from 'lucide-react';
 
 interface CardModalProps {
   card: Card | null;
@@ -9,6 +10,23 @@ interface CardModalProps {
   onResearch: (id: number) => void;
   onRetry: (id: number) => void;
   showToast?: (msg: string) => void;
+}
+
+// extractFindingsActions turns the bullet lines of a findings report into
+// candidate checklist items. ponytail: bullet/numbered lines only — no
+// markdown parser; anything fancier belongs in the research prompt.
+const MAX_EXTRACTED_ACTIONS = 10;
+
+function extractFindingsActions(findings: string): string[] {
+  const out: string[] = [];
+  for (const raw of findings.split('\n')) {
+    const m = raw.trim().match(/^(?:[-*•]|\d+[.)])\s+(.+)$/);
+    if (!m) continue;
+    const text = m[1].replace(/[*_`]/g, '').trim();
+    if (text.length > 2 && !out.includes(text)) out.push(text);
+    if (out.length >= MAX_EXTRACTED_ACTIONS) break;
+  }
+  return out;
 }
 
 export const CardModal: React.FC<CardModalProps> = ({
@@ -27,13 +45,67 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [status, setStatus] = useState(card?.status || 'inbox');
   const [note, setNote] = useState(card?.source_note || '');
   const [tagsInput, setTagsInput] = useState((card?.tags || []).join(', '));
-  const [_actions, _setActions] = useState<string[]>(card?.proposed_actions || []);
+  const [actions, setActions] = useState<string[]>(card?.proposed_actions || []);
   const [completedActions, setCompletedActions] = useState<Record<number, boolean>>({});
+  const [newAction, setNewAction] = useState('');
+  const [research, setResearch] = useState<ResearchItem | null>(null);
+
+  const cardId = card?.id;
+  useEffect(() => {
+    if (!cardId) return;
+    let alive = true;
+    fetchCardResearch(cardId)
+      .then((r) => {
+        if (alive) setResearch(r);
+      })
+      .catch((err: Error) => showToast?.(err.message));
+    return () => {
+      alive = false;
+    };
+  }, [cardId, showToast]);
 
   if (!card) return null;
 
   const toggleAction = (index: number) => {
     setCompletedActions((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const editAction = (index: number, text: string) => {
+    setActions((prev) => prev.map((a, i) => (i === index ? text : a)));
+  };
+
+  // removeAction also reindexes the completion flags so the remaining
+  // checkboxes keep their state.
+  const removeAction = (index: number) => {
+    setActions((prev) => prev.filter((_, i) => i !== index));
+    setCompletedActions((prev) => {
+      const next: Record<number, boolean> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const i = Number(k);
+        if (i < index) next[i] = v;
+        else if (i > index) next[i - 1] = v;
+      });
+      return next;
+    });
+  };
+
+  const addAction = () => {
+    const text = newAction.trim();
+    if (!text) return;
+    setActions((prev) => [...prev, text]);
+    setNewAction('');
+  };
+
+  const appendFindingsAsActions = () => {
+    if (!research) return;
+    const seen = new Set(actions.map((a) => a.trim().toLowerCase()));
+    const fresh = extractFindingsActions(research.findings).filter((a) => !seen.has(a.toLowerCase()));
+    if (!fresh.length) {
+      showToast?.('No new bullet points in these findings');
+      return;
+    }
+    setActions((prev) => [...prev, ...fresh]);
+    showToast?.(`Added ${fresh.length} finding bullets — save to persist`);
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -47,7 +119,7 @@ export const CardModal: React.FC<CardModalProps> = ({
       status: status as any,
       source_note: note,
       tags: tagsInput.split(',').map((t) => t.trim()).filter(Boolean),
-      proposed_actions: _actions,
+      proposed_actions: actions,
     });
     onClose();
   };
@@ -135,33 +207,113 @@ export const CardModal: React.FC<CardModalProps> = ({
               />
             </div>
 
-            {_actions.length > 0 && (
-              <div className="briefing-section">
-                <div className="briefing-heading heading-actions">
-                  <CheckCircle2 size={13} />
-                  <span>Proposed Actions Checklist</span>
-                </div>
-                <div className="actions-list">
-                  {_actions.map((act, idx) => (
-                    <div
-                      key={idx}
-                      className="action-item"
-                      style={{ cursor: 'pointer', opacity: completedActions[idx] ? 0.6 : 1 }}
-                      onClick={() => toggleAction(idx)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={Boolean(completedActions[idx])}
-                        onChange={() => toggleAction(idx)}
-                        style={{ cursor: 'pointer', marginTop: 3 }}
-                      />
-                      <span style={{ textDecoration: completedActions[idx] ? 'line-through' : 'none' }}>
-                        {act}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+            <div className="briefing-section">
+              <div className="briefing-heading heading-actions">
+                <CheckCircle2 size={13} />
+                <span>Proposed Actions Checklist</span>
               </div>
+              <div className="actions-list">
+                {actions.map((act, idx) => (
+                  <div
+                    key={idx}
+                    className="action-item"
+                    style={{ alignItems: 'center', opacity: completedActions[idx] ? 0.6 : 1 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(completedActions[idx])}
+                      onChange={() => toggleAction(idx)}
+                      style={{ cursor: 'pointer' }}
+                      aria-label={`Action ${idx + 1} done`}
+                    />
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={act}
+                      onChange={(e) => editAction(idx, e.target.value)}
+                      aria-label={`Action ${idx + 1}`}
+                      style={{
+                        flex: 1,
+                        padding: '4px 8px',
+                        fontSize: 13.5,
+                        background: 'transparent',
+                        border: '1px solid transparent',
+                        textDecoration: completedActions[idx] ? 'line-through' : 'none',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="close-btn"
+                      onClick={() => removeAction(idx)}
+                      title="Remove action"
+                      aria-label="Remove action"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newAction}
+                  placeholder="Add a step..."
+                  onChange={(e) => setNewAction(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addAction();
+                    }
+                  }}
+                />
+                <button type="button" className="btn-secondary" onClick={addAction}>
+                  <Plus size={14} color="#34d399" />
+                  <span>Add Step</span>
+                </button>
+              </div>
+            </div>
+
+            {research && (
+              <details className="briefing-section">
+                <summary className="briefing-heading heading-summary" style={{ cursor: 'pointer' }}>
+                  <FileSearch size={13} />
+                  <span>Research Findings</span>
+                  <span style={{ textTransform: 'none', letterSpacing: 0, color: '#94a3b8' }}>
+                    {research.status}
+                    {research.query ? ` · ${research.query}` : ''}
+                  </span>
+                </summary>
+                {research.error ? (
+                  <p style={{ color: '#ff8a8a', fontSize: 13 }}>{research.error}</p>
+                ) : (
+                  <pre
+                    style={{
+                      margin: 0,
+                      maxHeight: 220,
+                      overflow: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      fontFamily: 'inherit',
+                      fontSize: 12.5,
+                      lineHeight: 1.5,
+                      color: '#cbd5e1',
+                      background: 'rgba(15, 23, 42, 0.6)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: 10,
+                    }}
+                  >
+                    {research.findings}
+                  </pre>
+                )}
+                <div>
+                  <button type="button" className="btn-secondary" onClick={appendFindingsAsActions}>
+                    <ListPlus size={14} color="#c084fc" />
+                    <span>Append Findings as Actions</span>
+                  </button>
+                </div>
+              </details>
             )}
           </div>
 

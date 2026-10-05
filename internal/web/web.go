@@ -447,6 +447,8 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 }
 
 // getResearch serves the single-row report as HTML for the Telegram link.
+// A JSON client (Accept: application/json or ?format=json) gets the raw row
+// instead — the dashboard reads the findings to turn them into checklist items.
 func (a *api) getResearch(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -456,6 +458,10 @@ func (a *api) getResearch(w http.ResponseWriter, r *http.Request) {
 	row, err := a.store.GetResearch(r.Context(), id)
 	if err != nil {
 		a.fail(w, err)
+		return
+	}
+	if r.Header.Get("Accept") == "application/json" || r.URL.Query().Get("format") == "json" {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": row})
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -580,6 +580,47 @@ func TestGetResearchNotFound(t *testing.T) {
 	}
 }
 
+func TestGetResearchJSON(t *testing.T) {
+	st := newStubStore()
+	st.researches[1] = port.Research{
+		ID: 1, CardID: 5, Status: "done",
+		Query: "cli-fi reading list", Findings: "# Found\n\nSome **markdown** text.",
+	}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	for _, path := range []string{"/api/v1/research/1?format=json", "/api/v1/research/1"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if !strings.Contains(path, "format=") {
+			req.Header.Set("Accept", "application/json")
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d, want 200", path, rr.Code)
+		}
+		if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+			t.Fatalf("%s: Content-Type = %q, want application/json", path, ct)
+		}
+		var out struct {
+			OK   bool          `json:"ok"`
+			Data port.Research `json:"data"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+			t.Fatalf("%s: json: %v", path, err)
+		}
+		if !out.OK {
+			t.Fatalf("%s: ok = false, want true", path)
+		}
+		if out.Data.ID != 1 || out.Data.CardID != 5 || out.Data.Status != "done" {
+			t.Fatalf("%s: data = %+v, want research #1 for card 5", path, out.Data)
+		}
+		if out.Data.Query != "cli-fi reading list" || !strings.Contains(out.Data.Findings, "markdown") {
+			t.Fatalf("%s: data missing findings/query: %+v", path, out.Data)
+		}
+	}
+}
+
 // --- static ------------------------------------------------------------------
 
 func TestStaticIndexServed(t *testing.T) {
