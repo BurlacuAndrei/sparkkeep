@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Sparkles, Shield, Cpu, ArrowRight, CheckCircle2, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import * as api from '../api';
 
@@ -92,9 +93,38 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     }
   };
 
-  return (
-    <div className="setup-wizard-backdrop">
-      <div className="setup-wizard-card">
+  return createPortal(
+    <div
+      className="setup-wizard-backdrop"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 99999,
+        background: 'rgba(5, 7, 12, 0.88)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div
+        className="setup-wizard-card"
+        style={{
+          width: '100%',
+          maxWidth: '580px',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          margin: 'auto',
+        }}
+      >
         {/* Header */}
         <div className="setup-header">
           <div className="setup-logo-badge">
@@ -359,6 +389,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

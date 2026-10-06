@@ -1,6 +1,5 @@
-// Sparkkeep service worker: app shell offline, network-first data,
-// cache-first hashed bundles.
-const CACHE = 'sparkkeep-v1'
+// Sparkkeep service worker: app shell offline, network-first data.
+const CACHE = 'sparkkeep-v2'
 const SHELL = ['/', '/manifest.json', '/icon.svg']
 
 self.addEventListener('install', (e) => {
@@ -25,10 +24,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url)
   if (url.origin !== self.location.origin) return
 
-  if (req.mode === 'navigate' || url.pathname.startsWith('/api/')) {
+  if (req.mode === 'navigate' || url.pathname.startsWith('/api/') || url.pathname.startsWith('/assets/')) {
     e.respondWith(networkFirst(req))
-  } else if (url.pathname.startsWith('/assets/')) {
-    e.respondWith(cacheFirst(req))
   }
 })
 
@@ -44,14 +41,6 @@ async function networkFirst(req) {
   }
 }
 
-// Cache-first: /assets/* filenames are content-hashed by the build.
-async function cacheFirst(req) {
-  const hit = await caches.match(req)
-  if (hit) return hit
-  const res = await fetch(req)
-  if (res.ok) await put(req, res)
-  return res
-}
 
 async function put(req, res) {
   const c = await caches.open(CACHE)

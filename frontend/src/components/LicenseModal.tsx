@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Sparkles, CheckCircle2, ShieldCheck, Key, FolderSync, Send, AlertCircle, ExternalLink } from 'lucide-react';
 import { LicenseStatus } from '../types';
 import * as api from '../api';
@@ -83,9 +84,40 @@ export function LicenseModal({
     }
   };
 
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="license-modal-card" onClick={(e) => e.stopPropagation()}>
+  return createPortal(
+    <div
+      className="modal-backdrop"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 99999,
+        background: 'rgba(5, 7, 12, 0.85)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        boxSizing: 'border-box',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="license-modal-card"
+        style={{
+          width: '100%',
+          maxWidth: '540px',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          margin: 'auto',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Header */}
         <div className="license-modal-header">
           <div className="license-title-group">
@@ -252,6 +284,7 @@ export function LicenseModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
