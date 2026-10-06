@@ -63,6 +63,9 @@ func TestRunSearchNoResults(t *testing.T) {
 	if err == nil {
 		t.Fatal("err = nil, want error on empty search results")
 	}
+	if !errors.Is(err, ErrNoSearchResults) {
+		t.Fatalf("err = %v, want errors.Is ErrNoSearchResults", err)
+	}
 	if report != "" {
 		t.Fatalf("report = %q, want empty", report)
 	}

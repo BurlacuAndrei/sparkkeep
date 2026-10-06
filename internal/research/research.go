@@ -33,6 +33,17 @@ const (
 	searchTimeout = 30 * time.Second
 )
 
+var (
+	// ErrNoFetchableText is returned when no fetched URL content produced usable text.
+	ErrNoFetchableText = errors.New("research: no fetchable text")
+	// ErrEmptyQuery is returned when the query generator produces an empty string.
+	ErrEmptyQuery = errors.New("research: empty query from LLM")
+	// ErrNoSearchResults is returned when SearXNG yields 0 URLs.
+	ErrNoSearchResults = errors.New("no search results")
+	// ErrEmptyReport is returned when the synthesis prompt yields no output.
+	ErrEmptyReport = errors.New("empty report from LLM")
+)
+
 // searchResp mirrors the SearXNG JSON API slice the pipeline consumes.
 type searchResp struct {
 	Results []struct {
@@ -87,7 +98,7 @@ func (r *Runner) Run(ctx context.Context, card port.Card) (string, error) {
 	}
 	clip := r.fetchAndClip(ctx, urls)
 	if clip == "" {
-		return "", errors.New("research: no fetchable text")
+		return "", ErrNoFetchableText
 	}
 	report, err := r.synthesize(ctx, card, urls, clip)
 	if err != nil {
@@ -118,7 +129,7 @@ func (r *Runner) buildQuery(ctx context.Context, card port.Card) (string, error)
 			return line, nil
 		}
 	}
-	return "", errors.New("research: empty query from LLM")
+	return "", ErrEmptyQuery
 }
 
 // search queries the SearXNG JSON API and returns the result URLs. An empty
@@ -149,7 +160,7 @@ func (r *Runner) search(ctx context.Context, query, fallbackURL string) ([]strin
 		}
 	}
 	if len(urls) == 0 {
-		return nil, errors.New("no search results")
+		return nil, ErrNoSearchResults
 	}
 	return urls, nil
 }
@@ -215,7 +226,7 @@ func (r *Runner) synthesize(ctx context.Context, card port.Card, urls []string, 
 	}
 	out = strings.TrimSpace(out)
 	if out == "" {
-		return "", errors.New("empty report from LLM")
+		return "", ErrEmptyReport
 	}
 	if i := strings.Index(out, "## "); i > 0 {
 		out = out[i:]

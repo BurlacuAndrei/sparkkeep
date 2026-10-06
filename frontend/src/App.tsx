@@ -9,6 +9,7 @@ import { DigestView } from './components/DigestView';
 import { CardModal } from './components/CardModal';
 import { NewCardModal } from './components/NewCardModal';
 import { Bell, Lock } from 'lucide-react';
+import { CardActionsProvider } from './context/CardActionsContext';
 
 export function App() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -54,8 +55,8 @@ export function App() {
         q: query,
       });
       setCards(data);
-    } catch (err: any) {
-      showToast(err.message);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   }, [horizon, status, selectedTag, query, showToast]);
 
@@ -63,8 +64,8 @@ export function App() {
     try {
       const data = await api.fetchTags();
       setTags(data);
-    } catch (err: any) {
-      showToast(err.message);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   }, [showToast]);
 
@@ -72,8 +73,8 @@ export function App() {
     try {
       const data = await api.fetchDigest();
       setDigest(data);
-    } catch (err: any) {
-      showToast(err.message);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   }, [showToast]);
 
@@ -111,8 +112,8 @@ export function App() {
       await api.updateCard(id, { status: newStatus as any });
       showToast(`Updated card #${id} → ${newStatus}`);
       reloadAll();
-    } catch (err: any) {
-      showToast(err.message);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   };
 
@@ -122,8 +123,8 @@ export function App() {
       await api.triggerResearch(id);
       showToast(`Research queued for card #${id}`);
       reloadAll();
-    } catch (err: any) {
-      showToast(err.message);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   };
 
@@ -133,8 +134,8 @@ export function App() {
       await api.retryCard(id);
       showToast(`Retried extraction for card #${id}`);
       reloadAll();
-    } catch (err: any) {
-      showToast(err.message);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   };
 
@@ -144,8 +145,8 @@ export function App() {
       await api.createCard(newCard);
       showToast('Spark captured successfully!');
       reloadAll();
-    } catch (err: any) {
-      showToast(err.message);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   };
 
@@ -155,8 +156,8 @@ export function App() {
       await api.updateCard(id, patch);
       showToast(`Saved changes to card #${id}`);
       reloadAll();
-    } catch (err: any) {
-      showToast(err.message);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   };
 
@@ -177,14 +178,24 @@ export function App() {
       setTokenInput('');
       setIsAuthRequired(false);
       reloadAll();
-    } catch (err: any) {
-      showToast(err.message);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   };
 
   return (
-    <div className="app-container">
-      <Header
+    <CardActionsProvider
+      value={{
+        onSelectCard: setSelectedCard,
+        onStatusChange: handleStatusChange,
+        onResearch: handleResearch,
+        onRetry: handleRetry,
+        onUpdateCard: handleUpdateCard,
+        showToast,
+      }}
+    >
+      <div className="app-container">
+        <Header
         query={query}
         onQueryChange={setQuery}
         viewMode={viewMode}
@@ -311,7 +322,8 @@ export function App() {
           <span>{toastMessage}</span>
         </div>
       )}
-    </div>
+      </div>
+    </CardActionsProvider>
   );
 }
 

@@ -19,6 +19,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return data;
 }
 
+export function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return 'An unexpected error occurred';
+}
+
 export async function fetchCards(filter: CardFilter = {}): Promise<Card[]> {
   const params = new URLSearchParams();
   if (filter.horizon) params.set('horizon', filter.horizon);
@@ -26,6 +32,8 @@ export async function fetchCards(filter: CardFilter = {}): Promise<Card[]> {
   if (filter.tag) params.set('tag', filter.tag);
   if (filter.q) params.set('q', filter.q);
   if (filter.stale_days) params.set('stale_days', String(filter.stale_days));
+  if (filter.limit !== undefined) params.set('limit', String(filter.limit));
+  if (filter.offset !== undefined) params.set('offset', String(filter.offset));
 
   const res = await request<{ ok: boolean; cards: Card[] }>(`/api/v1/cards?${params.toString()}`);
   return res.cards || [];

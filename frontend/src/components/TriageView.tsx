@@ -78,8 +78,8 @@ export const TriageView: React.FC<TriageViewProps> = ({
       setShelveMsg(`Shelved ${res.shelved_count} stale card${res.shelved_count === 1 ? '' : 's'}.`);
       setCurrentIndex(0);
       onRefresh?.();
-    } catch (err: any) {
-      setShelveMsg(err.message);
+    } catch (err: unknown) {
+      setShelveMsg(api.getErrorMessage(err));
     }
   }, [onRefresh]);
 

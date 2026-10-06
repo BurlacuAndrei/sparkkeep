@@ -267,6 +267,21 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 	if s == "" {
 		return AnalysisResult{}, ErrInvalidResponse
 	}
+	if s[0] != '{' && s[0] != '[' {
+		startObj := strings.Index(s, "{")
+		startArr := strings.Index(s, "[")
+		if startObj >= 0 && (startArr < 0 || startObj < startArr) {
+			end := strings.LastIndex(s, "}")
+			if end > startObj {
+				s = s[startObj : end+1]
+			}
+		} else if startArr >= 0 {
+			end := strings.LastIndex(s, "]")
+			if end > startArr {
+				s = s[startArr : end+1]
+			}
+		}
+	}
 	switch s[0] {
 	case '{':
 		var rawMap map[string]json.RawMessage

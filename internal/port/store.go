@@ -13,6 +13,10 @@ var ErrNotFound = errors.New("not found")
 // that already has one queued/running.
 var ErrResearchActive = errors.New("research already running")
 
+// ErrConflict is returned when an operation violates a uniqueness constraint
+// (such as duplicate source URL).
+var ErrConflict = errors.New("conflict: entity already exists")
+
 // Store provides CRUD for cards, research, and tags.
 type Store interface {
 	CreateCard(ctx context.Context, c Card) (Card, error)

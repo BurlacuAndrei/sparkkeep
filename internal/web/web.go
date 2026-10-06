@@ -253,6 +253,9 @@ func (a *api) listCards(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("limit"); v != "" {
 		f.Limit, _ = strconv.Atoi(v)
 	}
+	if v := q.Get("offset"); v != "" {
+		f.Offset, _ = strconv.Atoi(v)
+	}
 	if v := q.Get("stale_days"); v != "" {
 		f.StaleDays, _ = strconv.Atoi(v)
 	}
@@ -316,7 +319,7 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 		ProposedActions:  b.ProposedActions,
 	})
 	if err != nil {
-		if isUniqueConstraint(err) {
+		if errors.Is(err, port.ErrConflict) || isUniqueConstraint(err) {
 			if existing, gerr := a.store.GetCardBySourceURL(r.Context(), b.SourceURL); gerr == nil {
 				writeErr(w, http.StatusConflict, "already captured: "+existing.Title)
 				return
@@ -648,6 +651,9 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 func isUniqueConstraint(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, port.ErrConflict) {
+		return true
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "UNIQUE constraint failed") ||

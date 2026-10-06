@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -593,5 +594,63 @@ func TestCreateResearchDedup(t *testing.T) {
 	_, err = s.CreateResearch(ctx, c.ID, "query 2")
 	if !errors.Is(err, port.ErrResearchActive) {
 		t.Fatalf("got err = %v, want port.ErrResearchActive", err)
+	}
+}
+
+func TestListCardsTagChunking(t *testing.T) {
+	s, ctx := newTestStore(t)
+	// Create multiple cards with tags to ensure chunked tag resolution works cleanly
+	for i := 0; i < 15; i++ {
+		_, err := s.CreateCard(ctx, port.Card{
+			Title: fmt.Sprintf("Card %d", i),
+			Tags:  []string{"chunk-test", fmt.Sprintf("tag-%d", i)},
+		})
+		if err != nil {
+			t.Fatalf("CreateCard %d: %v", i, err)
+		}
+	}
+	cards, err := s.ListCards(ctx, port.CardFilter{Limit: 20})
+	if err != nil {
+		t.Fatalf("ListCards: %v", err)
+	}
+	if len(cards) != 15 {
+		t.Fatalf("got %d cards, want 15", len(cards))
+	}
+	for _, c := range cards {
+		if len(c.Tags) != 2 {
+			t.Fatalf("card %d (%s) expected 2 tags, got %d: %v", c.ID, c.Title, len(c.Tags), c.Tags)
+		}
+	}
+}
+
+func TestListCardsOffset(t *testing.T) {
+	s, ctx := newTestStore(t)
+	for i := 0; i < 10; i++ {
+		_, err := s.CreateCard(ctx, port.Card{Title: fmt.Sprintf("Offset Card %d", i)})
+		if err != nil {
+			t.Fatalf("CreateCard %d: %v", i, err)
+		}
+	}
+	page1, err := s.ListCards(ctx, port.CardFilter{Limit: 5, Offset: 0})
+	if err != nil {
+		t.Fatalf("page 1: %v", err)
+	}
+	if len(page1) != 5 {
+		t.Fatalf("page 1 len = %d, want 5", len(page1))
+	}
+	page2, err := s.ListCards(ctx, port.CardFilter{Limit: 5, Offset: 5})
+	if err != nil {
+		t.Fatalf("page 2: %v", err)
+	}
+	if len(page2) != 5 {
+		t.Fatalf("page 2 len = %d, want 5", len(page2))
+	}
+	// Verify no overlap
+	for _, p1 := range page1 {
+		for _, p2 := range page2 {
+			if p1.ID == p2.ID {
+				t.Fatalf("page 1 and page 2 contain duplicate card ID %d", p1.ID)
+			}
+		}
 	}
 }

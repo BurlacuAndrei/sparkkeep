@@ -91,6 +91,9 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.Title, c.Summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, c.ExecutiveSummary, c.ValueProposition, actionsJSON, ts, ts)
 	if err != nil {
+		if isUniqueConstraint(err) {
+			return port.Card{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
+		}
 		return port.Card{}, err
 	}
 	id, err := res.LastInsertId()
@@ -238,6 +241,10 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	}
 	sqlq += " ORDER BY updated_at DESC LIMIT ?"
 	args = append(args, limit)
+	if f.Offset > 0 {
+		sqlq += " OFFSET ?"
+		args = append(args, f.Offset)
+	}
 
 	rows, err := s.db.QueryContext(ctx, sqlq, args...)
 	if err != nil {
@@ -269,75 +276,106 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		return cards, nil
 	}
 
-	cardIDs := make([]any, len(cards))
-	placeholders := make([]string, len(cards))
-	for i, c := range cards {
-		cardIDs[i] = c.ID
-		placeholders[i] = "?"
-	}
-	tagQuery := fmt.Sprintf(`SELECT ct.card_id, t.name FROM cards_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.card_id IN (%s) ORDER BY t.name`, strings.Join(placeholders, ","))
-	tagRows, err := s.db.QueryContext(ctx, tagQuery, cardIDs...)
-	if err != nil {
-		return nil, err
-	}
-	defer tagRows.Close()
-
 	tagsByCard := make(map[int64][]string, len(cards))
-	for tagRows.Next() {
-		var cid int64
-		var name string
-		if err := tagRows.Scan(&cid, &name); err != nil {
+	const tagBatchSize = 500
+	for i := 0; i < len(cards); i += tagBatchSize {
+		end := i + tagBatchSize
+		if end > len(cards) {
+			end = len(cards)
+		}
+		chunk := cards[i:end]
+		cardIDs := make([]any, len(chunk))
+		placeholders := make([]string, len(chunk))
+		for j, c := range chunk {
+			cardIDs[j] = c.ID
+			placeholders[j] = "?"
+		}
+		tagQuery := fmt.Sprintf(`SELECT ct.card_id, t.name FROM cards_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.card_id IN (%s) ORDER BY t.name`, strings.Join(placeholders, ","))
+		tagRows, err := s.db.QueryContext(ctx, tagQuery, cardIDs...)
+		if err != nil {
 			return nil, err
 		}
-		tagsByCard[cid] = append(tagsByCard[cid], name)
+		for tagRows.Next() {
+			var cid int64
+			var name string
+			if err := tagRows.Scan(&cid, &name); err != nil {
+				tagRows.Close()
+				return nil, err
+			}
+			tagsByCard[cid] = append(tagsByCard[cid], name)
+		}
+		if err := tagRows.Err(); err != nil {
+			tagRows.Close()
+			return nil, err
+		}
+		tagRows.Close()
 	}
-	if err := tagRows.Err(); err != nil {
-		return nil, err
-	}
+
 	for i := range cards {
 		cards[i].Tags = tagsByCard[cards[i].ID]
 	}
 	return cards, nil
 }
 
+type updateBuilder struct {
+	table string
+	sets  []string
+	args  []any
+	idCol string
+	idVal any
+}
+
+func newUpdateBuilder(table, idCol string, idVal any) *updateBuilder {
+	return &updateBuilder{table: table, idCol: idCol, idVal: idVal}
+}
+
+func (b *updateBuilder) set(col string, val any) {
+	b.sets = append(b.sets, col+" = ?")
+	b.args = append(b.args, val)
+}
+
+func (b *updateBuilder) empty() bool {
+	return len(b.sets) == 0
+}
+
+func (b *updateBuilder) build() (string, []any) {
+	b.sets = append(b.sets, "updated_at = ?")
+	b.args = append(b.args, now())
+	b.args = append(b.args, b.idVal)
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = ?", b.table, strings.Join(b.sets, ", "), b.idCol)
+	return query, b.args
+}
+
 func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (port.Card, error) {
-	var sets []string
-	var args []any
+	b := newUpdateBuilder("cards", "id", id)
 	if p.Status != nil {
-		sets = append(sets, "status = ?")
-		args = append(args, *p.Status)
+		b.set("status", *p.Status)
 	}
 	if p.Horizon != nil {
-		sets = append(sets, "horizon = ?")
-		args = append(args, *p.Horizon)
+		b.set("horizon", *p.Horizon)
 	}
 	if p.Note != nil {
-		sets = append(sets, "source_note = ?")
-		args = append(args, *p.Note)
+		b.set("source_note", *p.Note)
 	}
 	if p.ExecutiveSummary != nil {
-		sets = append(sets, "executive_summary = ?")
-		args = append(args, *p.ExecutiveSummary)
+		b.set("executive_summary", *p.ExecutiveSummary)
 	}
 	if p.ValueProposition != nil {
-		sets = append(sets, "value_proposition = ?")
-		args = append(args, *p.ValueProposition)
+		b.set("value_proposition", *p.ValueProposition)
 	}
 	if p.ProposedActions != nil {
 		actionsJSON := "[]"
-		if b, err := json.Marshal(*p.ProposedActions); err == nil {
-			actionsJSON = string(b)
+		if data, err := json.Marshal(*p.ProposedActions); err == nil {
+			actionsJSON = string(data)
 		}
-		sets = append(sets, "proposed_actions = ?")
-		args = append(args, actionsJSON)
+		b.set("proposed_actions", actionsJSON)
 	}
-	if len(sets) == 0 {
+	if b.empty() {
 		return s.GetCard(ctx, id)
 	}
-	sets = append(sets, "updated_at = ?")
-	args = append(args, now())
-	args = append(args, id)
-	res, err := s.db.ExecContext(ctx, `UPDATE cards SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)
+
+	query, args := b.build()
+	res, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return port.Card{}, err
 	}
@@ -482,4 +520,14 @@ func (s *Store) GetResearchFindings(ctx context.Context, id int64) (string, erro
 		return "", port.ErrNotFound
 	}
 	return findings, err
+}
+
+func isUniqueConstraint(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "UNIQUE constraint failed") ||
+		strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "idx_cards_source")
 }

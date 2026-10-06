@@ -59,6 +59,7 @@ type CardFilter struct {
 	Query   string
 	Since   time.Time
 	Limit   int
+	Offset  int
 	// StaleDays > 0 keeps only cards untouched for at least that many days.
 	StaleDays int
 }

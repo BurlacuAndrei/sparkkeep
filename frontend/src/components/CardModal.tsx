@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, ResearchItem } from '../types';
-import { fetchCardResearch } from '../api';
+import { fetchCardResearch, getErrorMessage } from '../api';
 import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus } from 'lucide-react';
 
 interface CardModalProps {
@@ -136,8 +136,8 @@ export const CardModal: React.FC<CardModalProps> = ({
     try {
       await navigator.clipboard.writeText(await fetchMarkdown());
       showToast?.('Markdown copied to clipboard');
-    } catch (err: any) {
-      showToast?.(err.message);
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
     }
   };
 
@@ -147,8 +147,8 @@ export const CardModal: React.FC<CardModalProps> = ({
       const q = new URLSearchParams({ text: card.title, description: md });
       window.open(`https://todoist.com/showTask?${q.toString()}`, '_blank', 'noopener');
       showToast?.('Opening Todoist with this spark...');
-    } catch (err: any) {
-      showToast?.(err.message);
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
     }
   };
 

@@ -1,22 +1,29 @@
 import React from 'react';
 import { Card } from '../types';
+import { useCardActions } from '../context/CardActionsContext';
 import { ArrowRight, Check, Archive, Sparkles, RefreshCw, X, FileText, CheckCircle2 } from 'lucide-react';
 
 interface CardItemProps {
   card: Card;
-  onSelect: (card: Card) => void;
-  onStatusChange: (id: number, status: string) => void;
-  onResearch: (id: number) => void;
-  onRetry: (id: number) => void;
+  onSelect?: (card: Card) => void;
+  onStatusChange?: (id: number, status: string) => void;
+  onResearch?: (id: number) => void;
+  onRetry?: (id: number) => void;
 }
 
 export const CardItem: React.FC<CardItemProps> = ({
   card,
-  onSelect,
-  onStatusChange,
-  onResearch,
-  onRetry,
+  onSelect: propOnSelect,
+  onStatusChange: propOnStatusChange,
+  onResearch: propOnResearch,
+  onRetry: propOnRetry,
 }) => {
+  const actions = useCardActions();
+  const onSelect = propOnSelect || actions.onSelectCard;
+  const onStatusChange = propOnStatusChange || actions.onStatusChange;
+  const onResearch = propOnResearch || actions.onResearch;
+  const onRetry = propOnRetry || actions.onRetry;
+
   const isFailed = card.title === 'Analysis failed';
   const _hasBriefing = Boolean(card.executive_summary || (card.proposed_actions && card.proposed_actions.length > 0));
 

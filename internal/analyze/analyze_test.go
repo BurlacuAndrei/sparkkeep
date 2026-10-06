@@ -153,6 +153,17 @@ func TestExtractJSONWrapper(t *testing.T) {
 	}
 }
 
+func TestExtractJSONConversational(t *testing.T) {
+	raw := "Here is the requested analysis:\n```json\n{\"cards\":[{\"title\":\"Conv\",\"summary\":\"ok\",\"horizon\":\"short-term\",\"tags\":[],\"links\":[]}]}\n```\nHope this is helpful!"
+	res, err := ExtractJSON(raw)
+	if err != nil {
+		t.Fatalf("ExtractJSON conversational err: %v", err)
+	}
+	if len(res.Cards) != 1 || res.Cards[0].Title != "Conv" {
+		t.Fatalf("cards = %+v", res.Cards)
+	}
+}
+
 func TestPromptForContainsBriefing(t *testing.T) {
 	p := PromptFor(capture.Fetched{Title: "Test Title", Caption: "my caption text"})
 	if !strings.Contains(p, "executive_summary") || !strings.Contains(p, "value_proposition") || !strings.Contains(p, "proposed_actions") {

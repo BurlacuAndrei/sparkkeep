@@ -99,6 +99,13 @@ func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card
 		}
 		out = append(out, c)
 	}
+	if f.Offset > 0 {
+		if f.Offset >= len(out) {
+			out = nil
+		} else {
+			out = out[f.Offset:]
+		}
+	}
 	if f.Limit > 0 && len(out) > f.Limit {
 		out = out[:f.Limit]
 	}
@@ -458,11 +465,11 @@ func TestListCardsFilters(t *testing.T) {
 	st := newStubStore()
 	h := webHandler(st, &core.Service{Logf: t.Logf})
 
-	rr := doJSON(t, h, http.MethodGet, "/api/v1/cards?horizon=short-term&status=inbox&tag=go&q=idea&limit=5", "")
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/cards?horizon=short-term&status=inbox&tag=go&q=idea&limit=5&offset=10", "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rr.Code)
 	}
-	want := port.CardFilter{Horizon: "short-term", Status: "inbox", Tag: "go", Query: "idea", Limit: 5}
+	want := port.CardFilter{Horizon: "short-term", Status: "inbox", Tag: "go", Query: "idea", Limit: 5, Offset: 10}
 	if st.lastFilter != want {
 		t.Fatalf("filter = %+v, want %+v", st.lastFilter, want)
 	}
