@@ -6,6 +6,8 @@ sparkkeep.db
 /dist/
 *.log
 .env
+docker-compose.traefik.yml
+docker-compose.override.yml
 data/
 .opencode/
 .superpowers/

@@ -49,11 +49,9 @@ type Config struct {
 // takes precedence in Load).
 const DefaultSearchURL = "https://searx.be"
 
-// DefaultASRURL points at the deployed whisper container on proxy_net, used when
-// SPARKKEEP_ASR_URL is unset. Override per deployment (SPARKKEEP_ASR_URL takes
-// precedence in Load). Note: getenv treats an empty value as unset, so ASRURL is
-// never empty — callers that must skip transcription need their own switch.
-const DefaultASRURL = "http://whisper:9000"
+// DefaultASRURL is the Whisper ASR endpoint used when SPARKKEEP_ASR_URL is unset.
+// Empty by default to disable ASR unless explicitly configured.
+const DefaultASRURL = ""
 
 func Load() (Config, error) {
 	cfg := Config{

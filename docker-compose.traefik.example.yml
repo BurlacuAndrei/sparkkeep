@@ -1,0 +1,24 @@
+# Compose override example for Traefik reverse proxy setups.
+# Copy to docker-compose.traefik.yml and customize for your domain and network:
+#   cp docker-compose.traefik.example.yml docker-compose.traefik.yml
+# Then run:
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+services:
+  sparkkeep:
+    env_file:
+      - .env
+    networks:
+      - default
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sparkkeep.rule=Host(`${SPARKKEEP_DOMAIN:-sparkkeep.example.com}`)"
+      - "traefik.http.routers.sparkkeep.entrypoints=websecure"
+      - "traefik.http.routers.sparkkeep.tls=true"
+      - "traefik.http.routers.sparkkeep.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sparkkeep.loadbalancer.server.port=8080"
+      - "traefik.docker.network=proxy_net"
+
+networks:
+  proxy_net:
+    external: true
