@@ -162,6 +162,18 @@ func (s *stubStore) GetResearchFindings(_ context.Context, id int64) (string, er
 
 func (s *stubStore) ShelveStale(context.Context, int) (int64, error) { return 0, nil }
 
+func (s *stubStore) GetSetting(_ context.Context, _ string) (string, error) {
+	return "", port.ErrNotFound
+}
+
+func (s *stubStore) SetSetting(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (s *stubStore) ListSettings(context.Context) (map[string]string, error) {
+	return nil, nil
+}
+
 func (s *stubStore) Close() error { return nil }
 
 // stubChannel records notifications; when err is set Notify returns it.
@@ -711,7 +723,6 @@ func TestRetrySuccessWithSourceURL(t *testing.T) {
 	}
 }
 
-
 // --- Research ---------------------------------------------------------------
 
 func TestResearchSuccessNotifyDone(t *testing.T) {
@@ -1109,7 +1120,7 @@ func TestResolveMediaEdgeCases(t *testing.T) {
 
 	// 2. PDF file
 	f = s.resolveMedia(ctx, capture.Share{
-		Kind: capture.KindFile,
+		Kind:  capture.KindFile,
 		Files: []capture.File{{Name: "doc.pdf", Mime: "application/pdf", Data: []byte("%PDF-1.4")}},
 	})
 	if len(f.Notes) == 0 || f.Notes[0] != "pdf: text not extracted" {
@@ -1118,7 +1129,7 @@ func TestResolveMediaEdgeCases(t *testing.T) {
 
 	// 3. Binary file
 	f = s.resolveMedia(ctx, capture.Share{
-		Kind: capture.KindFile,
+		Kind:  capture.KindFile,
 		Files: []capture.File{{Name: "bin.dat", Mime: "application/octet-stream", Data: []byte{0x00, 0x01}}},
 	})
 	if len(f.Notes) == 0 || f.Notes[0] != "file: content not extractable" {
@@ -1129,7 +1140,7 @@ func TestResolveMediaEdgeCases(t *testing.T) {
 	sNoVision := baseSvc(t, st, &stubChannel{}, llm)
 	sNoVision.Vision = nil
 	f = sNoVision.resolveMedia(ctx, capture.Share{
-		Kind: capture.KindImage,
+		Kind:  capture.KindImage,
 		Files: []capture.File{{Name: "img.jpg", Mime: "image/jpeg", Data: []byte("jpg")}},
 	})
 	if len(f.Notes) == 0 || f.Notes[0] != "image unreadable" {
@@ -1140,7 +1151,7 @@ func TestResolveMediaEdgeCases(t *testing.T) {
 	sNoASR := baseSvc(t, st, &stubChannel{}, llm)
 	sNoASR.ASR = nil
 	f = sNoASR.resolveMedia(ctx, capture.Share{
-		Kind: capture.KindAudio,
+		Kind:  capture.KindAudio,
 		Files: []capture.File{{Name: "a.mp3", Mime: "audio/mp3", Data: []byte("mp3")}},
 	})
 	if len(f.Notes) == 0 || f.Notes[0] != "audio not transcribed" {
@@ -1207,4 +1218,3 @@ func TestFFmpegBinConfig(t *testing.T) {
 	// Could be empty or "ffmpeg" if installed on host
 	_ = bin
 }
-

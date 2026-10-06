@@ -410,4 +410,3 @@ func TestNotifyVariants(t *testing.T) {
 		t.Fatalf("unexpected done sent: %v", sent)
 	}
 }
-

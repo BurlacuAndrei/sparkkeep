@@ -2,7 +2,10 @@ sparkkeep.db
 *.db-wal
 *.db-shm
 /sparkkeep
+/license-gen
+/dist/
 *.log
 .env
 data/
 .opencode/
+.superpowers/

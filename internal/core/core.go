@@ -23,8 +23,10 @@ import (
 	"sparkkeep/internal/asr"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
+	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
+	"sparkkeep/internal/webhook"
 )
 
 // Describer reads an image and returns a text digest. Satisfied by
@@ -51,13 +53,15 @@ type Service struct {
 	Channel          port.Channel
 	Fetcher          capture.Fetcher // recognize+fetch (field named Fetcher: Capture collided with the method)
 	Analyze          *analyze.Client
-	Vision           Describer        // nil disables image digests
-	ASR              Transcriber      // nil disables transcription
-	Runner           *research.Runner // field named Runner: Research collided with the method
-	UploadDir        string           // "" disables upload retention
-	UploadMaxAgeDays int              // 0 disables age-based cleanup
-	UploadMaxSizeMB  int              // 0 disables size-based cleanup
-	FFmpegBin        string           // "" disables video audio extraction
+	Vision           Describer           // nil disables image digests
+	ASR              Transcriber         // nil disables transcription
+	Runner           *research.Runner    // field named Runner: Research collided with the method
+	UploadDir        string              // "" disables upload retention
+	UploadMaxAgeDays int                 // 0 disables age-based cleanup
+	UploadMaxSizeMB  int                 // 0 disables size-based cleanup
+	FFmpegBin        string              // "" disables video audio extraction
+	License          *license.Manager    // offline Tier/capability manager
+	Webhook          *webhook.Dispatcher // outbound webhook dispatcher
 	Logf             func(format string, args ...any)
 	WG               sync.WaitGroup
 	ctx              context.Context
@@ -85,6 +89,7 @@ func (s *Service) GoResearch(ctx context.Context, cardID int64) {
 // client and research runner for cfg, and logf (default log.Printf).
 func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format string, args ...any)) *Service {
 	llm := analyze.New(cfg, nil)
+	licMgr := license.NewManager(st)
 	s := &Service{
 		Store: st,
 		Fetcher: capture.Capture{
@@ -102,13 +107,67 @@ func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format
 		UploadMaxAgeDays: cfg.UploadMaxAgeDays,
 		UploadMaxSizeMB:  cfg.UploadMaxSizeMB,
 		FFmpegBin:        ffmpegBin(cfg),
+		License:          licMgr,
+		Webhook:          webhook.NewDispatcher(st, licMgr, logf),
 		Logf:             logf,
 		ctx:              ctx,
 	}
 	if s.Logf == nil {
 		s.Logf = log.Printf
 	}
+	if st != nil {
+		if k, err := st.GetSetting(ctx, "llm_key"); err == nil && k != "" {
+			llm.APIKey = k
+		}
+		if b, err := st.GetSetting(ctx, "llm_base"); err == nil && b != "" {
+			llm.BaseURL = b
+		}
+		if m, err := st.GetSetting(ctx, "llm_model"); err == nil && m != "" {
+			llm.Model = m
+			llm.VisionModel = m
+		}
+	}
 	return s
+}
+
+// UpdateLLMConfig updates active LLM client parameters dynamically.
+func (s *Service) UpdateLLMConfig(base, key, model string) {
+	if s.Analyze != nil {
+		if base != "" {
+			s.Analyze.BaseURL = base
+		}
+		if key != "" {
+			s.Analyze.APIKey = key
+		}
+		if model != "" {
+			s.Analyze.Model = model
+			s.Analyze.VisionModel = model
+		}
+	}
+}
+
+// HasCapability checks whether a feature is permitted under the active license.
+func (s *Service) HasCapability(ctx context.Context, feature string) bool {
+	if s.License == nil {
+		return false
+	}
+	return s.License.HasCapability(ctx, feature)
+}
+
+// LicenseStatus returns the current active tier, expiry, and features.
+func (s *Service) LicenseStatus(ctx context.Context) license.LicenseStatus {
+	if s.License == nil {
+		return license.LicenseStatus{Tier: license.TierCommunity, IsValid: true}
+	}
+	return s.License.Status(ctx)
+}
+
+// ActivateLicense attempts to verify and activate a Pro license key.
+func (s *Service) ActivateLicense(ctx context.Context, key string) (*license.LicenseStatus, error) {
+	if s.License == nil {
+		return nil, errors.New("license manager not initialized")
+	}
+	return s.License.Activate(ctx, key)
 }
 
 // ffmpegBin returns a usable ffmpeg path or "" when it is not installed.
@@ -164,6 +223,9 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 			return ids, err
 		}
 		ids = append(ids, created.ID)
+		if s.Webhook != nil {
+			s.Webhook.Dispatch(ctx, webhook.EventCardCreated, created)
+		}
 		if err := s.notify(ctx, port.Notification{Kind: "created", Card: created}); err != nil {
 			s.Logf("core: notify created card %d: %v", created.ID, err)
 		}
@@ -274,6 +336,9 @@ func (s *Service) Research(ctx context.Context, cardID int64) error {
 	}
 	if nerr := s.notify(ctx, port.Notification{Kind: "research_done", Res: &row, Text: "Research complete"}); nerr != nil {
 		s.Logf("core: notify research_done: %v", nerr)
+	}
+	if s.Webhook != nil {
+		s.Webhook.Dispatch(ctx, webhook.EventResearchCompleted, row)
 	}
 	return nil
 }

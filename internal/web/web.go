@@ -4,6 +4,7 @@
 package web
 
 import (
+	"context"
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,7 +21,10 @@ import (
 
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
+	"sparkkeep/internal/license"
+	"sparkkeep/internal/obsidian"
 	"sparkkeep/internal/port"
+	"sparkkeep/internal/webhook"
 )
 
 //go:embed dist/*
@@ -105,6 +110,14 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/v1/capture", a.capture)
 	mux.HandleFunc("GET /api/v1/media/{name}", a.media)
 	mux.HandleFunc("POST /api/v1/auth/verify", a.verifyToken)
+	mux.HandleFunc("GET /api/v1/setup/status", a.setupStatus)
+	mux.HandleFunc("POST /api/v1/setup", a.setup)
+	mux.HandleFunc("GET /api/v1/settings", a.getSettings)
+	mux.HandleFunc("PATCH /api/v1/settings", a.patchSettings)
+	mux.HandleFunc("GET /api/v1/license/status", a.getLicenseStatus)
+	mux.HandleFunc("POST /api/v1/license/activate", a.activateLicense)
+	mux.HandleFunc("POST /api/v1/export/obsidian", a.syncObsidian)
+	mux.HandleFunc("POST /api/v1/webhooks/test", a.testWebhook)
 	return a.authMiddleware(mux)
 }
 
@@ -165,7 +178,7 @@ func serveEmbedded(path, contentType string) http.HandlerFunc {
 func isPublicPath(r *http.Request) bool {
 	p := r.URL.Path
 	switch p {
-	case "/api/v1/health", "/api/v1/auth/verify", "/manifest.json", "/sw.js", "/icon.svg":
+	case "/api/v1/health", "/api/v1/auth/verify", "/api/v1/setup/status", "/api/v1/setup", "/manifest.json", "/sw.js", "/icon.svg":
 		return true
 	}
 	if strings.HasPrefix(p, "/assets/") {
@@ -174,6 +187,18 @@ func isPublicPath(r *http.Request) bool {
 	html := !strings.Contains(r.Header.Get("Accept"), "application/json") &&
 		r.URL.Query().Get("format") != "json"
 	return html && strings.HasPrefix(p, "/api/v1/research/")
+}
+
+func (a *api) effectiveAuthToken(ctx context.Context) string {
+	if a.authToken != "" {
+		return a.authToken
+	}
+	if a.store != nil {
+		if tok, err := a.store.GetSetting(ctx, "auth_token"); err == nil && tok != "" {
+			return tok
+		}
+	}
+	return ""
 }
 
 // presentedToken reads the token from Authorization: Bearer, the auth cookie,
@@ -198,7 +223,8 @@ func tokenMatches(got, want string) bool {
 // gets a 401 and the client shows the unlock modal.
 func (a *api) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if a.authToken == "" || isPublicPath(r) || tokenMatches(presentedToken(r), a.authToken) {
+		token := a.effectiveAuthToken(r.Context())
+		if token == "" || isPublicPath(r) || tokenMatches(presentedToken(r), token) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -225,7 +251,8 @@ func (a *api) verifyToken(w http.ResponseWriter, r *http.Request) {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		tok = strings.TrimPrefix(h, "Bearer ")
 	}
-	if !tokenMatches(tok, a.authToken) {
+	required := a.effectiveAuthToken(r.Context())
+	if !tokenMatches(tok, required) {
 		writeErr(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
@@ -234,6 +261,265 @@ func (a *api) verifyToken(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (a *api) isConfigured(ctx context.Context) bool {
+	if a.authToken != "" {
+		return true
+	}
+	if a.store != nil {
+		if val, err := a.store.GetSetting(ctx, "setup_completed"); err == nil && val == "true" {
+			return true
+		}
+		if val, err := a.store.GetSetting(ctx, "auth_token"); err == nil && val != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *api) setupStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	settings, err := a.store.ListSettings(ctx)
+	if err != nil {
+		settings = map[string]string{}
+	}
+	configured := a.isConfigured(ctx)
+	hasAuth := a.effectiveAuthToken(ctx) != ""
+	hasLLMKey := settings["llm_key"] != ""
+	llmBase := settings["llm_base"]
+	llmModel := settings["llm_model"]
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":            true,
+		"is_configured": configured,
+		"has_auth":      hasAuth,
+		"has_llm_key":   hasLLMKey,
+		"llm_base":      llmBase,
+		"llm_model":     llmModel,
+	})
+}
+
+func (a *api) setup(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if a.isConfigured(ctx) {
+		token := a.effectiveAuthToken(ctx)
+		if !tokenMatches(presentedToken(r), token) {
+			writeErr(w, http.StatusForbidden, "forbidden: setup already completed")
+			return
+		}
+	}
+
+	var b struct {
+		AuthToken string `json:"auth_token"`
+		LLMBase   string `json:"llm_base"`
+		LLMKey    string `json:"llm_key"`
+		LLMModel  string `json:"llm_model"`
+	}
+	if err := decodeJSON(w, r, &b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+
+	if b.AuthToken != "" {
+		if err := a.store.SetSetting(ctx, "auth_token", b.AuthToken); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	if b.LLMBase != "" {
+		if err := a.store.SetSetting(ctx, "llm_base", b.LLMBase); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	if b.LLMKey != "" {
+		if err := a.store.SetSetting(ctx, "llm_key", b.LLMKey); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	if b.LLMModel != "" {
+		if err := a.store.SetSetting(ctx, "llm_model", b.LLMModel); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	if err := a.store.SetSetting(ctx, "setup_completed", "true"); err != nil {
+		a.fail(w, err)
+		return
+	}
+
+	if a.svc != nil {
+		a.svc.UpdateLLMConfig(b.LLMBase, b.LLMKey, b.LLMModel)
+	}
+
+	effectiveTok := a.effectiveAuthToken(ctx)
+	if effectiveTok != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name: authCookie, Value: effectiveTok, Path: "/",
+			SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": effectiveTok})
+}
+
+func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	settings, err := a.store.ListSettings(ctx)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true,
+		"settings": map[string]any{
+			"llm_base":       settings["llm_base"],
+			"llm_model":      settings["llm_model"],
+			"has_llm_key":    settings["llm_key"] != "",
+			"has_auth_token": a.effectiveAuthToken(ctx) != "",
+		},
+	})
+}
+
+func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var b struct {
+		AuthToken *string `json:"auth_token,omitempty"`
+		LLMBase   *string `json:"llm_base,omitempty"`
+		LLMKey    *string `json:"llm_key,omitempty"`
+		LLMModel  *string `json:"llm_model,omitempty"`
+	}
+	if err := decodeJSON(w, r, &b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+
+	var base, key, model string
+	if b.AuthToken != nil {
+		if err := a.store.SetSetting(ctx, "auth_token", *b.AuthToken); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	if b.LLMBase != nil {
+		base = *b.LLMBase
+		if err := a.store.SetSetting(ctx, "llm_base", base); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	if b.LLMKey != nil {
+		key = *b.LLMKey
+		if err := a.store.SetSetting(ctx, "llm_key", key); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	if b.LLMModel != nil {
+		model = *b.LLMModel
+		if err := a.store.SetSetting(ctx, "llm_model", model); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+
+	if a.svc != nil {
+		a.svc.UpdateLLMConfig(base, key, model)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (a *api) getLicenseStatus(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": license.LicenseStatus{Tier: license.TierCommunity, IsValid: true}})
+		return
+	}
+	status := a.svc.LicenseStatus(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": status})
+}
+
+func (a *api) activateLicense(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil {
+		writeErr(w, http.StatusInternalServerError, "service not initialized")
+		return
+	}
+	var b struct {
+		Key string `json:"key"`
+	}
+	if err := decodeJSON(w, r, &b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	status, err := a.svc.ActivateLicense(r.Context(), b.Key)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": status})
+}
+
+func (a *api) syncObsidian(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil || !a.svc.HasCapability(r.Context(), license.FeatureObsidianSync) {
+		writeErr(w, http.StatusPaymentRequired, "feature requires a pro license")
+		return
+	}
+	var b struct {
+		VaultPath string `json:"vault_path"`
+	}
+	_ = decodeJSON(w, r, &b)
+	vaultPath := b.VaultPath
+	if vaultPath == "" {
+		vaultPath = filepath.Join(a.uploadDir, "obsidian_vault")
+		if a.uploadDir == "" {
+			vaultPath = "./data/obsidian_vault"
+		}
+	}
+
+	cards, err := a.store.ListCards(r.Context(), port.CardFilter{})
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+
+	written, err := obsidian.SyncCards(vaultPath, cards)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"written":    written,
+		"vault_path": vaultPath,
+	})
+}
+
+func (a *api) testWebhook(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil || a.svc.Webhook == nil || !a.svc.HasCapability(r.Context(), license.FeatureWebhooks) {
+		writeErr(w, http.StatusPaymentRequired, "webhooks require a pro license")
+		return
+	}
+	var b struct {
+		URL    string `json:"url"`
+		Secret string `json:"secret"`
+	}
+	if err := decodeJSON(w, r, &b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	if b.URL == "" {
+		writeErr(w, http.StatusBadRequest, "url is required")
+		return
+	}
+	statusCode, err := a.svc.Webhook.SendSync(r.Context(), b.URL, b.Secret, webhook.EventPing, map[string]string{"message": "Sparkkeep webhook test ping"})
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "status_code": statusCode, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status_code": statusCode})
 }
 
 // --- API handlers -----------------------------------------------------------

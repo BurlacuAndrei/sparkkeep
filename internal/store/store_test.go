@@ -27,8 +27,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 3 {
-		t.Fatalf("version = %d, want 3", version)
+	if version != 4 {
+		t.Fatalf("version = %d, want 4", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -696,3 +696,49 @@ func TestGetResearchFindings(t *testing.T) {
 	}
 }
 
+func TestSettingsCRUD(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	// Initially missing
+	_, err := s.GetSetting(ctx, "llm_key")
+	if !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing setting, got %v", err)
+	}
+
+	// Insert setting
+	if err := s.SetSetting(ctx, "llm_key", "sk-test-12345"); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	val, err := s.GetSetting(ctx, "llm_key")
+	if err != nil {
+		t.Fatalf("GetSetting: %v", err)
+	}
+	if val != "sk-test-12345" {
+		t.Fatalf("got val = %q, want %q", val, "sk-test-12345")
+	}
+
+	// Update setting
+	if err := s.SetSetting(ctx, "llm_key", "sk-updated-99999"); err != nil {
+		t.Fatalf("SetSetting update: %v", err)
+	}
+	val, err = s.GetSetting(ctx, "llm_key")
+	if err != nil {
+		t.Fatalf("GetSetting updated: %v", err)
+	}
+	if val != "sk-updated-99999" {
+		t.Fatalf("got val = %q, want %q", val, "sk-updated-99999")
+	}
+
+	// Add second setting and list
+	if err := s.SetSetting(ctx, "auth_token", "super-secret"); err != nil {
+		t.Fatalf("SetSetting auth_token: %v", err)
+	}
+	all, err := s.ListSettings(ctx)
+	if err != nil {
+		t.Fatalf("ListSettings: %v", err)
+	}
+	if len(all) != 2 || all["auth_token"] != "super-secret" || all["llm_key"] != "sk-updated-99999" {
+		t.Fatalf("unexpected settings map: %+v", all)
+	}
+}

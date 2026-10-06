@@ -2,10 +2,14 @@ package web
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,8 +19,10 @@ import (
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
+	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
+	"sparkkeep/internal/webhook"
 )
 
 // --- stubs -------------------------------------------------------------------
@@ -29,6 +35,7 @@ type stubStore struct {
 	cards      map[int64]port.Card
 	researches map[int64]port.Research
 	tags       []port.Tag
+	settings   map[string]string
 	nextCard   int64
 	nextRes    int64
 	lastFilter port.CardFilter
@@ -36,7 +43,7 @@ type stubStore struct {
 }
 
 func newStubStore() *stubStore {
-	return &stubStore{cards: map[int64]port.Card{}, researches: map[int64]port.Research{}}
+	return &stubStore{cards: map[int64]port.Card{}, researches: map[int64]port.Research{}, settings: map[string]string{}}
 }
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
@@ -225,6 +232,39 @@ func (s *stubStore) GetResearchFindings(_ context.Context, id int64) (string, er
 		return "", port.ErrNotFound
 	}
 	return r.Findings, nil
+}
+
+func (s *stubStore) GetSetting(_ context.Context, key string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settings == nil {
+		return "", port.ErrNotFound
+	}
+	val, ok := s.settings[key]
+	if !ok {
+		return "", port.ErrNotFound
+	}
+	return val, nil
+}
+
+func (s *stubStore) SetSetting(_ context.Context, key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settings == nil {
+		s.settings = make(map[string]string)
+	}
+	s.settings[key] = value
+	return nil
+}
+
+func (s *stubStore) ListSettings(_ context.Context) (map[string]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	res := make(map[string]string)
+	for k, v := range s.settings {
+		res[k] = v
+	}
+	return res, nil
 }
 
 func (s *stubStore) Close() error { return nil }
@@ -1193,3 +1233,263 @@ func TestRetryCardErrors(t *testing.T) {
 	}
 }
 
+func TestSetupFlowAndSettings(t *testing.T) {
+	st := newStubStore()
+	svc := &core.Service{Logf: t.Logf}
+	h := New(st, svc, config.Config{MaxUploadMB: 25})
+
+	// 1. Initial setup status: not configured
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/setup/status", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("setup/status code = %d, want 200", rr.Code)
+	}
+	var status struct {
+		OK           bool   `json:"ok"`
+		IsConfigured bool   `json:"is_configured"`
+		HasAuth      bool   `json:"has_auth"`
+		HasLLMKey    bool   `json:"has_llm_key"`
+		LLMBase      string `json:"llm_base"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &status); err != nil {
+		t.Fatalf("unmarshal status: %v", err)
+	}
+	if status.IsConfigured || status.HasAuth || status.HasLLMKey {
+		t.Fatalf("expected unconfigured initial state, got %+v", status)
+	}
+
+	// 2. Perform initial setup (publicly allowed)
+	setupBody := `{"auth_token":"my-master-token","llm_key":"sk-secret-byok","llm_base":"https://api.openai.com/v1","llm_model":"gpt-4o"}`
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/setup", setupBody)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("setup post code = %d, want 200, body = %s", rr.Code, rr.Body.String())
+	}
+	cookies := rr.Result().Cookies()
+	if len(cookies) == 0 || cookies[0].Value != "my-master-token" {
+		t.Fatalf("expected auth cookie to be set, got %+v", cookies)
+	}
+
+	// 3. Status is now configured
+	rr = doJSON(t, h, http.MethodGet, "/api/v1/setup/status", "")
+	if err := json.Unmarshal(rr.Body.Bytes(), &status); err != nil {
+		t.Fatalf("unmarshal status: %v", err)
+	}
+	if !status.IsConfigured || !status.HasAuth || !status.HasLLMKey {
+		t.Fatalf("expected configured state, got %+v", status)
+	}
+
+	// 4. Unauthenticated access to /api/v1/cards is now blocked!
+	rr = doJSON(t, h, http.MethodGet, "/api/v1/cards", "")
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 unauthorized on /api/v1/cards after setup, got %d", rr.Code)
+	}
+
+	// 5. Authenticated access to /api/v1/cards succeeds with bearer token
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/cards", nil)
+	req.Header.Set("Authorization", "Bearer my-master-token")
+	rr2 := httptest.NewRecorder()
+	h.ServeHTTP(rr2, req)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on /api/v1/cards with token, got %d", rr2.Code)
+	}
+
+	// 6. Unauthenticated setup call is now rejected with 403 Forbidden
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/setup", `{"auth_token":"hacker-token"}`)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 forbidden on setup when already configured, got %d", rr.Code)
+	}
+
+	// 7. Get settings returns masked settings
+	reqSettings, _ := http.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+	reqSettings.Header.Set("Authorization", "Bearer my-master-token")
+	rrSettings := httptest.NewRecorder()
+	h.ServeHTTP(rrSettings, reqSettings)
+	if rrSettings.Code != http.StatusOK {
+		t.Fatalf("expected 200 on /api/v1/settings, got %d", rrSettings.Code)
+	}
+	var setResp struct {
+		OK       bool `json:"ok"`
+		Settings struct {
+			LLMBase      string `json:"llm_base"`
+			LLMModel     string `json:"llm_model"`
+			HasLLMKey    bool   `json:"has_llm_key"`
+			HasAuthToken bool   `json:"has_auth_token"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(rrSettings.Body.Bytes(), &setResp); err != nil {
+		t.Fatalf("unmarshal settings: %v", err)
+	}
+	if !setResp.Settings.HasLLMKey || !setResp.Settings.HasAuthToken || setResp.Settings.LLMModel != "gpt-4o" {
+		t.Fatalf("unexpected settings response: %+v", setResp)
+	}
+
+	// 8. Patch settings updates configuration
+	reqPatch, _ := http.NewRequest(http.MethodPatch, "/api/v1/settings", strings.NewReader(`{"llm_model":"claude-3-5-sonnet"}`))
+	reqPatch.Header.Set("Authorization", "Bearer my-master-token")
+	reqPatch.Header.Set("Content-Type", "application/json")
+	rrPatch := httptest.NewRecorder()
+	h.ServeHTTP(rrPatch, reqPatch)
+	if rrPatch.Code != http.StatusOK {
+		t.Fatalf("expected 200 on patch /api/v1/settings, got %d", rrPatch.Code)
+	}
+
+	val, err := st.GetSetting(context.Background(), "llm_model")
+	if err != nil || val != "claude-3-5-sonnet" {
+		t.Fatalf("expected patched model in store, got %q, err=%v", val, err)
+	}
+}
+
+func TestLicenseAndObsidianGating(t *testing.T) {
+	st := newStubStore()
+	svc := &core.Service{
+		Store:   st,
+		License: license.NewManager(st),
+		Logf:    t.Logf,
+	}
+	h := New(st, svc, config.Config{MaxUploadMB: 25})
+
+	// Add a sample card to store
+	c, _ := st.CreateCard(context.Background(), port.Card{
+		Title:   "Tier 2 Pro Feature Card",
+		Summary: "Testing Obsidian Sync gating",
+	})
+
+	// 1. Check initial license status (should be Community)
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/license/status", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("license status code = %d", rr.Code)
+	}
+	var licResp struct {
+		OK     bool                  `json:"ok"`
+		Status license.LicenseStatus `json:"status"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &licResp); err != nil {
+		t.Fatalf("unmarshal license status: %v", err)
+	}
+	if licResp.Status.Tier != license.TierCommunity {
+		t.Fatalf("expected tier community, got %s", licResp.Status.Tier)
+	}
+
+	// 2. Obsidian sync should be blocked with 402 Payment Required for Community tier
+	tempVault := filepath.Join(t.TempDir(), "ObsidianVault")
+	syncBody := fmt.Sprintf(`{"vault_path":%q}`, tempVault)
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/export/obsidian", syncBody)
+	if rr.Code != http.StatusPaymentRequired {
+		t.Fatalf("expected 402 Payment Required on obsidian sync, got %d", rr.Code)
+	}
+
+	// 3. Generate a valid Pro license key with test Ed25519 keypair
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	svc.License.SetPublicKeyForTest(pub)
+
+	validPayload := license.LicensePayload{
+		Email:     "pro-user@sparkkeep.dev",
+		Tier:      license.TierPro,
+		Features:  []string{license.FeatureObsidianSync, license.FeatureWebhooks},
+		IssuedAt:  time.Now().Unix(),
+		ExpiresAt: 0,
+	}
+	signedKey, err := license.SignLicenseForTest(priv, validPayload)
+	if err != nil {
+		t.Fatalf("SignLicense: %v", err)
+	}
+
+	// 4. Activate Pro license
+	activateBody := fmt.Sprintf(`{"key":%q}`, signedKey)
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/license/activate", activateBody)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 on license activate, got %d, body: %s", rr.Code, rr.Body.String())
+	}
+
+	// 5. License status is now Pro
+	rr = doJSON(t, h, http.MethodGet, "/api/v1/license/status", "")
+	if err := json.Unmarshal(rr.Body.Bytes(), &licResp); err != nil {
+		t.Fatalf("unmarshal license: %v", err)
+	}
+	if licResp.Status.Tier != license.TierPro || licResp.Status.Email != "pro-user@sparkkeep.dev" {
+		t.Fatalf("expected pro status, got %+v", licResp.Status)
+	}
+
+	// 6. Obsidian sync now succeeds!
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/export/obsidian", syncBody)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 on obsidian sync as Pro, got %d, body: %s", rr.Code, rr.Body.String())
+	}
+	var syncResp struct {
+		OK        bool   `json:"ok"`
+		Written   int    `json:"written"`
+		VaultPath string `json:"vault_path"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &syncResp); err != nil {
+		t.Fatalf("unmarshal sync resp: %v", err)
+	}
+	if syncResp.Written != 1 {
+		t.Fatalf("expected 1 written note, got %d", syncResp.Written)
+	}
+
+	// Verify markdown file exists on disk
+	notePath := filepath.Join(tempVault, "Tier 2 Pro Feature Card.md")
+	data, err := os.ReadFile(notePath)
+	if err != nil {
+		t.Fatalf("read synced note: %v", err)
+	}
+	if !strings.Contains(string(data), "# Tier 2 Pro Feature Card") {
+		t.Fatalf("unexpected note content: %s", string(data))
+	}
+	_ = c
+}
+
+func TestWebhookEndpointAndGating(t *testing.T) {
+	st := newStubStore()
+	licMgr := license.NewManager(st)
+	svc := &core.Service{
+		Store:   st,
+		License: licMgr,
+		Webhook: webhook.NewDispatcher(st, licMgr, t.Logf),
+		Logf:    t.Logf,
+	}
+	h := New(st, svc, config.Config{MaxUploadMB: 25})
+
+	mockTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mockTarget.Close()
+
+	// 1. Community tier should receive 402 Payment Required
+	body := fmt.Sprintf(`{"url":%q}`, mockTarget.URL)
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/webhooks/test", body)
+	if rr.Code != http.StatusPaymentRequired {
+		t.Fatalf("expected 402 on webhook test for community tier, got %d", rr.Code)
+	}
+
+	// 2. Activate Pro license
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	svc.License.SetPublicKeyForTest(pub)
+	key, _ := license.SignLicense(priv, license.LicensePayload{
+		Email:    "webhook-pro@example.com",
+		Tier:     license.TierPro,
+		Features: []string{license.FeatureWebhooks},
+	})
+	_, _ = svc.License.Activate(context.Background(), key)
+
+	// 3. Pro tier now succeeds
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/webhooks/test", body)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 on webhook test as Pro, got %d, body: %s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		OK         bool `json:"ok"`
+		StatusCode int  `json:"status_code"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal resp: %v", err)
+	}
+	if !resp.OK || resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected webhook test resp: %+v", resp)
+	}
+}

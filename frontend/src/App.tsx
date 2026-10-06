@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Tag, DigestData } from './types';
+import { Card, Tag, DigestData, LicenseStatus } from './types';
 import * as api from './api';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -8,6 +8,8 @@ import { TriageView } from './components/TriageView';
 import { DigestView } from './components/DigestView';
 import { CardModal } from './components/CardModal';
 import { NewCardModal } from './components/NewCardModal';
+import { SetupWizard } from './components/SetupWizard';
+import { LicenseModal } from './components/LicenseModal';
 import { Bell, Lock } from 'lucide-react';
 import { CardActionsProvider } from './context/CardActionsContext';
 
@@ -31,6 +33,11 @@ export function App() {
   // Auth (SPARKKEEP_AUTH_TOKEN): a 401 anywhere raises the unlock modal.
   const [isAuthRequired, setIsAuthRequired] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
+  const [isSetupNeeded, setIsSetupNeeded] = useState(false);
+
+  // License & Pro Features
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
 
   const showToast = useCallback((msg: string) => {
     if (msg === 'unauthorized' || msg === 'HTTP 401') {
@@ -78,16 +85,37 @@ export function App() {
     }
   }, [showToast]);
 
+  const loadLicense = useCallback(async () => {
+    try {
+      const res = await api.fetchLicenseStatus();
+      setLicenseStatus(res.status);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const reloadAll = useCallback(() => {
     loadCards();
     loadTags();
+    loadLicense();
     if (viewMode === 'digest') loadDigest();
-  }, [loadCards, loadTags, loadDigest, viewMode]);
+  }, [loadCards, loadTags, loadLicense, loadDigest, viewMode]);
 
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
     loadTags();
-  }, [loadTags]);
+    loadLicense();
+  }, [loadTags, loadLicense]);
+
+  useEffect(() => {
+    api.getSetupStatus()
+      .then((status) => {
+        if (!status.is_configured) {
+          setIsSetupNeeded(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (viewMode === 'digest') {
@@ -207,6 +235,8 @@ export function App() {
         onOpenNewCard={() => setIsNewModalOpen(true)}
         onTriggerResearch={handleResearch}
         flashMessage={toastMessage || ''}
+        isPro={licenseStatus?.tier === 'pro'}
+        onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
       />
 
       <div className="main-layout">
@@ -318,6 +348,25 @@ export function App() {
           </form>
         </div>
       )}
+
+      {/* First-Run Setup Wizard */}
+      {isSetupNeeded && (
+        <SetupWizard
+          onComplete={() => {
+            setIsSetupNeeded(false);
+            reloadAll();
+          }}
+        />
+      )}
+
+      {/* Sparkkeep Pro License & Features Modal */}
+      <LicenseModal
+        isOpen={isLicenseModalOpen}
+        onClose={() => setIsLicenseModalOpen(false)}
+        licenseStatus={licenseStatus}
+        onLicenseUpdated={(newStatus) => setLicenseStatus(newStatus)}
+        onToast={showToast}
+      />
 
       {/* Floating Toast Notification */}
       {toastMessage && (

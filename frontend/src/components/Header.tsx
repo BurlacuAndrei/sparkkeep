@@ -9,6 +9,8 @@ interface HeaderProps {
   onOpenNewCard: () => void;
   onTriggerResearch: (cardId: number) => void;
   flashMessage: string;
+  isPro?: boolean;
+  onOpenLicenseModal: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -19,6 +21,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewCard,
   onTriggerResearch,
   flashMessage,
+  isPro,
+  onOpenLicenseModal,
 }) => {
   const [researchId, setResearchId] = React.useState('');
 
@@ -98,6 +102,16 @@ export const Header: React.FC<HeaderProps> = ({
             Research
           </button>
         </form>
+
+        <button
+          type="button"
+          className={`license-trigger-btn ${isPro ? 'pro' : 'community'}`}
+          onClick={onOpenLicenseModal}
+          title={isPro ? "Sparkkeep Pro Lifetime Active" : "Upgrade to Sparkkeep Pro"}
+        >
+          <Sparkles size={13} strokeWidth={1.75} />
+          <span>{isPro ? "PRO" : "Upgrade"}</span>
+        </button>
 
         <button id="new-card-btn" type="button" className="btn-primary" onClick={onOpenNewCard}>
           <Plus size={14} strokeWidth={1.75} />

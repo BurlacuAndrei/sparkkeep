@@ -38,4 +38,8 @@ type Store interface {
 	// GetResearchFindings returns only the findings column for a research row.
 	// Used by the single-row endpoint; ListResearch omits findings.
 	GetResearchFindings(ctx context.Context, id int64) (string, error)
+	// Key-value settings persistence for runtime BYOK and admin configuration.
+	GetSetting(ctx context.Context, key string) (string, error)
+	SetSetting(ctx context.Context, key, value string) error
+	ListSettings(ctx context.Context) (map[string]string, error)
 }

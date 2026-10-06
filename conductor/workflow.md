@@ -1,2 +1,0 @@
-# Workflow
-Fix all P0 correctness/availability bugs first, then Ugly cleanup. Each subagent owns one fix category with fresh context. Gatekeeper reviews each PR; final validator runs full test suite + lint.

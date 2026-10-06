@@ -50,3 +50,28 @@ export interface CardFilter {
   limit?: number;
   offset?: number;
 }
+
+export interface SetupStatus {
+  ok: boolean;
+  is_configured: boolean;
+  has_auth: boolean;
+  has_llm_key: boolean;
+  llm_base?: string;
+  llm_model?: string;
+}
+
+export interface SetupPayload {
+  auth_token?: string;
+  llm_base?: string;
+  llm_key?: string;
+  llm_model?: string;
+}
+
+export interface LicenseStatus {
+  tier: 'community' | 'pro' | string;
+  email?: string;
+  features: string[];
+  expires_at?: number;
+  is_lifetime: boolean;
+  is_valid: boolean;
+}

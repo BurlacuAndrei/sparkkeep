@@ -27,6 +27,8 @@ RUN apk add --no-cache ca-certificates yt-dlp wget su-exec \
 COPY --from=build /out/sparkkeep /usr/local/bin/sparkkeep
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+ENV SPARKKEEP_DB=/data/sparkkeep.db \
+    SPARKKEEP_HTTP_ADDR=:8080
 VOLUME /data
 EXPOSE 8080
 HEALTHCHECK CMD wget -qO- localhost:8080/api/v1/health || exit 1

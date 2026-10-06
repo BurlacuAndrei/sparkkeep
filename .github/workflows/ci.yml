@@ -2,15 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
-  ci:
+  test:
+    name: Lint, Build & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -18,30 +20,35 @@ jobs:
           go-version: '1.26'
           cache: true
 
-      - name: Set up Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: frontend/package.json
 
-      - name: Run fmt
-        run: make fmt
-
-      - name: Run vet
-        run: make vet
-
-      - name: Run test
-        run: make test
-
-      - name: Install frontend dependencies
+      - name: Install Frontend Dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install
 
-      - name: Run frontend lint
+      - name: Run Frontend Lint
         working-directory: frontend
         run: npm run lint
 
-      - name: Run frontend build
+      - name: Build Frontend Assets
         working-directory: frontend
         run: npm run build
+
+      - name: Check Go Formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go code is not formatted. Run 'gofmt -w .':"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Go Vet
+        run: go vet ./...
+
+      - name: Run Go Unit & Integration Tests
+        run: go test -v -race -count=1 ./...

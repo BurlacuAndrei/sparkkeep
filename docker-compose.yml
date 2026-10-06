@@ -1,28 +1,12 @@
 services:
   sparkkeep:
     build: .
+    image: sparkkeep:latest
     container_name: sparkkeep
     restart: unless-stopped
-    env_file: .env
     ports:
       - "${SPARKKEEP_HTTP_PORT:-8080}:8080"
     volumes:
       - ./data:/data
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # reach host Ollama
-    networks:
-      - default
-      - proxy_net   # reach the internal SearXNG (searxng)
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.sparkkeep.rule=Host(`spark.example.com`)"
-      - "traefik.http.routers.sparkkeep.entrypoints=websecure"
-      - "traefik.http.routers.sparkkeep.tls=true"
-      - "traefik.http.routers.sparkkeep.tls.certresolver=le"
-      - "traefik.http.routers.sparkkeep.middlewares=authelia@docker"
-      - "traefik.http.services.sparkkeep.loadbalancer.server.port=8080"
-      - "traefik.docker.network=proxy_net"
-
-networks:
-  proxy_net:
-    external: true
+      - "host.docker.internal:host-gateway"   # reach host Ollama or local LLMs

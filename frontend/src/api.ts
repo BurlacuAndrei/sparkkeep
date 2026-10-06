@@ -105,10 +105,57 @@ export async function fetchResearchItem(id: number): Promise<ResearchItem> {
   return res.data;
 }
 
-// fetchCardResearch returns the newest research row for a card with its full
-// findings, or null when the card has never been researched.
 export async function fetchCardResearch(cardId: number): Promise<ResearchItem | null> {
   const list = await fetchResearchList();
   const latest = list.filter((r) => r.card_id === cardId).sort((a, b) => b.id - a.id)[0];
   return latest ? fetchResearchItem(latest.id) : null;
+}
+
+export async function getSetupStatus(): Promise<{ ok: boolean; is_configured: boolean; has_auth: boolean; has_llm_key: boolean; llm_base?: string; llm_model?: string }> {
+  const res = await fetch('/api/v1/setup/status');
+  return res.json();
+}
+
+export async function submitSetup(payload: { auth_token?: string; llm_base?: string; llm_key?: string; llm_model?: string }): Promise<{ ok: boolean; token?: string }> {
+  const res = await fetch('/api/v1/setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || 'Failed to complete setup');
+  }
+  if (data.token) {
+    localStorage.setItem(TOKEN_KEY, data.token);
+  }
+  return data;
+}
+
+export async function fetchLicenseStatus(): Promise<{ ok: boolean; status: import('./types').LicenseStatus }> {
+  return request<{ ok: boolean; status: import('./types').LicenseStatus }>('/api/v1/license/status');
+}
+
+export async function activateLicense(key: string): Promise<{ ok: boolean; status: import('./types').LicenseStatus }> {
+  return request<{ ok: boolean; status: import('./types').LicenseStatus }>('/api/v1/license/activate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key }),
+  });
+}
+
+export async function syncObsidian(vaultPath?: string): Promise<{ ok: boolean; written: number; vault_path: string }> {
+  return request<{ ok: boolean; written: number; vault_path: string }>('/api/v1/export/obsidian', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vault_path: vaultPath || '' }),
+  });
+}
+
+export async function testWebhook(url: string, secret?: string): Promise<{ ok: boolean; status_code: number; error?: string }> {
+  return request<{ ok: boolean; status_code: number; error?: string }>('/api/v1/webhooks/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, secret }),
+  });
 }
