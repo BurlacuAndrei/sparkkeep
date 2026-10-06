@@ -487,6 +487,18 @@ body {
   border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
+.horizon-pill.medium-term {
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.horizon-pill.long-term {
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.2);
+}
+
 .horizon-pill.lifetime {
   background: rgba(245, 158, 11, 0.1);
   color: #fbbf24;

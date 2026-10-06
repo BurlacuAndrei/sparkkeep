@@ -19,8 +19,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onRetry,
 }) => {
   const inboxCards = cards.filter((c) => c.status === 'inbox');
-  const actionQueueCards = cards.filter((c) => c.status === 'doing' || (c.horizon === 'short-term' && c.status === 'inbox'));
-  const bucketListCards = cards.filter((c) => c.horizon === 'lifetime' && c.status !== 'done' && c.status !== 'dismissed');
+  const doingCards = cards.filter((c) => c.status === 'doing');
   const shelvedCards = cards.filter((c) => c.status === 'shelved');
   const doneCards = cards.filter((c) => c.status === 'done');
 
@@ -64,51 +63,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </div>
         </div>
 
-        {/* Action Queue Column */}
+        {/* Doing Column */}
         <div className="kanban-column">
           <div className="column-header">
             <div className="column-title">
               <Zap size={15} strokeWidth={1.5} color="#34d399" />
               <span>Doing</span>
             </div>
-            <span className="column-count">{actionQueueCards.length}</span>
+            <span className="column-count">{doingCards.length}</span>
           </div>
           <div id="action-board" className="cards-container">
-            {actionQueueCards.length === 0 ? (
+            {doingCards.length === 0 ? (
               <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
                 No active actions queued.
               </div>
             ) : (
-              actionQueueCards.map((c) => (
-                <CardItem
-                  key={c.id}
-                  card={c}
-                  onSelect={onSelectCard}
-                  onStatusChange={onStatusChange}
-                  onResearch={onResearch}
-                  onRetry={onRetry}
-                />
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Bucket List Column */}
-        <div className="kanban-column">
-          <div className="column-header">
-            <div className="column-title">
-              <Compass size={15} strokeWidth={1.5} color="#fbbf24" />
-              <span>Lifetime</span>
-            </div>
-            <span className="column-count">{bucketListCards.length}</span>
-          </div>
-          <div id="bucket-board" className="cards-container">
-            {bucketListCards.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
-                No lifetime aspirations saved.
-              </div>
-            ) : (
-              bucketListCards.map((c) => (
+              doingCards.map((c) => (
                 <CardItem
                   key={c.id}
                   card={c}

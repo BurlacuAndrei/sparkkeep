@@ -115,7 +115,7 @@ export const CardModal: React.FC<CardModalProps> = ({
       summary: _summary,
       executive_summary: executiveSummary,
       value_proposition: valueProposition,
-      horizon: horizon as 'short-term' | 'lifetime',
+      horizon: horizon as 'short-term' | 'medium-term' | 'long-term' | 'lifetime',
       status: status as any,
       source_note: note,
       tags: tagsInput.split(',').map((t) => t.trim()).filter(Boolean),
@@ -341,6 +341,8 @@ export const CardModal: React.FC<CardModalProps> = ({
                 onChange={(e) => setHorizon(e.target.value as any)}
               >
                 <option value="short-term">Short-term (Immediate action)</option>
+                <option value="medium-term">Medium-term (Planned)</option>
+                <option value="long-term">Long-term (Vision)</option>
                 <option value="lifetime">Lifetime (Bucket list / vision)</option>
               </select>
             </div>

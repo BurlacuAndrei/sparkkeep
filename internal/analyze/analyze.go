@@ -29,7 +29,7 @@ import (
 type Idea struct {
 	Title            string   `json:"title"`
 	Summary          string   `json:"summary"`
-	Horizon          string   `json:"horizon"` // "short-term" | "lifetime"
+	Horizon          string   `json:"horizon"` // "short-term" | "medium-term" | "long-term" | "lifetime"
 	Tags             []string `json:"tags"`
 	Links            []string `json:"links"`
 	ExecutiveSummary string   `json:"executive_summary,omitempty"`
@@ -408,7 +408,7 @@ Return ONLY a valid JSON object matching this schema:
 }
 
 Rules:
-- horizon must be "short-term" (actionable now/soon) or "lifetime" (long-horizon bucket item).
+- horizon must be "short-term" (actionable now/soon), "medium-term" (planned), "long-term" (vision), or "lifetime" (bucket item).
 - One card per distinct idea or tool; if one idea, exactly one card; never merge; never drop.
 - EXTRACTION NOTES are warnings about what could NOT be read. Never present a note's
   subject as content you learned. If content is missing, say so plainly in the summary.

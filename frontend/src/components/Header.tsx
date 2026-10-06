@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Search, Plus, Calendar, Layers, Zap } from 'lucide-react';
+import { Sparkles, Search, Plus, Calendar, Layers, Zap, Settings } from 'lucide-react';
 
 interface HeaderProps {
   query: string;
@@ -11,6 +11,7 @@ interface HeaderProps {
   flashMessage: string;
   isPro?: boolean;
   onOpenLicenseModal: () => void;
+  onOpenSettingsModal: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   flashMessage,
   isPro,
   onOpenLicenseModal,
+  onOpenSettingsModal,
 }) => {
   const [researchId, setResearchId] = React.useState('');
 
@@ -111,6 +113,10 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Sparkles size={13} strokeWidth={1.75} />
           <span>{isPro ? "PRO" : "Upgrade"}</span>
+        </button>
+
+        <button type="button" className="btn-secondary" onClick={onOpenSettingsModal} title="Settings" style={{ padding: '0 10px' }}>
+          <Settings size={14} strokeWidth={1.75} />
         </button>
 
         <button id="new-card-btn" type="button" className="btn-primary" onClick={onOpenNewCard}>

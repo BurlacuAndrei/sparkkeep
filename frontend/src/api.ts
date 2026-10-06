@@ -159,3 +159,15 @@ export async function testWebhook(url: string, secret?: string): Promise<{ ok: b
     body: JSON.stringify({ url, secret }),
   });
 }
+
+export async function getSettings(): Promise<{ ok: boolean; settings: { llm_base?: string; llm_model?: string; has_llm_key: boolean; has_auth_token: boolean } }> {
+  return request('/api/v1/settings');
+}
+
+export async function patchSettings(payload: { auth_token?: string; llm_base?: string; llm_key?: string; llm_model?: string }): Promise<{ ok: boolean }> {
+  return request('/api/v1/settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}

@@ -13,7 +13,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCreate })
   const [executiveSummary, setExecutiveSummary] = useState('');
   const [valueProposition, setValueProposition] = useState('');
   const [proposedActionsText, setProposedActionsText] = useState('');
-  const [horizon, setHorizon] = useState<'short-term' | 'lifetime'>('short-term');
+  const [horizon, setHorizon] = useState<'short-term' | 'medium-term' | 'long-term' | 'lifetime'>('short-term');
   const [status, setStatus] = useState('inbox');
   const [sourceURL, setSourceURL] = useState('');
   const [sourceNote, setSourceNote] = useState('');
@@ -132,6 +132,8 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCreate })
                 onChange={(e) => setHorizon(e.target.value as any)}
               >
                 <option value="short-term">short-term</option>
+                <option value="medium-term">medium-term</option>
+                <option value="long-term">long-term</option>
                 <option value="lifetime">lifetime</option>
               </select>
             </div>

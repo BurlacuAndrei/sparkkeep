@@ -2,7 +2,7 @@ export interface Card {
   id: number;
   title: string;
   summary: string;
-  horizon: 'short-term' | 'lifetime';
+  horizon: 'short-term' | 'medium-term' | 'long-term' | 'lifetime';
   status: 'inbox' | 'doing' | 'done' | 'shelved' | 'dismissed';
   source_url: string;
   source_note: string;

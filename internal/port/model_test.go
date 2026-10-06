@@ -8,10 +8,11 @@ func TestValidHorizon(t *testing.T) {
 		want    bool
 	}{
 		{HorizonShortTerm, true},
+		{HorizonMediumTerm, true},
+		{HorizonLongTerm, true},
 		{HorizonLifetime, true},
 		{"invalid", false},
 		{"", false},
-		{"mid-term", false},
 	}
 
 	for _, tt := range tests {

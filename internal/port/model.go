@@ -3,8 +3,10 @@ package port
 import "time"
 
 const (
-	HorizonShortTerm = "short-term"
-	HorizonLifetime  = "lifetime"
+	HorizonShortTerm  = "short-term"
+	HorizonMediumTerm = "medium-term"
+	HorizonLongTerm   = "long-term"
+	HorizonLifetime   = "lifetime"
 
 	StatusInbox     = "inbox"
 	StatusDoing     = "doing"
@@ -14,7 +16,7 @@ const (
 )
 
 func ValidHorizon(h string) bool {
-	return h == HorizonShortTerm || h == HorizonLifetime
+	return h == HorizonShortTerm || h == HorizonMediumTerm || h == HorizonLongTerm || h == HorizonLifetime
 }
 
 func ValidStatus(s string) bool {

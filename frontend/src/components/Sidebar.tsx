@@ -36,6 +36,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <option value="all">All Horizons</option>
           <option value="short-term">⚡ Short-term (Actionable)</option>
+          <option value="medium-term">📅 Medium-term (Planned)</option>
+          <option value="long-term">🔭 Long-term (Vision)</option>
           <option value="lifetime">🌟 Lifetime (Bucket list)</option>
         </select>
       </div>

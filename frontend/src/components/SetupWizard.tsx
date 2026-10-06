@@ -7,44 +7,19 @@ interface SetupWizardProps {
   onComplete: () => void;
 }
 
-type ProviderPreset = 'openai' | 'ollama' | 'deepseek' | 'custom';
-
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [authToken, setAuthToken] = useState('');
   const [confirmToken, setConfirmToken] = useState('');
   const [showToken, setShowToken] = useState(false);
 
-  const [provider, setProvider] = useState<ProviderPreset>('openai');
   const [llmBase, setLlmBase] = useState('https://api.openai.com/v1');
   const [llmKey, setLlmKey] = useState('');
-  const [llmModel, setLlmModel] = useState('gpt-4o-mini');
+  const [llmModel, setLlmModel] = useState('');
   const [showLlmKey, setShowLlmKey] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const applyPreset = (preset: ProviderPreset) => {
-    setProvider(preset);
-    setError(null);
-    switch (preset) {
-      case 'openai':
-        setLlmBase('https://api.openai.com/v1');
-        setLlmModel('gpt-4o-mini');
-        break;
-      case 'ollama':
-        setLlmBase('http://localhost:11434/v1');
-        setLlmModel('llama3.2');
-        setLlmKey('');
-        break;
-      case 'deepseek':
-        setLlmBase('https://api.deepseek.com/v1');
-        setLlmModel('deepseek-chat');
-        break;
-      case 'custom':
-        break;
-    }
-  };
 
   const handleStep1Next = () => {
     setError(null);
@@ -69,8 +44,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       setError('LLM API Base URL is required.');
       return;
     }
-    if (provider !== 'ollama' && !llmKey.trim()) {
-      setError('An API Key is required for cloud AI providers.');
+    if (!llmModel.trim()) {
+      setError('Model Name is required.');
       return;
     }
     setStep(3);
@@ -231,45 +206,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               <Cpu className="section-icon" size={20} />
               <div>
                 <h3>AI Model Integration (BYOK)</h3>
-                <p>Plug in your own API key. You maintain 100% control over costs and models.</p>
+                <p>Configure your AI API Base URL, Model Name, and API Key.</p>
               </div>
-            </div>
-
-            {/* Presets */}
-            <div className="setup-presets-label">Choose Provider</div>
-            <div className="setup-presets-grid">
-              <button
-                type="button"
-                className={`preset-card ${provider === 'openai' ? 'active' : ''}`}
-                onClick={() => applyPreset('openai')}
-              >
-                <div className="preset-title">OpenAI</div>
-                <div className="preset-desc">GPT-4o mini, GPT-4o</div>
-              </button>
-              <button
-                type="button"
-                className={`preset-card ${provider === 'deepseek' ? 'active' : ''}`}
-                onClick={() => applyPreset('deepseek')}
-              >
-                <div className="preset-title">DeepSeek</div>
-                <div className="preset-desc">DeepSeek-V3 / Chat</div>
-              </button>
-              <button
-                type="button"
-                className={`preset-card ${provider === 'ollama' ? 'active' : ''}`}
-                onClick={() => applyPreset('ollama')}
-              >
-                <div className="preset-title">Local Ollama</div>
-                <div className="preset-desc">Offline & Private</div>
-              </button>
-              <button
-                type="button"
-                className={`preset-card ${provider === 'custom' ? 'active' : ''}`}
-                onClick={() => applyPreset('custom')}
-              >
-                <div className="preset-title">Custom</div>
-                <div className="preset-desc">Any OpenAI-compat API</div>
-              </button>
             </div>
 
             {/* API Base URL */}
@@ -285,31 +223,6 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               />
             </div>
 
-            {/* API Key (Optional for Ollama) */}
-            {provider !== 'ollama' && (
-              <div className="setup-form-group">
-                <label htmlFor="llm-key-input">API Key</label>
-                <div className="setup-input-wrapper">
-                  <input
-                    id="llm-key-input"
-                    type={showLlmKey ? 'text' : 'password'}
-                    value={llmKey}
-                    onChange={(e) => setLlmKey(e.target.value)}
-                    className="setup-input"
-                    placeholder="sk-..."
-                  />
-                  <button
-                    type="button"
-                    className="setup-eye-btn"
-                    onClick={() => setShowLlmKey(!showLlmKey)}
-                    tabIndex={-1}
-                  >
-                    {showLlmKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-            )}
-
             {/* Model Name */}
             <div className="setup-form-group">
               <label htmlFor="llm-model-input">Model Name</label>
@@ -319,8 +232,31 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 value={llmModel}
                 onChange={(e) => setLlmModel(e.target.value)}
                 className="setup-input"
-                placeholder="e.g. gpt-4o-mini or llama3.2"
+                placeholder="e.g. gpt-4o or llama-3.2"
               />
+            </div>
+
+            {/* API Key */}
+            <div className="setup-form-group">
+              <label htmlFor="llm-key-input">API Key (Optional for some local providers)</label>
+              <div className="setup-input-wrapper">
+                <input
+                  id="llm-key-input"
+                  type={showLlmKey ? 'text' : 'password'}
+                  value={llmKey}
+                  onChange={(e) => setLlmKey(e.target.value)}
+                  className="setup-input"
+                  placeholder="sk-..."
+                />
+                <button
+                  type="button"
+                  className="setup-eye-btn"
+                  onClick={() => setShowLlmKey(!showLlmKey)}
+                  tabIndex={-1}
+                >
+                  {showLlmKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             <div className="setup-actions">
@@ -351,16 +287,16 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 <span className="summary-value badge-success">Enabled (Custom Passphrase)</span>
               </div>
               <div className="summary-row">
-                <span className="summary-key">AI Provider</span>
-                <span className="summary-value">{provider.toUpperCase()}</span>
-              </div>
-              <div className="summary-row">
                 <span className="summary-key">Base URL</span>
                 <span className="summary-value code">{llmBase}</span>
               </div>
               <div className="summary-row">
                 <span className="summary-key">Selected Model</span>
-                <span className="summary-value code">{llmModel || 'Default'}</span>
+                <span className="summary-value code">{llmModel}</span>
+              </div>
+              <div className="summary-row">
+                <span className="summary-key">API Key Provided</span>
+                <span className="summary-value">{llmKey ? 'Yes' : 'No'}</span>
               </div>
               <div className="summary-row">
                 <span className="summary-key">Storage Location</span>

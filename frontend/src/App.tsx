@@ -10,6 +10,7 @@ import { CardModal } from './components/CardModal';
 import { NewCardModal } from './components/NewCardModal';
 import { SetupWizard } from './components/SetupWizard';
 import { LicenseModal } from './components/LicenseModal';
+import { SettingsModal } from './components/SettingsModal';
 import { Bell, Lock } from 'lucide-react';
 import { CardActionsProvider } from './context/CardActionsContext';
 
@@ -20,7 +21,7 @@ export function App() {
 
   // Filters & Navigation
   const [viewMode, setViewMode] = useState<'kanban' | 'triage' | 'digest'>('kanban');
-  const [horizon, setHorizon] = useState('');
+  const [horizon, setHorizon] = useState('short-term');
   const [status, setStatus] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [query, setQuery] = useState('');
@@ -38,6 +39,7 @@ export function App() {
   // License & Pro Features
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
   const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const showToast = useCallback((msg: string) => {
     if (msg === 'unauthorized' || msg === 'HTTP 401') {
@@ -237,6 +239,7 @@ export function App() {
         flashMessage={toastMessage || ''}
         isPro={licenseStatus?.tier === 'pro'}
         onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
+        onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
       />
 
       <div className="main-layout">
@@ -367,6 +370,16 @@ export function App() {
         onLicenseUpdated={(newStatus) => setLicenseStatus(newStatus)}
         onToast={showToast}
       />
+
+      {isSettingsModalOpen && (
+        <SettingsModal
+          onClose={() => {
+            setIsSettingsModalOpen(false);
+            reloadAll();
+          }}
+          showToast={showToast}
+        />
+      )}
 
       {/* Floating Toast Notification */}
       {toastMessage && (
