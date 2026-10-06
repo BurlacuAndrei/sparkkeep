@@ -161,7 +161,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             <span style={{ fontSize: 13, color: '#94a3b8' }}>Card #{card.id}</span>
           </div>
           <button type="button" className="close-btn" onClick={onClose}>
-            <X size={18} />
+            <X size={17} strokeWidth={1.5} />
           </button>
         </div>
 
@@ -181,7 +181,7 @@ export const CardModal: React.FC<CardModalProps> = ({
           <div className="briefing-box">
             <div className="briefing-section">
               <div className="briefing-heading heading-summary">
-                <FileText size={13} />
+                <FileText size={13} strokeWidth={1.5} />
                 <span>Executive Summary ("What is this?")</span>
               </div>
               <textarea
@@ -195,7 +195,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
             <div className="briefing-section">
               <div className="briefing-heading heading-value">
-                <Lightbulb size={13} />
+                <Lightbulb size={13} strokeWidth={1.5} />
                 <span>Value Proposition ("Why does it matter?")</span>
               </div>
               <textarea
@@ -209,7 +209,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
             <div className="briefing-section">
               <div className="briefing-heading heading-actions">
-                <CheckCircle2 size={13} />
+                <CheckCircle2 size={13} strokeWidth={1.5} />
                 <span>Proposed Actions Checklist</span>
               </div>
               <div className="actions-list">
@@ -248,7 +248,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       title="Remove action"
                       aria-label="Remove action"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} strokeWidth={1.5} />
                     </button>
                   </div>
                 ))}
@@ -268,7 +268,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   }}
                 />
                 <button type="button" className="btn-secondary" onClick={addAction}>
-                  <Plus size={14} color="#34d399" />
+                  <Plus size={13} strokeWidth={1.5} color="#34d399" />
                   <span>Add Step</span>
                 </button>
               </div>
@@ -277,7 +277,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             {research && (
               <details className="briefing-section">
                 <summary className="briefing-heading heading-summary" style={{ cursor: 'pointer' }}>
-                  <FileSearch size={13} />
+                  <FileSearch size={13} strokeWidth={1.5} />
                   <span>Research Findings</span>
                   <span style={{ textTransform: 'none', letterSpacing: 0, color: '#94a3b8' }}>
                     {research.status}
@@ -309,7 +309,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 )}
                 <div>
                   <button type="button" className="btn-secondary" onClick={appendFindingsAsActions}>
-                    <ListPlus size={14} color="#c084fc" />
+                    <ListPlus size={13} strokeWidth={1.5} color="#c084fc" />
                     <span>Append Findings as Actions</span>
                   </button>
                 </div>
@@ -374,7 +374,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   className="btn-secondary"
                   style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
                 >
-                  <ExternalLink size={14} />
+                  <ExternalLink size={13} strokeWidth={1.5} />
                   <span>Visit</span>
                 </a>
               </div>
@@ -399,7 +399,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 className="btn-secondary"
                 onClick={() => onResearch(card.id)}
               >
-                <Sparkles size={14} color="#c084fc" />
+                <Sparkles size={13} strokeWidth={1.5} color="#c084fc" />
                 <span>Deep Research</span>
               </button>
 
@@ -409,18 +409,18 @@ export const CardModal: React.FC<CardModalProps> = ({
                   className="btn-secondary"
                   onClick={() => onRetry(card.id)}
                 >
-                  <RefreshCw size={14} color="#fbbf24" />
+                  <RefreshCw size={13} strokeWidth={1.5} color="#fbbf24" />
                   <span>Retry Extraction</span>
                 </button>
               )}
 
               <button type="button" className="btn-secondary" onClick={handleCopyMarkdown}>
-                <ClipboardCopy size={14} color="#34d399" />
+                <ClipboardCopy size={13} strokeWidth={1.5} color="#34d399" />
                 <span>Copy Markdown</span>
               </button>
 
               <button type="button" className="btn-secondary" onClick={handleAddToTodoist}>
-                <CheckSquare size={14} color="#e879f9" />
+                <CheckSquare size={13} strokeWidth={1.5} color="#e879f9" />
                 <span>Add to Todoist</span>
               </button>
             </div>
@@ -430,7 +430,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 Cancel
               </button>
               <button type="submit" className="btn-primary">
-                <Save size={14} />
+                <Save size={13} strokeWidth={1.5} />
                 <span>Save Changes</span>
               </button>
             </div>

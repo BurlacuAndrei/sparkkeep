@@ -35,14 +35,14 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="topbar">
       <div className="brand" onClick={() => onViewModeChange('kanban')}>
         <div className="brand-icon">
-          <Sparkles size={18} color="#fff" />
+          <Sparkles size={16} strokeWidth={1.75} color="#fff" />
         </div>
         <span className="brand-title">sparkkeep</span>
         <span className="brand-badge">V2 Engine</span>
       </div>
 
       <div className="search-wrapper">
-        <Search size={15} className="search-icon" />
+        <Search size={14} strokeWidth={1.5} className="search-icon" />
         <input
           id="q"
           type="search"
@@ -61,7 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onViewModeChange('triage')}
             title="Focus Triage Mode (Action Engine)"
           >
-            <Zap size={14} />
+            <Zap size={13} strokeWidth={1.5} />
             <span>Triage</span>
           </button>
           <button
@@ -70,7 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onViewModeChange('kanban')}
             title="Kanban Board View"
           >
-            <Layers size={14} />
+            <Layers size={13} strokeWidth={1.5} />
             <span>Boards</span>
           </button>
           <button
@@ -80,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onViewModeChange(viewMode === 'digest' ? 'kanban' : 'digest')}
             title="Weekly Digest Timeline"
           >
-            <Calendar size={14} />
+            <Calendar size={13} strokeWidth={1.5} />
             <span>Digest</span>
           </button>
         </div>
@@ -100,7 +100,7 @@ export const Header: React.FC<HeaderProps> = ({
         </form>
 
         <button id="new-card-btn" type="button" className="btn-primary" onClick={onOpenNewCard}>
-          <Plus size={15} />
+          <Plus size={14} strokeWidth={1.75} />
           <span>New Card</span>
         </button>
       </div>

@@ -5,8 +5,8 @@
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#0b0f19",
-  "theme_color": "#0f172a",
+  "background_color": "#090a0f",
+  "theme_color": "#090a0f",
   "share_target": {
     "action": "/api/v1/capture",
     "method": "POST",

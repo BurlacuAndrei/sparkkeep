@@ -37,7 +37,7 @@ export const CardItem: React.FC<CardItemProps> = ({
         <span className={`horizon ${card.horizon} horizon-pill ${card.horizon}`}>
           {card.horizon}
         </span>
-        <span className="status" style={{ fontSize: 11, color: '#94a3b8', textTransform: 'capitalize' }}>
+        <span className="card-status status">
           {card.status}
         </span>
       </div>
@@ -50,7 +50,7 @@ export const CardItem: React.FC<CardItemProps> = ({
       {card.executive_summary && (
         <div className="card-briefing-snippet">
           <div className="briefing-label">
-            <FileText size={10} />
+            <FileText size={11} strokeWidth={1.5} />
             <span>Briefing</span>
           </div>
           <div>{card.executive_summary}</div>
@@ -59,7 +59,7 @@ export const CardItem: React.FC<CardItemProps> = ({
 
       {card.proposed_actions && card.proposed_actions.length > 0 && (
         <div className="card-actions-summary">
-          <CheckCircle2 size={12} />
+          <CheckCircle2 size={12} strokeWidth={1.5} />
           <span>{card.proposed_actions.length} action item{card.proposed_actions.length > 1 ? 's' : ''} planned</span>
         </div>
       )}
@@ -82,7 +82,7 @@ export const CardItem: React.FC<CardItemProps> = ({
               title="Move to Doing"
               onClick={() => onStatusChange(card.id, 'doing')}
             >
-              <ArrowRight size={13} color="#34d399" />
+              <ArrowRight size={13} strokeWidth={1.5} color="#34d399" />
             </button>
           )}
 
@@ -94,7 +94,7 @@ export const CardItem: React.FC<CardItemProps> = ({
               title="Mark Done"
               onClick={() => onStatusChange(card.id, 'done')}
             >
-              <Check size={13} color="#a5b4fc" />
+              <Check size={13} strokeWidth={1.5} color="#a5b4fc" />
             </button>
           )}
 
@@ -106,7 +106,7 @@ export const CardItem: React.FC<CardItemProps> = ({
               title="Shelve for later"
               onClick={() => onStatusChange(card.id, 'shelved')}
             >
-              <Archive size={13} color="#94a3b8" />
+              <Archive size={13} strokeWidth={1.5} color="#94a3b8" />
             </button>
           )}
 
@@ -117,7 +117,7 @@ export const CardItem: React.FC<CardItemProps> = ({
             title="Run autonomous research"
             onClick={() => onResearch(card.id)}
           >
-            <Sparkles size={13} color="#c084fc" />
+            <Sparkles size={13} strokeWidth={1.5} color="#c084fc" />
           </button>
 
           {isFailed && (
@@ -128,7 +128,7 @@ export const CardItem: React.FC<CardItemProps> = ({
               title="Retry analysis"
               onClick={() => onRetry(card.id)}
             >
-              <RefreshCw size={13} color="#fbbf24" />
+              <RefreshCw size={13} strokeWidth={1.5} color="#fbbf24" />
             </button>
           )}
 
@@ -140,7 +140,7 @@ export const CardItem: React.FC<CardItemProps> = ({
               title="Not interested"
               onClick={() => onStatusChange(card.id, 'dismissed')}
             >
-              <X size={13} color="#fb7185" />
+              <X size={13} strokeWidth={1.5} color="#fb7185" />
             </button>
           )}
         </div>

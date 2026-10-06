@@ -25,7 +25,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="sidebar">
       <div className="filter-group">
         <span className="filter-title">
-          <Compass size={12} style={{ display: 'inline', marginRight: 4 }} />
+          <Compass size={13} strokeWidth={1.5} style={{ display: 'inline', marginRight: 5 }} />
           Horizon
         </span>
         <select
@@ -42,7 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="filter-group">
         <span className="filter-title">
-          <Filter size={12} style={{ display: 'inline', marginRight: 4 }} />
+          <Filter size={13} strokeWidth={1.5} style={{ display: 'inline', marginRight: 5 }} />
           Status
         </span>
         <select
@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="filter-group">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span className="filter-title">
-            <TagIcon size={12} style={{ display: 'inline', marginRight: 4 }} />
+            <TagIcon size={13} strokeWidth={1.5} style={{ display: 'inline', marginRight: 5 }} />
             Tags
           </span>
           {selectedTag && (

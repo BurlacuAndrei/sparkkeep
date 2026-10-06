@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 interface State {
   hasError: boolean;
@@ -21,7 +22,7 @@ export class ErrorBoundary extends React.Component<
         <div style={{
           padding: 40,
           textAlign: 'center',
-          color: '#f8fafc',
+          color: 'var(--text-main)',
           minHeight: '60vh',
           display: 'flex',
           flexDirection: 'column',
@@ -30,38 +31,30 @@ export class ErrorBoundary extends React.Component<
           gap: 16,
         }}>
           <div style={{
-            width: 64,
-            height: 64,
+            width: 52,
+            height: 52,
             borderRadius: '50%',
-            background: 'rgba(244, 63, 94, 0.15)',
+            background: 'rgba(244, 63, 94, 0.1)',
+            border: '1px solid rgba(244, 63, 94, 0.25)',
             color: '#fb7185',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 28,
           }}>
-            ⚠
+            <AlertTriangle size={24} strokeWidth={1.5} />
           </div>
-          <h2 style={{ fontSize: 22, fontWeight: 700 }}>Something went wrong</h2>
-          <p style={{ color: '#94a3b8', maxWidth: 400, fontSize: 14, lineHeight: 1.6 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700 }}>Something went wrong</h2>
+          <p style={{ color: 'var(--text-dim)', maxWidth: 400, fontSize: 13.5, lineHeight: 1.6 }}>
             {this.state.error?.message || 'An unexpected error occurred in the application.'}
           </p>
           <button
+            type="button"
+            className="btn-primary"
             onClick={() => {
               this.setState({ hasError: false });
               window.location.reload();
             }}
-            style={{
-              marginTop: 8,
-              padding: '10px 24px',
-              borderRadius: 10,
-              background: 'linear-gradient(135deg, #6366f1, #06b6d4)',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: 14,
-            }}
+            style={{ marginTop: 8 }}
           >
             Reload Application
           </button>

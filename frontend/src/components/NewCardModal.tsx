@@ -48,11 +48,11 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCreate })
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Plus size={20} color="#6366f1" />
+            <Plus size={18} strokeWidth={1.5} color="#818cf8" />
             <span>Create New Spark / Card</span>
           </h2>
           <button type="button" className="close-btn" onClick={onClose} id="cancel-new">
-            <X size={18} />
+            <X size={17} strokeWidth={1.5} />
           </button>
         </div>
 
@@ -83,7 +83,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCreate })
           <div className="briefing-box" style={{ padding: 14 }}>
             <div className="briefing-section">
               <div className="briefing-heading heading-summary">
-                <FileText size={12} />
+                <FileText size={12} strokeWidth={1.5} />
                 <span>Executive Summary</span>
               </div>
               <input
@@ -96,7 +96,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCreate })
 
             <div className="briefing-section">
               <div className="briefing-heading heading-value">
-                <Lightbulb size={12} />
+                <Lightbulb size={12} strokeWidth={1.5} />
                 <span>Value Proposition</span>
               </div>
               <input
@@ -109,7 +109,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCreate })
 
             <div className="briefing-section">
               <div className="briefing-heading heading-actions">
-                <CheckCircle2 size={12} />
+                <CheckCircle2 size={12} strokeWidth={1.5} />
                 <span>Proposed Actions (1 per line)</span>
               </div>
               <textarea

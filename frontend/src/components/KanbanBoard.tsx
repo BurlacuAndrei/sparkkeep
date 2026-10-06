@@ -39,8 +39,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <div className="kanban-column">
           <div className="column-header">
             <div className="column-title">
-              <Inbox size={16} color="#38bdf8" />
-              <span>Inbox (Unsorted)</span>
+              <Inbox size={15} strokeWidth={1.5} color="#38bdf8" />
+              <span>Inbox</span>
             </div>
             <span className="column-count">{inboxCards.length}</span>
           </div>
@@ -68,8 +68,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <div className="kanban-column">
           <div className="column-header">
             <div className="column-title">
-              <Zap size={16} color="#34d399" />
-              <span>Action Queue (Doing)</span>
+              <Zap size={15} strokeWidth={1.5} color="#34d399" />
+              <span>Doing</span>
             </div>
             <span className="column-count">{actionQueueCards.length}</span>
           </div>
@@ -97,8 +97,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <div className="kanban-column">
           <div className="column-header">
             <div className="column-title">
-              <Compass size={16} color="#fbbf24" />
-              <span>Bucket List (Lifetime)</span>
+              <Compass size={15} strokeWidth={1.5} color="#fbbf24" />
+              <span>Lifetime</span>
             </div>
             <span className="column-count">{bucketListCards.length}</span>
           </div>
@@ -126,7 +126,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <div className="kanban-column">
           <div className="column-header">
             <div className="column-title">
-              <Archive size={16} color="#94a3b8" />
+              <Archive size={15} strokeWidth={1.5} color="#94a3b8" />
               <span>Shelved</span>
             </div>
             <span className="column-count">{shelvedCards.length}</span>
@@ -155,7 +155,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <div className="kanban-column">
           <div className="column-header">
             <div className="column-title">
-              <CheckCircle2 size={16} color="#a5b4fc" />
+              <CheckCircle2 size={15} strokeWidth={1.5} color="#a5b4fc" />
               <span>Completed</span>
             </div>
             <span className="column-count">{doneCards.length}</span>

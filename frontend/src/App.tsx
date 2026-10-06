@@ -281,12 +281,12 @@ export function App() {
           >
             <div className="modal-header">
               <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Lock size={20} color="#6366f1" />
+                <Lock size={18} strokeWidth={1.5} color="#818cf8" />
                 <span>Authentication Required</span>
               </h2>
             </div>
 
-            <p style={{ color: 'var(--text-dim)', margin: 0, fontSize: 14 }}>
+            <p style={{ color: 'var(--text-dim)', margin: 0, fontSize: 13.5, lineHeight: 1.5 }}>
               This Sparkkeep instance is locked. Enter the access token
               (<code>SPARKKEEP_AUTH_TOKEN</code>) to continue.
             </p>
@@ -307,7 +307,7 @@ export function App() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button type="submit" className="btn-primary" disabled={!tokenInput.trim()}>
-                <Lock size={15} />
+                <Lock size={14} strokeWidth={1.5} />
                 <span>Unlock Sparkkeep</span>
               </button>
             </div>
@@ -318,7 +318,7 @@ export function App() {
       {/* Floating Toast Notification */}
       {toastMessage && (
         <div className="toast">
-          <Bell size={16} color="#818cf8" />
+          <Bell size={14} strokeWidth={1.5} color="#818cf8" />
           <span>{toastMessage}</span>
         </div>
       )}
