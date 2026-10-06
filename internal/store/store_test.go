@@ -654,3 +654,45 @@ func TestListCardsOffset(t *testing.T) {
 		}
 	}
 }
+
+func TestGetResearchFindings(t *testing.T) {
+	s, ctx := newTestStore(t)
+	c, err := s.CreateCard(ctx, port.Card{Title: "Research Findings Card"})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+	r, err := s.CreateResearch(ctx, c.ID, "what is x?")
+	if err != nil {
+		t.Fatalf("CreateResearch: %v", err)
+	}
+
+	// Before findings are set, findings string should be empty
+	findings, err := s.GetResearchFindings(ctx, r.ID)
+	if err != nil {
+		t.Fatalf("GetResearchFindings: %v", err)
+	}
+	if findings != "" {
+		t.Fatalf("expected empty findings, got %q", findings)
+	}
+
+	// Update findings
+	_, err = s.SetResearch(ctx, r.ID, "done", "Here are findings", "")
+	if err != nil {
+		t.Fatalf("SetResearch: %v", err)
+	}
+
+	findings, err = s.GetResearchFindings(ctx, r.ID)
+	if err != nil {
+		t.Fatalf("GetResearchFindings after set: %v", err)
+	}
+	if findings != "Here are findings" {
+		t.Fatalf("expected 'Here are findings', got %q", findings)
+	}
+
+	// Non-existent research row
+	_, err = s.GetResearchFindings(ctx, 999999)
+	if !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing research, got %v", err)
+	}
+}
+

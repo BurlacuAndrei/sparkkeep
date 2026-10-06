@@ -85,13 +85,16 @@ export function App() {
   }, [loadCards, loadTags, loadDigest, viewMode]);
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
     loadTags();
   }, [loadTags]);
 
   useEffect(() => {
     if (viewMode === 'digest') {
+      // oxlint-disable-next-line react/set-state-in-effect
       loadDigest();
     } else {
+      // oxlint-disable-next-line react/set-state-in-effect
       loadCards();
     }
   }, [viewMode, loadCards, loadDigest]);
@@ -101,6 +104,7 @@ export function App() {
   // so a reload does not toast (or refetch) a second time.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('captured') !== 'true') return;
+    // oxlint-disable-next-line react/set-state-in-effect
     showToast('Captured new spark from Share Sheet!');
     window.history.replaceState({}, '', window.location.pathname);
     reloadAll();

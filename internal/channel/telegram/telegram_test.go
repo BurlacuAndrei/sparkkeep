@@ -55,6 +55,9 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if p.Note != nil {
 		c.SourceNote = *p.Note
 	}
+	if p.SourceURL != nil {
+		c.SourceURL = *p.SourceURL
+	}
 	s.cards[id] = c
 	return c, nil
 }
@@ -318,3 +321,93 @@ func TestHelpCommandSendsHelpWithoutCapturing(t *testing.T) {
 		t.Errorf("sent = %v, want the help text", sent)
 	}
 }
+
+func TestParseCallback(t *testing.T) {
+	tests := []struct {
+		input      string
+		wantID     int64
+		wantAction string
+		wantOK     bool
+	}{
+		{"42:doing", 42, "doing", true},
+		{"1:retry", 1, "retry", true},
+		{"invalid", 0, "", false},
+		{"abc:doing", 0, "", false},
+		{"-5:doing", 0, "", false},
+		{"0:doing", 0, "", false},
+	}
+
+	for _, tt := range tests {
+		id, action, ok := parseCallback(tt.input)
+		if ok != tt.wantOK || id != tt.wantID || action != tt.wantAction {
+			t.Errorf("parseCallback(%q) = (%d, %q, %v); want (%d, %q, %v)",
+				tt.input, id, action, ok, tt.wantID, tt.wantAction, tt.wantOK)
+		}
+	}
+}
+
+func TestOffsetHandling(t *testing.T) {
+	dir := t.TempDir()
+	filePath := dir + "/test_offset.json"
+
+	a := &Adapter{offsetP: filePath}
+	// Initial read should be 0
+	if off := a.readOffset(); off != 0 {
+		t.Fatalf("expected 0 initial offset, got %d", off)
+	}
+
+	// Write offset and read back
+	a.writeOffset(12345)
+	if off := a.readOffset(); off != 12345 {
+		t.Fatalf("expected 12345 offset, got %d", off)
+	}
+
+	// Custom environment variable test
+	t.Setenv("SPARKKEEP_OFFSET_FILE", dir+"/env_offset.json")
+	aEnv := &Adapter{}
+	if aEnv.offsetFile() != dir+"/env_offset.json" {
+		t.Fatalf("expected env offset file, got %q", aEnv.offsetFile())
+	}
+}
+
+func TestNotifyVariants(t *testing.T) {
+	card := port.Card{
+		ID:      10,
+		Title:   "Notify Card",
+		Summary: "Summary text",
+	}
+
+	// 1. Notify duplicate
+	sent := stubTelegram(t, func() *Adapter {
+		return &Adapter{Token: "tok", OwnerID: 1}
+	}, func(a *Adapter) {
+		err := a.Notify(context.Background(), port.Notification{
+			Kind: "duplicate",
+			Card: card,
+			Text: "Already captured: Notify Card",
+		})
+		if err != nil {
+			t.Fatalf("Notify duplicate: %v", err)
+		}
+	})
+	if len(sent) != 1 || sent[0] != "Already captured: Notify Card" {
+		t.Fatalf("unexpected duplicate sent: %v", sent)
+	}
+
+	// 2. Notify default (e.g. done)
+	sent = stubTelegram(t, func() *Adapter {
+		return &Adapter{Token: "tok", OwnerID: 1}
+	}, func(a *Adapter) {
+		err := a.Notify(context.Background(), port.Notification{
+			Kind: "done",
+			Card: card,
+		})
+		if err != nil {
+			t.Fatalf("Notify done: %v", err)
+		}
+	})
+	if len(sent) != 1 || !slices.Contains(sent, "Notify Card\nSummary text") {
+		t.Fatalf("unexpected done sent: %v", sent)
+	}
+}
+

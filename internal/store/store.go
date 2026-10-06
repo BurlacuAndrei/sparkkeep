@@ -357,6 +357,9 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 	if p.Note != nil {
 		b.set("source_note", *p.Note)
 	}
+	if p.SourceURL != nil {
+		b.set("source_url", *p.SourceURL)
+	}
 	if p.ExecutiveSummary != nil {
 		b.set("executive_summary", *p.ExecutiveSummary)
 	}

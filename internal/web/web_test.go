@@ -28,6 +28,7 @@ type stubStore struct {
 	mu         sync.Mutex
 	cards      map[int64]port.Card
 	researches map[int64]port.Research
+	tags       []port.Tag
 	nextCard   int64
 	nextRes    int64
 	lastFilter port.CardFilter
@@ -142,6 +143,9 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if p.Note != nil {
 		c.SourceNote = *p.Note
 	}
+	if p.SourceURL != nil {
+		c.SourceURL = *p.SourceURL
+	}
 	c.UpdatedAt = time.Now().UTC()
 	s.cards[id] = c
 	return c, nil
@@ -158,7 +162,7 @@ func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) erro
 }
 
 func (s *stubStore) ListTags(context.Context) ([]port.Tag, error) {
-	return nil, nil
+	return s.tags, nil
 }
 
 func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string) (port.Research, error) {
@@ -1014,3 +1018,178 @@ func TestAuthMiddleware(t *testing.T) {
 		t.Errorf("verify bad token set cookies: %+v", cs)
 	}
 }
+
+func TestListTagsEndpoint(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, nil)
+
+	// Empty tags
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/tags", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	var res struct {
+		OK   bool       `json:"ok"`
+		Tags []port.Tag `json:"tags"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !res.OK || len(res.Tags) != 0 {
+		t.Fatalf("expected empty tags, got %+v", res)
+	}
+
+	// Populated tags
+	st.tags = []port.Tag{
+		{Name: "ai", Count: 5},
+		{Name: "go", Count: 2},
+	}
+	rr = doJSON(t, h, http.MethodGet, "/api/v1/tags", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !res.OK || len(res.Tags) != 2 || res.Tags[0].Name != "ai" || res.Tags[1].Count != 2 {
+		t.Fatalf("tags unexpected: %+v", res)
+	}
+}
+
+func TestListResearchEndpoint(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, nil)
+
+	// Empty research list
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/research", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	var res struct {
+		OK       bool            `json:"ok"`
+		Research []port.Research `json:"research"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !res.OK || len(res.Research) != 0 {
+		t.Fatalf("expected empty research, got %+v", res)
+	}
+
+	// Add research row
+	st.researches[1] = port.Research{ID: 1, CardID: 10, Status: "done", Query: "q1", Findings: "f1"}
+	rr = doJSON(t, h, http.MethodGet, "/api/v1/research", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !res.OK || len(res.Research) != 1 || res.Research[0].CardID != 10 {
+		t.Fatalf("research list unexpected: %+v", res)
+	}
+}
+
+func TestTriggerResearchErrors(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	// Missing / invalid card_id (<= 0)
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/research", `{"card_id": 0}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for card_id 0", rr.Code)
+	}
+
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/research", `{"card_id": -5}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for negative card_id", rr.Code)
+	}
+
+	// Bad json
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/research", `{bad-json}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for bad json", rr.Code)
+	}
+
+	// Active research conflict
+	st.researches[1] = port.Research{ID: 1, CardID: 42, Status: "queued"}
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/research", `{"card_id": 42}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 conflict for active research", rr.Code)
+	}
+}
+
+func TestPatchCardEdgeCases(t *testing.T) {
+	st := newStubStore()
+	st.cards[1] = port.Card{ID: 1, Title: "Existing Card", Status: port.StatusInbox, Horizon: port.HorizonShortTerm, Tags: []string{"old"}}
+	h := webHandler(st, nil)
+
+	// Bad ID
+	rr := doJSON(t, h, http.MethodPatch, "/api/v1/cards/abc", `{"status":"doing"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for bad id", rr.Code)
+	}
+
+	// Invalid status
+	rr = doJSON(t, h, http.MethodPatch, "/api/v1/cards/1", `{"status":"bogus_status"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for bogus status", rr.Code)
+	}
+
+	// Invalid horizon
+	rr = doJSON(t, h, http.MethodPatch, "/api/v1/cards/1", `{"horizon":"bogus_horizon"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for bogus horizon", rr.Code)
+	}
+
+	// Missing card (404)
+	rr = doJSON(t, h, http.MethodPatch, "/api/v1/cards/999", `{"status":"doing"}`)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for missing card", rr.Code)
+	}
+
+	// Update tags only
+	rr = doJSON(t, h, http.MethodPatch, "/api/v1/cards/1", `{"tags":["ai","automation"]}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 for tags update", rr.Code)
+	}
+	var res struct {
+		OK   bool      `json:"ok"`
+		Data port.Card `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(res.Data.Tags) != 2 || res.Data.Tags[0] != "ai" {
+		t.Fatalf("updated tags unexpected: %+v", res.Data.Tags)
+	}
+}
+
+func TestGetCardEdgeCases(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, nil)
+
+	// Bad ID
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/cards/abc", "")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for non-numeric id", rr.Code)
+	}
+
+	// Not Found
+	rr = doJSON(t, h, http.MethodGet, "/api/v1/cards/404", "")
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for missing id", rr.Code)
+	}
+}
+
+func TestRetryCardErrors(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	// Bad ID
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards/invalid/retry", "")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for bad id", rr.Code)
+	}
+}
+

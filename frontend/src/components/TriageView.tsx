@@ -60,14 +60,12 @@ export const TriageView: React.FC<TriageViewProps> = ({
     : baseCards;
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Keep index in range
-  useEffect(() => {
-    if (currentIndex >= triageCards.length && triageCards.length > 0) {
-      setCurrentIndex(triageCards.length - 1);
-    }
-  }, [triageCards.length, currentIndex]);
+  // Keep index clamped within bounds without cascading render effect
+  const safeIndex = triageCards.length > 0 && currentIndex >= triageCards.length
+    ? triageCards.length - 1
+    : currentIndex;
 
-  const currentCard = triageCards[currentIndex];
+  const currentCard = triageCards[safeIndex];
   const currentIdleDays = currentCard ? idleDays(currentCard) : 0;
   const isStale = currentIdleDays >= STALE_DAYS;
 
@@ -203,14 +201,14 @@ export const TriageView: React.FC<TriageViewProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, color: '#38bdf8' }}>Focus Triage</span>
           <span style={{ color: '#64748b' }}>·</span>
-          <span>Card {currentIndex + 1} of {triageCards.length}</span>
+          <span>Card {safeIndex + 1} of {triageCards.length}</span>
           {staleControls}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button
             type="button"
             className="icon-btn"
-            disabled={currentIndex === 0}
+            disabled={safeIndex === 0}
             onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
             title="Previous card"
           >
@@ -219,7 +217,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
           <button
             type="button"
             className="icon-btn"
-            disabled={currentIndex >= triageCards.length - 1}
+            disabled={safeIndex >= triageCards.length - 1}
             onClick={() => setCurrentIndex((prev) => Math.min(triageCards.length - 1, prev + 1))}
             title="Next card"
           >

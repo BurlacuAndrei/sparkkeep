@@ -92,6 +92,9 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if p.Note != nil {
 		c.SourceNote = *p.Note
 	}
+	if p.SourceURL != nil {
+		c.SourceURL = *p.SourceURL
+	}
 	c.UpdatedAt = time.Now().UTC()
 	s.cards[id] = c
 	return c, nil
@@ -666,6 +669,49 @@ func TestRetrySuccessUpdatesCard(t *testing.T) {
 	}
 }
 
+func TestRetrySuccessWithSourceURL(t *testing.T) {
+	st := newStubStore()
+	failedCard, err := st.CreateCard(context.Background(), port.Card{
+		Title:      "Analysis failed",
+		Summary:    "Analysis failed, see source.",
+		SourceURL:  "https://example.com/unique-retry-target",
+		SourceNote: "https://example.com/unique-retry-target",
+		Status:     port.StatusInbox,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	work := llmStub(http.StatusOK, `[{"title":"Retried Success","summary":"retried summary","horizon":"short-term","tags":["fixed"],"links":["https://example.com/unique-retry-target"]}]`)
+	defer work.Close()
+
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, work)
+
+	updated, err := s.Retry(context.Background(), failedCard.ID)
+	if err != nil {
+		t.Fatalf("Retry with SourceURL failed: %v", err)
+	}
+	if updated.Title != "Retried Success" {
+		t.Errorf("updated title = %q, want Retried Success", updated.Title)
+	}
+	if updated.SourceURL != "https://example.com/unique-retry-target" {
+		t.Errorf("updated SourceURL = %q, want https://example.com/unique-retry-target", updated.SourceURL)
+	}
+
+	orig, err := st.GetCard(context.Background(), failedCard.ID)
+	if err != nil {
+		t.Fatalf("GetCard orig: %v", err)
+	}
+	if orig.Status != port.StatusDismissed {
+		t.Errorf("orig status = %q, want dismissed", orig.Status)
+	}
+	if orig.SourceURL != "" {
+		t.Errorf("orig SourceURL = %q, want empty to prevent unique constraint conflict", orig.SourceURL)
+	}
+}
+
+
 // --- Research ---------------------------------------------------------------
 
 func TestResearchSuccessNotifyDone(t *testing.T) {
@@ -965,3 +1011,200 @@ func TestPersistUploadDeduplicatesByContent(t *testing.T) {
 		t.Errorf("wrote %d files, want 1", len(entries))
 	}
 }
+
+func TestGoResearch(t *testing.T) {
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "source text here")
+	}))
+	defer src.Close()
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"results":[{"url":%q}]}`, src.URL)
+	}))
+	defer search.Close()
+	llm := researchLLM()
+	defer llm.Close()
+
+	st := newStubStore()
+	c, _ := st.CreateCard(context.Background(), port.Card{Title: "Card for GoResearch"})
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	r := research.New(config.Config{SearchURL: search.URL}, analyzeClient(llm))
+	r.Timeout = 5 * time.Second
+	s.Runner = r
+
+	ctx := context.Background()
+	s.GoResearch(ctx, c.ID)
+	s.WG.Wait()
+
+	if len(st.researches) != 1 {
+		t.Fatalf("expected 1 research row, got %d", len(st.researches))
+	}
+	resRow := st.researches[1]
+	if resRow.Status != "done" {
+		t.Fatalf("status = %q, want done", resRow.Status)
+	}
+}
+
+func TestReadTextFileAndStripHTML(t *testing.T) {
+	// Plain text
+	txt, ok := readTextFile(capture.File{
+		Name: "test.txt", Mime: "text/plain", Data: []byte("Hello plain text"),
+	})
+	if !ok || txt != "Hello plain text" {
+		t.Fatalf("plain text = %q, %v", txt, ok)
+	}
+
+	// HTML stripping scripts, styles, tags
+	htmlData := "<html><head><script>alert('xss');</script><style>body { color: red; }</style></head><body><h1>Hello</h1> <p>World</p></body></html>"
+	txt, ok = readTextFile(capture.File{
+		Name: "page.html", Mime: "text/html", Data: []byte(htmlData),
+	})
+	if !ok {
+		t.Fatalf("html expected ok")
+	}
+	if strings.Contains(txt, "alert") || strings.Contains(txt, "color") || !strings.Contains(txt, "Hello") || !strings.Contains(txt, "World") {
+		t.Fatalf("stripped html unexpected: %q", txt)
+	}
+
+	// Non-text
+	_, ok = readTextFile(capture.File{
+		Name: "img.png", Mime: "image/png", Data: []byte("\x89PNG\r\n"),
+	})
+	if ok {
+		t.Fatalf("image/png should not be text")
+	}
+
+	// Truncation over 4000 characters
+	longText := strings.Repeat("A", 5000)
+	txt, ok = readTextFile(capture.File{
+		Name: "long.txt", Mime: "text/plain", Data: []byte(longText),
+	})
+	if !ok || len(txt) != 4000 {
+		t.Fatalf("expected 4000 length, got %d", len(txt))
+	}
+}
+
+func TestClipText(t *testing.T) {
+	if got := clipText("short", 10); got != "short" {
+		t.Errorf("clipText(short, 10) = %q", got)
+	}
+	if got := clipText("longer than five", 5); got != "longe" {
+		t.Errorf("clipText(longer than five, 5) = %q", got)
+	}
+}
+
+func TestResolveMediaEdgeCases(t *testing.T) {
+	llm := llmStub(http.StatusOK, `{"cards":[{"title":"T","summary":"S"}]}`)
+	defer llm.Close()
+	st := newStubStore()
+	s := baseSvc(t, st, &stubChannel{}, llm)
+
+	ctx := context.Background()
+
+	// 1. Empty files slice
+	f := s.resolveMedia(ctx, capture.Share{Kind: capture.KindFile, Files: nil})
+	if len(f.Notes) == 0 || f.Notes[0] != "no file content received" {
+		t.Fatalf("expected 'no file content received', got %v", f.Notes)
+	}
+
+	// 2. PDF file
+	f = s.resolveMedia(ctx, capture.Share{
+		Kind: capture.KindFile,
+		Files: []capture.File{{Name: "doc.pdf", Mime: "application/pdf", Data: []byte("%PDF-1.4")}},
+	})
+	if len(f.Notes) == 0 || f.Notes[0] != "pdf: text not extracted" {
+		t.Fatalf("expected 'pdf: text not extracted', got %v", f.Notes)
+	}
+
+	// 3. Binary file
+	f = s.resolveMedia(ctx, capture.Share{
+		Kind: capture.KindFile,
+		Files: []capture.File{{Name: "bin.dat", Mime: "application/octet-stream", Data: []byte{0x00, 0x01}}},
+	})
+	if len(f.Notes) == 0 || f.Notes[0] != "file: content not extractable" {
+		t.Fatalf("expected 'file: content not extractable', got %v", f.Notes)
+	}
+
+	// 4. Image with Vision = nil
+	sNoVision := baseSvc(t, st, &stubChannel{}, llm)
+	sNoVision.Vision = nil
+	f = sNoVision.resolveMedia(ctx, capture.Share{
+		Kind: capture.KindImage,
+		Files: []capture.File{{Name: "img.jpg", Mime: "image/jpeg", Data: []byte("jpg")}},
+	})
+	if len(f.Notes) == 0 || f.Notes[0] != "image unreadable" {
+		t.Fatalf("expected 'image unreadable', got %v", f.Notes)
+	}
+
+	// 5. Audio with ASR = nil
+	sNoASR := baseSvc(t, st, &stubChannel{}, llm)
+	sNoASR.ASR = nil
+	f = sNoASR.resolveMedia(ctx, capture.Share{
+		Kind: capture.KindAudio,
+		Files: []capture.File{{Name: "a.mp3", Mime: "audio/mp3", Data: []byte("mp3")}},
+	})
+	if len(f.Notes) == 0 || f.Notes[0] != "audio not transcribed" {
+		t.Fatalf("expected 'audio not transcribed', got %v", f.Notes)
+	}
+}
+
+func TestDuplicateCardShelvedOrDismissedRestoresInbox(t *testing.T) {
+	spy := &promptSpy{}
+	llm := spy.server(t)
+	defer llm.Close()
+
+	for _, initialStatus := range []string{port.StatusShelved, port.StatusDismissed} {
+		st := newStubStore()
+		existing, err := st.CreateCard(context.Background(), port.Card{
+			Title:      "Initial Card",
+			SourceURL:  "https://example.com/unique-url",
+			SourceNote: "initial note",
+			Status:     initialStatus,
+		})
+		if err != nil {
+			t.Fatalf("CreateCard: %v", err)
+		}
+
+		ch := &stubChannel{}
+		s := baseSvc(t, st, ch, llm)
+		s.Fetcher = textFetcher()
+
+		// Sharing the same URL with a caption note
+		_, err = s.CaptureShare(context.Background(), capture.Share{
+			Kind:    capture.KindLink,
+			URL:     "https://example.com/unique-url",
+			Caption: "added second thought",
+		})
+		if err != nil {
+			t.Fatalf("CaptureShare: %v", err)
+		}
+
+		updated, err := st.GetCard(context.Background(), existing.ID)
+		if err != nil {
+			t.Fatalf("GetCard: %v", err)
+		}
+
+		if updated.Status != port.StatusInbox {
+			t.Errorf("card from %s should be restored to %s, got %s",
+				initialStatus, port.StatusInbox, updated.Status)
+		}
+		if !strings.Contains(updated.SourceNote, "added second thought") {
+			t.Errorf("note not appended: %s", updated.SourceNote)
+		}
+	}
+}
+
+func TestFFmpegBinConfig(t *testing.T) {
+	// SPARKKEEP_FFMPEG_BIN env override
+	t.Setenv("SPARKKEEP_FFMPEG_BIN", "/custom/ffmpeg")
+	if bin := ffmpegBin(config.Config{}); bin != "/custom/ffmpeg" {
+		t.Errorf("ffmpegBin with env = %q, want /custom/ffmpeg", bin)
+	}
+
+	t.Setenv("SPARKKEEP_FFMPEG_BIN", "")
+	// If candidate not found
+	bin := ffmpegBin(config.Config{FFmpegBin: "/nonexistent/binary"})
+	// Could be empty or "ffmpeg" if installed on host
+	_ = bin
+}
+

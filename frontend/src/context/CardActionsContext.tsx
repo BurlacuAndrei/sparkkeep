@@ -25,6 +25,7 @@ export const CardActionsProvider: React.FC<CardActionsProviderProps> = ({ value,
   );
 };
 
+// oxlint-disable-next-line react/only-export-components
 export function useCardActions(): CardActions {
   const ctx = useContext(CardActionsContext);
   if (!ctx) {

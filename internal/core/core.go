@@ -40,7 +40,7 @@ type Transcriber interface {
 
 var (
 	tagStripRe    = regexp.MustCompile(`<[^>]*>`)
-	scriptStyleRe = regexp.MustCompile(`(?s)<(script|style)[^>]*>.*?</\\1>`)
+	scriptStyleRe = regexp.MustCompile(`(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>`)
 )
 
 // Service wires the pipeline together. Channel is left nil until the
@@ -204,6 +204,9 @@ func isUniqueConstraint(err error) bool {
 	if err == nil {
 		return false
 	}
+	if errors.Is(err, port.ErrConflict) {
+		return true
+	}
 	msg := err.Error()
 	return strings.Contains(msg, "UNIQUE constraint failed") ||
 		strings.Contains(msg, "unique constraint") ||
@@ -298,13 +301,22 @@ func (s *Service) Retry(ctx context.Context, cardID int64) (port.Card, error) {
 		return card, nil
 	}
 	idea := res.Cards[0]
+	dismissed := port.StatusDismissed
+	emptyURL := ""
+	dismissPatch := port.CardPatch{Status: &dismissed}
+	if card.SourceURL != "" {
+		dismissPatch.SourceURL = &emptyURL
+	}
+	if _, err := s.Store.UpdateCard(ctx, cardID, dismissPatch); err != nil {
+		s.Logf("core: dismiss original failed card %d: %v", cardID, err)
+	}
+
 	created, err := s.Store.CreateCard(ctx, cardFromIdea(idea, res, card.SourceURL, card.SourceNote))
 	if err != nil {
+		if card.SourceURL != "" {
+			_, _ = s.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &card.Status, SourceURL: &card.SourceURL})
+		}
 		return port.Card{}, err
-	}
-	dismissed := port.StatusDismissed
-	if _, err := s.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &dismissed}); err != nil {
-		s.Logf("core: dismiss original failed card %d: %v", cardID, err)
 	}
 	if nerr := s.notify(ctx, port.Notification{Kind: "done", Card: created}); nerr != nil {
 		s.Logf("core: notify retry done: %v", nerr)

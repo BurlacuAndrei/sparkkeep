@@ -71,6 +71,7 @@ type CardPatch struct {
 	ExecutiveSummary *string
 	ValueProposition *string
 	ProposedActions  *[]string
+	SourceURL        *string
 }
 
 type TagPair struct {
