@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Card } from '../types';
 import { X, Plus, FileText, Lightbulb, CheckCircle2 } from 'lucide-react';
+import { CustomSelect } from './CustomSelect';
+import { CARD_HORIZON_OPTIONS, CARD_STATUS_OPTIONS } from './selectOptions';
 
 interface NewCardModalProps {
   onClose: () => void;
@@ -124,33 +126,27 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCreate })
 
           <div className="form-grid">
             <div className="form-group">
-              <label>Horizon</label>
-              <select
+              <label htmlFor="new-card-horizon">Horizon</label>
+              <CustomSelect
+                id="new-card-horizon"
                 name="horizon"
-                className="form-select"
                 value={horizon}
-                onChange={(e) => setHorizon(e.target.value as any)}
-              >
-                <option value="short-term">short-term</option>
-                <option value="medium-term">medium-term</option>
-                <option value="long-term">long-term</option>
-                <option value="lifetime">lifetime</option>
-              </select>
+                onChange={(val) => setHorizon(val)}
+                options={CARD_HORIZON_OPTIONS}
+                ariaLabel="Card horizon"
+              />
             </div>
 
             <div className="form-group">
-              <label>Status</label>
-              <select
+              <label htmlFor="new-card-status">Status</label>
+              <CustomSelect
+                id="new-card-status"
                 name="status"
-                className="form-select"
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="inbox">inbox</option>
-                <option value="doing">doing</option>
-                <option value="done">done</option>
-                <option value="shelved">shelved</option>
-              </select>
+                onChange={(val) => setStatus(val)}
+                options={CARD_STATUS_OPTIONS}
+                ariaLabel="Card status"
+              />
             </div>
           </div>
 

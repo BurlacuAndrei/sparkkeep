@@ -1,4 +1,4 @@
-import { Card, Tag, DigestData, ResearchItem, CardFilter } from './types';
+import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput } from './types';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -160,14 +160,31 @@ export async function testWebhook(url: string, secret?: string): Promise<{ ok: b
   });
 }
 
-export async function getSettings(): Promise<{ ok: boolean; settings: { llm_base?: string; llm_model?: string; has_llm_key: boolean; has_auth_token: boolean } }> {
+export async function getSettings(): Promise<{
+  ok: boolean;
+  settings: {
+    llm_base?: string;
+    llm_model?: string;
+    has_llm_key: boolean;
+    has_auth_token: boolean;
+    llm_profiles?: LLMProfile[];
+  };
+}> {
   return request('/api/v1/settings');
 }
 
-export async function patchSettings(payload: { auth_token?: string; llm_base?: string; llm_key?: string; llm_model?: string }): Promise<{ ok: boolean }> {
+export async function patchSettings(payload: {
+  auth_token?: string;
+  llm_base?: string;
+  llm_key?: string;
+  llm_model?: string;
+  llm_profiles?: LLMProfileInput[];
+  default_profile_id?: string;
+}): Promise<{ ok: boolean }> {
   return request('/api/v1/settings', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 }
+

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Card, ResearchItem } from '../types';
 import { fetchCardResearch, getErrorMessage } from '../api';
 import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus } from 'lucide-react';
+import { CustomSelect } from './CustomSelect';
+import { CARD_HORIZON_OPTIONS, CARD_STATUS_OPTIONS } from './selectOptions';
 
 interface CardModalProps {
   card: Card | null;
@@ -319,32 +321,25 @@ export const CardModal: React.FC<CardModalProps> = ({
 
           <div className="form-grid">
             <div className="form-group">
-              <label>Status</label>
-              <select
-                className="form-select"
+              <label htmlFor="card-status">Status</label>
+              <CustomSelect
+                id="card-status"
                 value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-              >
-                <option value="inbox">Inbox</option>
-                <option value="doing">Doing</option>
-                <option value="done">Done</option>
-                <option value="shelved">Shelved</option>
-                <option value="dismissed">Dismissed</option>
-              </select>
+                onChange={(val) => setStatus(val as any)}
+                options={CARD_STATUS_OPTIONS}
+                ariaLabel="Card status"
+              />
             </div>
 
             <div className="form-group">
-              <label>Horizon</label>
-              <select
-                className="form-select"
+              <label htmlFor="card-horizon">Horizon</label>
+              <CustomSelect
+                id="card-horizon"
                 value={horizon}
-                onChange={(e) => setHorizon(e.target.value as any)}
-              >
-                <option value="short-term">Short-term (Immediate action)</option>
-                <option value="medium-term">Medium-term (Planned)</option>
-                <option value="long-term">Long-term (Vision)</option>
-                <option value="lifetime">Lifetime (Bucket list / vision)</option>
-              </select>
+                onChange={(val) => setHorizon(val as any)}
+                options={CARD_HORIZON_OPTIONS}
+                ariaLabel="Card horizon"
+              />
             </div>
           </div>
 

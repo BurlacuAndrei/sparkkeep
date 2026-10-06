@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, Shield, Cpu, ArrowRight, CheckCircle2, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Sparkles, Shield, Cpu, ArrowRight, CheckCircle2, Lock, AlertCircle, Eye, EyeOff, Palette } from 'lucide-react';
 import * as api from '../api';
+import { ThemeSelector } from './ThemeSelector';
+import { useTheme } from '../context/ThemeContext';
 
 interface SetupWizardProps {
   onComplete: () => void;
 }
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
+  const { theme, resolvedTheme } = useTheme();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [authToken, setAuthToken] = useState('');
   const [confirmToken, setConfirmToken] = useState('');
@@ -115,7 +118,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         <div className="setup-stepper">
           <div className={`step-item ${step >= 1 ? 'active' : ''} ${step > 1 ? 'done' : ''}`}>
             <div className="step-circle">{step > 1 ? <CheckCircle2 size={16} /> : '1'}</div>
-            <span className="step-label">Security</span>
+            <span className="step-label">Look & Auth</span>
           </div>
           <div className="step-line" />
           <div className={`step-item ${step >= 2 ? 'active' : ''} ${step > 2 ? 'done' : ''}`}>
@@ -140,6 +143,19 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         {/* Step 1: Security & Master Auth */}
         {step === 1 && (
           <div className="setup-body">
+            {/* Visual Appearance & Theme Selection */}
+            <div className="setup-section-intro">
+              <Palette className="section-icon" size={20} />
+              <div>
+                <h3>Visual Appearance</h3>
+                <p>Choose your workspace look. Your preference takes effect immediately.</p>
+              </div>
+            </div>
+
+            <ThemeSelector />
+
+            <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '4px 0 8px 0' }} />
+
             <div className="setup-section-intro">
               <Shield className="section-icon" size={20} />
               <div>
@@ -282,6 +298,12 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             </div>
 
             <div className="setup-summary-card">
+              <div className="summary-row">
+                <span className="summary-key">Appearance Theme</span>
+                <span className="summary-value" style={{ textTransform: 'capitalize' }}>
+                  {theme === 'system' ? `System (${resolvedTheme})` : `${theme} Mode`}
+                </span>
+              </div>
               <div className="summary-row">
                 <span className="summary-key">Access Protection</span>
                 <span className="summary-value badge-success">Enabled (Custom Passphrase)</span>

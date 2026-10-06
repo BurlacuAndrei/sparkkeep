@@ -136,9 +136,7 @@ func (s *Service) UpdateLLMConfig(base, key, model string) {
 		if base != "" {
 			s.Analyze.BaseURL = base
 		}
-		if key != "" {
-			s.Analyze.APIKey = key
-		}
+		s.Analyze.APIKey = key
 		if model != "" {
 			s.Analyze.Model = model
 			s.Analyze.VisionModel = model

@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     ports:
       - "${SPARKKEEP_HTTP_PORT:-8080}:8080"
+    env_file:
+      - .env
     volumes:
       - ./data:/data
     extra_hosts:

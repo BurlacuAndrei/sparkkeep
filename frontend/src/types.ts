@@ -75,3 +75,22 @@ export interface LicenseStatus {
   is_lifetime: boolean;
   is_valid: boolean;
 }
+
+export interface LLMProfile {
+  id: string;
+  name: string;
+  base_url: string;
+  model: string;
+  has_key: boolean;
+  is_default: boolean;
+}
+
+export interface LLMProfileInput {
+  id?: string;
+  name: string;
+  base_url: string;
+  model: string;
+  api_key?: string;
+  is_default?: boolean;
+}
+

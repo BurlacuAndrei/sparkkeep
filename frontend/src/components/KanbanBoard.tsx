@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card } from '../types';
 import { CardItem } from './CardItem';
-import { Inbox, Zap, Compass, Archive, CheckCircle2 } from 'lucide-react';
+import { Inbox, Zap, Archive, CheckCircle2 } from 'lucide-react';
 
 interface KanbanBoardProps {
   cards: Card[];

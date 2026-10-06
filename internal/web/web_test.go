@@ -1493,3 +1493,157 @@ func TestWebhookEndpointAndGating(t *testing.T) {
 		t.Fatalf("unexpected webhook test resp: %+v", resp)
 	}
 }
+
+func TestMultipleLLMProfiles(t *testing.T) {
+	st := newStubStore()
+	analyzeClient := analyze.New(config.Config{
+		LLMBase:  "https://api.openai.com/v1",
+		LLMKey:   "sk-secret-initial",
+		LLMModel: "gpt-4o",
+	}, nil)
+	svc := &core.Service{
+		Store:   st,
+		Analyze: analyzeClient,
+		Logf:    t.Logf,
+	}
+	h := New(st, svc, config.Config{MaxUploadMB: 25})
+
+	// Pre-populate initial legacy settings in store
+	ctx := context.Background()
+	_ = st.SetSetting(ctx, "llm_base", "https://api.openai.com/v1")
+	_ = st.SetSetting(ctx, "llm_model", "gpt-4o")
+	_ = st.SetSetting(ctx, "llm_key", "sk-secret-initial")
+
+	// 1. GET /api/v1/settings should auto-create initial default profile
+	reqGet, _ := http.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+	rrGet := httptest.NewRecorder()
+	h.ServeHTTP(rrGet, reqGet)
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("expected 200 on GET /api/v1/settings, got %d", rrGet.Code)
+	}
+
+	bodyStr := rrGet.Body.String()
+	if strings.Contains(bodyStr, "sk-secret-initial") {
+		t.Fatalf("API key leaked in plain text in GET /api/v1/settings response: %s", bodyStr)
+	}
+
+	var getResp struct {
+		OK       bool `json:"ok"`
+		Settings struct {
+			LLMBase     string       `json:"llm_base"`
+			LLMModel    string       `json:"llm_model"`
+			HasLLMKey   bool         `json:"has_llm_key"`
+			LLMProfiles []LLMProfile `json:"llm_profiles"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(rrGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("unmarshal GET settings: %v", err)
+	}
+
+	if len(getResp.Settings.LLMProfiles) != 1 {
+		t.Fatalf("expected 1 auto-created profile, got %d", len(getResp.Settings.LLMProfiles))
+	}
+	p1 := getResp.Settings.LLMProfiles[0]
+	if p1.ID != "default" || p1.Model != "gpt-4o" || !p1.HasKey || !p1.IsDefault {
+		t.Fatalf("unexpected auto-created profile: %+v", p1)
+	}
+
+	// Verify llm_profiles was persisted into database
+	storedJSON, err := st.GetSetting(ctx, "llm_profiles")
+	if err != nil || storedJSON == "" {
+		t.Fatalf("expected llm_profiles stored in db, got err=%v val=%q", err, storedJSON)
+	}
+
+	// 2. PATCH /api/v1/settings: add a new profile and set it as default
+	patchPayload := `{
+		"llm_profiles": [
+			{
+				"id": "default",
+				"name": "OpenAI Default",
+				"base_url": "https://api.openai.com/v1",
+				"model": "gpt-4o",
+				"is_default": false
+			},
+			{
+				"id": "groq-fast",
+				"name": "Groq Llama 3.3",
+				"base_url": "https://api.groq.com/openai/v1",
+				"model": "llama-3.3-70b-versatile",
+				"api_key": "gsk-groqkey-12345",
+				"is_default": true
+			}
+		]
+	}`
+	reqPatch, _ := http.NewRequest(http.MethodPatch, "/api/v1/settings", strings.NewReader(patchPayload))
+	reqPatch.Header.Set("Content-Type", "application/json")
+	rrPatch := httptest.NewRecorder()
+	h.ServeHTTP(rrPatch, reqPatch)
+	if rrPatch.Code != http.StatusOK {
+		t.Fatalf("expected 200 on PATCH /api/v1/settings, got %d: %s", rrPatch.Code, rrPatch.Body.String())
+	}
+
+	// Verify active settings in store were updated to Groq
+	activeModel, _ := st.GetSetting(ctx, "llm_model")
+	activeBase, _ := st.GetSetting(ctx, "llm_base")
+	activeKey, _ := st.GetSetting(ctx, "llm_key")
+	if activeModel != "llama-3.3-70b-versatile" || activeBase != "https://api.groq.com/openai/v1" || activeKey != "gsk-groqkey-12345" {
+		t.Fatalf("store active settings not updated: model=%q base=%q key=%q", activeModel, activeBase, activeKey)
+	}
+
+	// Verify svc.Analyze was notified and updated dynamically
+	if svc.Analyze.Model != "llama-3.3-70b-versatile" || svc.Analyze.BaseURL != "https://api.groq.com/openai/v1" || svc.Analyze.APIKey != "gsk-groqkey-12345" {
+		t.Fatalf("svc.Analyze LLM config not updated: model=%q base=%q key=%q", svc.Analyze.Model, svc.Analyze.BaseURL, svc.Analyze.APIKey)
+	}
+
+	// 3. PATCH update profile without api_key: preserves existing key
+	patchPreserveKey := `{
+		"llm_profiles": [
+			{
+				"id": "default",
+				"name": "OpenAI Default Updated",
+				"base_url": "https://api.openai.com/v1",
+				"model": "gpt-4o-mini",
+				"is_default": false
+			},
+			{
+				"id": "groq-fast",
+				"name": "Groq Llama 3.3",
+				"base_url": "https://api.groq.com/openai/v1",
+				"model": "llama-3.3-70b-versatile",
+				"is_default": true
+			}
+		]
+	}`
+	reqPatch2, _ := http.NewRequest(http.MethodPatch, "/api/v1/settings", strings.NewReader(patchPreserveKey))
+	reqPatch2.Header.Set("Content-Type", "application/json")
+	rrPatch2 := httptest.NewRecorder()
+	h.ServeHTTP(rrPatch2, reqPatch2)
+	if rrPatch2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on PATCH 2, got %d", rrPatch2.Code)
+	}
+
+	// Verify default profile still retained "sk-secret-initial" even though api_key was empty in patch
+	storedJSON2, _ := st.GetSetting(ctx, "llm_profiles")
+	if !strings.Contains(storedJSON2, "sk-secret-initial") {
+		t.Fatalf("expected preserved API key in stored profiles, got: %s", storedJSON2)
+	}
+
+	// 4. Switch default back using default_profile_id
+	patchSwitch := `{"default_profile_id": "default"}`
+	reqPatch3, _ := http.NewRequest(http.MethodPatch, "/api/v1/settings", strings.NewReader(patchSwitch))
+	reqPatch3.Header.Set("Content-Type", "application/json")
+	rrPatch3 := httptest.NewRecorder()
+	h.ServeHTTP(rrPatch3, reqPatch3)
+	if rrPatch3.Code != http.StatusOK {
+		t.Fatalf("expected 200 on PATCH default switch, got %d", rrPatch3.Code)
+	}
+
+	activeModel3, _ := st.GetSetting(ctx, "llm_model")
+	activeKey3, _ := st.GetSetting(ctx, "llm_key")
+	if activeModel3 != "gpt-4o-mini" || activeKey3 != "sk-secret-initial" {
+		t.Fatalf("expected switched back to default model: model=%q key=%q", activeModel3, activeKey3)
+	}
+	if svc.Analyze.Model != "gpt-4o-mini" || svc.Analyze.APIKey != "sk-secret-initial" {
+		t.Fatalf("svc.Analyze not switched back: model=%q key=%q", svc.Analyze.Model, svc.Analyze.APIKey)
+	}
+}

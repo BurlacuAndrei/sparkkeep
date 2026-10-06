@@ -44,7 +44,6 @@ export const Header: React.FC<HeaderProps> = ({
           <Sparkles size={16} strokeWidth={1.75} color="#fff" />
         </div>
         <span className="brand-title">sparkkeep</span>
-        <span className="brand-badge">V2 Engine</span>
       </div>
 
       <div className="search-wrapper">

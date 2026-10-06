@@ -96,7 +96,7 @@ export function LicenseModal({
         width: '100vw',
         height: '100vh',
         zIndex: 99999,
-        background: 'rgba(5, 7, 12, 0.85)',
+        background: 'var(--modal-backdrop)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
         display: 'flex',

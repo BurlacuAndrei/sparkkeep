@@ -1,6 +1,8 @@
 import React from 'react';
 import { Tag } from '../types';
 import { Compass, Filter, Tag as TagIcon } from 'lucide-react';
+import { CustomSelect } from './CustomSelect';
+import { HORIZON_FILTER_OPTIONS, STATUS_FILTER_OPTIONS } from './selectOptions';
 
 interface SidebarProps {
   horizon: string;
@@ -28,18 +30,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Compass size={13} strokeWidth={1.5} style={{ display: 'inline', marginRight: 5 }} />
           Horizon
         </span>
-        <select
+        <CustomSelect
           id="horizon"
-          className="filter-select"
           value={horizon || 'all'}
-          onChange={(e) => onHorizonChange(e.target.value === 'all' ? '' : e.target.value)}
-        >
-          <option value="all">All Horizons</option>
-          <option value="short-term">⚡ Short-term (Actionable)</option>
-          <option value="medium-term">📅 Medium-term (Planned)</option>
-          <option value="long-term">🔭 Long-term (Vision)</option>
-          <option value="lifetime">🌟 Lifetime (Bucket list)</option>
-        </select>
+          onChange={(val) => onHorizonChange(val === 'all' ? '' : val)}
+          options={HORIZON_FILTER_OPTIONS}
+          size="sm"
+          ariaLabel="Filter by horizon"
+        />
       </div>
 
       <div className="filter-group">
@@ -47,19 +45,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Filter size={13} strokeWidth={1.5} style={{ display: 'inline', marginRight: 5 }} />
           Status
         </span>
-        <select
+        <CustomSelect
           id="status"
-          className="filter-select"
           value={status || 'all'}
-          onChange={(e) => onStatusChange(e.target.value === 'all' ? '' : e.target.value)}
-        >
-          <option value="all">All Statuses</option>
-          <option value="inbox">📥 Inbox</option>
-          <option value="doing">⚡ Doing</option>
-          <option value="done">✅ Done</option>
-          <option value="shelved">📦 Shelved</option>
-          <option value="dismissed">🚫 Dismissed</option>
-        </select>
+          onChange={(val) => onStatusChange(val === 'all' ? '' : val)}
+          options={STATUS_FILTER_OPTIONS}
+          size="sm"
+          ariaLabel="Filter by status"
+        />
       </div>
 
       <div className="filter-group">

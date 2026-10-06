@@ -13,14 +13,23 @@ import { LicenseModal } from './components/LicenseModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Bell, Lock } from 'lucide-react';
 import { CardActionsProvider } from './context/CardActionsContext';
+import { ThemeProvider } from './context/ThemeContext';
 
-export function App() {
+function AppContent() {
   const [cards, setCards] = useState<Card[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [digest, setDigest] = useState<DigestData | null>(null);
 
   // Filters & Navigation
-  const [viewMode, setViewMode] = useState<'kanban' | 'triage' | 'digest'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'triage' | 'digest'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sparkkeep_default_view');
+      if (saved === 'kanban' || saved === 'triage' || saved === 'digest') {
+        return saved;
+      }
+    }
+    return 'kanban';
+  });
   const [horizon, setHorizon] = useState('short-term');
   const [status, setStatus] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
@@ -390,6 +399,14 @@ export function App() {
       )}
       </div>
     </CardActionsProvider>
+  );
+}
+
+export function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
   );
 }
 

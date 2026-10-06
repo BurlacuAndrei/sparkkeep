@@ -354,6 +354,20 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 		a.svc.UpdateLLMConfig(b.LLMBase, b.LLMKey, b.LLMModel)
 	}
 
+	if b.LLMModel != "" || b.LLMBase != "" {
+		initial := []storedLLMProfile{{
+			ID:        "default",
+			Name:      "Default",
+			BaseURL:   b.LLMBase,
+			Model:     b.LLMModel,
+			APIKey:    b.LLMKey,
+			IsDefault: true,
+		}}
+		if data, err := json.Marshal(initial); err == nil && a.store != nil {
+			_ = a.store.SetSetting(ctx, "llm_profiles", string(data))
+		}
+	}
+
 	effectiveTok := a.effectiveAuthToken(ctx)
 	if effectiveTok != "" {
 		http.SetCookie(w, &http.Cookie{
@@ -365,6 +379,88 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": effectiveTok})
 }
 
+// LLMProfile represents a configured LLM endpoint and model.
+// API keys are never exposed in plaintext.
+type LLMProfile struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	BaseURL   string `json:"base_url"`
+	Model     string `json:"model"`
+	HasKey    bool   `json:"has_key"`
+	IsDefault bool   `json:"is_default"`
+}
+
+type storedLLMProfile struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	BaseURL   string `json:"base_url"`
+	Model     string `json:"model"`
+	APIKey    string `json:"api_key"`
+	IsDefault bool   `json:"is_default"`
+}
+
+type llmProfileInput struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	BaseURL   string `json:"base_url"`
+	Model     string `json:"model"`
+	APIKey    string `json:"api_key,omitempty"`
+	IsDefault bool   `json:"is_default"`
+}
+
+func (a *api) loadStoredProfiles(ctx context.Context) []storedLLMProfile {
+	if a.store == nil {
+		return nil
+	}
+	val, err := a.store.GetSetting(ctx, "llm_profiles")
+	if err != nil || strings.TrimSpace(val) == "" {
+		return nil
+	}
+	var profs []storedLLMProfile
+	if err := json.Unmarshal([]byte(val), &profs); err != nil {
+		return nil
+	}
+	return profs
+}
+
+func (a *api) ensureStoredProfiles(ctx context.Context, settings map[string]string) []storedLLMProfile {
+	profs := a.loadStoredProfiles(ctx)
+	if len(profs) > 0 {
+		return profs
+	}
+
+	base := settings["llm_base"]
+	model := settings["llm_model"]
+	key := settings["llm_key"]
+	if model == "" && a.svc != nil && a.svc.Analyze != nil {
+		model = a.svc.Analyze.Model
+		if base == "" {
+			base = a.svc.Analyze.BaseURL
+		}
+		if key == "" {
+			key = a.svc.Analyze.APIKey
+		}
+	}
+
+	if model != "" || base != "" {
+		initProf := storedLLMProfile{
+			ID:        "default",
+			Name:      "Default",
+			BaseURL:   base,
+			Model:     model,
+			APIKey:    key,
+			IsDefault: true,
+		}
+		profs = []storedLLMProfile{initProf}
+		if data, err := json.Marshal(profs); err == nil && a.store != nil {
+			_ = a.store.SetSetting(ctx, "llm_profiles", string(data))
+		}
+	} else {
+		profs = []storedLLMProfile{}
+	}
+	return profs
+}
+
 func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	settings, err := a.store.ListSettings(ctx)
@@ -372,13 +468,57 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
+
+	storedProfs := a.ensureStoredProfiles(ctx, settings)
+	hasDefault := false
+	for _, p := range storedProfs {
+		if p.IsDefault {
+			hasDefault = true
+			break
+		}
+	}
+	if !hasDefault && len(storedProfs) > 0 {
+		storedProfs[0].IsDefault = true
+	}
+
+	pubProfiles := make([]LLMProfile, len(storedProfs))
+	for i, p := range storedProfs {
+		pubProfiles[i] = LLMProfile{
+			ID:        p.ID,
+			Name:      p.Name,
+			BaseURL:   p.BaseURL,
+			Model:     p.Model,
+			HasKey:    p.APIKey != "",
+			IsDefault: p.IsDefault,
+		}
+	}
+
+	activeBase := settings["llm_base"]
+	activeModel := settings["llm_model"]
+	hasKey := settings["llm_key"] != ""
+	for _, p := range storedProfs {
+		if p.IsDefault {
+			if activeBase == "" {
+				activeBase = p.BaseURL
+			}
+			if activeModel == "" {
+				activeModel = p.Model
+			}
+			if !hasKey && p.APIKey != "" {
+				hasKey = true
+			}
+			break
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
-			"llm_base":       settings["llm_base"],
-			"llm_model":      settings["llm_model"],
-			"has_llm_key":    settings["llm_key"] != "",
+			"llm_base":       activeBase,
+			"llm_model":      activeModel,
+			"has_llm_key":    hasKey,
 			"has_auth_token": a.effectiveAuthToken(ctx) != "",
+			"llm_profiles":   pubProfiles,
 		},
 	})
 }
@@ -386,47 +526,151 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var b struct {
-		AuthToken *string `json:"auth_token,omitempty"`
-		LLMBase   *string `json:"llm_base,omitempty"`
-		LLMKey    *string `json:"llm_key,omitempty"`
-		LLMModel  *string `json:"llm_model,omitempty"`
+		AuthToken        *string            `json:"auth_token,omitempty"`
+		LLMBase          *string            `json:"llm_base,omitempty"`
+		LLMKey           *string            `json:"llm_key,omitempty"`
+		LLMModel         *string            `json:"llm_model,omitempty"`
+		LLMProfiles      *[]llmProfileInput `json:"llm_profiles,omitempty"`
+		DefaultProfileID *string            `json:"default_profile_id,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
 		return
 	}
 
-	var base, key, model string
 	if b.AuthToken != nil {
 		if err := a.store.SetSetting(ctx, "auth_token", *b.AuthToken); err != nil {
 			a.fail(w, err)
 			return
 		}
 	}
-	if b.LLMBase != nil {
-		base = *b.LLMBase
-		if err := a.store.SetSetting(ctx, "llm_base", base); err != nil {
-			a.fail(w, err)
-			return
-		}
+
+	settings, _ := a.store.ListSettings(ctx)
+	if settings == nil {
+		settings = map[string]string{}
 	}
-	if b.LLMKey != nil {
-		key = *b.LLMKey
-		if err := a.store.SetSetting(ctx, "llm_key", key); err != nil {
-			a.fail(w, err)
-			return
-		}
+	storedProfs := a.ensureStoredProfiles(ctx, settings)
+	existingMap := make(map[string]storedLLMProfile, len(storedProfs))
+	for _, p := range storedProfs {
+		existingMap[p.ID] = p
 	}
-	if b.LLMModel != nil {
-		model = *b.LLMModel
-		if err := a.store.SetSetting(ctx, "llm_model", model); err != nil {
-			a.fail(w, err)
-			return
+
+	profilesChanged := false
+
+	if b.LLMProfiles != nil {
+		profilesChanged = true
+		newProfs := make([]storedLLMProfile, 0, len(*b.LLMProfiles))
+		defaultIndex := -1
+		for _, inp := range *b.LLMProfiles {
+			id := strings.TrimSpace(inp.ID)
+			if id == "" {
+				id = fmt.Sprintf("prof-%d", time.Now().UnixNano())
+			}
+			key := inp.APIKey
+			if key == "" {
+				if ex, ok := existingMap[id]; ok {
+					key = ex.APIKey
+				}
+			}
+			isDef := inp.IsDefault
+			if b.DefaultProfileID != nil {
+				isDef = (id == *b.DefaultProfileID)
+			}
+			if isDef {
+				if defaultIndex >= 0 {
+					isDef = false
+				} else {
+					defaultIndex = len(newProfs)
+				}
+			}
+			newProfs = append(newProfs, storedLLMProfile{
+				ID:        id,
+				Name:      inp.Name,
+				BaseURL:   inp.BaseURL,
+				Model:     inp.Model,
+				APIKey:    key,
+				IsDefault: isDef,
+			})
+		}
+		if defaultIndex < 0 && len(newProfs) > 0 {
+			newProfs[0].IsDefault = true
+		}
+		storedProfs = newProfs
+	} else if b.DefaultProfileID != nil {
+		profilesChanged = true
+		targetID := *b.DefaultProfileID
+		for i := range storedProfs {
+			storedProfs[i].IsDefault = (storedProfs[i].ID == targetID)
 		}
 	}
 
-	if a.svc != nil {
-		a.svc.UpdateLLMConfig(base, key, model)
+	// Find the default profile (if any)
+	var defProf *storedLLMProfile
+	for i := range storedProfs {
+		if storedProfs[i].IsDefault {
+			defProf = &storedProfs[i]
+			break
+		}
+	}
+
+	// Legacy direct updates to llm_base, llm_key, llm_model
+	if b.LLMBase != nil || b.LLMKey != nil || b.LLMModel != nil {
+		profilesChanged = true
+		if defProf != nil {
+			if b.LLMBase != nil {
+				defProf.BaseURL = *b.LLMBase
+			}
+			if b.LLMKey != nil {
+				defProf.APIKey = *b.LLMKey
+			}
+			if b.LLMModel != nil {
+				defProf.Model = *b.LLMModel
+			}
+		}
+	}
+
+	if defProf != nil {
+		if err := a.store.SetSetting(ctx, "llm_base", defProf.BaseURL); err != nil {
+			a.fail(w, err)
+			return
+		}
+		if err := a.store.SetSetting(ctx, "llm_model", defProf.Model); err != nil {
+			a.fail(w, err)
+			return
+		}
+		if err := a.store.SetSetting(ctx, "llm_key", defProf.APIKey); err != nil {
+			a.fail(w, err)
+			return
+		}
+		if a.svc != nil {
+			a.svc.UpdateLLMConfig(defProf.BaseURL, defProf.APIKey, defProf.Model)
+		}
+	} else if b.LLMBase != nil || b.LLMKey != nil || b.LLMModel != nil {
+		var base, key, model string
+		if b.LLMBase != nil {
+			base = *b.LLMBase
+			_ = a.store.SetSetting(ctx, "llm_base", base)
+		}
+		if b.LLMKey != nil {
+			key = *b.LLMKey
+			_ = a.store.SetSetting(ctx, "llm_key", key)
+		}
+		if b.LLMModel != nil {
+			model = *b.LLMModel
+			_ = a.store.SetSetting(ctx, "llm_model", model)
+		}
+		if a.svc != nil {
+			a.svc.UpdateLLMConfig(base, key, model)
+		}
+	}
+
+	if profilesChanged && len(storedProfs) > 0 {
+		if data, err := json.Marshal(storedProfs); err == nil && a.store != nil {
+			if err := a.store.SetSetting(ctx, "llm_profiles", string(data)); err != nil {
+				a.fail(w, err)
+				return
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
