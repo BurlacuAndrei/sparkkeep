@@ -66,7 +66,8 @@ type Fetched struct {
 }
 
 var (
-	urlRe   = regexp.MustCompile(`https?://[^\s]+`)
+	URLRe   = regexp.MustCompile(`https?://[^\s]+`)
+	urlRe   = URLRe
 	tagRe   = regexp.MustCompile(`<[^>]*>`)
 	blankRe = regexp.MustCompile(`\n{3,}`)
 	titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)

@@ -523,3 +523,83 @@ func TestClipMultiByteUnicode(t *testing.T) {
 	}
 }
 
+func TestExtractJSONNewAndLegacyShapes(t *testing.T) {
+	// 1. New shape with references
+	newPayload := `{
+		"executive_summary": "Summary",
+		"cards": [
+			{
+				"title": "FFmpeg Tooling",
+				"summary": "Video CLI tool",
+				"horizon": "short-term",
+				"tags": ["video"],
+				"references": [
+					{"kind": "tool", "label": "ffmpeg"},
+					{"kind": "repo", "label": "ffmpeg/ffmpeg", "url": "https://github.com/ffmpeg/ffmpeg"}
+				]
+			}
+		]
+	}`
+	resNew, err := ExtractJSON(newPayload)
+	if err != nil {
+		t.Fatalf("ExtractJSON(newPayload): %v", err)
+	}
+	if len(resNew.Cards[0].References) != 2 {
+		t.Fatalf("got %d references, want 2", len(resNew.Cards[0].References))
+	}
+	if resNew.Cards[0].References[0].Kind != port.RefKindTool || resNew.Cards[0].References[0].Label != "ffmpeg" {
+		t.Errorf("ref 0 mismatch: %+v", resNew.Cards[0].References[0])
+	}
+	if resNew.Cards[0].References[1].Kind != port.RefKindRepo || resNew.Cards[0].References[1].Label != "ffmpeg/ffmpeg" {
+		t.Errorf("ref 1 mismatch: %+v", resNew.Cards[0].References[1])
+	}
+
+	// 2. Legacy shape with links[] mapped to kind:url / kind:repo
+	legacyPayload := `{
+		"cards": [
+			{
+				"title": "Legacy Links Card",
+				"summary": "Summary",
+				"horizon": "short-term",
+				"tags": [],
+				"links": [
+					"https://example.com/guide?utm_source=hackernews",
+					"https://github.com/gin-gonic/gin"
+				]
+			}
+		]
+	}`
+	resLegacy, err := ExtractJSON(legacyPayload)
+	if err != nil {
+		t.Fatalf("ExtractJSON(legacyPayload): %v", err)
+	}
+	if len(resLegacy.Cards[0].References) != 2 {
+		t.Fatalf("got %d references, want 2", len(resLegacy.Cards[0].References))
+	}
+	if resLegacy.Cards[0].References[0].Kind != port.RefKindURL || resLegacy.Cards[0].References[0].URL != "https://example.com/guide" {
+		t.Errorf("legacy link 0 mismatch (tracking param should be stripped): %+v", resLegacy.Cards[0].References[0])
+	}
+	if resLegacy.Cards[0].References[1].Kind != port.RefKindRepo || resLegacy.Cards[0].References[1].URL != "https://github.com/gin-gonic/gin" {
+		t.Errorf("legacy link 1 mismatch (github should be repo): %+v", resLegacy.Cards[0].References[1])
+	}
+
+	// 3. Legacy array shape
+	arrayPayload := `[
+		{
+			"title": "Array Card",
+			"summary": "Summary",
+			"horizon": "medium-term",
+			"tags": [],
+			"links": ["https://golang.org"]
+		}
+	]`
+	resArr, err := ExtractJSON(arrayPayload)
+	if err != nil {
+		t.Fatalf("ExtractJSON(arrayPayload): %v", err)
+	}
+	if len(resArr.Cards[0].References) != 1 || resArr.Cards[0].References[0].Kind != port.RefKindURL || resArr.Cards[0].References[0].URL != "https://golang.org" {
+		t.Errorf("legacy array ref mismatch: %+v", resArr.Cards[0].References)
+	}
+}
+
+

@@ -28,11 +28,14 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 5 {
-		t.Fatalf("version = %d, want 5", version)
+	if version != 6 {
+		t.Fatalf("version = %d, want 6", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
+	}
+	if _, err := s.db.Exec(`SELECT 1 FROM card_references LIMIT 1`); err != nil {
+		t.Fatalf("card_references table: %v", err)
 	}
 }
 
@@ -921,13 +924,13 @@ func TestMigrationBackfill(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	// Verify schema version is 5
+	// Verify schema version is 6
 	var version int
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 5 {
-		t.Fatalf("version = %d, want 5", version)
+	if version != 6 {
+		t.Fatalf("version = %d, want 6", version)
 	}
 
 	// Verify backfilled captures exist
@@ -985,4 +988,79 @@ func TestMigrationBackfill(t *testing.T) {
 		t.Fatal("splitCard zero ID")
 	}
 }
+
+func TestCardReferencesRoundTrip(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	refs := []port.Reference{
+		{Kind: port.RefKindRepo, Label: "gin-gonic/gin", URL: "https://github.com/gin-gonic/gin"},
+		{Kind: port.RefKindTool, Label: "ffmpeg"},
+		{Kind: port.RefKindURL, Label: "https://example.com/docs", URL: "https://example.com/docs"},
+	}
+
+	c, err := s.CreateCard(ctx, port.Card{
+		Title:      "Card with References",
+		References: refs,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	got, err := s.GetCard(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if len(got.References) != 3 {
+		t.Fatalf("got %d references, want 3", len(got.References))
+	}
+	if got.References[0].Kind != port.RefKindRepo || got.References[0].Label != "gin-gonic/gin" || got.References[0].URL != "https://github.com/gin-gonic/gin" {
+		t.Errorf("ref 0 mismatch: %+v", got.References[0])
+	}
+	if got.References[1].Kind != port.RefKindTool || got.References[1].Label != "ffmpeg" || got.References[1].URL != "" {
+		t.Errorf("ref 1 mismatch: %+v", got.References[1])
+	}
+	if got.References[2].Kind != port.RefKindURL || got.References[2].Label != "https://example.com/docs" || got.References[2].URL != "https://example.com/docs" {
+		t.Errorf("ref 2 mismatch: %+v", got.References[2])
+	}
+
+	// ListCards batch-hydration check
+	cards, err := s.ListCards(ctx, port.CardFilter{})
+	if err != nil {
+		t.Fatalf("ListCards: %v", err)
+	}
+	var found *port.Card
+	for i := range cards {
+		if cards[i].ID == c.ID {
+			found = &cards[i]
+			break
+		}
+	}
+	if found == nil || len(found.References) != 3 {
+		t.Fatalf("ListCards did not hydrate references correctly: %+v", found)
+	}
+
+	// UpdateCard with replacement references
+	newRefs := []port.Reference{
+		{Kind: port.RefKindPerson, Label: "Alan Turing"},
+	}
+	updated, err := s.UpdateCard(ctx, c.ID, port.CardPatch{
+		References: &newRefs,
+	})
+	if err != nil {
+		t.Fatalf("UpdateCard references: %v", err)
+	}
+	if len(updated.References) != 1 || updated.References[0].Label != "Alan Turing" {
+		t.Fatalf("updated references mismatch: %+v", updated.References)
+	}
+
+	// Reload to verify DB state
+	reloaded, err := s.GetCard(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("reloaded: %v", err)
+	}
+	if len(reloaded.References) != 1 || reloaded.References[0].Label != "Alan Turing" {
+		t.Fatalf("reloaded references mismatch: %+v", reloaded.References)
+	}
+}
+
 

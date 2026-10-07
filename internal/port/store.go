@@ -28,6 +28,7 @@ type Store interface {
 	// into shelved and returns how many rows it changed.
 	ShelveStale(ctx context.Context, days int) (int64, error)
 	SetCardTags(ctx context.Context, id int64, tags []string) error
+	SetCardReferences(ctx context.Context, id int64, refs []Reference) error
 	ListTags(ctx context.Context) ([]Tag, error)
 	CreateResearch(ctx context.Context, cardID int64, query string) (Research, error)
 	HasActiveResearch(ctx context.Context, cardID int64) (bool, error)

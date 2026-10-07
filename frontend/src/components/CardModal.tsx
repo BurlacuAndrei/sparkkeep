@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Card, ResearchItem } from '../types';
+import { Card, ResearchItem, Reference, ReferenceKind } from '../types';
 import { fetchCardResearch, getErrorMessage } from '../api';
-import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus } from 'lucide-react';
+import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus, Link2 } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
 import { CARD_HORIZON_OPTIONS, CARD_STATUS_OPTIONS } from './selectOptions';
 
@@ -47,6 +47,10 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [status, setStatus] = useState(card?.status || 'inbox');
   const [note, setNote] = useState(card?.source_note || '');
   const [tagsInput, setTagsInput] = useState((card?.tags || []).join(', '));
+  const [references, setReferences] = useState<Reference[]>(card?.references || []);
+  const [newRefKind, setNewRefKind] = useState<ReferenceKind>('url');
+  const [newRefLabel, setNewRefLabel] = useState('');
+  const [newRefUrl, setNewRefUrl] = useState('');
   const [actions, setActions] = useState<string[]>(card?.proposed_actions || []);
   const [completedActions, setCompletedActions] = useState<Record<number, boolean>>({});
   const [newAction, setNewAction] = useState('');
@@ -98,6 +102,25 @@ export const CardModal: React.FC<CardModalProps> = ({
     setNewAction('');
   };
 
+  const removeReference = (index: number) => {
+    setReferences((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addReference = () => {
+    const lbl = newRefLabel.trim();
+    const u = newRefUrl.trim();
+    if (!lbl && !u) return;
+    const item: Reference = {
+      kind: newRefKind,
+      label: lbl || u,
+      ...(u ? { url: u } : {}),
+    };
+    setReferences((prev) => [...prev, item]);
+    setNewRefLabel('');
+    setNewRefUrl('');
+    setNewRefKind('url');
+  };
+
   const appendFindingsAsActions = () => {
     if (!research) return;
     const seen = new Set(actions.map((a) => a.trim().toLowerCase()));
@@ -121,6 +144,7 @@ export const CardModal: React.FC<CardModalProps> = ({
       status: status as any,
       source_note: note,
       tags: tagsInput.split(',').map((t) => t.trim()).filter(Boolean),
+      references,
       proposed_actions: actions,
     });
     onClose();
@@ -351,6 +375,148 @@ export const CardModal: React.FC<CardModalProps> = ({
               value={tagsInput}
               onChange={(e) => setTagsInput(e.target.value)}
             />
+          </div>
+
+          <div className="form-group">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Link2 size={13} strokeWidth={1.5} color="#38bdf8" />
+                <span>References</span>
+              </label>
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                {references.length} {references.length === 1 ? 'item' : 'items'}
+              </span>
+            </div>
+
+            {references.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                {references.map((ref, idx) => (
+                  <div
+                    key={idx}
+                    className="reference-item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      padding: '5px 8px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-sm)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                      <span className={`ref-kind-chip ref-kind-${ref.kind}`}>
+                        {ref.kind}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          color: '#e2e8f0',
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                        title={ref.label}
+                      >
+                        {ref.label || ref.url}
+                      </span>
+                      {ref.url && (
+                        <a
+                          href={ref.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            color: '#38bdf8',
+                            fontSize: 12,
+                            textDecoration: 'none',
+                            marginLeft: 'auto',
+                            paddingRight: 4,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            maxWidth: 220,
+                          }}
+                          title={ref.url}
+                        >
+                          <ExternalLink size={11} strokeWidth={1.5} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{ref.url}</span>
+                        </a>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="close-btn"
+                      onClick={() => removeReference(idx)}
+                      title="Remove reference"
+                      aria-label={`Remove reference ${ref.label || ref.url}`}
+                    >
+                      <Trash2 size={13} strokeWidth={1.5} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <select
+                className="form-input"
+                value={newRefKind}
+                onChange={(e) => setNewRefKind(e.target.value as ReferenceKind)}
+                style={{ width: 95, padding: '4px 6px', fontSize: 12 }}
+                aria-label="Reference kind"
+              >
+                <option value="url">url</option>
+                <option value="repo">repo</option>
+                <option value="tool">tool</option>
+                <option value="product">product</option>
+                <option value="person">person</option>
+                <option value="org">org</option>
+                <option value="paper">paper</option>
+                <option value="other">other</option>
+              </select>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Label or entity name..."
+                value={newRefLabel}
+                onChange={(e) => setNewRefLabel(e.target.value)}
+                style={{ flex: '1 1 140px', minWidth: 120, padding: '4px 8px', fontSize: 12.5 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addReference();
+                  }
+                }}
+              />
+              <input
+                type="text"
+                className="form-input"
+                placeholder="URL (optional)..."
+                value={newRefUrl}
+                onChange={(e) => setNewRefUrl(e.target.value)}
+                style={{ flex: '1 1 160px', minWidth: 140, padding: '4px 8px', fontSize: 12.5 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addReference();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={addReference}
+                style={{ padding: '4px 10px', fontSize: 12 }}
+              >
+                <Plus size={12} strokeWidth={1.5} color="#34d399" />
+                <span>Add Ref</span>
+              </button>
+            </div>
           </div>
 
           {card.source_url && (

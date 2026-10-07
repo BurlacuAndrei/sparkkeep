@@ -242,7 +242,7 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 
 	var ids []int64
 	for _, idea := range res.Cards {
-		url := firstURL(fetched, idea.Links)
+		url := firstURL(fetched, idea.Links, idea.References)
 		card := cardFromIdea(idea, res, url, fetched.Caption)
 		if capRow.ID > 0 {
 			card.CaptureID = &capRow.ID
@@ -359,11 +359,16 @@ func cardFromIdea(idea analyze.Idea, res analyze.AnalysisResult, url, note strin
 	if len(actions) == 0 {
 		actions = res.ProposedActions
 	}
+	refs := idea.References
+	if refs == nil {
+		refs = []port.Reference{}
+	}
 	return port.Card{
 		Title:            idea.Title,
 		Summary:          idea.Summary,
 		Horizon:          idea.Horizon,
 		Tags:             idea.Tags,
+		References:       refs,
 		SourceURL:        url,
 		SourceNote:       note,
 		Status:           port.StatusInbox,
@@ -573,7 +578,7 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 
 	var createdCards []port.Card
 	for _, idea := range res.Cards {
-		url := firstURL(fetched, idea.Links)
+		url := firstURL(fetched, idea.Links, idea.References)
 		if url == "" {
 			url = card.SourceURL
 		}
@@ -909,14 +914,19 @@ func mergeFetched(a, b capture.Fetched) capture.Fetched {
 }
 
 // firstURL is the card's SourceURL: the fetched URL, else the first idea
-// link the model reported.
-func firstURL(fetched capture.Fetched, links []string) string {
+// link or reference URL reported.
+func firstURL(fetched capture.Fetched, links []string, refs []port.Reference) string {
 	if fetched.URL != "" {
 		return fetched.URL
 	}
 	for _, l := range links {
 		if strings.TrimSpace(l) != "" {
 			return l
+		}
+	}
+	for _, r := range refs {
+		if strings.TrimSpace(r.URL) != "" {
+			return r.URL
 		}
 	}
 	return ""

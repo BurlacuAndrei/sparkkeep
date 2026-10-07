@@ -1,3 +1,19 @@
+export type ReferenceKind =
+  | 'url'
+  | 'repo'
+  | 'tool'
+  | 'product'
+  | 'person'
+  | 'org'
+  | 'paper'
+  | 'other';
+
+export interface Reference {
+  kind: ReferenceKind;
+  label: string;
+  url?: string;
+}
+
 export interface Card {
   id: number;
   capture_id?: number | null;
@@ -8,6 +24,7 @@ export interface Card {
   source_url: string;
   source_note: string;
   tags: string[];
+  references?: Reference[];
   executive_summary?: string;
   value_proposition?: string;
   proposed_actions?: string[];

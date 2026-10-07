@@ -28,14 +28,15 @@ import (
 )
 
 type Idea struct {
-	Title            string   `json:"title"`
-	Summary          string   `json:"summary"`
-	Horizon          string   `json:"horizon"` // "short-term" | "medium-term" | "long-term" | "lifetime"
-	Tags             []string `json:"tags"`
-	Links            []string `json:"links"`
-	ExecutiveSummary string   `json:"executive_summary,omitempty"`
-	ValueProposition string   `json:"value_proposition,omitempty"`
-	ProposedActions  []string `json:"proposed_actions,omitempty"`
+	Title            string           `json:"title"`
+	Summary          string           `json:"summary"`
+	Horizon          string           `json:"horizon"` // "short-term" | "medium-term" | "long-term" | "lifetime"
+	Tags             []string         `json:"tags"`
+	Links            []string         `json:"links,omitempty"`
+	References       []port.Reference `json:"references,omitempty"`
+	ExecutiveSummary string           `json:"executive_summary,omitempty"`
+	ValueProposition string           `json:"value_proposition,omitempty"`
+	ProposedActions  []string         `json:"proposed_actions,omitempty"`
 }
 
 type AnalysisResult struct {
@@ -242,7 +243,15 @@ func (c *Client) Analyze(ctx context.Context, payload capture.Fetched) (Analysis
 	if err != nil {
 		return AnalysisResult{}, err
 	}
-	return ExtractJSON(content)
+	res, err := ExtractJSON(content)
+	if err != nil {
+		return AnalysisResult{}, err
+	}
+	deterministic := ExtractDeterministicReferences(payload)
+	for i := range res.Cards {
+		res.Cards[i].References = MergeReferences(res.Cards[i].References, deterministic)
+	}
+	return res, nil
 }
 
 // Ask issues one chat completion for a free-text prompt and returns the raw
@@ -318,9 +327,7 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 		if len(res.Cards) == 0 {
 			return AnalysisResult{}, ErrInvalidResponse
 		}
-		for i := range res.Cards {
-			res.Cards[i].Horizon = normalizeHorizon(res.Cards[i].Horizon)
-		}
+		res.Cards = normalizeIdeaCards(res.Cards)
 		if err := validateCards(res.Cards); err != nil {
 			return AnalysisResult{}, err
 		}
@@ -334,9 +341,7 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 		if err := json.Unmarshal([]byte(s), &cards); err != nil {
 			return AnalysisResult{}, ErrInvalidResponse
 		}
-		for i := range cards {
-			cards[i].Horizon = normalizeHorizon(cards[i].Horizon)
-		}
+		cards = normalizeIdeaCards(cards)
 		if err := validateCards(cards); err != nil {
 			return AnalysisResult{}, err
 		}
@@ -353,6 +358,42 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 	default:
 		return AnalysisResult{}, ErrInvalidResponse
 	}
+}
+
+func normalizeIdeaCards(cards []Idea) []Idea {
+	for i := range cards {
+		cards[i].Horizon = normalizeHorizon(cards[i].Horizon)
+		var legacyRefs []port.Reference
+		for _, l := range cards[i].Links {
+			l = strings.TrimSpace(l)
+			if l == "" {
+				continue
+			}
+			canon := CanonicalURL(l)
+			if canon == "" {
+				canon = l
+			}
+			kind := port.RefKindURL
+			label := canon
+			if IsGitHubURL(canon) {
+				kind = port.RefKindRepo
+				label = GitHubRepoLabel(canon)
+			}
+			legacyRefs = append(legacyRefs, port.Reference{
+				Kind:  kind,
+				Label: label,
+				URL:   canon,
+			})
+		}
+		cards[i].References = MergeReferences(cards[i].References, legacyRefs)
+		if cards[i].Tags == nil {
+			cards[i].Tags = []string{}
+		}
+		if cards[i].ProposedActions == nil {
+			cards[i].ProposedActions = []string{}
+		}
+	}
+	return cards
 }
 
 func normalizeHorizon(raw string) string {
@@ -430,13 +471,20 @@ Return ONLY a valid JSON object matching this schema:
       "summary": "2-3 lines summarizing this distinct takeaway, project, or tool",
       "horizon": "short-term",
       "tags": ["lowercase tags, max 5"],
-      "links": ["source links or references"]
+      "references": [
+        {
+          "kind": "tool",
+          "label": "name or label",
+          "url": "optional url"
+        }
+      ]
     }
   ]
 }
 
 Rules:
 - horizon must be "short-term" (actionable now/soon), "medium-term" (planned), "long-term" (vision), or "lifetime" (bucket item).
+- references: extract named entities (kind: tool, product, person, org, paper, repo, other) and any explicit links (kind: url or repo). url is optional for entities.
 - One card per distinct idea or tool; if one idea, exactly one card; never merge; never drop.
 - EXTRACTION NOTES are warnings about what could NOT be read. Never present a note's
   subject as content you learned. If content is missing, say so plainly in the summary.

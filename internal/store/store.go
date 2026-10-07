@@ -110,7 +110,10 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	if c.ProposedActions == nil {
 		c.ProposedActions = []string{}
 	}
-	if len(c.Tags) > 0 {
+	if c.References == nil {
+		c.References = []port.Reference{}
+	}
+	if len(c.Tags) > 0 || len(c.References) > 0 {
 		tx, ok := exec.(*sql.Tx)
 		if !ok {
 			tx, err = s.db.BeginTx(ctx, nil)
@@ -125,6 +128,13 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 				return port.Card{}, err
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO cards_tags (card_id, tag_id) VALUES (?, ?)`, id, tagID); err != nil {
+				return port.Card{}, err
+			}
+		}
+		for i, ref := range c.References {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO card_references (card_id, kind, label, url, position) VALUES (?, ?, ?, ?, ?)`,
+				id, ref.Kind, ref.Label, ref.URL, i); err != nil {
 				return port.Card{}, err
 			}
 		}
@@ -168,7 +178,31 @@ func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 		return port.Card{}, err
 	}
 	c.Tags = tags
+	refs, err := s.cardReferences(ctx, id)
+	if err != nil {
+		return port.Card{}, err
+	}
+	c.References = refs
 	return c, nil
+}
+
+func (s *Store) cardReferences(ctx context.Context, cardID int64) ([]port.Reference, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT kind, label, url FROM card_references WHERE card_id = ? ORDER BY position ASC, id ASC`,
+		cardID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	refs := []port.Reference{}
+	for rows.Next() {
+		var r port.Reference
+		if err := rows.Scan(&r.Kind, &r.Label, &r.URL); err != nil {
+			return nil, err
+		}
+		refs = append(refs, r)
+	}
+	return refs, rows.Err()
 }
 
 // GetCardBySourceURL returns the oldest card bearing url (trimmed) or
@@ -323,8 +357,47 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		tagRows.Close()
 	}
 
+	refsByCard := make(map[int64][]port.Reference, len(cards))
+	for i := 0; i < len(cards); i += tagBatchSize {
+		end := i + tagBatchSize
+		if end > len(cards) {
+			end = len(cards)
+		}
+		chunk := cards[i:end]
+		cardIDs := make([]any, len(chunk))
+		placeholders := make([]string, len(chunk))
+		for j, c := range chunk {
+			cardIDs[j] = c.ID
+			placeholders[j] = "?"
+		}
+		refQuery := fmt.Sprintf(`SELECT card_id, kind, label, url FROM card_references WHERE card_id IN (%s) ORDER BY position ASC, id ASC`, strings.Join(placeholders, ","))
+		refRows, err := s.db.QueryContext(ctx, refQuery, cardIDs...)
+		if err != nil {
+			return nil, err
+		}
+		for refRows.Next() {
+			var cid int64
+			var r port.Reference
+			if err := refRows.Scan(&cid, &r.Kind, &r.Label, &r.URL); err != nil {
+				refRows.Close()
+				return nil, err
+			}
+			refsByCard[cid] = append(refsByCard[cid], r)
+		}
+		if err := refRows.Err(); err != nil {
+			refRows.Close()
+			return nil, err
+		}
+		refRows.Close()
+	}
+
 	for i := range cards {
 		cards[i].Tags = tagsByCard[cards[i].ID]
+		refs := refsByCard[cards[i].ID]
+		if refs == nil {
+			refs = []port.Reference{}
+		}
+		cards[i].References = refs
 	}
 	return cards, nil
 }
@@ -388,6 +461,13 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 	if p.CaptureID != nil {
 		b.set("capture_id", *p.CaptureID)
 	}
+	if p.References != nil {
+		if err := s.SetCardReferences(ctx, id, *p.References); err != nil {
+			return port.Card{}, err
+		}
+		// ensure updated_at is refreshed on the card
+		b.set("updated_at", now())
+	}
 	if b.empty() {
 		return s.GetCard(ctx, id)
 	}
@@ -430,6 +510,25 @@ func (s *Store) SetCardTags(ctx context.Context, id int64, tags []string) error 
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO cards_tags (card_id, tag_id) VALUES (?, ?)`, id, tagID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) SetCardReferences(ctx context.Context, id int64, refs []port.Reference) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM card_references WHERE card_id = ?`, id); err != nil {
+		return err
+	}
+	for i, ref := range refs {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO card_references (card_id, kind, label, url, position) VALUES (?, ?, ?, ?, ?)`,
+			id, ref.Kind, ref.Label, ref.URL, i); err != nil {
 			return err
 		}
 	}

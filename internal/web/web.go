@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
 	"sparkkeep/internal/license"
@@ -808,10 +809,11 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 		Status           string   `json:"status"`
 		SourceURL        string   `json:"source_url"`
 		SourceNote       string   `json:"source_note"`
-		Tags             []string `json:"tags"`
-		ExecutiveSummary string   `json:"executive_summary"`
-		ValueProposition string   `json:"value_proposition"`
-		ProposedActions  []string `json:"proposed_actions"`
+		Tags             []string         `json:"tags"`
+		References       []port.Reference `json:"references"`
+		ExecutiveSummary string           `json:"executive_summary"`
+		ValueProposition string           `json:"value_proposition"`
+		ProposedActions  []string         `json:"proposed_actions"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -836,6 +838,36 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 	if u := strings.TrimSpace(b.SourceURL); u != "" {
 		b.SourceURL = u
 	}
+	for i := range b.References {
+		ref := &b.References[i]
+		ref.Kind = strings.ToLower(strings.TrimSpace(ref.Kind))
+		if ref.Kind == "" {
+			ref.Kind = port.RefKindOther
+		}
+		if !port.ValidReferenceKind(ref.Kind) {
+			writeErr(w, http.StatusBadRequest, "invalid reference kind: "+ref.Kind)
+			return
+		}
+		ref.Label = strings.TrimSpace(ref.Label)
+		ref.URL = strings.TrimSpace(ref.URL)
+		if ref.URL != "" {
+			ref.URL = analyze.CanonicalURL(ref.URL)
+			if analyze.IsGitHubURL(ref.URL) && ref.Kind == port.RefKindURL {
+				ref.Kind = port.RefKindRepo
+			}
+		}
+		if ref.Label == "" {
+			if ref.URL != "" {
+				if ref.Kind == port.RefKindRepo {
+					ref.Label = analyze.GitHubRepoLabel(ref.URL)
+				} else {
+					ref.Label = ref.URL
+				}
+			} else {
+				ref.Label = ref.Kind
+			}
+		}
+	}
 	card, err := a.store.CreateCard(r.Context(), port.Card{
 		Title:            b.Title,
 		Summary:          b.Summary,
@@ -844,6 +876,7 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 		SourceURL:        b.SourceURL,
 		SourceNote:       b.SourceNote,
 		Tags:             b.Tags,
+		References:       b.References,
 		ExecutiveSummary: b.ExecutiveSummary,
 		ValueProposition: b.ValueProposition,
 		ProposedActions:  b.ProposedActions,
@@ -882,13 +915,14 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Status           *string   `json:"status"`
-		Horizon          *string   `json:"horizon"`
-		Note             *string   `json:"note"`
-		Tags             []string  `json:"tags"`
-		ExecutiveSummary *string   `json:"executive_summary"`
-		ValueProposition *string   `json:"value_proposition"`
-		ProposedActions  *[]string `json:"proposed_actions"`
+		Status           *string           `json:"status"`
+		Horizon          *string           `json:"horizon"`
+		Note             *string           `json:"note"`
+		Tags             []string          `json:"tags"`
+		References       *[]port.Reference `json:"references"`
+		ExecutiveSummary *string           `json:"executive_summary"`
+		ValueProposition *string           `json:"value_proposition"`
+		ProposedActions  *[]string         `json:"proposed_actions"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -902,6 +936,38 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid horizon: "+*b.Horizon)
 		return
 	}
+	if b.References != nil {
+		for i := range *b.References {
+			ref := &(*b.References)[i]
+			ref.Kind = strings.ToLower(strings.TrimSpace(ref.Kind))
+			if ref.Kind == "" {
+				ref.Kind = port.RefKindOther
+			}
+			if !port.ValidReferenceKind(ref.Kind) {
+				writeErr(w, http.StatusBadRequest, "invalid reference kind: "+ref.Kind)
+				return
+			}
+			ref.Label = strings.TrimSpace(ref.Label)
+			ref.URL = strings.TrimSpace(ref.URL)
+			if ref.URL != "" {
+				ref.URL = analyze.CanonicalURL(ref.URL)
+				if analyze.IsGitHubURL(ref.URL) && ref.Kind == port.RefKindURL {
+					ref.Kind = port.RefKindRepo
+				}
+			}
+			if ref.Label == "" {
+				if ref.URL != "" {
+					if ref.Kind == port.RefKindRepo {
+						ref.Label = analyze.GitHubRepoLabel(ref.URL)
+					} else {
+						ref.Label = ref.URL
+					}
+				} else {
+					ref.Label = ref.Kind
+				}
+			}
+		}
+	}
 	card, err := a.store.GetCard(r.Context(), id)
 	if err != nil {
 		a.fail(w, err)
@@ -914,8 +980,9 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		ExecutiveSummary: b.ExecutiveSummary,
 		ValueProposition: b.ValueProposition,
 		ProposedActions:  b.ProposedActions,
+		References:       b.References,
 	}
-	if patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil {
+	if patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil || patch.References != nil {
 		card, err = a.store.UpdateCard(r.Context(), id, patch)
 		if err != nil {
 			a.fail(w, err)

@@ -90,6 +90,19 @@ func CardToMarkdown(c port.Card) string {
 		sb.WriteString("\n\n")
 	}
 
+	// References
+	if len(c.References) > 0 {
+		sb.WriteString("## References\n\n")
+		for _, r := range c.References {
+			if r.URL != "" {
+				sb.WriteString(fmt.Sprintf("- [%s](%s) (%s)\n", r.Label, r.URL, r.Kind))
+			} else {
+				sb.WriteString(fmt.Sprintf("- %s (%s)\n", r.Label, r.Kind))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
 	return sb.String()
 }
 

@@ -58,6 +58,9 @@ func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error
 	}
 	s.nextCard++
 	c.ID = s.nextCard
+	if c.References == nil {
+		c.References = []port.Reference{}
+	}
 	c.CreatedAt = time.Now().UTC()
 	c.UpdatedAt = c.CreatedAt
 	s.cards[c.ID] = c
@@ -207,6 +210,9 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if p.SourceURL != nil {
 		c.SourceURL = *p.SourceURL
 	}
+	if p.References != nil {
+		c.References = *p.References
+	}
 	c.UpdatedAt = time.Now().UTC()
 	s.cards[id] = c
 	return c, nil
@@ -218,6 +224,16 @@ func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) erro
 		return port.ErrNotFound
 	}
 	c.Tags = tags
+	s.cards[id] = c
+	return nil
+}
+
+func (s *stubStore) SetCardReferences(_ context.Context, id int64, refs []port.Reference) error {
+	c, ok := s.cards[id]
+	if !ok {
+		return port.ErrNotFound
+	}
+	c.References = refs
 	s.cards[id] = c
 	return nil
 }
@@ -627,6 +643,71 @@ func TestPatchCard(t *testing.T) {
 	}
 	if !out.OK || out.Data.Status != "doing" {
 		t.Fatalf("out = %+v, want status doing", out)
+	}
+}
+
+func TestPatchCardReferences(t *testing.T) {
+	st := newStubStore()
+	st.cards[5] = port.Card{
+		ID:         5,
+		Title:      "Card 5",
+		Status:     port.StatusInbox,
+		References: []port.Reference{{Kind: port.RefKindURL, Label: "old", URL: "https://old.com"}},
+	}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	// 1. Full replacement list of references
+	patchJSON := `{
+		"references": [
+			{"kind": "repo", "label": "gin-gonic/gin", "url": "https://github.com/gin-gonic/gin?utm_source=test"},
+			{"kind": "tool", "label": "ffmpeg"}
+		]
+	}`
+	rr := doJSON(t, h, http.MethodPatch, "/api/v1/cards/5", patchJSON)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+
+	var out struct {
+		OK   bool      `json:"ok"`
+		Data port.Card `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !out.OK {
+		t.Fatalf("expected ok=true, got response: %s", rr.Body.String())
+	}
+	if len(out.Data.References) != 2 {
+		t.Fatalf("expected 2 references in response, got %d", len(out.Data.References))
+	}
+	if out.Data.References[0].Kind != port.RefKindRepo || out.Data.References[0].URL != "https://github.com/gin-gonic/gin" {
+		t.Errorf("ref 0 mismatch (tracking params stripped): %+v", out.Data.References[0])
+	}
+	if out.Data.References[1].Kind != port.RefKindTool || out.Data.References[1].Label != "ffmpeg" {
+		t.Errorf("ref 1 mismatch: %+v", out.Data.References[1])
+	}
+
+	// 2. Invalid reference kind returns 400 Bad Request
+	badJSON := `{"references": [{"kind": "unsupported_kind", "label": "bad"}]}`
+	rrBad := doJSON(t, h, http.MethodPatch, "/api/v1/cards/5", badJSON)
+	if rrBad.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request, got %d", rrBad.Code)
+	}
+
+	// 3. Clear references with empty list
+	clearJSON := `{"references": []}`
+	rrClear := doJSON(t, h, http.MethodPatch, "/api/v1/cards/5", clearJSON)
+	if rrClear.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on clear, got %d", rrClear.Code)
+	}
+	var clearOut struct {
+		OK   bool      `json:"ok"`
+		Data port.Card `json:"data"`
+	}
+	_ = json.Unmarshal(rrClear.Body.Bytes(), &clearOut)
+	if len(clearOut.Data.References) != 0 {
+		t.Errorf("expected 0 references, got %d", len(clearOut.Data.References))
 	}
 }
 

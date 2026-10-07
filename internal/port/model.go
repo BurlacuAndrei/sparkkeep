@@ -13,6 +13,15 @@ const (
 	StatusDone      = "done"
 	StatusShelved   = "shelved"
 	StatusDismissed = "dismissed"
+
+	RefKindURL     = "url"
+	RefKindRepo    = "repo"
+	RefKindTool    = "tool"
+	RefKindProduct = "product"
+	RefKindPerson  = "person"
+	RefKindOrg     = "org"
+	RefKindPaper   = "paper"
+	RefKindOther   = "other"
 )
 
 func ValidHorizon(h string) bool {
@@ -23,21 +32,37 @@ func ValidStatus(s string) bool {
 	return s == StatusInbox || s == StatusDoing || s == StatusDone || s == StatusShelved || s == StatusDismissed
 }
 
+func ValidReferenceKind(k string) bool {
+	switch k {
+	case RefKindURL, RefKindRepo, RefKindTool, RefKindProduct, RefKindPerson, RefKindOrg, RefKindPaper, RefKindOther:
+		return true
+	default:
+		return false
+	}
+}
+
+type Reference struct {
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	URL   string `json:"url,omitempty"`
+}
+
 type Card struct {
-	ID               int64     `json:"id"`
-	CaptureID        *int64    `json:"capture_id,omitempty"`
-	Title            string    `json:"title"`
-	Summary          string    `json:"summary"`
-	Horizon          string    `json:"horizon"`
-	Status           string    `json:"status"`
-	SourceURL        string    `json:"source_url"`
-	SourceNote       string    `json:"source_note"`
-	Tags             []string  `json:"tags"`
-	ExecutiveSummary string    `json:"executive_summary"`
-	ValueProposition string    `json:"value_proposition"`
-	ProposedActions  []string  `json:"proposed_actions"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               int64       `json:"id"`
+	CaptureID        *int64      `json:"capture_id,omitempty"`
+	Title            string      `json:"title"`
+	Summary          string      `json:"summary"`
+	Horizon          string      `json:"horizon"`
+	Status           string      `json:"status"`
+	SourceURL        string      `json:"source_url"`
+	SourceNote       string      `json:"source_note"`
+	Tags             []string    `json:"tags"`
+	References       []Reference `json:"references"`
+	ExecutiveSummary string      `json:"executive_summary"`
+	ValueProposition string      `json:"value_proposition"`
+	ProposedActions  []string    `json:"proposed_actions"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
 }
 
 type Capture struct {
@@ -90,6 +115,7 @@ type CardPatch struct {
 	ProposedActions  *[]string
 	SourceURL        *string
 	CaptureID        *int64
+	References       *[]Reference
 }
 
 type TagPair struct {

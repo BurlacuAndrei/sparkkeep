@@ -38,6 +38,9 @@ func newStubStore() *stubStore {
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
 	s.nextCard++
 	c.ID = s.nextCard
+	if c.References == nil {
+		c.References = []port.Reference{}
+	}
 	s.cards[c.ID] = c
 	return c, nil
 }
@@ -127,6 +130,16 @@ func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) erro
 		return port.ErrNotFound
 	}
 	c.Tags = tags
+	s.cards[id] = c
+	return nil
+}
+
+func (s *stubStore) SetCardReferences(_ context.Context, id int64, refs []port.Reference) error {
+	c, ok := s.cards[id]
+	if !ok {
+		return port.ErrNotFound
+	}
+	c.References = refs
 	s.cards[id] = c
 	return nil
 }
