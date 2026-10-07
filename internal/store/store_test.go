@@ -28,8 +28,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 7 {
-		t.Fatalf("version = %d, want 7", version)
+	if version != 8 {
+		t.Fatalf("version = %d, want 8", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -341,6 +341,24 @@ func TestResearchCRUD(t *testing.T) {
 	if r.Status != "queued" || r.Query != "how to do it" {
 		t.Fatalf("created: %+v", r)
 	}
+	nowTime := time.Now().Truncate(time.Second)
+	step1 := port.ResearchStep{ID: "ground", Status: "done", StartedAt: nowTime, FinishedAt: nowTime, Note: "grounded"}
+	src1 := port.Source{ID: "S1", URL: "https://example.com/1", Title: "Doc 1", Origin: "reference", ClippedText: "sample text"}
+	if err := s.UpdateResearchProgress(ctx, r.ID, "running", "refined query", []port.ResearchStep{step1}, []port.Source{src1}, 150); err != nil {
+		t.Fatalf("UpdateResearchProgress: %v", err)
+	}
+
+	progressGot, err := s.GetResearch(ctx, r.ID)
+	if err != nil {
+		t.Fatalf("GetResearch after progress: %v", err)
+	}
+	if progressGot.Status != "running" || progressGot.Query != "refined query" || len(progressGot.Steps) != 1 || len(progressGot.Sources) != 1 || progressGot.Tokens != 150 {
+		t.Fatalf("unexpected progress got: %+v", progressGot)
+	}
+	if progressGot.Steps[0].ID != "ground" || progressGot.Sources[0].ID != "S1" {
+		t.Fatalf("unexpected step/source content: %+v", progressGot)
+	}
+
 	updated, err := s.SetResearch(ctx, r.ID, "done", "findings here", "")
 	if err != nil {
 		t.Fatalf("SetResearch: %v", err)
@@ -352,14 +370,14 @@ func TestResearchCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetResearch: %v", err)
 	}
-	if got.Status != "done" {
+	if got.Status != "done" || len(got.Steps) != 1 || len(got.Sources) != 1 {
 		t.Fatalf("got: %+v", got)
 	}
 	list, err := s.ListResearch(ctx)
 	if err != nil {
 		t.Fatalf("ListResearch: %v", err)
 	}
-	if len(list) != 1 || list[0].ID != r.ID || list[0].CardID != c.ID {
+	if len(list) != 1 || list[0].ID != r.ID || list[0].CardID != c.ID || len(list[0].Steps) != 1 {
 		t.Fatalf("list: %+v", list)
 	}
 }
@@ -924,13 +942,13 @@ func TestMigrationBackfill(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	// Verify schema version is 7
+	// Verify schema version is 8
 	var version int
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 7 {
-		t.Fatalf("version = %d, want 7", version)
+	if version != 8 {
+		t.Fatalf("version = %d, want 8", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1042,8 +1060,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 7 {
-		t.Fatalf("version = %d, want 7", version)
+	if version != 8 {
+		t.Fatalf("version = %d, want 8", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care

@@ -106,14 +106,34 @@ type Capture struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+type ResearchStep struct {
+	ID         string    `json:"id"`
+	Status     string    `json:"status"` // "running", "done", "failed", "skipped"
+	StartedAt  time.Time `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at"`
+	Note       string    `json:"note,omitempty"`
+}
+
+type Source struct {
+	ID          string    `json:"id"`
+	URL         string    `json:"url"`
+	Title       string    `json:"title"`
+	FetchedAt   time.Time `json:"fetched_at"`
+	Origin      string    `json:"origin"` // "capture" | "reference" | "search"
+	ClippedText string    `json:"clipped_text"`
+}
+
 type Research struct {
-	ID        int64     `json:"id"`
-	CardID    int64     `json:"card_id"`
-	Status    string    `json:"status"`
-	Query     string    `json:"query"`
-	Findings  string    `json:"findings"`
-	Error     string    `json:"error,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        int64          `json:"id"`
+	CardID    int64          `json:"card_id"`
+	Status    string         `json:"status"`
+	Query     string         `json:"query"`
+	Findings  string         `json:"findings"`
+	Error     string         `json:"error,omitempty"`
+	Steps     []ResearchStep `json:"steps"`
+	Sources   []Source       `json:"sources"`
+	Tokens    int            `json:"tokens"`
+	CreatedAt time.Time      `json:"created_at"`
 }
 
 type Tag struct {

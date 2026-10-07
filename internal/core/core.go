@@ -650,11 +650,12 @@ func (s *Service) Research(ctx context.Context, cardID int64) error {
 		return errors.New("core: research runner not initialized")
 	}
 	runner := *s.Runner
+	runner.Store = s.Store
 	if s.Router != nil {
 		runner.PlanLLM = s.Router.For(analyze.RoleResearchPlan)
 		runner.SynthesisLLM = s.Router.For(analyze.RoleResearchSynthesis)
 	}
-	findings, err := runner.Run(ctx, card)
+	findings, err := runner.RunWithID(ctx, card, row.ID)
 	if err != nil {
 		row, rerr := s.Store.SetResearch(ctx, row.ID, "failed", "", err.Error())
 		if rerr != nil {

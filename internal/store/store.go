@@ -794,12 +794,45 @@ func (s *Store) SetResearch(ctx context.Context, id int64, status, findings, err
 	return s.GetResearch(ctx, id)
 }
 
+func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, tokens int) error {
+	stepsJSON := "[]"
+	if len(steps) > 0 {
+		b, err := json.Marshal(steps)
+		if err == nil {
+			stepsJSON = string(b)
+		}
+	}
+	sourcesJSON := "[]"
+	if len(sources) > 0 {
+		b, err := json.Marshal(sources)
+		if err == nil {
+			sourcesJSON = string(b)
+		}
+	}
+	queryClause := ""
+	args := []any{status, stepsJSON, sourcesJSON, tokens}
+	if query != "" {
+		queryClause = ", query = ?"
+		args = append(args, query)
+	}
+	args = append(args, id)
+	querySQL := fmt.Sprintf(`UPDATE research SET status = ?, steps = ?, sources = ?, tokens = ?%s WHERE id = ?`, queryClause)
+	res, err := s.db.ExecContext(ctx, querySQL, args...)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return port.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, card_id, status, query, findings, error, created_at FROM research WHERE id = ?`, id)
+		`SELECT id, card_id, status, query, findings, error, steps, sources, tokens, created_at FROM research WHERE id = ?`, id)
 	var r port.Research
-	var created string
-	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &created)
+	var created, stepsJSON, sourcesJSON string
+	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &r.Tokens, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Research{}, port.ErrNotFound
 	}
@@ -807,12 +840,24 @@ func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error
 		return port.Research{}, err
 	}
 	r.CreatedAt, _ = parseTime(created)
+	if stepsJSON != "" {
+		_ = json.Unmarshal([]byte(stepsJSON), &r.Steps)
+	}
+	if r.Steps == nil {
+		r.Steps = []port.ResearchStep{}
+	}
+	if sourcesJSON != "" {
+		_ = json.Unmarshal([]byte(sourcesJSON), &r.Sources)
+	}
+	if r.Sources == nil {
+		r.Sources = []port.Source{}
+	}
 	return r, nil
 }
 
 func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, card_id, status, query, error, created_at FROM research ORDER BY id`)
+		`SELECT id, card_id, status, query, error, steps, sources, tokens, created_at FROM research ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -820,11 +865,23 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	var list []port.Research
 	for rows.Next() {
 		var r port.Research
-		var created string
-		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &created); err != nil {
+		var created, stepsJSON, sourcesJSON string
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &stepsJSON, &sourcesJSON, &r.Tokens, &created); err != nil {
 			return nil, err
 		}
 		r.CreatedAt, _ = parseTime(created)
+		if stepsJSON != "" {
+			_ = json.Unmarshal([]byte(stepsJSON), &r.Steps)
+		}
+		if r.Steps == nil {
+			r.Steps = []port.ResearchStep{}
+		}
+		if sourcesJSON != "" {
+			_ = json.Unmarshal([]byte(sourcesJSON), &r.Sources)
+		}
+		if r.Sources == nil {
+			r.Sources = []port.Source{}
+		}
 		list = append(list, r)
 	}
 	return list, rows.Err()

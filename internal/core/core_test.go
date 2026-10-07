@@ -204,6 +204,22 @@ func (s *stubStore) SetResearch(_ context.Context, id int64, status, findings, e
 	return r, nil
 }
 
+func (s *stubStore) UpdateResearchProgress(_ context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, tokens int) error {
+	r, ok := s.researches[id]
+	if !ok {
+		return port.ErrNotFound
+	}
+	r.Status = status
+	if query != "" {
+		r.Query = query
+	}
+	r.Steps = steps
+	r.Sources = sources
+	r.Tokens = tokens
+	s.researches[id] = r
+	return nil
+}
+
 func (s *stubStore) GetResearch(_ context.Context, id int64) (port.Research, error) {
 	r, ok := s.researches[id]
 	if !ok {
