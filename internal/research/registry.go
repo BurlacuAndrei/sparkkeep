@@ -164,3 +164,19 @@ func (r *Registry) FormatForSynthesis() string {
 	}
 	return b.String()
 }
+
+// FormatCitations returns a clean list of cited sources: [S#] Title (URL).
+func (r *Registry) FormatCitations() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var b strings.Builder
+	for _, s := range r.sources {
+		u := s.URL
+		if u == "" {
+			u = "no url"
+		}
+		b.WriteString(fmt.Sprintf("[%s] %s (%s)\n", s.ID, s.Title, u))
+	}
+	return b.String()
+}

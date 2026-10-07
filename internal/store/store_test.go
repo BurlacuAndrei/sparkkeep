@@ -28,8 +28,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 9 {
-		t.Fatalf("version = %d, want 9", version)
+	if version != 10 {
+		t.Fatalf("version = %d, want 10", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -349,7 +349,22 @@ func TestResearchCRUD(t *testing.T) {
 			{ID: "Q1", Question: "What is it?", Query: "cli-fi reading list", PreferDomains: []string{"github.com"}},
 		},
 	}
-	if err := s.UpdateResearchProgress(ctx, r.ID, "running", "refined query", []port.ResearchStep{step1}, []port.Source{src1}, plan, 150); err != nil {
+	result := &port.ResearchResult{
+		Claims: []port.ClaimVerdict{
+			{Claim: "Claim 1", Status: "supported", Rationale: "Verified", Sources: []string{"S1"}},
+		},
+		Landscape: []port.LandscapeItem{
+			{Name: "Alt 1", OneLiner: "Good alt", HowItDiffers: "Faster", Sources: []string{"S1"}},
+		},
+		Verdict: &port.ResearchVerdict{
+			Recommendation:   "pursue",
+			Confidence:       "high",
+			NextActions:      []string{"step 1", "step 2", "step 3"},
+			SuggestedHorizon: "short-term",
+			SuggestedTags:    []string{"tech"},
+		},
+	}
+	if err := s.UpdateResearchProgress(ctx, r.ID, "running", "refined query", []port.ResearchStep{step1}, []port.Source{src1}, plan, result, 150); err != nil {
 		t.Fatalf("UpdateResearchProgress: %v", err)
 	}
 
@@ -365,6 +380,9 @@ func TestResearchCRUD(t *testing.T) {
 	}
 	if progressGot.Plan == nil || len(progressGot.Plan.Questions) != 1 || progressGot.Plan.Questions[0].ID != "Q1" {
 		t.Fatalf("unexpected plan content: %+v", progressGot.Plan)
+	}
+	if progressGot.Result == nil || len(progressGot.Result.Claims) != 1 || progressGot.Result.Verdict == nil || progressGot.Result.Verdict.Recommendation != "pursue" {
+		t.Fatalf("unexpected result content: %+v", progressGot.Result)
 	}
 
 	updated, err := s.SetResearch(ctx, r.ID, "done", "findings here", "")
@@ -950,13 +968,13 @@ func TestMigrationBackfill(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	// Verify schema version is 9
+	// Verify schema version is 10
 	var version int
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 9 {
-		t.Fatalf("version = %d, want 9", version)
+	if version != 10 {
+		t.Fatalf("version = %d, want 10", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1068,8 +1086,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 9 {
-		t.Fatalf("version = %d, want 9", version)
+	if version != 10 {
+		t.Fatalf("version = %d, want 10", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -1237,6 +1255,83 @@ func TestCardReferencesRoundTrip(t *testing.T) {
 	}
 	if len(reloaded.References) != 1 || reloaded.References[0].Label != "Alan Turing" {
 		t.Fatalf("reloaded references mismatch: %+v", reloaded.References)
+	}
+}
+
+func TestCardActionsSourceAndWriteback(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	card, err := s.CreateCard(ctx, port.Card{
+		Title:           "Writeback Card",
+		Summary:         "Summary",
+		ProposedActions: []string{"Action from triage"},
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+	if card.ActionsSource != "triage" {
+		t.Fatalf("want actions_source triage, got %s", card.ActionsSource)
+	}
+
+	// Update actions without specifying source -> automatically becomes "user"
+	userActions := []string{"User edited action"}
+	card, err = s.UpdateCard(ctx, card.ID, port.CardPatch{
+		ProposedActions: &userActions,
+	})
+	if err != nil {
+		t.Fatalf("UpdateCard: %v", err)
+	}
+	if card.ActionsSource != "user" {
+		t.Fatalf("want actions_source user, got %s", card.ActionsSource)
+	}
+	if len(card.ProposedActions) != 1 || card.ProposedActions[0] != "User edited action" {
+		t.Fatalf("unexpected proposed actions: %+v", card.ProposedActions)
+	}
+
+	// Update research verdict and suggestions
+	verdict := "pursue"
+	confidence := "high"
+	suggHorizon := "short-term"
+	suggTags := []string{"ai", "nlp"}
+	researchActions := []string{"Research action 1", "Research action 2"}
+	src := "research"
+
+	card, err = s.UpdateCard(ctx, card.ID, port.CardPatch{
+		ResearchVerdict:    &verdict,
+		ResearchConfidence: &confidence,
+		SuggestedHorizon:   &suggHorizon,
+		SuggestedTags:      &suggTags,
+		ProposedActions:    &researchActions,
+		ActionsSource:      &src,
+	})
+	if err != nil {
+		t.Fatalf("UpdateCard writeback: %v", err)
+	}
+	if card.ActionsSource != "research" {
+		t.Fatalf("want actions_source research, got %s", card.ActionsSource)
+	}
+	if card.ResearchVerdict != "pursue" || card.ResearchConfidence != "high" || card.SuggestedHorizon != "short-term" {
+		t.Fatalf("unexpected verdict/suggestions: %+v", card)
+	}
+	if len(card.SuggestedTags) != 2 || card.SuggestedTags[0] != "ai" {
+		t.Fatalf("unexpected suggested tags: %+v", card.SuggestedTags)
+	}
+
+	// Verify GetCard and ListCards return all fields
+	got, err := s.GetCard(ctx, card.ID)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if got.ActionsSource != "research" || got.ResearchVerdict != "pursue" || len(got.SuggestedTags) != 2 {
+		t.Fatalf("GetCard unexpected data: %+v", got)
+	}
+
+	list, err := s.ListCards(ctx, port.CardFilter{})
+	if err != nil {
+		t.Fatalf("ListCards: %v", err)
+	}
+	if len(list) != 1 || list[0].ActionsSource != "research" || list[0].ResearchVerdict != "pursue" || len(list[0].SuggestedTags) != 2 {
+		t.Fatalf("ListCards unexpected data: %+v", list[0])
 	}
 }
 

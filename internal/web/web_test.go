@@ -234,6 +234,27 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if p.Worthiness != nil {
 		c.Worthiness = *p.Worthiness
 	}
+	if p.ProposedActions != nil {
+		c.ProposedActions = *p.ProposedActions
+		if p.ActionsSource == nil {
+			c.ActionsSource = "user"
+		}
+	}
+	if p.ActionsSource != nil {
+		c.ActionsSource = *p.ActionsSource
+	}
+	if p.ResearchVerdict != nil {
+		c.ResearchVerdict = *p.ResearchVerdict
+	}
+	if p.ResearchConfidence != nil {
+		c.ResearchConfidence = *p.ResearchConfidence
+	}
+	if p.SuggestedHorizon != nil {
+		c.SuggestedHorizon = *p.SuggestedHorizon
+	}
+	if p.SuggestedTags != nil {
+		c.SuggestedTags = *p.SuggestedTags
+	}
 	c.UpdatedAt = time.Now().UTC()
 	s.cards[id] = c
 	return c, nil
@@ -295,7 +316,7 @@ func (s *stubStore) SetResearch(_ context.Context, id int64, status, findings, e
 	return r, nil
 }
 
-func (s *stubStore) UpdateResearchProgress(_ context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, plan *port.ResearchPlan, tokens int) error {
+func (s *stubStore) UpdateResearchProgress(_ context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, plan *port.ResearchPlan, result *port.ResearchResult, tokens int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, ok := s.researches[id]
@@ -309,6 +330,7 @@ func (s *stubStore) UpdateResearchProgress(_ context.Context, id int64, status, 
 	r.Steps = steps
 	r.Sources = sources
 	r.Plan = plan
+	r.Result = result
 	r.Tokens = tokens
 	s.researches[id] = r
 	return nil

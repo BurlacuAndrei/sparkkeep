@@ -198,6 +198,7 @@ func (r *Runner) RunWithID(ctx context.Context, card port.Card, researchID int64
 	if report == "" {
 		return "", ErrEmptyReport
 	}
+	r.writeBackCard(ctx, state)
 	return report, nil
 }
 
@@ -205,7 +206,7 @@ func (r *Runner) persistProgress(ctx context.Context, state *RunState, status st
 	if state.Store == nil || state.ResearchID <= 0 {
 		return
 	}
-	_ = state.Store.UpdateResearchProgress(ctx, state.ResearchID, status, state.Query, state.Steps, state.Sources.All(), state.Plan, state.Tokens)
+	_ = state.Store.UpdateResearchProgress(ctx, state.ResearchID, status, state.Query, state.Steps, state.Sources.All(), state.Plan, state.Result, state.Tokens)
 }
 
 func (r *Runner) buildPipeline() []Step {
@@ -215,7 +216,10 @@ func (r *Runner) buildPipeline() []Step {
 		{ID: "plan", Name: "Plan research questions", Run: r.stepPlan},
 		{ID: "search", Name: "Search per question", Run: r.stepSearch},
 		{ID: "read", Name: "Fetch search results", Run: r.stepRead},
-		{ID: "synthesize", Name: "Synthesize report", Run: r.stepSynthesize},
+		{ID: "verify_claims", Name: "Verify claims", Run: r.stepVerifyClaims},
+		{ID: "landscape", Name: "Analyze landscape", Run: r.stepLandscape},
+		{ID: "verdict", Name: "Synthesize verdict", Run: r.stepVerdict},
+		{ID: "report", Name: "Generate final report", Run: r.stepReport},
 	}
 }
 
@@ -519,64 +523,464 @@ func (r *Runner) stepRead(ctx context.Context, state *RunState) error {
 	return nil
 }
 
-// 6. synthesize — research_synthesis model groups findings per question with citations.
-func (r *Runner) stepSynthesize(ctx context.Context, state *RunState) error {
-	sourcesText := state.Sources.FormatForSynthesis()
-	if strings.TrimSpace(sourcesText) == "" {
-		return ErrNoFetchableText
+// 6. verify_claims — evaluates each Triage claim; downgrades verdicts without valid S#.
+func (r *Runner) stepVerifyClaims(ctx context.Context, state *RunState) error {
+	if len(state.Card.Claims) == 0 {
+		state.Result.Claims = []port.ClaimVerdict{}
+		state.SetNote("verify_claims", "No claims to verify")
+		return nil
 	}
-
-	tldr := state.Card.TLDR
-	if tldr == "" {
-		tldr = state.Card.Summary
-	}
-	claimsStr := strings.Join(state.Card.Claims, "; ")
-
-	var qList strings.Builder
-	if state.Plan != nil {
-		for _, q := range state.Plan.Questions {
-			qList.WriteString(fmt.Sprintf("- %s: %s\n", q.ID, q.Question))
-		}
-	}
-
-	prompt := fmt.Sprintf(`Synthesize the research findings into an actionable markdown report.
-Address each planned question systematically.
-You MUST cite sources using their bracketed identifiers (e.g. [S1], [S2]) throughout the report.
-Structure the report with the following exact sections:
-## What the source says
-## Questions & Findings
-[For each question, provide a subsection "### Q#: <Question>" with findings and citations]
-## Sources
-## Next steps
-
-Context:
-Title: %s
-Summary / TLDR: %s
-Claims: %s
-
-Planned Questions:
-%s
-Sources:
-%s`, state.Card.Title, tldr, claimsStr, qList.String(), sourcesText)
 
 	client := r.synthesisClient()
 	if client == nil {
-		return errors.New("research: no LLM client configured for synthesis")
+		return errors.New("research: no LLM client configured for verify_claims")
 	}
 
+	var b strings.Builder
+	b.WriteString(`You are a fact-checking assistant. Evaluate each claim extracted from the original capture against the collected research sources.
+For each claim, determine if it is "supported", "disputed", or "unverified".
+Provide a 1-line rationale and list the relevant source IDs (e.g. ["S1", "S2"]). If no source supports or disputes the claim, status MUST be "unverified" with empty sources [].
+
+Claims to verify:
+`)
+	for _, c := range state.Card.Claims {
+		b.WriteString(fmt.Sprintf("- %s\n", c))
+	}
+	b.WriteString("\nAvailable Sources:\n")
+	b.WriteString(state.Sources.FormatForSynthesis())
+	b.WriteString("\nReply with ONLY a strict JSON object with this exact structure:\n" + schemaClaims + "\n")
+
+	var resp struct {
+		Claims []port.ClaimVerdict `json:"claims"`
+	}
+	err := askJSON(ctx, client, b.String(), &resp, schemaClaims)
+	if err != nil {
+		state.SetNote("verify_claims", fmt.Sprintf("Failed to parse claims verification: %v", err))
+		for _, c := range state.Card.Claims {
+			resp.Claims = append(resp.Claims, port.ClaimVerdict{
+				Claim:     c,
+				Status:    "unverified",
+				Rationale: "Verification unavailable",
+				Sources:   []string{},
+			})
+		}
+	}
+
+	validSourceIDs := make(map[string]bool)
+	for _, s := range state.Sources.All() {
+		validSourceIDs[s.ID] = true
+	}
+
+	received := make(map[string]port.ClaimVerdict)
+	for _, cv := range resp.Claims {
+		received[strings.TrimSpace(strings.ToLower(cv.Claim))] = cv
+	}
+
+	var finalVerdicts []port.ClaimVerdict
+	for _, origClaim := range state.Card.Claims {
+		norm := strings.TrimSpace(strings.ToLower(origClaim))
+		v, ok := received[norm]
+		if !ok {
+			matched := false
+			for k, cv := range received {
+				if strings.Contains(k, norm) || strings.Contains(norm, k) {
+					v = cv
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				v = port.ClaimVerdict{
+					Claim:     origClaim,
+					Status:    "unverified",
+					Rationale: "No analysis returned",
+					Sources:   []string{},
+				}
+			}
+		}
+		v.Claim = origClaim
+
+		// Enforce: filter sources against valid sources
+		var validSources []string
+		for _, sid := range v.Sources {
+			sid = strings.TrimSpace(sid)
+			if validSourceIDs[sid] {
+				validSources = append(validSources, sid)
+			}
+		}
+		v.Sources = validSources
+
+		// Normalize status
+		status := strings.ToLower(strings.TrimSpace(v.Status))
+		if status != "supported" && status != "disputed" && status != "unverified" {
+			status = "unverified"
+		}
+
+		// Enforce: claims citing no valid S# must be unverified
+		if len(v.Sources) == 0 && (status == "supported" || status == "disputed") {
+			status = "unverified"
+			if v.Rationale == "" {
+				v.Rationale = "Unverified (no valid sources cited)"
+			} else if !strings.Contains(v.Rationale, "no valid sources") {
+				v.Rationale = strings.TrimSpace(v.Rationale) + " (Downgraded: no valid sources cited)"
+			}
+		}
+		v.Status = status
+		finalVerdicts = append(finalVerdicts, v)
+	}
+
+	state.Result.Claims = finalVerdicts
+	state.StepOutputs["verify_claims"] = finalVerdicts
+	if _, ok := state.Notes["verify_claims"]; !ok {
+		state.SetNote("verify_claims", fmt.Sprintf("Verified %d claims", len(finalVerdicts)))
+	}
+	return nil
+}
+
+// 7. landscape — up to 5 alternatives/prior art.
+func (r *Runner) stepLandscape(ctx context.Context, state *RunState) error {
+	client := r.synthesisClient()
+	if client == nil {
+		return errors.New("research: no LLM client configured for landscape")
+	}
+
+	var b strings.Builder
+	b.WriteString(`You are a competitive and technology landscape analyst. Identify up to 5 alternatives, competitors, or prior art related to this topic.
+For each item, specify its name, optional URL, a 1-line summary, how it differs from the topic, and relevant source IDs (e.g. ["S1"]).
+
+Topic: ` + state.Card.Title + "\n")
+	if state.Card.Summary != "" {
+		b.WriteString("Summary: " + state.Card.Summary + "\n")
+	}
+	b.WriteString("\nAvailable Sources:\n")
+	b.WriteString(state.Sources.FormatForSynthesis())
+	b.WriteString("\nReply with ONLY a strict JSON object with this exact structure:\n" + schemaLandscape + "\n")
+
+	var resp struct {
+		Landscape []port.LandscapeItem `json:"landscape"`
+	}
+	err := askJSON(ctx, client, b.String(), &resp, schemaLandscape)
+	if err != nil {
+		state.SetNote("landscape", fmt.Sprintf("Failed to parse landscape: %v", err))
+		resp.Landscape = []port.LandscapeItem{}
+	}
+
+	validSourceIDs := make(map[string]bool)
+	for _, s := range state.Sources.All() {
+		validSourceIDs[s.ID] = true
+	}
+
+	if len(resp.Landscape) > 5 {
+		resp.Landscape = resp.Landscape[:5]
+	}
+	for i := range resp.Landscape {
+		var validSources []string
+		for _, sid := range resp.Landscape[i].Sources {
+			sid = strings.TrimSpace(sid)
+			if validSourceIDs[sid] {
+				validSources = append(validSources, sid)
+			}
+		}
+		resp.Landscape[i].Sources = validSources
+	}
+
+	state.Result.Landscape = resp.Landscape
+	state.StepOutputs["landscape"] = resp.Landscape
+	if _, ok := state.Notes["landscape"]; !ok {
+		state.SetNote("landscape", fmt.Sprintf("Identified %d alternatives/prior art", len(resp.Landscape)))
+	}
+	return nil
+}
+
+// 8. verdict — strategic recommendation, risks, confidence, next actions (research_synthesis).
+func (r *Runner) stepVerdict(ctx context.Context, state *RunState) error {
+	client := r.synthesisClient()
+	if client == nil {
+		return errors.New("research: no LLM client configured for verdict")
+	}
+
+	var b strings.Builder
+	b.WriteString(`You are a research synthesis and executive decision assistant. Provide a strategic verdict on this card based on the findings, claims verification, and competitive landscape.
+Recommendation must be exactly "pursue", "watch", or "skip".
+Confidence must be "high", "medium", or "low".
+Next actions must contain 3 to 5 concrete, actionable steps.
+Suggested horizon must be one of: "short-term", "medium-term", "long-term", "lifetime" (or omit if unsure).
+
+Topic Context:
+Title: ` + state.Card.Title + "\n")
+	if state.Card.Summary != "" {
+		b.WriteString("Summary: " + state.Card.Summary + "\n")
+	}
+	if len(state.Result.Claims) > 0 {
+		b.WriteString("\nClaim Verifications:\n")
+		for _, cv := range state.Result.Claims {
+			b.WriteString(fmt.Sprintf("- %s: %s (%s)\n", cv.Claim, cv.Status, cv.Rationale))
+		}
+	}
+	if len(state.Result.Landscape) > 0 {
+		b.WriteString("\nCompetitive Landscape:\n")
+		for _, li := range state.Result.Landscape {
+			b.WriteString(fmt.Sprintf("- %s: %s (diff: %s)\n", li.Name, li.OneLiner, li.HowItDiffers))
+		}
+	}
+	b.WriteString("\nSources:\n")
+	b.WriteString(state.Sources.FormatForSynthesis())
+	b.WriteString("\nReply with ONLY a strict JSON object with this exact structure:\n" + schemaVerdict + "\n")
+
+	var resp port.ResearchVerdict
+	err := askJSON(ctx, client, b.String(), &resp, schemaVerdict)
+	if err != nil {
+		state.SetNote("verdict", fmt.Sprintf("Verdict failed: %v", err))
+		return fmt.Errorf("verdict parse failed: %w", err)
+	}
+
+	rec := strings.ToLower(strings.TrimSpace(resp.Recommendation))
+	switch rec {
+	case "pursue", "watch", "skip":
+		resp.Recommendation = rec
+	default:
+		resp.Recommendation = "watch"
+	}
+
+	conf := strings.ToLower(strings.TrimSpace(resp.Confidence))
+	switch conf {
+	case "high", "medium", "low":
+		resp.Confidence = conf
+	default:
+		resp.Confidence = "medium"
+	}
+
+	if len(resp.NextActions) > 5 {
+		resp.NextActions = resp.NextActions[:5]
+	}
+	if len(resp.NextActions) < 3 {
+		if len(resp.NextActions) == 0 {
+			resp.NextActions = []string{
+				"Review research findings",
+				"Evaluate technical feasibility",
+				"Decide next milestone",
+			}
+		} else if len(resp.NextActions) == 1 {
+			resp.NextActions = append(resp.NextActions, "Assess integration requirements", "Review community feedback")
+		} else if len(resp.NextActions) == 2 {
+			resp.NextActions = append(resp.NextActions, "Define implementation roadmap")
+		}
+	}
+
+	if resp.SuggestedHorizon != "" && !port.ValidHorizon(resp.SuggestedHorizon) {
+		resp.SuggestedHorizon = ""
+	}
+
+	state.Result.Verdict = &resp
+	state.StepOutputs["verdict"] = resp
+	state.SetNote("verdict", fmt.Sprintf("Verdict: %s (confidence: %s)", resp.Recommendation, resp.Confidence))
+	return nil
+}
+
+// 9. report — renders deterministic markdown report from structured outputs.
+func (r *Runner) stepReport(ctx context.Context, state *RunState) error {
+	var b strings.Builder
+
+	b.WriteString(fmt.Sprintf("# Research: %s\n\n", state.Card.Title))
+
+	// Verdict section
+	if state.Result != nil && state.Result.Verdict != nil {
+		v := state.Result.Verdict
+		b.WriteString("## Executive Verdict\n\n")
+		b.WriteString(fmt.Sprintf("- **Recommendation:** `%s` (Confidence: `%s`)\n", strings.ToUpper(v.Recommendation), strings.ToUpper(v.Confidence)))
+		if v.ForWhom != "" {
+			b.WriteString(fmt.Sprintf("- **For Whom:** %s\n", v.ForWhom))
+		}
+		if len(v.Risks) > 0 {
+			b.WriteString("\n### Key Risks\n")
+			for _, rk := range v.Risks {
+				b.WriteString(fmt.Sprintf("- %s\n", rk))
+			}
+		}
+		if len(v.NextActions) > 0 {
+			b.WriteString("\n### Recommended Next Actions\n")
+			for i, act := range v.NextActions {
+				b.WriteString(fmt.Sprintf("%d. %s\n", i+1, act))
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	// Claim Verification section
+	if state.Result != nil && len(state.Result.Claims) > 0 {
+		b.WriteString("## Claim Verification\n\n")
+		for _, cv := range state.Result.Claims {
+			badge := strings.ToUpper(cv.Status)
+			citations := ""
+			if len(cv.Sources) > 0 {
+				var citeParts []string
+				for _, sid := range cv.Sources {
+					citeParts = append(citeParts, fmt.Sprintf("[%s]", sid))
+				}
+				citations = " " + strings.Join(citeParts, " ")
+			}
+			b.WriteString(fmt.Sprintf("- **%s** — `[%s]`%s\n", cv.Claim, badge, citations))
+			if cv.Rationale != "" {
+				b.WriteString(fmt.Sprintf("  %s\n", cv.Rationale))
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	// Competitive Landscape & Alternatives
+	if state.Result != nil && len(state.Result.Landscape) > 0 {
+		b.WriteString("## Competitive Landscape & Alternatives\n\n")
+		for _, li := range state.Result.Landscape {
+			citations := ""
+			if len(li.Sources) > 0 {
+				var citeParts []string
+				for _, sid := range li.Sources {
+					citeParts = append(citeParts, fmt.Sprintf("[%s]", sid))
+				}
+				citations = " " + strings.Join(citeParts, " ")
+			}
+			nameHeader := li.Name
+			if li.URL != "" {
+				nameHeader = fmt.Sprintf("[%s](%s)", li.Name, li.URL)
+			}
+			b.WriteString(fmt.Sprintf("### %s%s\n", nameHeader, citations))
+			if li.OneLiner != "" {
+				b.WriteString(fmt.Sprintf("%s\n\n", li.OneLiner))
+			}
+			if li.HowItDiffers != "" {
+				b.WriteString(fmt.Sprintf("**How it differs:** %s\n\n", li.HowItDiffers))
+			}
+		}
+	}
+
+	// Questions & Findings
+	if state.Plan != nil && len(state.Plan.Questions) > 0 {
+		b.WriteString("## Questions & Findings\n\n")
+		for _, q := range state.Plan.Questions {
+			b.WriteString(fmt.Sprintf("### %s: %s\n", q.ID, q.Question))
+			b.WriteString(fmt.Sprintf("Search query: `%s`\n\n", q.Query))
+		}
+	}
+
+	// Sources section
+	b.WriteString("## Sources & Citations\n\n")
+	b.WriteString(state.Sources.FormatCitations())
+	b.WriteString("\n")
+
+	rendered := strings.TrimSpace(b.String())
+	state.StepOutputs["report"] = rendered
+	state.SetNote("report", "Report compiled successfully")
+	return nil
+}
+
+func (r *Runner) writeBackCard(ctx context.Context, state *RunState) {
+	if state.Store == nil || state.Card.ID <= 0 || state.Result == nil || state.Result.Verdict == nil {
+		return
+	}
+	verdict := state.Result.Verdict
+
+	card, err := state.Store.GetCard(ctx, state.Card.ID)
+	if err != nil {
+		return
+	}
+
+	patch := port.CardPatch{
+		ResearchVerdict:    &verdict.Recommendation,
+		ResearchConfidence: &verdict.Confidence,
+	}
+	if verdict.SuggestedHorizon != "" && port.ValidHorizon(verdict.SuggestedHorizon) {
+		patch.SuggestedHorizon = &verdict.SuggestedHorizon
+	}
+	if len(verdict.SuggestedTags) > 0 {
+		patch.SuggestedTags = &verdict.SuggestedTags
+	}
+
+	// proposed_actions ← verdict.next_actions
+	// replace only if the user hasn't edited actions; track actions_source: "triage"|"research"|"user"
+	if card.ActionsSource != "user" && len(verdict.NextActions) > 0 {
+		patch.ProposedActions = &verdict.NextActions
+		src := "research"
+		patch.ActionsSource = &src
+	}
+
+	_, _ = state.Store.UpdateCard(ctx, state.Card.ID, patch)
+}
+
+const schemaClaims = `{
+  "claims": [
+    {
+      "claim": "claim text",
+      "status": "supported | disputed | unverified",
+      "rationale": "one line rationale",
+      "sources": ["S1"]
+    }
+  ]
+}`
+
+const schemaLandscape = `{
+  "landscape": [
+    {
+      "name": "Alternative name",
+      "url": "https://example.com",
+      "one_liner": "Brief summary",
+      "how_it_differs": "Key differences",
+      "sources": ["S1"]
+    }
+  ]
+}`
+
+const schemaVerdict = `{
+  "recommendation": "pursue | watch | skip",
+  "for_whom": "Target audience",
+  "risks": ["Risk 1", "Risk 2"],
+  "confidence": "high | medium | low",
+  "next_actions": ["Action 1", "Action 2", "Action 3"],
+  "suggested_horizon": "short-term",
+  "suggested_tags": ["tag1", "tag2"]
+}`
+
+func extractJSON(s string) string {
+	s = strings.TrimSpace(s)
+	if idx := strings.Index(s, "```json"); idx != -1 {
+		s = s[idx+len("```json"):]
+		if end := strings.Index(s, "```"); end != -1 {
+			s = s[:end]
+		}
+	} else if idx := strings.Index(s, "```"); idx != -1 {
+		s = s[idx+3:]
+		if end := strings.Index(s, "```"); end != -1 {
+			s = s[:end]
+		}
+	}
+	s = strings.TrimSpace(s)
+	first := strings.IndexByte(s, '{')
+	last := strings.LastIndexByte(s, '}')
+	if first != -1 && last > first {
+		return s[first : last+1]
+	}
+	return s
+}
+
+func askJSON(ctx context.Context, client *analyze.Client, prompt string, target any, schemaDesc string) error {
 	out, err := client.Ask(ctx, prompt)
 	if err != nil {
 		return err
 	}
-	out = strings.TrimSpace(out)
-	if out == "" {
-		return ErrEmptyReport
+	cleaned := extractJSON(out)
+	if jerr := json.Unmarshal([]byte(cleaned), target); jerr == nil {
+		return nil
 	}
-	if i := strings.Index(out, "## "); i > 0 {
-		out = out[i:]
+
+	repairPrompt := fmt.Sprintf(
+		"The previous output was not valid JSON conforming to the schema.\nError: Output could not be parsed as JSON.\nPrevious output:\n%s\n\nPlease return ONLY a valid JSON object conforming to this schema:\n%s",
+		out, schemaDesc,
+	)
+	retryOut, rerr := client.Ask(ctx, repairPrompt)
+	if rerr != nil {
+		return rerr
 	}
-	state.StepOutputs["report"] = out
-	return nil
+	cleanedRetry := extractJSON(retryOut)
+	return json.Unmarshal([]byte(cleanedRetry), target)
 }
 
 // buildSingleQuery derives a single search query fallback.

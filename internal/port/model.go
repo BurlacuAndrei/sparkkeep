@@ -87,9 +87,14 @@ type Card struct {
 	Worthiness       Worthiness  `json:"worthiness"`
 	ExecutiveSummary string      `json:"executive_summary"`
 	ValueProposition string      `json:"value_proposition"`
-	ProposedActions  []string    `json:"proposed_actions"`
-	CreatedAt        time.Time   `json:"created_at"`
-	UpdatedAt        time.Time   `json:"updated_at"`
+	ProposedActions    []string    `json:"proposed_actions"`
+	ActionsSource      string      `json:"actions_source"`
+	ResearchVerdict    string      `json:"research_verdict,omitempty"`
+	ResearchConfidence string      `json:"research_confidence,omitempty"`
+	SuggestedHorizon   string      `json:"suggested_horizon,omitempty"`
+	SuggestedTags      []string    `json:"suggested_tags,omitempty"`
+	CreatedAt          time.Time   `json:"created_at"`
+	UpdatedAt          time.Time   `json:"updated_at"`
 }
 
 type Capture struct {
@@ -144,9 +149,41 @@ type Research struct {
 	Error     string         `json:"error,omitempty"`
 	Steps     []ResearchStep `json:"steps"`
 	Sources   []Source       `json:"sources"`
-	Plan      *ResearchPlan  `json:"plan,omitempty"`
-	Tokens    int            `json:"tokens"`
-	CreatedAt time.Time      `json:"created_at"`
+	Plan      *ResearchPlan   `json:"plan,omitempty"`
+	Result    *ResearchResult `json:"result,omitempty"`
+	Tokens    int             `json:"tokens"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
+type ClaimVerdict struct {
+	Claim     string   `json:"claim"`
+	Status    string   `json:"status"` // supported | disputed | unverified
+	Rationale string   `json:"rationale"`
+	Sources   []string `json:"sources"`
+}
+
+type LandscapeItem struct {
+	Name         string   `json:"name"`
+	URL          string   `json:"url,omitempty"`
+	OneLiner     string   `json:"one_liner"`
+	HowItDiffers string   `json:"how_it_differs"`
+	Sources      []string `json:"sources"`
+}
+
+type ResearchVerdict struct {
+	Recommendation   string   `json:"recommendation"` // pursue | watch | skip
+	ForWhom          string   `json:"for_whom"`
+	Risks            []string `json:"risks"`
+	Confidence       string   `json:"confidence"` // high | medium | low
+	NextActions      []string `json:"next_actions"`
+	SuggestedHorizon string   `json:"suggested_horizon,omitempty"`
+	SuggestedTags    []string `json:"suggested_tags,omitempty"`
+}
+
+type ResearchResult struct {
+	Claims    []ClaimVerdict   `json:"claims"`
+	Landscape []LandscapeItem  `json:"landscape"`
+	Verdict   *ResearchVerdict `json:"verdict,omitempty"`
 }
 
 type Tag struct {
@@ -181,8 +218,13 @@ type CardPatch struct {
 	WhyCare          *string
 	Claims           *[]string
 	OpenQuestions    *[]string
-	Signals          *Signals
-	Worthiness       *Worthiness
+	Signals            *Signals
+	Worthiness         *Worthiness
+	ActionsSource      *string
+	ResearchVerdict    *string
+	ResearchConfidence *string
+	SuggestedHorizon   *string
+	SuggestedTags      *[]string
 }
 
 type TagPair struct {

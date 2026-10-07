@@ -138,10 +138,20 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	if c.CaptureID != nil {
 		captureID = *c.CaptureID
 	}
+	actionsSource := c.ActionsSource
+	if actionsSource == "" {
+		actionsSource = "triage"
+	}
+	suggestedTagsJSON := "[]"
+	if len(c.SuggestedTags) > 0 {
+		if data, err := json.Marshal(c.SuggestedTags); err == nil {
+			suggestedTagsJSON = string(data)
+		}
+	}
 	res, err := exec.ExecContext(ctx,
-		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, ts, ts)
+		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, research_verdict, research_confidence, suggested_horizon, suggested_tags, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, actionsSource, c.ResearchVerdict, c.ResearchConfidence, c.SuggestedHorizon, suggestedTagsJSON, ts, ts)
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return port.Card{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
@@ -169,6 +179,10 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	}
 	if c.ProposedActions == nil {
 		c.ProposedActions = []string{}
+	}
+	c.ActionsSource = actionsSource
+	if c.SuggestedTags == nil {
+		c.SuggestedTags = []string{}
 	}
 	if c.References == nil {
 		c.References = []port.Reference{}
@@ -209,13 +223,13 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 
 func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, created_at, updated_at
+		`SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, research_verdict, research_confidence, suggested_horizon, suggested_tags, created_at, updated_at
 		 FROM cards WHERE id = ?`, id)
 	var c port.Card
 	var captureID sql.NullInt64
 	var created, updated string
-	var actionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw string
-	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &created, &updated)
+	var actionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw, suggestedTagsRaw string
+	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Card{}, port.ErrNotFound
 	}
@@ -247,6 +261,15 @@ func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	}
 	if c.OpenQuestions == nil {
 		c.OpenQuestions = []string{}
+	}
+	if c.ActionsSource == "" {
+		c.ActionsSource = "triage"
+	}
+	if suggestedTagsRaw != "" {
+		_ = json.Unmarshal([]byte(suggestedTagsRaw), &c.SuggestedTags)
+	}
+	if c.SuggestedTags == nil {
+		c.SuggestedTags = []string{}
 	}
 	if signalsRaw != "" {
 		_ = json.Unmarshal([]byte(signalsRaw), &c.Signals)
@@ -386,7 +409,7 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	if limit <= 0 {
 		limit = defaultLimit
 	}
-	sqlq := `SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, created_at, updated_at FROM cards`
+	sqlq := `SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, research_verdict, research_confidence, suggested_horizon, suggested_tags, created_at, updated_at FROM cards`
 	if len(where) > 0 {
 		sqlq += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -407,8 +430,8 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		var c port.Card
 		var captureID sql.NullInt64
 		var created, updated string
-		var actionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw string
-		if err := rows.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &created, &updated); err != nil {
+		var actionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw, suggestedTagsRaw string
+		if err := rows.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &created, &updated); err != nil {
 			return nil, err
 		}
 		if captureID.Valid {
@@ -436,6 +459,15 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		}
 		if c.OpenQuestions == nil {
 			c.OpenQuestions = []string{}
+		}
+		if c.ActionsSource == "" {
+			c.ActionsSource = "triage"
+		}
+		if suggestedTagsRaw != "" {
+			_ = json.Unmarshal([]byte(suggestedTagsRaw), &c.SuggestedTags)
+		}
+		if c.SuggestedTags == nil {
+			c.SuggestedTags = []string{}
 		}
 		if signalsRaw != "" {
 			_ = json.Unmarshal([]byte(signalsRaw), &c.Signals)
@@ -658,6 +690,28 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 			actionsJSON = string(data)
 		}
 		b.set("proposed_actions", actionsJSON)
+		if p.ActionsSource == nil {
+			b.set("actions_source", "user")
+		}
+	}
+	if p.ActionsSource != nil {
+		b.set("actions_source", *p.ActionsSource)
+	}
+	if p.ResearchVerdict != nil {
+		b.set("research_verdict", *p.ResearchVerdict)
+	}
+	if p.ResearchConfidence != nil {
+		b.set("research_confidence", *p.ResearchConfidence)
+	}
+	if p.SuggestedHorizon != nil {
+		b.set("suggested_horizon", *p.SuggestedHorizon)
+	}
+	if p.SuggestedTags != nil {
+		stJSON := "[]"
+		if data, err := json.Marshal(*p.SuggestedTags); err == nil {
+			stJSON = string(data)
+		}
+		b.set("suggested_tags", stJSON)
 	}
 	if p.CaptureID != nil {
 		b.set("capture_id", *p.CaptureID)
@@ -794,7 +848,7 @@ func (s *Store) SetResearch(ctx context.Context, id int64, status, findings, err
 	return s.GetResearch(ctx, id)
 }
 
-func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, plan *port.ResearchPlan, tokens int) error {
+func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, plan *port.ResearchPlan, result *port.ResearchResult, tokens int) error {
 	stepsJSON := "[]"
 	if len(steps) > 0 {
 		b, err := json.Marshal(steps)
@@ -816,14 +870,21 @@ func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, qu
 			planJSON = string(b)
 		}
 	}
+	resultJSON := "{}"
+	if result != nil {
+		b, err := json.Marshal(result)
+		if err == nil {
+			resultJSON = string(b)
+		}
+	}
 	queryClause := ""
-	args := []any{status, stepsJSON, sourcesJSON, planJSON, tokens}
+	args := []any{status, stepsJSON, sourcesJSON, planJSON, resultJSON, tokens}
 	if query != "" {
 		queryClause = ", query = ?"
 		args = append(args, query)
 	}
 	args = append(args, id)
-	querySQL := fmt.Sprintf(`UPDATE research SET status = ?, steps = ?, sources = ?, plan = ?, tokens = ?%s WHERE id = ?`, queryClause)
+	querySQL := fmt.Sprintf(`UPDATE research SET status = ?, steps = ?, sources = ?, plan = ?, result = ?, tokens = ?%s WHERE id = ?`, queryClause)
 	res, err := s.db.ExecContext(ctx, querySQL, args...)
 	if err != nil {
 		return err
@@ -836,10 +897,10 @@ func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, qu
 
 func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, tokens, created_at FROM research WHERE id = ?`, id)
+		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, created_at FROM research WHERE id = ?`, id)
 	var r port.Research
-	var created, stepsJSON, sourcesJSON, planJSON string
-	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &r.Tokens, &created)
+	var created, stepsJSON, sourcesJSON, planJSON, resultJSON string
+	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Research{}, port.ErrNotFound
 	}
@@ -865,12 +926,18 @@ func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error
 			r.Plan = &p
 		}
 	}
+	if resultJSON != "" && resultJSON != "{}" {
+		var res port.ResearchResult
+		if err := json.Unmarshal([]byte(resultJSON), &res); err == nil {
+			r.Result = &res
+		}
+	}
 	return r, nil
 }
 
 func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, card_id, status, query, error, steps, sources, plan, tokens, created_at FROM research ORDER BY id`)
+		`SELECT id, card_id, status, query, error, steps, sources, plan, result, tokens, created_at FROM research ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -878,8 +945,8 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	var list []port.Research
 	for rows.Next() {
 		var r port.Research
-		var created, stepsJSON, sourcesJSON, planJSON string
-		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &r.Tokens, &created); err != nil {
+		var created, stepsJSON, sourcesJSON, planJSON, resultJSON string
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &created); err != nil {
 			return nil, err
 		}
 		r.CreatedAt, _ = parseTime(created)
@@ -899,6 +966,12 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 			var p port.ResearchPlan
 			if err := json.Unmarshal([]byte(planJSON), &p); err == nil && len(p.Questions) > 0 {
 				r.Plan = &p
+			}
+		}
+		if resultJSON != "" && resultJSON != "{}" {
+			var res port.ResearchResult
+			if err := json.Unmarshal([]byte(resultJSON), &res); err == nil {
+				r.Result = &res
 			}
 		}
 		list = append(list, r)

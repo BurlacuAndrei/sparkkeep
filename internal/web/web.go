@@ -975,7 +975,12 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		Worthiness       *port.Worthiness  `json:"worthiness"`
 		ExecutiveSummary *string           `json:"executive_summary"`
 		ValueProposition *string           `json:"value_proposition"`
-		ProposedActions  *[]string         `json:"proposed_actions"`
+		ProposedActions    *[]string         `json:"proposed_actions"`
+		ActionsSource      *string           `json:"actions_source"`
+		ResearchVerdict    *string           `json:"research_verdict"`
+		ResearchConfidence *string           `json:"research_confidence"`
+		SuggestedHorizon   *string           `json:"suggested_horizon"`
+		SuggestedTags      *[]string         `json:"suggested_tags"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -1039,10 +1044,15 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		Worthiness:       b.Worthiness,
 		ExecutiveSummary: b.ExecutiveSummary,
 		ValueProposition: b.ValueProposition,
-		ProposedActions:  b.ProposedActions,
-		References:       b.References,
+		ProposedActions:    b.ProposedActions,
+		ActionsSource:      b.ActionsSource,
+		ResearchVerdict:    b.ResearchVerdict,
+		ResearchConfidence: b.ResearchConfidence,
+		SuggestedHorizon:   b.SuggestedHorizon,
+		SuggestedTags:      b.SuggestedTags,
+		References:         b.References,
 	}
-	if patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.Type != nil || patch.TLDR != nil || patch.WhyCare != nil || patch.Claims != nil || patch.OpenQuestions != nil || patch.Signals != nil || patch.Worthiness != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil || patch.References != nil {
+	if patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.Type != nil || patch.TLDR != nil || patch.WhyCare != nil || patch.Claims != nil || patch.OpenQuestions != nil || patch.Signals != nil || patch.Worthiness != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil || patch.ActionsSource != nil || patch.ResearchVerdict != nil || patch.ResearchConfidence != nil || patch.SuggestedHorizon != nil || patch.SuggestedTags != nil || patch.References != nil {
 		card, err = a.store.UpdateCard(r.Context(), id, patch)
 		if err != nil {
 			a.fail(w, err)

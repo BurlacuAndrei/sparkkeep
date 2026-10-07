@@ -121,7 +121,7 @@ func TestCoreRouterPerRoleEndpoints(t *testing.T) {
 	serverB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&bSynthesisHits, 1)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"## Findings\nSynthesized by Model B\n## Sources\nhttps://example.com/source\n## Next steps\nExecute"}}]}`)
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"recommendation\":\"pursue\",\"for_whom\":\"engineers\",\"risks\":[],\"confidence\":\"high\",\"next_actions\":[\"act1\",\"act2\",\"act3\"],\"landscape\":[],\"claims\":[]}"}}]}`)
 	}))
 	defer serverB.Close()
 
@@ -201,8 +201,8 @@ func TestCoreRouterPerRoleEndpoints(t *testing.T) {
 	if atomic.LoadInt64(&aPlanHits) != 1 {
 		t.Fatalf("expected 1 research plan hit on Server A, got %d", atomic.LoadInt64(&aPlanHits))
 	}
-	if atomic.LoadInt64(&bSynthesisHits) != 1 {
-		t.Fatalf("expected 1 research synthesis hit on Server B, got %d", atomic.LoadInt64(&bSynthesisHits))
+	if atomic.LoadInt64(&bSynthesisHits) < 1 {
+		t.Fatalf("expected at least 1 research synthesis hit on Server B, got %d", atomic.LoadInt64(&bSynthesisHits))
 	}
 }
 
@@ -228,7 +228,7 @@ func TestCoreRouterDeletionFallback(t *testing.T) {
 		// synthesis call on Server A fallback
 		atomic.AddInt64(&aSynthesisHits, 1)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"## Findings\nFell back to Model A\n## Sources\nhttps://example.com/source\n## Next steps\nOK"}}]}`)
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"recommendation\":\"pursue\",\"for_whom\":\"engineers\",\"risks\":[],\"confidence\":\"high\",\"next_actions\":[\"act1\",\"act2\",\"act3\"],\"landscape\":[],\"claims\":[]}"}}]}`)
 	}))
 	defer serverA.Close()
 
@@ -274,8 +274,8 @@ func TestCoreRouterDeletionFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected fallback to default profile without error, got: %v", err)
 	}
-	if atomic.LoadInt64(&aSynthesisHits) != 1 {
-		t.Fatalf("expected 1 synthesis hit on Server A as fallback, got %d", atomic.LoadInt64(&aSynthesisHits))
+	if atomic.LoadInt64(&aSynthesisHits) < 1 {
+		t.Fatalf("expected synthesis hit on Server A as fallback, got %d", atomic.LoadInt64(&aSynthesisHits))
 	}
 }
 
@@ -300,14 +300,14 @@ func TestCoreRouterSettingsChangeTakesEffectWithoutRestart(t *testing.T) {
 		}
 		atomic.AddInt64(&aSynthesisHits, 1)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"## Findings\nReport A\n## Sources\nhttps://example.com/source\n## Next steps\nDone"}}]}`)
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"recommendation\":\"pursue\",\"for_whom\":\"engineers\",\"risks\":[],\"confidence\":\"high\",\"next_actions\":[\"act1\",\"act2\",\"act3\"],\"landscape\":[],\"claims\":[]}"}}]}`)
 	}))
 	defer serverA.Close()
 
 	serverB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&bSynthesisHits, 1)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"## Findings\nReport B\n## Sources\nhttps://example.com/source\n## Next steps\nDone"}}]}`)
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"recommendation\":\"pursue\",\"for_whom\":\"engineers\",\"risks\":[],\"confidence\":\"high\",\"next_actions\":[\"act1\",\"act2\",\"act3\"],\"landscape\":[],\"claims\":[]}"}}]}`)
 	}))
 	defer serverB.Close()
 
@@ -349,8 +349,8 @@ func TestCoreRouterSettingsChangeTakesEffectWithoutRestart(t *testing.T) {
 	if err := svc.Research(ctx, card1.ID); err != nil {
 		t.Fatalf("first research failed: %v", err)
 	}
-	if atomic.LoadInt64(&aSynthesisHits) != 1 || atomic.LoadInt64(&bSynthesisHits) != 0 {
-		t.Fatalf("first run: want aHits=1, bHits=0, got a=%d b=%d", atomic.LoadInt64(&aSynthesisHits), atomic.LoadInt64(&bSynthesisHits))
+	if atomic.LoadInt64(&aSynthesisHits) < 1 || atomic.LoadInt64(&bSynthesisHits) != 0 {
+		t.Fatalf("first run: want aHits>=1, bHits=0, got a=%d b=%d", atomic.LoadInt64(&aSynthesisHits), atomic.LoadInt64(&bSynthesisHits))
 	}
 
 	// Change mapping in settings to prof-b and rebuild router (no process restart)
@@ -365,8 +365,8 @@ func TestCoreRouterSettingsChangeTakesEffectWithoutRestart(t *testing.T) {
 	if err := svc.Research(ctx, card2.ID); err != nil {
 		t.Fatalf("second research failed: %v", err)
 	}
-	if atomic.LoadInt64(&bSynthesisHits) != 1 {
-		t.Fatalf("second run: want bHits=1, got %d", atomic.LoadInt64(&bSynthesisHits))
+	if atomic.LoadInt64(&bSynthesisHits) < 1 {
+		t.Fatalf("second run: want bHits>=1, got %d", atomic.LoadInt64(&bSynthesisHits))
 	}
 }
 

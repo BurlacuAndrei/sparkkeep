@@ -57,8 +57,44 @@ export interface Card {
   executive_summary?: string;
   value_proposition?: string;
   proposed_actions?: string[];
+  actions_source?: 'triage' | 'research' | 'user' | string;
+  research_verdict?: 'pursue' | 'watch' | 'skip' | string;
+  research_confidence?: 'high' | 'medium' | 'low' | string;
+  suggested_horizon?: string;
+  suggested_tags?: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface ClaimVerdict {
+  claim: string;
+  status: 'supported' | 'disputed' | 'unverified';
+  rationale: string;
+  sources: string[];
+}
+
+export interface LandscapeItem {
+  name: string;
+  url?: string;
+  one_liner: string;
+  how_it_differs: string;
+  sources: string[];
+}
+
+export interface ResearchVerdict {
+  recommendation: 'pursue' | 'watch' | 'skip';
+  for_whom: string;
+  risks: string[];
+  confidence: 'high' | 'medium' | 'low';
+  next_actions: string[];
+  suggested_horizon?: string;
+  suggested_tags?: string[];
+}
+
+export interface ResearchResult {
+  claims: ClaimVerdict[];
+  landscape: LandscapeItem[];
+  verdict?: ResearchVerdict;
 }
 
 export interface Tag {
@@ -85,6 +121,11 @@ export interface ResearchItem {
   query: string;
   findings: string;
   error?: string;
+  steps?: any[];
+  sources?: any[];
+  plan?: any;
+  result?: ResearchResult;
+  tokens?: number;
   created_at: string;
 }
 

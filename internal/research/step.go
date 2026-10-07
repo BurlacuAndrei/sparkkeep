@@ -22,6 +22,7 @@ type RunState struct {
 	StepOutputs map[string]any
 	Steps       []port.ResearchStep
 	Plan        *port.ResearchPlan
+	Result      *port.ResearchResult
 	Query       string
 	Tokens      int
 	ResearchID  int64
@@ -36,6 +37,10 @@ func NewRunState(card port.Card, researchID int64, store port.Store, perSourceBu
 		Sources:     NewRegistry(perSourceBudget, totalBudget),
 		StepOutputs: make(map[string]any),
 		Steps:       []port.ResearchStep{},
+		Result: &port.ResearchResult{
+			Claims:    []port.ClaimVerdict{},
+			Landscape: []port.LandscapeItem{},
+		},
 		ResearchID:  researchID,
 		Store:       store,
 		Notes:       make(map[string]string),

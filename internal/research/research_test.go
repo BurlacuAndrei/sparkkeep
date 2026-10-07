@@ -22,7 +22,7 @@ import (
 )
 
 // llmStub is a chat-completions server that returns appropriate responses
-// for plan (JSON or single-line query) and synthesis (markdown with citations).
+// for plan, claims verification, landscape, and verdict.
 func llmStub() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -37,11 +37,17 @@ func llmStub() *httptest.Server {
 		if n := len(req.Messages); n > 0 {
 			last = req.Messages[n-1].Content
 		}
-		content := "## What the source says\nSummary [S1]\n## Questions & Findings\n### Q1: What is it?\nKey findings [S1]\n## Sources\n[S1] source\n## Next steps\nNext step"
+		content := `{"recommendation":"pursue","for_whom":"engineers","risks":["complexity"],"confidence":"high","next_actions":["Step 1","Step 2","Step 3"],"suggested_horizon":"short-term","suggested_tags":["ai"]}`
 		if strings.Contains(last, "research planning assistant") {
 			content = `{"questions":[{"id":"Q1","question":"Core technology?","query":"core tech query","prefer_domains":["github.com"]}]}`
 		} else if strings.Contains(last, "web search query") {
 			content = "cli-fi reading list"
+		} else if strings.Contains(last, "fact-checking assistant") || strings.Contains(last, "Claims to verify") {
+			content = `{"claims":[{"claim":"Claim 1","status":"supported","rationale":"Found in S1","sources":["S1"]}]}`
+		} else if strings.Contains(last, "competitive and technology landscape") {
+			content = `{"landscape":[{"name":"AltTool","url":"https://alt.example.com","one_liner":"Alt solution","how_it_differs":"Simpler","sources":["S1"]}]}`
+		} else if strings.Contains(last, "research synthesis and executive decision assistant") {
+			content = `{"recommendation":"pursue","for_whom":"engineers","risks":["complexity"],"confidence":"high","next_actions":["Step 1","Step 2","Step 3"],"suggested_horizon":"short-term","suggested_tags":["ai"]}`
 		}
 		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
 	}))
@@ -52,6 +58,22 @@ func stubRunner(llm *httptest.Server, searchURL string) *Runner {
 		analyze.New(config.Config{LLMBase: llm.URL, LLMModel: "stub"}, llm.Client()))
 	r.Timeout = 5 * time.Second
 	return r
+}
+
+func stubSynthServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+		content := `{"recommendation":"pursue","for_whom":"engineers","risks":["complexity"],"confidence":"high","next_actions":["Step 1","Step 2","Step 3"],"suggested_horizon":"short-term","suggested_tags":["ai"]}`
+		if strings.Contains(str, "Claims to verify") || strings.Contains(str, "fact-checking assistant") {
+			content = `{"claims":[{"claim":"Scales linearly","status":"supported","rationale":"Backed by S1","sources":["S1"]},{"claim":"Provides linearizability","status":"supported","rationale":"Backed by S1","sources":["S1"]}]}`
+		} else if strings.Contains(str, "competitive and technology landscape") {
+			content = `{"landscape":[{"name":"AltTool","url":"https://alt.example.com","one_liner":"Alt solution","how_it_differs":"Simpler","sources":["S1"]}]}`
+		} else if strings.Contains(str, "research synthesis and executive decision assistant") {
+			content = `{"recommendation":"pursue","for_whom":"engineers","risks":["complexity"],"confidence":"high","next_actions":["Step 1","Step 2","Step 3"],"suggested_horizon":"short-term","suggested_tags":["ai"]}`
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
+	}))
 }
 
 type traceFetcher struct {
@@ -93,12 +115,17 @@ type memoryStore struct {
 		status string
 		query  string
 		steps  []port.ResearchStep
+		result *port.ResearchResult
 	}
 	captures map[int64]port.Capture
+	cards    map[int64]port.Card
 }
 
 func newMemoryStore() *memoryStore {
-	return &memoryStore{captures: make(map[int64]port.Capture)}
+	return &memoryStore{
+		captures: make(map[int64]port.Capture),
+		cards:    make(map[int64]port.Card),
+	}
 }
 
 func (m *memoryStore) GetCapture(_ context.Context, id int64) (port.Capture, error) {
@@ -111,7 +138,49 @@ func (m *memoryStore) GetCapture(_ context.Context, id int64) (port.Capture, err
 	return cap, nil
 }
 
-func (m *memoryStore) UpdateResearchProgress(_ context.Context, _ int64, status, query string, steps []port.ResearchStep, _ []port.Source, _ *port.ResearchPlan, _ int) error {
+func (m *memoryStore) GetCard(_ context.Context, id int64) (port.Card, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	card, ok := m.cards[id]
+	if !ok {
+		return port.Card{}, port.ErrNotFound
+	}
+	return card, nil
+}
+
+func (m *memoryStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (port.Card, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	card, ok := m.cards[id]
+	if !ok {
+		return port.Card{}, port.ErrNotFound
+	}
+	if p.ProposedActions != nil {
+		card.ProposedActions = *p.ProposedActions
+		if p.ActionsSource == nil {
+			card.ActionsSource = "user"
+		}
+	}
+	if p.ActionsSource != nil {
+		card.ActionsSource = *p.ActionsSource
+	}
+	if p.ResearchVerdict != nil {
+		card.ResearchVerdict = *p.ResearchVerdict
+	}
+	if p.ResearchConfidence != nil {
+		card.ResearchConfidence = *p.ResearchConfidence
+	}
+	if p.SuggestedHorizon != nil {
+		card.SuggestedHorizon = *p.SuggestedHorizon
+	}
+	if p.SuggestedTags != nil {
+		card.SuggestedTags = *p.SuggestedTags
+	}
+	m.cards[id] = card
+	return card, nil
+}
+
+func (m *memoryStore) UpdateResearchProgress(_ context.Context, _ int64, status, query string, steps []port.ResearchStep, _ []port.Source, _ *port.ResearchPlan, result *port.ResearchResult, _ int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	stepsCopy := make([]port.ResearchStep, len(steps))
@@ -120,7 +189,8 @@ func (m *memoryStore) UpdateResearchProgress(_ context.Context, _ int64, status,
 		status string
 		query  string
 		steps  []port.ResearchStep
-	}{status: status, query: query, steps: stepsCopy})
+		result *port.ResearchResult
+	}{status: status, query: query, steps: stepsCopy, result: result})
 	return nil
 }
 
@@ -288,12 +358,7 @@ func TestRun_MultiQuestionPlanning(t *testing.T) {
 	}))
 	defer planServer.Close()
 
-	synthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		content := "## What the source says\n[S1]\n## Questions & Findings\n### Q1: Question 1?\nFindings for Q1 [S1]\n## Sources\n[S1]\n## Next steps\nSteps"
-		_ = body
-		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
-	}))
+	synthServer := stubSynthServer()
 	defer synthServer.Close()
 
 	planClient := analyze.New(config.Config{LLMBase: planServer.URL, LLMModel: "plan"}, planServer.Client())
@@ -339,10 +404,7 @@ func TestRun_InvalidPlanJSON_DegradesToSingleQuery(t *testing.T) {
 	}))
 	defer planServer.Close()
 
-	synthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		content := "## What the source says\nText [S1]\n## Questions & Findings\n### Q1: General\nFound things [S1]\n## Sources\n[S1]\n## Next steps\nSteps"
-		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
-	}))
+	synthServer := stubSynthServer()
 	defer synthServer.Close()
 
 	planClient := analyze.New(config.Config{LLMBase: planServer.URL, LLMModel: "plan"}, planServer.Client())
@@ -419,9 +481,7 @@ func TestRun_RoundRobinFairBudget(t *testing.T) {
 	}))
 	defer planServer.Close()
 
-	synthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"## What the source says\n[S1]\n## Questions & Findings\n### Q1\nfindings\n## Sources\n[S1]\n## Next steps\nsteps"}}]}`)
-	}))
+	synthServer := stubSynthServer()
 	defer synthServer.Close()
 
 	planClient := analyze.New(config.Config{LLMBase: planServer.URL, LLMModel: "plan"}, planServer.Client())
@@ -553,5 +613,239 @@ func TestRun_PartialRefFetchFailureContinuesWithNote(t *testing.T) {
 	}
 	if !strings.Contains(report, "## Questions & Findings") && !strings.Contains(report, "## Findings") {
 		t.Fatalf("report missing findings:\n%s", report)
+	}
+}
+
+func TestClaimVerification_CitationValidation(t *testing.T) {
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"results":[{"url":"https://example.com/s1"}]}`)
+	}))
+	defer search.Close()
+
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+		content := ""
+		if strings.Contains(str, "research planning assistant") {
+			content = `{"questions":[{"id":"Q1","question":"Question 1?","query":"q1"}]}`
+		} else if strings.Contains(str, "Claims to verify") {
+			// Claim 1 cites S1 (valid)
+			// Claim 2 cites S99 (invalid -> should downgrade)
+			// Claim 3 cites [] (no sources -> should downgrade)
+			content = `{
+				"claims": [
+					{"claim": "Claim 1", "status": "supported", "rationale": "Directly backed by S1", "sources": ["S1"]},
+					{"claim": "Claim 2", "status": "supported", "rationale": "I hallucinated this", "sources": ["S99"]},
+					{"claim": "Claim 3", "status": "disputed", "rationale": "I dispute without proof", "sources": []}
+				]
+			}`
+		} else if strings.Contains(str, "competitive and technology landscape") {
+			content = `{"landscape":[{"name":"Alt","url":"https://alt.com","one_liner":"Alt","how_it_differs":"Different","sources":["S1"]}]}`
+		} else if strings.Contains(str, "research synthesis and executive decision assistant") {
+			content = `{"recommendation":"pursue","for_whom":"all","risks":["none"],"confidence":"high","next_actions":["act1","act2","act3"]}`
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
+	}))
+	defer llm.Close()
+
+	runner := stubRunner(llm, search.URL)
+	tf := newTraceFetcher()
+	tf.bodies["https://example.com/s1"] = "Evidence body"
+	runner.Fetcher = tf
+
+	card := port.Card{
+		Title:  "Citation Validation Card",
+		Claims: []string{"Claim 1", "Claim 2", "Claim 3"},
+	}
+
+	state := NewRunState(card, 0, nil, DefaultPerSourceBudget, DefaultTotalBudget)
+	for _, step := range runner.buildPipeline() {
+		if err := step.Run(context.Background(), state); err != nil {
+			t.Fatalf("step %s failed: %v", step.ID, err)
+		}
+	}
+
+	if state.Result == nil || len(state.Result.Claims) != 3 {
+		t.Fatalf("expected 3 claim verdicts, got %+v", state.Result)
+	}
+
+	c1 := state.Result.Claims[0]
+	if c1.Status != "supported" || len(c1.Sources) != 1 || c1.Sources[0] != "S1" {
+		t.Fatalf("Claim 1 should be supported by S1, got: %+v", c1)
+	}
+
+	c2 := state.Result.Claims[1]
+	if c2.Status != "unverified" {
+		t.Fatalf("Claim 2 citing non-existent S99 should be downgraded to unverified, got: %+v", c2)
+	}
+
+	c3 := state.Result.Claims[2]
+	if c3.Status != "unverified" {
+		t.Fatalf("Claim 3 citing empty sources should be downgraded to unverified, got: %+v", c3)
+	}
+}
+
+func TestCardWriteBack_ProposedActions_AndUserGuard(t *testing.T) {
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"results":[{"url":"https://example.com/item"}]}`)
+	}))
+	defer search.Close()
+
+	llm := llmStub()
+	defer llm.Close()
+
+	runner := stubRunner(llm, search.URL)
+	tf := newTraceFetcher()
+	tf.bodies["https://example.com/item"] = "Content"
+	runner.Fetcher = tf
+
+	ms := newMemoryStore()
+	runner.Store = ms
+
+	// 1. Initial card with triage actions
+	card := port.Card{
+		ID:              42,
+		Title:           "Writeback Guard Card",
+		Summary:         "Summary",
+		ActionsSource:   "triage",
+		ProposedActions: []string{"Initial triage action"},
+	}
+	ms.cards[42] = card
+
+	_, err := runner.RunWithID(context.Background(), card, 100)
+	if err != nil {
+		t.Fatalf("RunWithID failed: %v", err)
+	}
+
+	// Should have replaced actions from research verdict
+	c1 := ms.cards[42]
+	if c1.ActionsSource != "research" {
+		t.Fatalf("actions_source want research, got %s", c1.ActionsSource)
+	}
+	if len(c1.ProposedActions) == 0 || c1.ProposedActions[0] == "Initial triage action" {
+		t.Fatalf("expected proposed actions to be updated by research, got: %+v", c1.ProposedActions)
+	}
+	if c1.ResearchVerdict != "pursue" || c1.ResearchConfidence != "high" {
+		t.Fatalf("unexpected verdict/confidence: %s / %s", c1.ResearchVerdict, c1.ResearchConfidence)
+	}
+
+	// 2. User edits actions
+	userActions := []string{"User manual action"}
+	_, err = ms.UpdateCard(context.Background(), 42, port.CardPatch{
+		ProposedActions: &userActions,
+	})
+	if err != nil {
+		t.Fatalf("UpdateCard user: %v", err)
+	}
+	cUser := ms.cards[42]
+	if cUser.ActionsSource != "user" {
+		t.Fatalf("want actions_source user after user update, got %s", cUser.ActionsSource)
+	}
+
+	// 3. Second research run: user-edited actions MUST NOT be overwritten
+	_, err = runner.RunWithID(context.Background(), cUser, 101)
+	if err != nil {
+		t.Fatalf("second RunWithID failed: %v", err)
+	}
+
+	c2 := ms.cards[42]
+	if c2.ActionsSource != "user" {
+		t.Fatalf("want actions_source still user, got %s", c2.ActionsSource)
+	}
+	if len(c2.ProposedActions) != 1 || c2.ProposedActions[0] != "User manual action" {
+		t.Fatalf("user-edited proposed actions were overwritten! got: %+v", c2.ProposedActions)
+	}
+}
+
+func TestStep_InvalidJSON_RepairAndFallback(t *testing.T) {
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"results":[{"url":"https://example.com/one"}]}`)
+	}))
+	defer search.Close()
+
+	// 1. Repair succeeds: first response is broken, second response is valid JSON
+	var callCount int
+	var mu sync.Mutex
+	repairLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		callCount++
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+
+		if strings.Contains(str, "research planning assistant") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+				strconv.Quote(`{"questions":[{"id":"Q1","question":"Q?","query":"q"}]}`))
+			return
+		}
+		if strings.Contains(str, "Claims to verify") || (strings.Contains(str, "not valid JSON") && strings.Contains(str, "claims")) {
+			// First call gives invalid JSON
+			if !strings.Contains(str, "not valid JSON") {
+				fmt.Fprintf(w, `{"choices":[{"message":{"content":"Broken non-json output"}}]}`)
+				return
+			}
+			// Repair retry gives valid JSON
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+				strconv.Quote(`{"claims":[{"claim":"C1","status":"supported","rationale":"ok","sources":["S1"]}]}`))
+			return
+		}
+		if strings.Contains(str, "landscape") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":"{\"landscape\":[]}"}}]}`)
+			return
+		}
+		// Verdict
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+			strconv.Quote(`{"recommendation":"watch","for_whom":"all","risks":[],"confidence":"medium","next_actions":["a1","a2","a3"]}`))
+	}))
+	defer repairLLM.Close()
+
+	runner := stubRunner(repairLLM, search.URL)
+	tf := newTraceFetcher()
+	tf.bodies["https://example.com/one"] = "body"
+	runner.Fetcher = tf
+
+	card := port.Card{Title: "Repair Test", Claims: []string{"C1"}}
+	state := NewRunState(card, 0, nil, DefaultPerSourceBudget, DefaultTotalBudget)
+
+	for _, step := range runner.buildPipeline() {
+		if err := step.Run(context.Background(), state); err != nil {
+			t.Fatalf("expected repair to succeed, but step %s failed: %v", step.ID, err)
+		}
+	}
+	if len(state.Result.Claims) != 1 || state.Result.Claims[0].Status != "supported" {
+		t.Fatalf("expected repaired claim, got: %+v", state.Result.Claims)
+	}
+
+	// 2. Verdict fails both tries -> research run fails
+	verdictFailLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+		if strings.Contains(str, "research planning assistant") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+				strconv.Quote(`{"questions":[{"id":"Q1","question":"Q?","query":"q"}]}`))
+			return
+		}
+		if strings.Contains(str, "fact-checking assistant") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":"{\"claims\":[]}"}}]}`)
+			return
+		}
+		if strings.Contains(str, "competitive and technology landscape analyst") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":"{\"landscape\":[]}"}}]}`)
+			return
+		}
+		// Verdict fails always
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":"Not JSON at all"}}]}`)
+	}))
+	defer verdictFailLLM.Close()
+
+	failRunner := stubRunner(verdictFailLLM, search.URL)
+	failRunner.Fetcher = tf
+
+	_, err := failRunner.Run(context.Background(), port.Card{Title: "Verdict Fail Card"})
+	if err == nil {
+		t.Fatal("expected run to fail when verdict JSON cannot be parsed even after repair")
+	}
+	if !strings.Contains(err.Error(), "verdict") {
+		t.Fatalf("expected verdict error, got: %v", err)
 	}
 }

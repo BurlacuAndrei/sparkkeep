@@ -160,13 +160,15 @@ export const CardModal: React.FC<CardModalProps> = ({
   const appendFindingsAsActions = () => {
     if (!research) return;
     const seen = new Set(actions.map((a) => a.trim().toLowerCase()));
-    const fresh = extractFindingsActions(research.findings).filter((a) => !seen.has(a.toLowerCase()));
+    const structuredActions = research.result?.verdict?.next_actions || [];
+    const candidates = structuredActions.length > 0 ? structuredActions : extractFindingsActions(research.findings);
+    const fresh = candidates.filter((a) => !seen.has(a.trim().toLowerCase()));
     if (!fresh.length) {
-      showToast?.('No new bullet points in these findings');
+      showToast?.('No new actions in these findings');
       return;
     }
     setActions((prev) => [...prev, ...fresh]);
-    showToast?.(`Added ${fresh.length} finding bullets — save to persist`);
+    showToast?.(`Added ${fresh.length} actions — save to persist`);
   };
 
   const handleSave = (e: React.FormEvent) => {
