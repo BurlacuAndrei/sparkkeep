@@ -331,6 +331,11 @@ func (s *Service) ProcessNextQueued(ctx context.Context, asOf time.Time) (bool, 
 		return true, err
 	}
 
+	rsStatus := "researching"
+	if _, cerr := s.Store.UpdateCard(ctx, card.ID, port.CardPatch{Status: &rsStatus}); cerr != nil {
+		s.Logf("core: failed to set card %d to researching: %v", card.ID, cerr)
+	}
+
 	err = s.executeResearch(ctx, runningItem, card)
 	return true, err
 }

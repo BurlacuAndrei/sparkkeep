@@ -703,6 +703,10 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 	if err != nil {
 		return err
 	}
+	rsStatus := "researching"
+	if _, cerr := s.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &rsStatus}); cerr != nil {
+		s.Logf("core: failed to set card %d to researching: %v", cardID, cerr)
+	}
 	return s.executeResearch(ctx, row, card)
 }
 
@@ -737,6 +741,10 @@ func (s *Service) executeResearch(ctx context.Context, row port.Research, card p
 		if rerr != nil {
 			return rerr
 		}
+		inboxStatus := "inbox"
+		if _, cerr := s.Store.UpdateCard(ctx, card.ID, port.CardPatch{Status: &inboxStatus}); cerr != nil {
+			s.Logf("core: failed to set card %d back to inbox: %v", card.ID, cerr)
+		}
 		if nerr := s.notify(ctx, port.Notification{Kind: "research_failed", Res: &row, Text: err.Error()}); nerr != nil {
 			s.Logf("core: notify research_failed: %v", nerr)
 		}
@@ -745,6 +753,10 @@ func (s *Service) executeResearch(ctx context.Context, row port.Research, card p
 	row, err = s.Store.SetResearch(ctx, row.ID, "done", findings, "")
 	if err != nil {
 		return err
+	}
+	reviewStatus := "review"
+	if _, cerr := s.Store.UpdateCard(ctx, card.ID, port.CardPatch{Status: &reviewStatus}); cerr != nil {
+		s.Logf("core: failed to set card %d to review: %v", card.ID, cerr)
 	}
 	if nerr := s.notify(ctx, port.Notification{Kind: "research_done", Res: &row, Text: "Research complete"}); nerr != nil {
 		s.Logf("core: notify research_done: %v", nerr)

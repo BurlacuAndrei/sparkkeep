@@ -20,6 +20,8 @@ export const HORIZON_FILTER_OPTIONS: SelectOption<string>[] = [
 export const STATUS_FILTER_OPTIONS: SelectOption<string>[] = [
   { value: 'all', label: 'All Statuses' },
   { value: 'inbox', label: '📥 Inbox' },
+  { value: 'researching', label: '🔍 Researching' },
+  { value: 'review', label: '👀 Review' },
   { value: 'doing', label: '⚡ Doing' },
   { value: 'done', label: '✅ Done' },
   { value: 'shelved', label: '📦 Shelved' },
@@ -33,8 +35,10 @@ export const CARD_HORIZON_OPTIONS: SelectOption<'short-term' | 'medium-term' | '
   { value: 'lifetime', label: '🌟 Lifetime (Bucket list / vision)' },
 ];
 
-export const CARD_STATUS_OPTIONS: SelectOption<'inbox' | 'doing' | 'done' | 'shelved' | 'dismissed'>[] = [
+export const CARD_STATUS_OPTIONS: SelectOption<'inbox' | 'researching' | 'review' | 'doing' | 'done' | 'shelved' | 'dismissed'>[] = [
   { value: 'inbox', label: '📥 Inbox' },
+  { value: 'researching', label: '🔍 Researching' },
+  { value: 'review', label: '👀 Review' },
   { value: 'doing', label: '⚡ Doing' },
   { value: 'done', label: '✅ Done' },
   { value: 'shelved', label: '📦 Shelved' },

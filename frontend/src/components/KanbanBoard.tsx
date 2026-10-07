@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card } from '../types';
 import { CardItem } from './CardItem';
-import { Inbox, Zap, Archive, CheckCircle2, Sparkles, CheckSquare } from 'lucide-react';
+import { Inbox, Zap, Archive, CheckCircle2, Sparkles, CheckSquare, Search, Eye } from 'lucide-react';
 import * as api from '../api';
 
 interface KanbanBoardProps {
@@ -32,6 +32,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [batching, setBatching] = useState(false);
 
   const inboxCards = cards.filter((c) => c.status === 'inbox');
+  const researchingCards = cards.filter((c) => c.status === 'researching');
+  const reviewCards = cards.filter((c) => c.status === 'review');
   const doingCards = cards.filter((c) => c.status === 'doing');
   const shelvedCards = cards.filter((c) => c.status === 'shelved');
   const doneCards = cards.filter((c) => c.status === 'done');
@@ -198,6 +200,46 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </div>
             ) : (
               inboxCards.map(renderCardItem)
+            )}
+          </div>
+        </div>
+
+        {/* Researching Column */}
+        <div className="kanban-column">
+          <div className="column-header">
+            <div className="column-title">
+              <Search size={15} strokeWidth={1.5} color="#c084fc" />
+              <span>Researching</span>
+            </div>
+            <span className="column-count">{researchingCards.length}</span>
+          </div>
+          <div className="cards-container">
+            {researchingCards.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                No active research.
+              </div>
+            ) : (
+              researchingCards.map(renderCardItem)
+            )}
+          </div>
+        </div>
+
+        {/* Review Column */}
+        <div className="kanban-column">
+          <div className="column-header">
+            <div className="column-title">
+              <Eye size={15} strokeWidth={1.5} color="#f472b6" />
+              <span>Review</span>
+            </div>
+            <span className="column-count">{reviewCards.length}</span>
+          </div>
+          <div className="cards-container">
+            {reviewCards.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                No reports to review.
+              </div>
+            ) : (
+              reviewCards.map(renderCardItem)
             )}
           </div>
         </div>
