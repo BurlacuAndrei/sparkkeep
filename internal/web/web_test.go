@@ -2606,21 +2606,21 @@ func TestPlaybookAPI(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &libResp); err != nil {
 		t.Fatalf("unmarshal library templates: %v", err)
 	}
-	if len(libResp.Templates) != 6 {
-		t.Fatalf("expected 6 library templates, got %d", len(libResp.Templates))
+	if len(libResp.Templates) != 3 {
+		t.Fatalf("expected 3 library templates, got %d", len(libResp.Templates))
 	}
-	// Verify monetization template is present
-	foundMonetization := false
+	// Verify general_analysis template is present
+	foundGeneral := false
 	for _, tpl := range libResp.Templates {
-		if tpl.ID == "monetization" {
-			foundMonetization = true
-			if tpl.Heading != "Monetization Angle" || tpl.ToolPolicy != "search" {
-				t.Errorf("unexpected monetization template config: %+v", tpl)
+		if tpl.ID == "general_analysis" {
+			foundGeneral = true
+			if tpl.Heading != "General Analysis" || tpl.ToolPolicy != "search" {
+				t.Errorf("unexpected general_analysis template config: %+v", tpl)
 			}
 		}
 	}
-	if !foundMonetization {
-		t.Errorf("monetization template not found in library")
+	if !foundGeneral {
+		t.Errorf("general_analysis template not found in library")
 	}
 }
 

@@ -2454,7 +2454,7 @@ body {
 /* --- Settings Modal Layout --- */
 .settings-modal-card {
   width: 100%;
-  max-width: 640px;
+  max-width: 860px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
@@ -2506,23 +2506,37 @@ body {
   color: var(--text-dim);
 }
 
-.settings-tabs-nav {
+.settings-modal-layout {
   display: flex;
-  padding: 0 16px;
-  gap: 6px;
+  min-height: 400px;
+  max-height: calc(88vh - 100px);
+}
+
+.settings-sidebar {
+  width: 240px;
+  border-right: 1px solid var(--border-subtle);
   background: var(--bg-surface-elevated);
-  border-bottom: 1px solid var(--border-subtle);
-  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0;
+  overflow-y: auto;
+}
+
+.settings-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .settings-tab-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 12px 20px;
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-left: 3px solid transparent;
   color: var(--text-dim);
   font-size: 13px;
   font-weight: 600;
@@ -2531,6 +2545,8 @@ body {
   transition: all 0.15s ease;
   position: relative;
   outline: none;
+  text-align: left;
+  width: 100%;
 }
 
 .settings-tab-btn:hover {
@@ -2540,7 +2556,7 @@ body {
 
 .settings-tab-btn.active {
   color: var(--accent-indigo);
-  border-bottom-color: var(--accent-indigo);
+  border-left-color: var(--accent-indigo);
   background: var(--bg-item-selected);
 }
 
@@ -2554,7 +2570,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-height: calc(88vh - 170px);
+  flex: 1;
   overflow-y: auto;
 }
 

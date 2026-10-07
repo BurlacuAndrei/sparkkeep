@@ -1052,8 +1052,8 @@ func TestClaimCheckPlaybook(t *testing.T) {
 
 func TestLibraryTemplates_ValidateAndRun(t *testing.T) {
 	templates := BuiltinStepTemplates()
-	if len(templates) != 6 {
-		t.Fatalf("expected 6 templates, got %d", len(templates))
+	if len(templates) != 3 {
+		t.Fatalf("expected 3 templates, got %d", len(templates))
 	}
 
 	for _, tpl := range templates {
@@ -1219,10 +1219,10 @@ func TestCustomStep_UseProfileOptOut(t *testing.T) {
 	}
 }
 
-func TestPersonalFitStep_ProducesFitScoreAndReferencesProfile(t *testing.T) {
-	personalFitResponse := `### Personal Fit & Alignment
-- **Personal Fit Score:** 4/5
-- **Why:** Aligns strongly with your goal of running Postgres + n8n automation on a NAS; this replaces an unmaintained container.
+func TestGeneralAnalysisStep_ProducesAnalysisAndReferencesProfile(t *testing.T) {
+	generalAnalysisResponse := `### General Analysis
+- **Core Concepts:** 4/5
+- **Insights:** Aligns strongly with your goal of running Postgres + n8n automation on a NAS; this replaces an unmaintained container.
 - **What's Missing:** You will need to install Traefik v3 proxy configs.
 - **Tailored First Step:** Run the provided docker-compose snippet on your local NAS.`
 
@@ -1240,8 +1240,8 @@ func TestPersonalFitStep_ProducesFitScoreAndReferencesProfile(t *testing.T) {
 			last = req.Messages[len(req.Messages)-1].Content
 		}
 		resp := "Generic response"
-		if strings.Contains(last, "Personal Fit Score") || strings.Contains(last, "personal_fit") || strings.Contains(last, "Personal Fit & Alignment") {
-			resp = personalFitResponse
+		if strings.Contains(last, "General Analysis") || strings.Contains(last, "general_analysis") {
+			resp = generalAnalysisResponse
 		}
 		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(resp))
 	}))
@@ -1257,13 +1257,13 @@ func TestPersonalFitStep_ProducesFitScoreAndReferencesProfile(t *testing.T) {
 	templates := BuiltinStepTemplates()
 	var pfTemplate *LibraryStepTemplate
 	for _, tpl := range templates {
-		if tpl.ID == "personal_fit" {
+		if tpl.ID == "general_analysis" {
 			pfTemplate = &tpl
 			break
 		}
 	}
 	if pfTemplate == nil {
-		t.Fatalf("personal_fit template not found in library")
+		t.Fatalf("general_analysis template not found in library")
 	}
 
 	pb := port.Playbook{
@@ -1299,8 +1299,8 @@ func TestPersonalFitStep_ProducesFitScoreAndReferencesProfile(t *testing.T) {
 		t.Fatalf("RunWithPlaybook failed: %v", err)
 	}
 
-	if !strings.Contains(report, "Personal Fit Score") || !strings.Contains(report, "4/5") {
-		t.Errorf("report missing Personal Fit Score: %s", report)
+	if !strings.Contains(report, "Core Concepts") || !strings.Contains(report, "4/5") {
+		t.Errorf("report missing Core Concepts: %s", report)
 	}
 	if !strings.Contains(report, "Postgres + n8n") {
 		t.Errorf("report missing references to user profile items (Postgres + n8n): %s", report)

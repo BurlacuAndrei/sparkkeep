@@ -103,12 +103,36 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
     desc: 'Cloud OpenAI inference',
   },
   {
+    label: 'Claude',
+    name: 'Anthropic Claude 3.5 Sonnet',
+    base: 'https://api.anthropic.com/v1',
+    model: 'claude-3-5-sonnet-20241022',
+    requiresKey: true,
+    desc: 'Cloud Anthropic inference',
+  },
+  {
+    label: 'Gemini',
+    name: 'Google Gemini 1.5 Pro',
+    base: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    model: 'gemini-1.5-pro-latest',
+    requiresKey: true,
+    desc: 'Cloud Gemini inference via OpenAI compat',
+  },
+  {
     label: 'Groq',
     name: 'Groq Llama 3.3',
     base: 'https://api.groq.com/openai/v1',
     model: 'llama-3.3-70b-versatile',
     requiresKey: true,
     desc: 'Ultra-fast LPU inference',
+  },
+  {
+    label: 'OpenRouter',
+    name: 'OpenRouter Auto',
+    base: 'https://openrouter.ai/api/v1',
+    model: 'anthropic/claude-3-haiku',
+    requiresKey: true,
+    desc: 'OpenRouter inference',
   },
   {
     label: 'Ollama',
@@ -585,85 +609,89 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="settings-tabs-nav" role="tablist" aria-label="Settings categories">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'appearance'}
-            className={`settings-tab-btn ${activeTab === 'appearance' ? 'active' : ''}`}
-            onClick={() => setActiveTab('appearance')}
-          >
-            <Palette size={15} />
-            <span>Appearance & Preferences</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'profile'}
-            className={`settings-tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
-            onClick={() => setActiveTab('profile')}
-          >
-            <User size={15} />
-            <span>About me</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'ai'}
-            className={`settings-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
-            onClick={() => setActiveTab('ai')}
-          >
-            <Cpu size={15} />
-            <span>AI Engine</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'playbooks'}
-            className={`settings-tab-btn ${activeTab === 'playbooks' ? 'active' : ''}`}
-            onClick={() => setActiveTab('playbooks')}
-          >
-            <BookOpen size={15} />
-            <span>Research Playbooks</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'schedule'}
-            className={`settings-tab-btn ${activeTab === 'schedule' ? 'active' : ''}`}
-            onClick={() => setActiveTab('schedule')}
-          >
-            <Clock size={15} />
-            <span>Scheduled Research</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'security'}
-            className={`settings-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
-            onClick={() => setActiveTab('security')}
-          >
-            <Shield size={15} />
-            <span>Security & Access</span>
-          </button>
-        </div>
-
-        {/* Error Alert */}
-        {error && (
-          <div className="setup-error-box" style={{ margin: '16px 24px 0' }}>
-            <AlertCircle size={18} />
-            <span>{error}</span>
+        {/* Modal Layout Wrapper */}
+        <div className="settings-modal-layout">
+          {/* Sidebar Navigation */}
+          <div className="settings-sidebar" role="tablist" aria-label="Settings categories">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'appearance'}
+              className={`settings-tab-btn ${activeTab === 'appearance' ? 'active' : ''}`}
+              onClick={() => setActiveTab('appearance')}
+            >
+              <Palette size={15} />
+              <span>Appearance & Preferences</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'profile'}
+              className={`settings-tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
+              onClick={() => setActiveTab('profile')}
+            >
+              <User size={15} />
+              <span>About me</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'ai'}
+              className={`settings-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
+              onClick={() => setActiveTab('ai')}
+            >
+              <Cpu size={15} />
+              <span>AI Engine</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'playbooks'}
+              className={`settings-tab-btn ${activeTab === 'playbooks' ? 'active' : ''}`}
+              onClick={() => setActiveTab('playbooks')}
+            >
+              <BookOpen size={15} />
+              <span>Research Playbooks</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'schedule'}
+              className={`settings-tab-btn ${activeTab === 'schedule' ? 'active' : ''}`}
+              onClick={() => setActiveTab('schedule')}
+            >
+              <Clock size={15} />
+              <span>Scheduled Research</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'security'}
+              className={`settings-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
+              onClick={() => setActiveTab('security')}
+            >
+              <Shield size={15} />
+              <span>Security & Access</span>
+            </button>
           </div>
-        )}
 
-        {/* Modal Body */}
-        {loading ? (
-          <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>
-            Loading platform configuration...
-          </div>
-        ) : (
-          <div className="settings-modal-body">
+          {/* Main Content Area */}
+          <div className="settings-main-content">
+            {/* Error Alert */}
+            {error && (
+              <div className="setup-error-box" style={{ margin: '16px 24px 0' }}>
+                <AlertCircle size={18} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Modal Body */}
+            {loading ? (
+              <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                Loading platform configuration...
+              </div>
+            ) : (
+              <div className="settings-modal-body">
             {/* TAB 1: Appearance & Preferences */}
             {activeTab === 'appearance' && (
               <div className="settings-panel" role="tabpanel">
@@ -790,72 +818,16 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
 
                   {/* Goals */}
                   <div className="setup-form-group">
-                    <label htmlFor="profile-goals">Primary Goals & Focus</label>
+                    <label htmlFor="profile-goals">Tell me about yourself</label>
                     <textarea
                       id="profile-goals"
                       className="setup-textarea"
-                      rows={3}
+                      rows={6}
                       value={profileGoals}
                       onChange={(e) => setProfileGoals(e.target.value)}
-                      placeholder="e.g. Build lean tools, automate media servers on NAS, explore open-source agents, self-host all workflows..."
+                      placeholder="e.g. I am a student trying to learn about software engineering, or I am a hobbyist building homelabs..."
                     />
-                    <span className="setup-hint">Free text: What you are trying to achieve or learn right now.</span>
-                  </div>
-
-                  {/* Skills */}
-                  <div className="setup-form-group">
-                    <label htmlFor="profile-skills">Skills & Languages (comma-separated tags)</label>
-                    <input
-                      id="profile-skills"
-                      type="text"
-                      className="setup-input"
-                      value={profileSkills}
-                      onChange={(e) => setProfileSkills(e.target.value)}
-                      placeholder="e.g. Go, Python, TypeScript, Docker, Linux, React"
-                    />
-                    <span className="setup-hint">Languages, frameworks, or technical domains you are comfortable with.</span>
-                  </div>
-
-                  {/* Stack / Tools */}
-                  <div className="setup-form-group">
-                    <label htmlFor="profile-stack">Current Stack & Tools (comma-separated tags)</label>
-                    <input
-                      id="profile-stack"
-                      type="text"
-                      className="setup-input"
-                      value={profileStack}
-                      onChange={(e) => setProfileStack(e.target.value)}
-                      placeholder="e.g. Postgres, SQLite, n8n, Traefik, Synology NAS, Ollama"
-                    />
-                    <span className="setup-hint">Your active infrastructure, self-hosted services, and preferred tools.</span>
-                  </div>
-
-                  {/* Interests */}
-                  <div className="setup-form-group">
-                    <label htmlFor="profile-interests">Interests & Topics (comma-separated tags)</label>
-                    <input
-                      id="profile-interests"
-                      type="text"
-                      className="setup-input"
-                      value={profileInterests}
-                      onChange={(e) => setProfileInterests(e.target.value)}
-                      placeholder="e.g. Homelab, Local AI, Privacy, Automation, MicroSaaS"
-                    />
-                    <span className="setup-hint">Topics that catch your eye during triage.</span>
-                  </div>
-
-                  {/* Constraints */}
-                  <div className="setup-form-group">
-                    <label htmlFor="profile-constraints">Time & Resource Constraints</label>
-                    <textarea
-                      id="profile-constraints"
-                      className="setup-textarea"
-                      rows={2}
-                      value={profileConstraints}
-                      onChange={(e) => setProfileConstraints(e.target.value)}
-                      placeholder="e.g. 2 hours/week, limited GPU VRAM, prefer zero-cost self-hosted software"
-                    />
-                    <span className="setup-hint">Free text: Any real-world boundaries on budget, hardware, or available time.</span>
+                    <span className="setup-hint">Free text: Give the AI context on who you are, what your goals are, and what you're interested in.</span>
                   </div>
 
                   {/* Output Language */}
@@ -993,20 +965,23 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
                       )}
 
                       {/* Preset Templates */}
-                      <div className="ai-presets-box">
-                        <span className="ai-presets-label">Preset Templates</span>
-                        <div className="llm-presets-selector">
+                      <div className="setup-form-group">
+                        <label htmlFor="ai-preset-select">Provider Preset Template</label>
+                        <select
+                          id="ai-preset-select"
+                          className="setup-select"
+                          value={selectedPreset}
+                          onChange={(e) => {
+                            const preset = PRESET_TEMPLATES.find((p) => p.label === e.target.value);
+                            if (preset) handleSelectPreset(preset);
+                          }}
+                        >
                           {PRESET_TEMPLATES.map((preset) => (
-                            <button
-                              key={preset.label}
-                              type="button"
-                              className={`llm-preset-chip ${selectedPreset === preset.label ? 'active' : ''}`}
-                              onClick={() => handleSelectPreset(preset)}
-                            >
+                            <option key={preset.label} value={preset.label}>
                               {preset.label}
-                            </button>
+                            </option>
                           ))}
-                        </div>
+                        </select>
                       </div>
 
                       <div className="setup-form-group">
@@ -1351,8 +1326,8 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
                 </div>
               </div>
             )}
-          </div>
-        )}
+            </div>
+          )}
 
         {/* Modal Footer */}
         {activeTab !== 'playbooks' && activeTab !== 'schedule' && (
@@ -1371,6 +1346,8 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
             </button>
           </div>
         )}
+        </div>
+        </div>
       </div>
     </div>,
     document.body
