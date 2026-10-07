@@ -414,53 +414,191 @@ func (s *Service) Research(ctx context.Context, cardID int64) error {
 	return nil
 }
 
-// Retry re-runs Analyze on a card's saved source and stores the first idea
-// as the retried card. port.CardPatch cannot rewrite Title/Summary, so the
-// re-analyzed idea is persisted as a fresh card row (retry supersedes the
-// failed card); on analysis failure the original card is kept and the error
-// returned.
-func (s *Service) Retry(ctx context.Context, cardID int64) (port.Card, error) {
+// ErrNothingToReanalyze is returned when Retry has neither usable capture content nor a URL to fetch.
+var ErrNothingToReanalyze = errors.New("nothing to re-analyze")
+
+func hasUsableContent(c port.Capture) bool {
+	return strings.TrimSpace(c.Text) != "" ||
+		strings.TrimSpace(c.Transcript) != "" ||
+		strings.TrimSpace(c.ImageDigest) != "" ||
+		strings.TrimSpace(c.Description) != ""
+}
+
+func fetchedFromCapture(c port.Capture, card port.Card) capture.Fetched {
+	caption := c.Caption
+	if caption == "" && card.SourceNote != "" && card.SourceNote != card.SourceURL {
+		caption = card.SourceNote
+	}
+	url := c.SourceURL
+	if url == "" {
+		url = card.SourceURL
+	}
+	return capture.Fetched{
+		Kind:        c.Kind,
+		URL:         url,
+		Title:       c.Title,
+		Description: c.Description,
+		Text:        c.Text,
+		Caption:     caption,
+		Transcript:  c.Transcript,
+		ImageDigest: c.ImageDigest,
+		Notes:       c.Notes,
+	}
+}
+
+// Retry loads the card's capture (or falls back to re-fetching its source URL),
+// re-analyzes it, marks the failed card dismissed, and creates all cards from
+// the analysis result linked to the same capture.
+func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) {
 	card, err := s.Store.GetCard(ctx, cardID)
 	if err != nil {
-		return port.Card{}, err
+		return nil, err
 	}
-	fetched := capture.Fetched{
-		URL:     card.SourceURL,
-		Title:   card.Title,
-		Caption: card.SourceNote,
+
+	var cap port.Capture
+	var hasCap bool
+	if card.CaptureID != nil && *card.CaptureID > 0 && s.Store != nil {
+		if c, err := s.Store.GetCapture(ctx, *card.CaptureID); err == nil {
+			cap = c
+			hasCap = true
+		}
 	}
+	if !hasCap && card.SourceURL != "" && s.Store != nil {
+		if c, err := s.Store.GetCaptureBySourceURL(ctx, card.SourceURL); err == nil {
+			cap = c
+			hasCap = true
+		}
+	}
+
+	var fetched capture.Fetched
+	if hasCap && hasUsableContent(cap) {
+		fetched = fetchedFromCapture(cap, card)
+	} else {
+		targetURL := strings.TrimSpace(card.SourceURL)
+		if targetURL == "" && hasCap {
+			targetURL = strings.TrimSpace(cap.SourceURL)
+		}
+		if targetURL != "" {
+			var share capture.Share
+			if s.Fetcher != nil {
+				share = s.Fetcher.Recognize(targetURL)
+			} else {
+				share = capture.Recognize(targetURL)
+			}
+			if share.Kind == "" && hasCap && cap.Kind != "" {
+				share.Kind = cap.Kind
+			}
+			if share.Caption == "" {
+				if hasCap && cap.Caption != "" {
+					share.Caption = cap.Caption
+				} else if card.SourceNote != "" && card.SourceNote != targetURL {
+					share.Caption = card.SourceNote
+				}
+			}
+			fetched = s.resolve(ctx, share)
+
+			if hasCap && cap.ID > 0 && s.Store != nil {
+				cap.Title = clipRunes(fetched.Title, 1000)
+				cap.Description = clipRunes(fetched.Description, 5000)
+				cap.Text = clipRunes(fetched.Text, 20000)
+				cap.Caption = clipRunes(fetched.Caption, 5000)
+				cap.Transcript = clipRunes(fetched.Transcript, 50000)
+				cap.ImageDigest = clipRunes(fetched.ImageDigest, 5000)
+				cap.Notes = fetched.Notes
+				if fetched.Kind != "" {
+					cap.Kind = fetched.Kind
+				}
+				if cap.SourceURL == "" {
+					cap.SourceURL = targetURL
+				}
+				if updated, uerr := s.Store.UpdateCapture(ctx, cap); uerr == nil {
+					cap = updated
+				} else {
+					s.Logf("core: update capture %d on retry: %v", cap.ID, uerr)
+				}
+			} else if s.Store != nil {
+				capRecord, perr := s.persistCapture(ctx, share, fetched)
+				if perr == nil {
+					cap = capRecord
+					hasCap = true
+				} else if existingCap, gerr := s.Store.GetCaptureBySourceURL(ctx, targetURL); gerr == nil {
+					cap = existingCap
+					hasCap = true
+					cap.Title = clipRunes(fetched.Title, 1000)
+					cap.Description = clipRunes(fetched.Description, 5000)
+					cap.Text = clipRunes(fetched.Text, 20000)
+					cap.Caption = clipRunes(fetched.Caption, 5000)
+					cap.Transcript = clipRunes(fetched.Transcript, 50000)
+					cap.ImageDigest = clipRunes(fetched.ImageDigest, 5000)
+					cap.Notes = fetched.Notes
+					if updated, uerr := s.Store.UpdateCapture(ctx, cap); uerr == nil {
+						cap = updated
+					}
+				}
+			}
+		} else {
+			return nil, ErrNothingToReanalyze
+		}
+	}
+
 	res, err := s.Analyze.Analyze(ctx, fetched)
 	if err != nil {
 		s.Logf("core: retry analyze card %d: %v", cardID, err)
-		return card, err
+		return nil, err
 	}
 	if len(res.Cards) == 0 {
-		return card, nil
+		return []port.Card{}, nil
 	}
-	idea := res.Cards[0]
+
 	dismissed := port.StatusDismissed
 	emptyURL := ""
 	dismissPatch := port.CardPatch{Status: &dismissed}
 	if card.SourceURL != "" {
 		dismissPatch.SourceURL = &emptyURL
 	}
+	if cap.ID > 0 {
+		dismissPatch.CaptureID = &cap.ID
+	}
 	if _, err := s.Store.UpdateCard(ctx, cardID, dismissPatch); err != nil {
 		s.Logf("core: dismiss original failed card %d: %v", cardID, err)
 	}
 
-	newCard := cardFromIdea(idea, res, card.SourceURL, card.SourceNote)
-	newCard.CaptureID = card.CaptureID
-	created, err := s.Store.CreateCard(ctx, newCard)
-	if err != nil {
-		if card.SourceURL != "" {
-			_, _ = s.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &card.Status, SourceURL: &card.SourceURL})
+	var capID *int64
+	if cap.ID > 0 {
+		cID := cap.ID
+		capID = &cID
+	} else if card.CaptureID != nil {
+		capID = card.CaptureID
+	}
+
+	var createdCards []port.Card
+	for _, idea := range res.Cards {
+		url := firstURL(fetched, idea.Links)
+		if url == "" {
+			url = card.SourceURL
 		}
-		return port.Card{}, err
+		note := fetched.Caption
+		if note == "" {
+			note = card.SourceNote
+		}
+		newCard := cardFromIdea(idea, res, url, note)
+		newCard.CaptureID = capID
+		created, err := s.Store.CreateCard(ctx, newCard)
+		if err != nil {
+			if len(createdCards) == 0 && card.SourceURL != "" {
+				_, _ = s.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &card.Status, SourceURL: &card.SourceURL})
+			}
+			return createdCards, err
+		}
+		createdCards = append(createdCards, created)
+		if s.Webhook != nil {
+			s.Webhook.Dispatch(ctx, webhook.EventCardCreated, created)
+		}
+		if nerr := s.notify(ctx, port.Notification{Kind: "done", Card: created}); nerr != nil {
+			s.Logf("core: notify retry done: %v", nerr)
+		}
 	}
-	if nerr := s.notify(ctx, port.Notification{Kind: "done", Card: created}); nerr != nil {
-		s.Logf("core: notify retry done: %v", nerr)
-	}
-	return created, nil
+	return createdCards, nil
 }
 
 // resolve turns a share into a Fetched. Link and text shares go through the

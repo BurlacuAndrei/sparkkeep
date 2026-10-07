@@ -646,6 +646,28 @@ func (s *Store) GetCaptureBySourceURL(ctx context.Context, url string) (port.Cap
 	return s.GetCapture(ctx, id)
 }
 
+func (s *Store) UpdateCapture(ctx context.Context, c port.Capture) (port.Capture, error) {
+	notesJSON := "[]"
+	if len(c.Notes) > 0 {
+		if b, err := json.Marshal(c.Notes); err == nil {
+			notesJSON = string(b)
+		}
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE captures SET kind = ?, source_url = ?, title = ?, description = ?, text = ?, caption = ?, transcript = ?, image_digest = ?, notes = ? WHERE id = ?`,
+		c.Kind, c.SourceURL, c.Title, c.Description, c.Text, c.Caption, c.Transcript, c.ImageDigest, notesJSON, c.ID)
+	if err != nil {
+		if isUniqueConstraint(err) {
+			return port.Capture{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
+		}
+		return port.Capture{}, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return port.Capture{}, port.ErrNotFound
+	}
+	return s.GetCapture(ctx, c.ID)
+}
+
 func isUniqueConstraint(err error) bool {
 	if err == nil {
 		return false

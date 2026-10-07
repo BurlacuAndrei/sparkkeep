@@ -46,4 +46,5 @@ type Store interface {
 	CreateCapture(ctx context.Context, c Capture) (Capture, error)
 	GetCapture(ctx context.Context, id int64) (Capture, error)
 	GetCaptureBySourceURL(ctx context.Context, url string) (Capture, error)
+	UpdateCapture(ctx context.Context, c Capture) (Capture, error)
 }

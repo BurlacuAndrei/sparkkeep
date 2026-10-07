@@ -127,6 +127,16 @@ func (s *stubStore) GetCaptureBySourceURL(_ context.Context, url string) (port.C
 	return port.Capture{}, port.ErrNotFound
 }
 
+func (s *stubStore) UpdateCapture(_ context.Context, c port.Capture) (port.Capture, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.captures[c.ID]; !ok {
+		return port.Capture{}, port.ErrNotFound
+	}
+	s.captures[c.ID] = c
+	return c, nil
+}
+
 func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card, error) {
 	s.lastFilter = f
 	var out []port.Card
@@ -643,7 +653,9 @@ func TestRetryCard(t *testing.T) {
 	llm := llmStub(http.StatusOK, `[{"title":"Fixed","summary":"now works","horizon":"short-term","tags":[],"links":[]}]`)
 	defer llm.Close()
 	st := newStubStore()
-	st.cards[5] = port.Card{ID: 5, Title: "Analysis failed", Status: port.StatusInbox, SourceNote: "raw"}
+	capID := int64(1)
+	st.captures[capID] = port.Capture{ID: capID, Text: "raw"}
+	st.cards[5] = port.Card{ID: 5, CaptureID: &capID, Title: "Analysis failed", Status: port.StatusInbox, SourceNote: "raw"}
 	svc := &core.Service{Store: st, Analyze: analyzeClient(llm), Logf: t.Logf}
 	h := webHandler(st, svc)
 
@@ -657,12 +669,48 @@ func TestRetryCard(t *testing.T) {
 			ID    int64  `json:"id"`
 			Title string `json:"title"`
 		} `json:"data"`
+		Cards []port.Card `json:"cards"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
 		t.Fatalf("json: %v", err)
 	}
 	if !out.OK || out.Data.Title != "Fixed" {
 		t.Fatalf("out = %+v, want retried card titled Fixed", out)
+	}
+	if len(out.Cards) != 1 || out.Cards[0].Title != "Fixed" {
+		t.Fatalf("out.Cards = %+v, want 1 card titled Fixed", out.Cards)
+	}
+}
+
+func TestRetryCardMultiIdea(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[
+		{"title":"Idea 1","summary":"first","horizon":"short-term","tags":[],"links":[]},
+		{"title":"Idea 2","summary":"second","horizon":"medium-term","tags":[],"links":[]}
+	]`)
+	defer llm.Close()
+	st := newStubStore()
+	capID := int64(10)
+	st.captures[capID] = port.Capture{ID: capID, Text: "full page text with two ideas"}
+	st.cards[5] = port.Card{ID: 5, CaptureID: &capID, Title: "Analysis failed", Status: port.StatusInbox}
+	svc := &core.Service{Store: st, Analyze: analyzeClient(llm), Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards/5/retry", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var out struct {
+		OK    bool        `json:"ok"`
+		Cards []port.Card `json:"cards"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !out.OK || len(out.Cards) != 2 {
+		t.Fatalf("out = %+v, want 2 cards", out)
+	}
+	if out.Cards[0].Title != "Idea 1" || out.Cards[1].Title != "Idea 2" {
+		t.Fatalf("unexpected cards: %+v", out.Cards)
 	}
 }
 
@@ -1268,12 +1316,36 @@ func TestGetCardEdgeCases(t *testing.T) {
 
 func TestRetryCardErrors(t *testing.T) {
 	st := newStubStore()
-	h := webHandler(st, &core.Service{Logf: t.Logf})
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := webHandler(st, svc)
 
 	// Bad ID
 	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards/invalid/retry", "")
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for bad id", rr.Code)
+	}
+
+	// Not Found
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/cards/999/retry", "")
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for missing id", rr.Code)
+	}
+
+	// Nothing to re-analyze (empty capture, no URL)
+	capID := int64(100)
+	st.captures[capID] = port.Capture{ID: capID} // all content empty, source_url empty
+	st.cards[10] = port.Card{ID: 10, CaptureID: &capID, Title: "Analysis failed", Status: port.StatusInbox}
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/cards/10/retry", "")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for nothing to re-analyze, body: %s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if body.OK || !strings.Contains(body.Error, "nothing to re-analyze") {
+		t.Fatalf("expected error containing 'nothing to re-analyze', got: %+v", body)
 	}
 }
 

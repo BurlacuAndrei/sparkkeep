@@ -942,12 +942,20 @@ func (a *api) retryCard(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad id")
 		return
 	}
-	card, err := a.svc.Retry(r.Context(), id)
+	cards, err := a.svc.Retry(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, core.ErrNothingToReanalyze) {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		a.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": card})
+	var first any
+	if len(cards) > 0 {
+		first = cards[0]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": first, "cards": cards})
 }
 
 // batchShelveStale shelves every inbox/doing card untouched for more than

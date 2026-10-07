@@ -134,6 +134,14 @@ func (s *stubStore) GetCaptureBySourceURL(_ context.Context, url string) (port.C
 	return port.Capture{}, port.ErrNotFound
 }
 
+func (s *stubStore) UpdateCapture(_ context.Context, c port.Capture) (port.Capture, error) {
+	if _, ok := s.captures[c.ID]; !ok {
+		return port.Capture{}, port.ErrNotFound
+	}
+	s.captures[c.ID] = c
+	return c, nil
+}
+
 func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) error {
 	c, ok := s.cards[id]
 	if !ok {
@@ -801,10 +809,14 @@ func TestRetrySuccessUpdatesCard(t *testing.T) {
 	s2 := baseSvc(t, st, ch, work)
 	s2.Fetcher = textFetcher()
 
-	updated, err := s2.Retry(context.Background(), ids[0])
+	updatedCards, err := s2.Retry(context.Background(), ids[0])
 	if err != nil {
 		t.Fatalf("Retry err: %v", err)
 	}
+	if len(updatedCards) != 1 {
+		t.Fatalf("updatedCards len = %d, want 1", len(updatedCards))
+	}
+	updated := updatedCards[0]
 	if updated.Title != "Fixed" || updated.Summary != "now works" || updated.Horizon != port.HorizonShortTerm {
 		t.Fatalf("updated card = %+v", updated)
 	}
@@ -841,11 +853,16 @@ func TestRetrySuccessWithSourceURL(t *testing.T) {
 
 	ch := &stubChannel{}
 	s := baseSvc(t, st, ch, work)
+	s.Fetcher = textFetcher()
 
-	updated, err := s.Retry(context.Background(), failedCard.ID)
+	updatedCards, err := s.Retry(context.Background(), failedCard.ID)
 	if err != nil {
 		t.Fatalf("Retry with SourceURL failed: %v", err)
 	}
+	if len(updatedCards) != 1 {
+		t.Fatalf("updatedCards len = %d, want 1", len(updatedCards))
+	}
+	updated := updatedCards[0]
 	if updated.Title != "Retried Success" {
 		t.Errorf("updated title = %q, want Retried Success", updated.Title)
 	}
@@ -862,6 +879,401 @@ func TestRetrySuccessWithSourceURL(t *testing.T) {
 	}
 	if orig.SourceURL != "" {
 		t.Errorf("orig SourceURL = %q, want empty to prevent unique constraint conflict", orig.SourceURL)
+	}
+}
+
+func TestRetryLinkUsesStoredCaptureText(t *testing.T) {
+	st := newStubStore()
+	ch := &stubChannel{}
+
+	pageText := "Detailed article content explaining an awesome new open-source database engine."
+	pageTitle := "Awesome DB Article"
+	pageURL := "https://example.com/awesome-db"
+
+	cap, err := st.CreateCapture(context.Background(), port.Capture{
+		Kind:        "link",
+		SourceURL:   pageURL,
+		Title:       pageTitle,
+		Description: "A great article",
+		Text:        pageText,
+	})
+	if err != nil {
+		t.Fatalf("CreateCapture: %v", err)
+	}
+
+	failedCard, err := st.CreateCard(context.Background(), port.Card{
+		CaptureID:  &cap.ID,
+		Title:      "Analysis failed",
+		Summary:    "Analysis failed, see source.",
+		Status:     port.StatusInbox,
+		SourceURL:  pageURL,
+		SourceNote: pageURL,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	var reqBody string
+	var reqMu sync.Mutex
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		reqMu.Lock()
+		reqBody = string(b)
+		reqMu.Unlock()
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+			strconv.Quote(`[{"title":"Awesome DB","summary":"Novel database engine","horizon":"short-term","tags":["database"],"links":["https://example.com/awesome-db"]}]`))
+	}))
+	defer llmSrv.Close()
+
+	fetcherCalled := false
+	s := baseSvc(t, st, ch, llmSrv)
+	s.Fetcher = stubFetcher{
+		recognize: func(raw string) capture.Share {
+			fetcherCalled = true
+			return capture.Recognize(raw)
+		},
+		fetch: func(s capture.Share) capture.Fetched {
+			fetcherCalled = true
+			return capture.Fetched{}
+		},
+	}
+
+	cards, err := s.Retry(context.Background(), failedCard.ID)
+	if err != nil {
+		t.Fatalf("Retry: %v", err)
+	}
+	if fetcherCalled {
+		t.Fatalf("fetcher was called, but capture had usable content; should not refetch")
+	}
+	if len(cards) != 1 {
+		t.Fatalf("created cards len = %d, want 1", len(cards))
+	}
+
+	reqMu.Lock()
+	body := reqBody
+	reqMu.Unlock()
+
+	// Acceptance criteria: assert LLM request body contains the page text, not "Analysis failed"
+	if !strings.Contains(body, pageText) {
+		t.Errorf("LLM request body does not contain page text. Got body:\n%s", body)
+	}
+	if strings.Contains(body, "Analysis failed") {
+		t.Errorf("LLM request body should not contain 'Analysis failed', but found it. Got body:\n%s", body)
+	}
+
+	if cards[0].Title != "Awesome DB" {
+		t.Errorf("card title = %q, want 'Awesome DB'", cards[0].Title)
+	}
+	if cards[0].CaptureID == nil || *cards[0].CaptureID != cap.ID {
+		t.Errorf("card CaptureID = %v, want %d", cards[0].CaptureID, cap.ID)
+	}
+
+	orig, err := st.GetCard(context.Background(), failedCard.ID)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if orig.Status != port.StatusDismissed {
+		t.Errorf("orig status = %q, want dismissed", orig.Status)
+	}
+}
+
+func TestRetryMultiIdea(t *testing.T) {
+	st := newStubStore()
+	ch := &stubChannel{}
+
+	cap, err := st.CreateCapture(context.Background(), port.Capture{
+		Kind:      "link",
+		SourceURL: "https://example.com/multi-tools",
+		Title:     "Three Cool Tools",
+		Text:      "Review of Tool 1, Tool 2, and Tool 3 for developers.",
+	})
+	if err != nil {
+		t.Fatalf("CreateCapture: %v", err)
+	}
+
+	failedCard, err := st.CreateCard(context.Background(), port.Card{
+		CaptureID:  &cap.ID,
+		Title:      "Analysis failed",
+		Status:     port.StatusInbox,
+		SourceURL:  cap.SourceURL,
+		SourceNote: cap.SourceURL,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	llmJSON := `[
+		{"title":"Tool 1","summary":"first tool","horizon":"short-term","tags":["t1"],"links":["https://example.com/tool1"]},
+		{"title":"Tool 2","summary":"second tool","horizon":"medium-term","tags":["t2"],"links":["https://example.com/tool2"]},
+		{"title":"Tool 3","summary":"third tool","horizon":"long-term","tags":["t3"],"links":["https://example.com/tool3"]}
+	]`
+	work := llmStub(http.StatusOK, llmJSON)
+	defer work.Close()
+
+	s := baseSvc(t, st, ch, work)
+	cards, err := s.Retry(context.Background(), failedCard.ID)
+	if err != nil {
+		t.Fatalf("Retry: %v", err)
+	}
+
+	// Acceptance criteria: Multi-idea retry yields N cards
+	if len(cards) != 3 {
+		t.Fatalf("cards len = %d, want 3", len(cards))
+	}
+	for i, c := range cards {
+		if c.CaptureID == nil || *c.CaptureID != cap.ID {
+			t.Errorf("card %d captureID = %v, want %d", i, c.CaptureID, cap.ID)
+		}
+		stored, err := st.GetCard(context.Background(), c.ID)
+		if err != nil || stored.Title != c.Title {
+			t.Errorf("stored card %d mismatch: %+v, %v", i, stored, err)
+		}
+	}
+
+	// Notifications: one "done" per created card
+	doneCount := 0
+	for _, n := range ch.notifies {
+		if n.Kind == "done" {
+			doneCount++
+		}
+	}
+	if doneCount != 3 {
+		t.Errorf("done notifications = %d, want 3", doneCount)
+	}
+
+	orig, _ := st.GetCard(context.Background(), failedCard.ID)
+	if orig.Status != port.StatusDismissed {
+		t.Errorf("original status = %q, want dismissed", orig.Status)
+	}
+}
+
+func TestRetryContentMissingRefetchesURL(t *testing.T) {
+	st := newStubStore()
+	ch := &stubChannel{}
+
+	targetURL := "https://example.com/empty-capture-refetch"
+	cap, err := st.CreateCapture(context.Background(), port.Capture{
+		Kind:      "link",
+		SourceURL: targetURL,
+		// All content fields empty (Text, Transcript, ImageDigest, Description)
+	})
+	if err != nil {
+		t.Fatalf("CreateCapture: %v", err)
+	}
+
+	failedCard, err := st.CreateCard(context.Background(), port.Card{
+		CaptureID:  &cap.ID,
+		Title:      "Analysis failed",
+		Status:     port.StatusInbox,
+		SourceURL:  targetURL,
+		SourceNote: targetURL,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	var reqBody string
+	var reqMu sync.Mutex
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		reqMu.Lock()
+		reqBody = string(b)
+		reqMu.Unlock()
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+			strconv.Quote(`[{"title":"Refetched Article","summary":"Freshly fetched content","horizon":"short-term","tags":[],"links":[]}]`))
+	}))
+	defer llmSrv.Close()
+
+	fetcherCalled := false
+	s := baseSvc(t, st, ch, llmSrv)
+	s.Fetcher = stubFetcher{
+		recognize: capture.Recognize,
+		fetch: func(sh capture.Share) capture.Fetched {
+			fetcherCalled = true
+			return capture.Fetched{
+				Kind:  "link",
+				URL:   sh.URL,
+				Title: "Freshly Fetched Headline",
+				Text:  "Freshly fetched body text from website.",
+			}
+		},
+		mediaMeta: func(sh capture.Share) capture.Fetched {
+			return capture.Fetched{}
+		},
+	}
+
+	cards, err := s.Retry(context.Background(), failedCard.ID)
+	if err != nil {
+		t.Fatalf("Retry: %v", err)
+	}
+	if !fetcherCalled {
+		t.Fatalf("fetcher was not called; expected refetch because capture content was empty")
+	}
+	if len(cards) != 1 {
+		t.Fatalf("cards len = %d, want 1", len(cards))
+	}
+
+	// Verify stored capture was updated
+	updatedCap, err := st.GetCapture(context.Background(), cap.ID)
+	if err != nil {
+		t.Fatalf("GetCapture: %v", err)
+	}
+	if updatedCap.Text != "Freshly fetched body text from website." {
+		t.Errorf("updated capture Text = %q, want freshly fetched text", updatedCap.Text)
+	}
+	if updatedCap.Title != "Freshly Fetched Headline" {
+		t.Errorf("updated capture Title = %q, want freshly fetched title", updatedCap.Title)
+	}
+
+	reqMu.Lock()
+	body := reqBody
+	reqMu.Unlock()
+	if !strings.Contains(body, "Freshly fetched body text from website.") {
+		t.Errorf("LLM prompt did not contain refetched text. Prompt body:\n%s", body)
+	}
+	if strings.Contains(body, "Analysis failed") {
+		t.Errorf("LLM prompt should not contain 'Analysis failed'")
+	}
+}
+
+func TestRetryNothingAvailable(t *testing.T) {
+	st := newStubStore()
+	ch := &stubChannel{}
+
+	// Capture with no content and no URL
+	cap, err := st.CreateCapture(context.Background(), port.Capture{
+		Kind:      "link",
+		SourceURL: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateCapture: %v", err)
+	}
+
+	failedCard, err := st.CreateCard(context.Background(), port.Card{
+		CaptureID:  &cap.ID,
+		Title:      "Analysis failed",
+		Summary:    "Analysis failed, see source.",
+		Status:     port.StatusInbox,
+		SourceURL:  "",
+		SourceNote: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	llmCalled := false
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		llmCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer llmSrv.Close()
+
+	s := baseSvc(t, st, ch, llmSrv)
+	s.Fetcher = stubFetcher{
+		recognize: func(raw string) capture.Share {
+			t.Fatalf("fetcher should not be called")
+			return capture.Share{}
+		},
+	}
+
+	cards, err := s.Retry(context.Background(), failedCard.ID)
+	// Acceptance criteria: Retry on a capture with no content and no URL returns an error and leaves state unchanged
+	if err == nil {
+		t.Fatalf("expected error for nothing available, got nil")
+	}
+	if !errors.Is(err, ErrNothingToReanalyze) && !strings.Contains(err.Error(), "nothing to re-analyze") {
+		t.Errorf("err = %v, want 'nothing to re-analyze'", err)
+	}
+	if len(cards) != 0 {
+		t.Errorf("cards len = %d, want 0", len(cards))
+	}
+	if llmCalled {
+		t.Errorf("LLM should not be called")
+	}
+
+	// State unchanged
+	cardAfter, err := st.GetCard(context.Background(), failedCard.ID)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if cardAfter.Status != port.StatusInbox || cardAfter.Title != "Analysis failed" {
+		t.Errorf("card state was modified: %+v", cardAfter)
+	}
+	if len(ch.notifies) != 0 {
+		t.Errorf("expected 0 notifications, got %d", len(ch.notifies))
+	}
+}
+
+func TestRetryLegacyCardWithoutCapture(t *testing.T) {
+	st := newStubStore()
+	ch := &stubChannel{}
+
+	targetURL := "https://example.com/legacy-article"
+	failedCard, err := st.CreateCard(context.Background(), port.Card{
+		CaptureID:  nil,
+		Title:      "Analysis failed",
+		Summary:    "Analysis failed, see source.",
+		Status:     port.StatusInbox,
+		SourceURL:  targetURL,
+		SourceNote: targetURL,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	llmJSON := `[{"title":"Legacy Result","summary":"analyzed legacy source","horizon":"short-term","tags":["legacy"],"links":["https://example.com/legacy-article"]}]`
+	work := llmStub(http.StatusOK, llmJSON)
+	defer work.Close()
+
+	fetcherCalled := false
+	s := baseSvc(t, st, ch, work)
+	s.Fetcher = stubFetcher{
+		recognize: capture.Recognize,
+		fetch: func(sh capture.Share) capture.Fetched {
+			fetcherCalled = true
+			return capture.Fetched{
+				Kind:  "link",
+				URL:   sh.URL,
+				Title: "Legacy Web Article",
+				Text:  "Legacy web article body extracted from HTTP.",
+			}
+		},
+		mediaMeta: func(sh capture.Share) capture.Fetched {
+			return capture.Fetched{}
+		},
+	}
+
+	cards, err := s.Retry(context.Background(), failedCard.ID)
+	if err != nil {
+		t.Fatalf("Retry: %v", err)
+	}
+	if !fetcherCalled {
+		t.Fatalf("fetcher was not called; legacy card without capture should re-fetch source_url")
+	}
+	if len(cards) != 1 {
+		t.Fatalf("cards len = %d, want 1", len(cards))
+	}
+	if cards[0].Title != "Legacy Result" {
+		t.Errorf("title = %q, want 'Legacy Result'", cards[0].Title)
+	}
+	if cards[0].CaptureID == nil {
+		t.Errorf("retried card should be linked to newly created capture")
+	} else {
+		cap, err := st.GetCapture(context.Background(), *cards[0].CaptureID)
+		if err != nil {
+			t.Errorf("failed to get created capture: %v", err)
+		}
+		if cap.SourceURL != targetURL {
+			t.Errorf("capture URL = %q, want %q", cap.SourceURL, targetURL)
+		}
+		if cap.Text != "Legacy web article body extracted from HTTP." {
+			t.Errorf("capture text = %q, want extracted text", cap.Text)
+		}
+	}
+
+	orig, _ := st.GetCard(context.Background(), failedCard.ID)
+	if orig.Status != port.StatusDismissed {
+		t.Errorf("original status = %q, want dismissed", orig.Status)
 	}
 }
 

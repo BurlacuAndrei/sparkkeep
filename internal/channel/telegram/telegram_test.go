@@ -98,6 +98,14 @@ func (s *stubStore) GetCaptureBySourceURL(_ context.Context, url string) (port.C
 	return port.Capture{}, port.ErrNotFound
 }
 
+func (s *stubStore) UpdateCapture(_ context.Context, c port.Capture) (port.Capture, error) {
+	if _, ok := s.captures[c.ID]; !ok {
+		return port.Capture{}, port.ErrNotFound
+	}
+	s.captures[c.ID] = c
+	return c, nil
+}
+
 func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (port.Card, error) {
 	c, ok := s.cards[id]
 	if !ok {
@@ -512,5 +520,52 @@ func TestTelegramNotificationCounts(t *testing.T) {
 	}
 	if !strings.Contains(dupSent[0], "Already captured") {
 		t.Errorf("duplicate message text = %q, want 'Already captured...'", dupSent[0])
+	}
+}
+
+func TestTelegramRetryCallback(t *testing.T) {
+	st := newStubStore()
+	capID := int64(1)
+	st.captures[capID] = port.Capture{ID: capID, Text: "Page text to retry"}
+	_, err := st.CreateCard(context.Background(), port.Card{
+		ID:         1,
+		CaptureID:  &capID,
+		Title:      "Analysis failed",
+		Status:     port.StatusInbox,
+		SourceNote: "https://example.com/retry",
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	llmJSON := `[{"title":"Retried Successfully","summary":"Retried card summary","horizon":"short-term","tags":[],"links":[]}]`
+	llm := llmStub(t, llmJSON)
+	svc := stubService(t, st, llm)
+
+	sent := stubTelegram(t, func() *Adapter {
+		adapter := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		svc.Channel = adapter
+		return adapter
+	}, func(a *Adapter) {
+		a.handleCallback(&callbackQuery{
+			ID:   "cb1",
+			From: &user{ID: 1},
+			Data: "1:retry",
+			Message: &message{
+				MessageID: 10,
+				Chat:      &chat{ID: 1},
+			},
+		})
+	})
+
+	var cardMsg string
+	for _, m := range sent {
+		if strings.Contains(m, "Retried Successfully") {
+			cardMsg = m
+			break
+		}
+	}
+	if cardMsg == "" {
+		t.Fatalf("expected notification to contain retried card, got: %v", sent)
 	}
 }

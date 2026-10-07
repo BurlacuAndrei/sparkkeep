@@ -802,6 +802,38 @@ func TestCaptureCRUD(t *testing.T) {
 	}
 }
 
+func TestUpdateCapture(t *testing.T) {
+	s, ctx := newTestStore(t)
+	c, err := s.CreateCapture(ctx, port.Capture{
+		Kind:      "link",
+		SourceURL: "https://example.com/to-update",
+		Title:     "Old Title",
+	})
+	if err != nil {
+		t.Fatalf("CreateCapture: %v", err)
+	}
+
+	c.Title = "Updated Title"
+	c.Text = "Updated Page Text"
+	c.Notes = []string{"note1"}
+	updated, err := s.UpdateCapture(ctx, c)
+	if err != nil {
+		t.Fatalf("UpdateCapture: %v", err)
+	}
+	if updated.Title != "Updated Title" || updated.Text != "Updated Page Text" {
+		t.Fatalf("UpdateCapture mismatch: %+v", updated)
+	}
+	if len(updated.Notes) != 1 || updated.Notes[0] != "note1" {
+		t.Fatalf("UpdateCapture notes: %+v", updated.Notes)
+	}
+
+	// Not found
+	_, err = s.UpdateCapture(ctx, port.Capture{ID: 999999})
+	if !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("UpdateCapture missing err = %v, want port.ErrNotFound", err)
+	}
+}
+
 func TestCaptureUniqueByURL(t *testing.T) {
 	s, ctx := newTestStore(t)
 	_, err := s.CreateCapture(ctx, port.Capture{
