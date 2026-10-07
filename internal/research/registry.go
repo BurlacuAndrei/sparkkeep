@@ -63,12 +63,25 @@ func normalizeURL(u string) string {
 
 // Add appends a document as S1..Sn if under budgets, performing rune-safe clipping.
 // Returns the added source and true, or nil and false if duplicate or no budget.
-func (r *Registry) Add(u, title, origin, text string, fetchedAt time.Time) (*port.Source, bool) {
+func (r *Registry) Add(u, title, origin, text string, fetchedAt time.Time, questions ...string) (*port.Source, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	norm := normalizeURL(u)
 	if norm != "" && r.seenURLs[norm] {
+		// If duplicate URL, append any new questions to the existing source
+		if len(questions) > 0 {
+			for i, s := range r.sources {
+				if normalizeURL(s.URL) == norm {
+					for _, q := range questions {
+						if !slicesContains(r.sources[i].Questions, q) {
+							r.sources[i].Questions = append(r.sources[i].Questions, q)
+						}
+					}
+					return &r.sources[i], false
+				}
+			}
+		}
 		return nil, false
 	}
 
@@ -106,9 +119,19 @@ func (r *Registry) Add(u, title, origin, text string, fetchedAt time.Time) (*por
 		FetchedAt:   fetchedAt,
 		Origin:      origin,
 		ClippedText: clippedText,
+		Questions:   questions,
 	}
 	r.sources = append(r.sources, src)
 	return &src, true
+}
+
+func slicesContains(slice []string, val string) bool {
+	for _, s := range slice {
+		if s == val {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Registry) All() []port.Source {
@@ -132,7 +155,11 @@ func (r *Registry) FormatForSynthesis() string {
 
 	var b strings.Builder
 	for _, s := range r.sources {
-		header := fmt.Sprintf("[%s] %s (%s) [Origin: %s]:", s.ID, s.Title, s.URL, s.Origin)
+		qTag := ""
+		if len(s.Questions) > 0 {
+			qTag = fmt.Sprintf(" [Serves: %s]", strings.Join(s.Questions, ", "))
+		}
+		header := fmt.Sprintf("[%s] %s (%s) [Origin: %s]%s:", s.ID, s.Title, s.URL, s.Origin, qTag)
 		b.WriteString(header + "\n" + s.ClippedText + "\n\n")
 	}
 	return b.String()

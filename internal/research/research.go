@@ -1,7 +1,8 @@
 // Package research runs bounded, step-based investigation passes on a card:
 // ground (capture + triage context) → resolve_refs (URL references) →
-// search (query build + SearXNG) → read (fetch search results) →
-// synthesize (LLM report with [S#] citations).
+// plan (question planning) → search (SearXNG per question + domain ranking) →
+// read (round-robin fair budget fetching) →
+// synthesize (LLM report grouped per question with [S#] citations).
 package research
 
 import (
@@ -22,7 +23,9 @@ import (
 )
 
 const (
-	defaultMaxResults = 6
+	defaultMaxResults   = 6
+	defaultMaxQuestions = 5
+	defaultMaxFetches   = 12
 	// Whole-run ceiling: includes LLM calls plus search and scraping.
 	defaultTimeout = 1500 * time.Second
 	// Search client timeout — bound for a single HTTP request.
@@ -34,7 +37,7 @@ var (
 	ErrNoFetchableText = errors.New("research: no fetchable text")
 	// ErrEmptyQuery is returned when the query generator produces an empty string.
 	ErrEmptyQuery = errors.New("research: empty query from LLM")
-	// ErrNoSearchResults is returned when SearXNG yields 0 URLs and no other sources exist.
+	// ErrNoSearchResults is returned when SearXNG yields 0 URLs across all queries and no other sources exist.
 	ErrNoSearchResults = errors.New("no search results")
 	// ErrEmptyReport is returned when the synthesis prompt yields no output.
 	ErrEmptyReport = errors.New("empty report from LLM")
@@ -54,7 +57,9 @@ type Runner struct {
 	SynthesisLLM    *analyze.Client // LLM for synthesis (RoleResearchSynthesis)
 	Fetcher         capture.Fetcher // fetcher for scraping URLs
 	Store           port.Store      // store for progress updates and capture lookup
-	MaxResults      int             // max search URLs to read (default 6)
+	MaxResults      int             // max search URLs per question (default 6)
+	MaxQuestions    int             // max questions in plan (default 5)
+	MaxFetches      int             // overall max fetches cap (default 12)
 	ClipChars       int             // total rune budget (default 40,000)
 	PerSourceBudget int             // per-source rune budget (default 6,000)
 	Timeout         time.Duration   // whole-run timeout
@@ -88,6 +93,20 @@ func (r *Runner) maxResults() int {
 	return defaultMaxResults
 }
 
+func (r *Runner) maxQuestions() int {
+	if r.MaxQuestions > 0 {
+		return r.MaxQuestions
+	}
+	return defaultMaxQuestions
+}
+
+func (r *Runner) maxFetches() int {
+	if r.MaxFetches > 0 {
+		return r.MaxFetches
+	}
+	return defaultMaxFetches
+}
+
 // New returns a Runner with design defaults.
 func New(cfg config.Config, llm *analyze.Client) *Runner {
 	return &Runner{
@@ -98,6 +117,8 @@ func New(cfg config.Config, llm *analyze.Client) *Runner {
 		SynthesisLLM:    llm,
 		Fetcher:         capture.Capture{HeadlessEnabled: cfg.HeadlessEnabled, ChromeBin: cfg.ChromeBin, YtDlpBin: cfg.YtDlpBin},
 		MaxResults:      defaultMaxResults,
+		MaxQuestions:    defaultMaxQuestions,
+		MaxFetches:      defaultMaxFetches,
 		ClipChars:       DefaultTotalBudget,
 		PerSourceBudget: DefaultPerSourceBudget,
 		Timeout:         defaultTimeout,
@@ -184,14 +205,15 @@ func (r *Runner) persistProgress(ctx context.Context, state *RunState, status st
 	if state.Store == nil || state.ResearchID <= 0 {
 		return
 	}
-	_ = state.Store.UpdateResearchProgress(ctx, state.ResearchID, status, state.Query, state.Steps, state.Sources.All(), state.Tokens)
+	_ = state.Store.UpdateResearchProgress(ctx, state.ResearchID, status, state.Query, state.Steps, state.Sources.All(), state.Plan, state.Tokens)
 }
 
 func (r *Runner) buildPipeline() []Step {
 	return []Step{
 		{ID: "ground", Name: "Ground context", Run: r.stepGround},
 		{ID: "resolve_refs", Name: "Resolve URL references", Run: r.stepResolveRefs},
-		{ID: "search", Name: "Build query and search", Run: r.stepSearch},
+		{ID: "plan", Name: "Plan research questions", Run: r.stepPlan},
+		{ID: "search", Name: "Search per question", Run: r.stepSearch},
 		{ID: "read", Name: "Fetch search results", Run: r.stepRead},
 		{ID: "synthesize", Name: "Synthesize report", Run: r.stepSynthesize},
 	}
@@ -270,59 +292,221 @@ func (r *Runner) stepResolveRefs(ctx context.Context, state *RunState) error {
 	return nil
 }
 
-// 3. search — build query from TL;DR + claims + references, search SearXNG, dedupe.
-func (r *Runner) stepSearch(ctx context.Context, state *RunState) error {
-	query, err := r.buildQuery(ctx, state.Card, state.References)
-	if err != nil {
-		return fmt.Errorf("build query: %w", err)
-	}
-	state.Query = query
+// 3. plan — decompose into 3-5 sub-questions using research_plan model.
+func (r *Runner) stepPlan(ctx context.Context, state *RunState) error {
+	var b strings.Builder
+	b.WriteString(`You are a research planning assistant. Decompose this research topic into 3 to 5 targeted sub-questions to investigate key claims, technical details, alternatives, pricing/open-source viability, and maintenance.
+Reply with ONLY a strict JSON object with this exact structure:
+{
+  "questions": [
+    {
+      "id": "Q1",
+      "question": "Clear question to answer?",
+      "query": "concise web search query",
+      "prefer_domains": ["github.com", "docs.python.org"]
+    }
+  ]
+}
 
-	urls, err := r.search(ctx, query, state.Card.SourceURL)
-	if err != nil || len(urls) == 0 {
+Topic Context:
+Title: ` + state.Card.Title + "\n")
+	tldr := state.Card.TLDR
+	if tldr == "" {
+		tldr = state.Card.Summary
+	}
+	if tldr != "" {
+		b.WriteString("TL;DR / Summary: " + tldr + "\n")
+	}
+	if len(state.Card.Claims) > 0 {
+		b.WriteString("Claims:\n")
+		for _, cl := range state.Card.Claims {
+			b.WriteString("- " + cl + "\n")
+		}
+	}
+	if len(state.Card.OpenQuestions) > 0 {
+		b.WriteString("Open Questions from Triage:\n")
+		for _, q := range state.Card.OpenQuestions {
+			b.WriteString("- " + q + "\n")
+		}
+	}
+	if len(state.References) > 0 {
+		b.WriteString("References:\n")
+		for _, ref := range state.References {
+			b.WriteString("- " + ref.Label + " (" + ref.URL + ")\n")
+		}
+	}
+	if existingSources := state.Sources.All(); len(existingSources) > 0 {
+		b.WriteString("Already grounded sources:\n")
+		for _, s := range existingSources {
+			b.WriteString("- " + s.Title + " (" + s.URL + ")\n")
+		}
+	}
+
+	client := r.planClient()
+	if client == nil {
+		return errors.New("research: no LLM client configured for plan")
+	}
+
+	out, err := client.Ask(ctx, b.String())
+	if err == nil {
+		out = strings.TrimSpace(out)
+		// Clean markdown code fence if present
+		if strings.HasPrefix(out, "```") {
+			lines := strings.Split(out, "\n")
+			if len(lines) >= 3 {
+				out = strings.Join(lines[1:len(lines)-1], "\n")
+			}
+		}
+		var plan port.ResearchPlan
+		if jerr := json.Unmarshal([]byte(out), &plan); jerr == nil && len(plan.Questions) > 0 {
+			maxQ := r.maxQuestions()
+			if len(plan.Questions) > maxQ {
+				plan.Questions = plan.Questions[:maxQ]
+			}
+			state.Plan = &plan
+			state.Query = plan.Questions[0].Query
+			state.SetNote("plan", fmt.Sprintf("Planned %d questions", len(plan.Questions)))
+			return nil
+		}
+	}
+
+	// Fallback to single-query behavior from Prompt 8 (do not fail)
+	singleQuery, qerr := r.buildSingleQuery(ctx, state.Card, state.References)
+	if qerr != nil {
+		singleQuery = state.Card.Title
+	}
+	state.Plan = &port.ResearchPlan{
+		Questions: []port.ResearchQuestion{
+			{ID: "Q1", Question: "General investigation", Query: singleQuery},
+		},
+	}
+	state.Query = singleQuery
+	state.SetNote("plan", "Planning fallback to single query")
+	return nil
+}
+
+// 4. search — execute searches per question, rank preferred domains, dedupe against registry.
+func (r *Runner) stepSearch(ctx context.Context, state *RunState) error {
+	if state.Plan == nil || len(state.Plan.Questions) == 0 {
+		state.Plan = &port.ResearchPlan{
+			Questions: []port.ResearchQuestion{{ID: "Q1", Question: "General", Query: state.Card.Title}},
+		}
+	}
+
+	questionURLs := make(map[string][]string)
+	totalResultsFound := 0
+
+	for _, q := range state.Plan.Questions {
+		urls, err := r.search(ctx, q.Query, state.Card.SourceURL)
+		if err != nil || len(urls) == 0 {
+			continue
+		}
+		totalResultsFound += len(urls)
+
+		// Rank preferred domains first
+		ranked := rankURLs(urls, q.PreferDomains)
+
+		// Filter out URLs already in registry
+		var deduped []string
+		for _, u := range ranked {
+			if !state.Sources.HasURL(u) {
+				deduped = append(deduped, u)
+			}
+		}
+		questionURLs[q.ID] = deduped
+	}
+
+	if totalResultsFound == 0 {
 		// If SearXNG returned 0 results but references or capture already produced text, continue!
 		if len(state.Sources.All()) > 0 {
 			state.SetNote("search", "0 search results; continuing with grounded sources")
-			state.StepOutputs["search_urls"] = []string{}
+			state.StepOutputs["question_urls"] = questionURLs
 			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("search: %w", err)
 		}
 		return ErrNoSearchResults
 	}
 
-	// Dedupe against already-fetched URLs in registry
-	var deduplicated []string
-	for _, u := range urls {
-		if !state.Sources.HasURL(u) {
-			deduplicated = append(deduplicated, u)
-		}
-	}
-	state.StepOutputs["search_urls"] = deduplicated
+	state.StepOutputs["question_urls"] = questionURLs
 	return nil
 }
 
-// 4. read — fetch top N search results into the registry.
+func rankURLs(urls []string, preferDomains []string) []string {
+	if len(preferDomains) == 0 {
+		return urls
+	}
+	var preferred []string
+	var standard []string
+	for _, u := range urls {
+		isPref := false
+		lowerU := strings.ToLower(u)
+		for _, dom := range preferDomains {
+			dom = strings.ToLower(strings.TrimSpace(dom))
+			if dom != "" && strings.Contains(lowerU, dom) {
+				isPref = true
+				break
+			}
+		}
+		if isPref {
+			preferred = append(preferred, u)
+		} else {
+			standard = append(standard, u)
+		}
+	}
+	return append(preferred, standard...)
+}
+
+// 5. read — fetch budget split fairly across questions (round-robin) up to MaxFetches cap.
 func (r *Runner) stepRead(ctx context.Context, state *RunState) error {
-	rawURLs, _ := state.StepOutputs["search_urls"].([]string)
-	limit := r.maxResults()
-	if len(rawURLs) > limit {
-		rawURLs = rawURLs[:limit]
+	questionURLs, _ := state.StepOutputs["question_urls"].(map[string][]string)
+	if questionURLs == nil {
+		questionURLs = make(map[string][]string)
 	}
 
+	maxFetches := r.maxFetches()
+	qIndices := make(map[string]int)
+	seenInRead := make(map[string]bool)
+	fetchesDone := 0
 	var notes []string
-	for _, u := range rawURLs {
-		f := r.fetcher().FetchWithContext(ctx, capture.Share{Kind: capture.KindLink, URL: u})
-		if f.Err != nil || strings.TrimSpace(f.Text) == "" {
-			notes = append(notes, fmt.Sprintf("failed to read %s", u))
-			continue
+
+	for fetchesDone < maxFetches {
+		progress := false
+		for _, q := range state.Plan.Questions {
+			if fetchesDone >= maxFetches {
+				break
+			}
+			urls := questionURLs[q.ID]
+			idx := qIndices[q.ID]
+			for idx < len(urls) {
+				u := urls[idx]
+				idx++
+				qIndices[q.ID] = idx
+
+				if seenInRead[u] || state.Sources.HasURL(u) {
+					// Mark that this source serves question q.ID as well
+					state.Sources.Add(u, "", "search", "", time.Now(), q.ID)
+					continue
+				}
+
+				seenInRead[u] = true
+				fetchesDone++
+				progress = true
+
+				f := r.fetcher().FetchWithContext(ctx, capture.Share{Kind: capture.KindLink, URL: u})
+				if f.Err != nil || strings.TrimSpace(f.Text) == "" {
+					notes = append(notes, fmt.Sprintf("failed to read %s", u))
+				} else {
+					title := f.Title
+					if title == "" {
+						title = u
+					}
+					state.Sources.Add(u, title, "search", f.Text, time.Now(), q.ID)
+				}
+				break // round-robin to next question
+			}
 		}
-		title := f.Title
-		if title == "" {
-			title = u
+		if !progress {
+			break
 		}
-		state.Sources.Add(u, title, "search", f.Text, time.Now())
 	}
 
 	if len(notes) > 0 {
@@ -335,7 +519,7 @@ func (r *Runner) stepRead(ctx context.Context, state *RunState) error {
 	return nil
 }
 
-// 5. synthesize — research_synthesis model cites [S#] sources.
+// 6. synthesize — research_synthesis model groups findings per question with citations.
 func (r *Runner) stepSynthesize(ctx context.Context, state *RunState) error {
 	sourcesText := state.Sources.FormatForSynthesis()
 	if strings.TrimSpace(sourcesText) == "" {
@@ -348,11 +532,20 @@ func (r *Runner) stepSynthesize(ctx context.Context, state *RunState) error {
 	}
 	claimsStr := strings.Join(state.Card.Claims, "; ")
 
+	var qList strings.Builder
+	if state.Plan != nil {
+		for _, q := range state.Plan.Questions {
+			qList.WriteString(fmt.Sprintf("- %s: %s\n", q.ID, q.Question))
+		}
+	}
+
 	prompt := fmt.Sprintf(`Synthesize the research findings into an actionable markdown report.
+Address each planned question systematically.
 You MUST cite sources using their bracketed identifiers (e.g. [S1], [S2]) throughout the report.
 Structure the report with the following exact sections:
 ## What the source says
-## Findings
+## Questions & Findings
+[For each question, provide a subsection "### Q#: <Question>" with findings and citations]
 ## Sources
 ## Next steps
 
@@ -361,8 +554,10 @@ Title: %s
 Summary / TLDR: %s
 Claims: %s
 
+Planned Questions:
+%s
 Sources:
-%s`, state.Card.Title, tldr, claimsStr, sourcesText)
+%s`, state.Card.Title, tldr, claimsStr, qList.String(), sourcesText)
 
 	client := r.synthesisClient()
 	if client == nil {
@@ -384,8 +579,8 @@ Sources:
 	return nil
 }
 
-// buildQuery derives one search query from the card via the plan LLM.
-func (r *Runner) buildQuery(ctx context.Context, card port.Card, refs []port.Reference) (string, error) {
+// buildSingleQuery derives a single search query fallback.
+func (r *Runner) buildSingleQuery(ctx context.Context, card port.Card, refs []port.Reference) (string, error) {
 	var b strings.Builder
 	b.WriteString("Create a concise web search query for investigating this idea. Reply with one line: the query.\n\n")
 	b.WriteString("Title: " + card.Title + "\n")

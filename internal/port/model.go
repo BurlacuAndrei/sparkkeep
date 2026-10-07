@@ -121,6 +121,18 @@ type Source struct {
 	FetchedAt   time.Time `json:"fetched_at"`
 	Origin      string    `json:"origin"` // "capture" | "reference" | "search"
 	ClippedText string    `json:"clipped_text"`
+	Questions   []string  `json:"questions,omitempty"` // question IDs served by this source (e.g. ["Q1"])
+}
+
+type ResearchQuestion struct {
+	ID            string   `json:"id"`
+	Question      string   `json:"question"`
+	Query         string   `json:"query"`
+	PreferDomains []string `json:"prefer_domains,omitempty"`
+}
+
+type ResearchPlan struct {
+	Questions []ResearchQuestion `json:"questions"`
 }
 
 type Research struct {
@@ -132,6 +144,7 @@ type Research struct {
 	Error     string         `json:"error,omitempty"`
 	Steps     []ResearchStep `json:"steps"`
 	Sources   []Source       `json:"sources"`
+	Plan      *ResearchPlan  `json:"plan,omitempty"`
 	Tokens    int            `json:"tokens"`
 	CreatedAt time.Time      `json:"created_at"`
 }

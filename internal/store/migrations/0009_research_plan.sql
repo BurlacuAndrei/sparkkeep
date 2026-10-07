@@ -1,0 +1,1 @@
+ALTER TABLE research ADD COLUMN plan TEXT NOT NULL DEFAULT '{}';

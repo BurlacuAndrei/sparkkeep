@@ -33,7 +33,7 @@ type Store interface {
 	CreateResearch(ctx context.Context, cardID int64, query string) (Research, error)
 	HasActiveResearch(ctx context.Context, cardID int64) (bool, error)
 	SetResearch(ctx context.Context, id int64, status, findings, errMsg string) (Research, error)
-	UpdateResearchProgress(ctx context.Context, id int64, status, query string, steps []ResearchStep, sources []Source, tokens int) error
+	UpdateResearchProgress(ctx context.Context, id int64, status, query string, steps []ResearchStep, sources []Source, plan *ResearchPlan, tokens int) error
 	GetResearch(ctx context.Context, id int64) (Research, error)
 	ListResearch(ctx context.Context) ([]Research, error)
 	Close() error

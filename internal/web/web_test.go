@@ -295,7 +295,7 @@ func (s *stubStore) SetResearch(_ context.Context, id int64, status, findings, e
 	return r, nil
 }
 
-func (s *stubStore) UpdateResearchProgress(_ context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, tokens int) error {
+func (s *stubStore) UpdateResearchProgress(_ context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, plan *port.ResearchPlan, tokens int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, ok := s.researches[id]
@@ -308,6 +308,7 @@ func (s *stubStore) UpdateResearchProgress(_ context.Context, id int64, status, 
 	}
 	r.Steps = steps
 	r.Sources = sources
+	r.Plan = plan
 	r.Tokens = tokens
 	s.researches[id] = r
 	return nil

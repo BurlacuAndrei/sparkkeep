@@ -98,7 +98,7 @@ func TestCoreRouterPerRoleEndpoints(t *testing.T) {
 		// Check if plan call or triage call
 		isPlan := false
 		for _, m := range req.Messages {
-			if str, ok := m.Content.(string); ok && strings.Contains(str, "Create a concise web search query") {
+			if str, ok := m.Content.(string); ok && (strings.Contains(str, "Create a concise web search query") || strings.Contains(str, "research planning assistant")) {
 				isPlan = true
 				break
 			}
@@ -107,7 +107,7 @@ func TestCoreRouterPerRoleEndpoints(t *testing.T) {
 		if isPlan {
 			atomic.AddInt64(&aPlanHits, 1)
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"choices":[{"message":{"content":"vector search query"}}]}`)
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"questions\":[{\"id\":\"Q1\",\"question\":\"vector search query\",\"query\":\"vector search query\"}]}"}}]}`)
 			return
 		}
 
@@ -219,9 +219,9 @@ func TestCoreRouterDeletionFallback(t *testing.T) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		for _, m := range req.Messages {
-			if str, ok := m.Content.(string); ok && strings.Contains(str, "Create a concise web search query") {
+			if str, ok := m.Content.(string); ok && (strings.Contains(str, "Create a concise web search query") || strings.Contains(str, "research planning assistant")) {
 				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprint(w, `{"choices":[{"message":{"content":"search query"}}]}`)
+				fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"questions\":[{\"id\":\"Q1\",\"question\":\"search query\",\"query\":\"search query\"}]}"}}]}`)
 				return
 			}
 		}
@@ -292,9 +292,9 @@ func TestCoreRouterSettingsChangeTakesEffectWithoutRestart(t *testing.T) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		for _, m := range req.Messages {
-			if str, ok := m.Content.(string); ok && strings.Contains(str, "Create a concise web search query") {
+			if str, ok := m.Content.(string); ok && (strings.Contains(str, "Create a concise web search query") || strings.Contains(str, "research planning assistant")) {
 				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprint(w, `{"choices":[{"message":{"content":"query"}}]}`)
+				fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"questions\":[{\"id\":\"Q1\",\"question\":\"query\",\"query\":\"query\"}]}"}}]}`)
 				return
 			}
 		}

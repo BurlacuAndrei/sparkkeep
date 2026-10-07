@@ -794,7 +794,7 @@ func (s *Store) SetResearch(ctx context.Context, id int64, status, findings, err
 	return s.GetResearch(ctx, id)
 }
 
-func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, tokens int) error {
+func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, query string, steps []port.ResearchStep, sources []port.Source, plan *port.ResearchPlan, tokens int) error {
 	stepsJSON := "[]"
 	if len(steps) > 0 {
 		b, err := json.Marshal(steps)
@@ -809,14 +809,21 @@ func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, qu
 			sourcesJSON = string(b)
 		}
 	}
+	planJSON := "{}"
+	if plan != nil {
+		b, err := json.Marshal(plan)
+		if err == nil {
+			planJSON = string(b)
+		}
+	}
 	queryClause := ""
-	args := []any{status, stepsJSON, sourcesJSON, tokens}
+	args := []any{status, stepsJSON, sourcesJSON, planJSON, tokens}
 	if query != "" {
 		queryClause = ", query = ?"
 		args = append(args, query)
 	}
 	args = append(args, id)
-	querySQL := fmt.Sprintf(`UPDATE research SET status = ?, steps = ?, sources = ?, tokens = ?%s WHERE id = ?`, queryClause)
+	querySQL := fmt.Sprintf(`UPDATE research SET status = ?, steps = ?, sources = ?, plan = ?, tokens = ?%s WHERE id = ?`, queryClause)
 	res, err := s.db.ExecContext(ctx, querySQL, args...)
 	if err != nil {
 		return err
@@ -829,10 +836,10 @@ func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, qu
 
 func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, card_id, status, query, findings, error, steps, sources, tokens, created_at FROM research WHERE id = ?`, id)
+		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, tokens, created_at FROM research WHERE id = ?`, id)
 	var r port.Research
-	var created, stepsJSON, sourcesJSON string
-	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &r.Tokens, &created)
+	var created, stepsJSON, sourcesJSON, planJSON string
+	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &r.Tokens, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Research{}, port.ErrNotFound
 	}
@@ -852,12 +859,18 @@ func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error
 	if r.Sources == nil {
 		r.Sources = []port.Source{}
 	}
+	if planJSON != "" && planJSON != "{}" {
+		var p port.ResearchPlan
+		if err := json.Unmarshal([]byte(planJSON), &p); err == nil && len(p.Questions) > 0 {
+			r.Plan = &p
+		}
+	}
 	return r, nil
 }
 
 func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, card_id, status, query, error, steps, sources, tokens, created_at FROM research ORDER BY id`)
+		`SELECT id, card_id, status, query, error, steps, sources, plan, tokens, created_at FROM research ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -865,8 +878,8 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	var list []port.Research
 	for rows.Next() {
 		var r port.Research
-		var created, stepsJSON, sourcesJSON string
-		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &stepsJSON, &sourcesJSON, &r.Tokens, &created); err != nil {
+		var created, stepsJSON, sourcesJSON, planJSON string
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &r.Tokens, &created); err != nil {
 			return nil, err
 		}
 		r.CreatedAt, _ = parseTime(created)
@@ -881,6 +894,12 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 		}
 		if r.Sources == nil {
 			r.Sources = []port.Source{}
+		}
+		if planJSON != "" && planJSON != "{}" {
+			var p port.ResearchPlan
+			if err := json.Unmarshal([]byte(planJSON), &p); err == nil && len(p.Questions) > 0 {
+				r.Plan = &p
+			}
 		}
 		list = append(list, r)
 	}

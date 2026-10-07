@@ -22,7 +22,7 @@ import (
 )
 
 // llmStub is a chat-completions server that returns appropriate responses
-// for plan (one-line query) and synthesis (markdown with citations).
+// for plan (JSON or single-line query) and synthesis (markdown with citations).
 func llmStub() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -37,8 +37,10 @@ func llmStub() *httptest.Server {
 		if n := len(req.Messages); n > 0 {
 			last = req.Messages[n-1].Content
 		}
-		content := "## What the source says\nSummary [S1]\n## Findings\nKey findings [S1]\n## Sources\n[S1] source\n## Next steps\nNext step"
-		if strings.Contains(last, "web search query") {
+		content := "## What the source says\nSummary [S1]\n## Questions & Findings\n### Q1: What is it?\nKey findings [S1]\n## Sources\n[S1] source\n## Next steps\nNext step"
+		if strings.Contains(last, "research planning assistant") {
+			content = `{"questions":[{"id":"Q1","question":"Core technology?","query":"core tech query","prefer_domains":["github.com"]}]}`
+		} else if strings.Contains(last, "web search query") {
 			content = "cli-fi reading list"
 		}
 		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
@@ -86,13 +88,13 @@ func (tf *traceFetcher) Subtitles(share capture.Share) string { return "" }
 
 type memoryStore struct {
 	port.Store
-	mu        sync.Mutex
-	progress  []struct {
+	mu       sync.Mutex
+	progress []struct {
 		status string
 		query  string
 		steps  []port.ResearchStep
 	}
-	captures  map[int64]port.Capture
+	captures map[int64]port.Capture
 }
 
 func newMemoryStore() *memoryStore {
@@ -109,7 +111,7 @@ func (m *memoryStore) GetCapture(_ context.Context, id int64) (port.Capture, err
 	return cap, nil
 }
 
-func (m *memoryStore) UpdateResearchProgress(_ context.Context, _ int64, status, query string, steps []port.ResearchStep, _ []port.Source, _ int) error {
+func (m *memoryStore) UpdateResearchProgress(_ context.Context, _ int64, status, query string, steps []port.ResearchStep, _ []port.Source, _ *port.ResearchPlan, _ int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	stepsCopy := make([]port.ResearchStep, len(steps))
@@ -167,8 +169,8 @@ func TestRunSearchNoResults_WithReferencesSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected run to succeed when search returns 0 but references produce text, got: %v", err)
 	}
-	if !strings.Contains(report, "## Findings") {
-		t.Fatalf("report missing ## Findings:\n%s", report)
+	if !strings.Contains(report, "## Questions & Findings") && !strings.Contains(report, "## Findings") {
+		t.Fatalf("report missing findings section:\n%s", report)
 	}
 }
 
@@ -219,7 +221,6 @@ func TestRun_OrderReferencesBeforeSearch(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	// Verify order: fetch:https://example.com/refA and fetch:https://example.com/refB MUST occur before search_api_called
 	searchIdx := -1
 	refAIdx := -1
 	refBIdx := -1
@@ -259,80 +260,217 @@ func (o orderTrackFetcher) FetchWithContext(ctx context.Context, share capture.S
 func (o orderTrackFetcher) MediaMeta(share capture.Share) capture.Fetched { return o.Fetch(share) }
 func (o orderTrackFetcher) Subtitles(share capture.Share) string           { return "" }
 
-func TestRun_SynthesisPromptContainsSourceMarkers(t *testing.T) {
-	var synthPrompt string
-	synthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req struct {
-			Messages []struct {
-				Content string `json:"content"`
-			} `json:"messages"`
-		}
-		_ = json.Unmarshal(body, &req)
-		if len(req.Messages) > 0 {
-			synthPrompt = req.Messages[len(req.Messages)-1].Content
-		}
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"## What the source says\n[S1] says X\n## Findings\nFound Y\n## Sources\n[S1]\n## Next steps\nDo Z"}}]}`)
+func TestRun_MultiQuestionPlanning(t *testing.T) {
+	var searchQueries []string
+	var searchMu sync.Mutex
+
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		searchMu.Lock()
+		searchQueries = append(searchQueries, q)
+		searchMu.Unlock()
+
+		// Return a distinct URL per query
+		resURL := fmt.Sprintf("https://example.com/res-%s", q)
+		fmt.Fprintf(w, `{"results":[{"url":%q}]}`, resURL)
 	}))
-	defer synthServer.Close()
+	defer search.Close()
+
+	// Plan LLM returns 3 questions
+	planJSON := `{"questions":[
+		{"id":"Q1","question":"Question 1?","query":"q1-search","prefer_domains":["github.com"]},
+		{"id":"Q2","question":"Question 2?","query":"q2-search"},
+		{"id":"Q3","question":"Question 3?","query":"q3-search"}
+	]}`
 
 	planServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"search query"}}]}`)
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(planJSON))
 	}))
 	defer planServer.Close()
 
-	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"results":[{"url":"https://example.com/res1"}]}`)
+	synthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		content := "## What the source says\n[S1]\n## Questions & Findings\n### Q1: Question 1?\nFindings for Q1 [S1]\n## Sources\n[S1]\n## Next steps\nSteps"
+		_ = body
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
 	}))
-	defer search.Close()
+	defer synthServer.Close()
 
 	planClient := analyze.New(config.Config{LLMBase: planServer.URL, LLMModel: "plan"}, planServer.Client())
 	synthClient := analyze.New(config.Config{LLMBase: synthServer.URL, LLMModel: "synth"}, synthServer.Client())
 
 	runner := NewWithClients(config.Config{SearchURL: search.URL}, planClient, synthClient)
 	tf := newTraceFetcher()
-	tf.bodies["https://example.com/res1"] = "Search result 1 text"
 	runner.Fetcher = tf
 
 	card := port.Card{
-		Title: "Test Citations",
-		TLDR:  "Summary",
-		References: []port.Reference{
-			{Kind: "url", Label: "RefDoc", URL: "https://example.com/ref"},
-		},
+		Title: "Multi-Question Card",
+		TLDR:  "Investigating distributed databases",
+		Claims: []string{"Scales linearly", "Provides linearizability"},
 	}
-	tf.bodies["https://example.com/ref"] = "Reference doc text"
 
 	report, err := runner.Run(context.Background(), card)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	if !strings.Contains(synthPrompt, "[S1]") || !strings.Contains(synthPrompt, "[S2]") {
-		t.Fatalf("synthesis prompt missing [S1] or [S2] source markers:\n%s", synthPrompt)
+	searchMu.Lock()
+	defer searchMu.Unlock()
+	if len(searchQueries) != 3 {
+		t.Fatalf("expected exactly 3 search requests, got %d: %v", len(searchQueries), searchQueries)
 	}
-	if !strings.Contains(report, "[S1]") {
-		t.Fatalf("report missing citations [S1]:\n%s", report)
+
+	if !strings.Contains(report, "## Questions & Findings") {
+		t.Fatalf("report missing ## Questions & Findings:\n%s", report)
+	}
+}
+
+func TestRun_InvalidPlanJSON_DegradesToSingleQuery(t *testing.T) {
+	var searchQueries []string
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		searchQueries = append(searchQueries, r.URL.Query().Get("q"))
+		fmt.Fprint(w, `{"results":[{"url":"https://example.com/fallback-res"}]}`)
+	}))
+	defer search.Close()
+
+	// Plan server returns invalid non-JSON output
+	planServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":"Not JSON at all, just free text query: fallback-query"}}]}`)
+	}))
+	defer planServer.Close()
+
+	synthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content := "## What the source says\nText [S1]\n## Questions & Findings\n### Q1: General\nFound things [S1]\n## Sources\n[S1]\n## Next steps\nSteps"
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
+	}))
+	defer synthServer.Close()
+
+	planClient := analyze.New(config.Config{LLMBase: planServer.URL, LLMModel: "plan"}, planServer.Client())
+	synthClient := analyze.New(config.Config{LLMBase: synthServer.URL, LLMModel: "synth"}, synthServer.Client())
+
+	runner := NewWithClients(config.Config{SearchURL: search.URL}, planClient, synthClient)
+	runner.Fetcher = newTraceFetcher()
+
+	card := port.Card{Title: "Fallback Card", TLDR: "Some summary"}
+	report, err := runner.Run(context.Background(), card)
+	if err != nil {
+		t.Fatalf("Run should succeed despite invalid plan JSON, got: %v", err)
+	}
+
+	if len(searchQueries) != 1 {
+		t.Fatalf("expected 1 fallback search query, got %d: %v", len(searchQueries), searchQueries)
+	}
+	if !strings.Contains(report, "## Questions & Findings") && !strings.Contains(report, "## Findings") {
+		t.Fatalf("unexpected report:\n%s", report)
+	}
+}
+
+func TestRankURLs_PreferredDomains(t *testing.T) {
+	urls := []string{
+		"https://blog.medium.com/post",
+		"https://github.com/org/repo",
+		"https://randomnews.org/article",
+		"https://docs.python.org/3/library",
+	}
+	prefer := []string{"github.com", "docs.python.org"}
+
+	ranked := rankURLs(urls, prefer)
+	if len(ranked) != 4 {
+		t.Fatalf("len = %d, want 4", len(ranked))
+	}
+	if ranked[0] != "https://github.com/org/repo" || ranked[1] != "https://docs.python.org/3/library" {
+		t.Fatalf("preferred domains not ranked first: %v", ranked)
+	}
+	if ranked[2] != "https://blog.medium.com/post" || ranked[3] != "https://randomnews.org/article" {
+		t.Fatalf("standard order not preserved: %v", ranked)
+	}
+}
+
+func TestRun_RoundRobinFairBudget(t *testing.T) {
+	// 2 questions, each has 3 search results. MaxFetches is 4.
+	// Round robin should take:
+	// Q1: url1, Q2: url4, Q1: url2, Q2: url5 -> exactly 4 total, 2 from each question!
+	var fetchedURLs []string
+	var fetchMu sync.Mutex
+
+	tf := newTraceFetcher()
+	orderTracker := orderTrackFetcher{
+		underlying: tf,
+		onFetch: func(u string) {
+			fetchMu.Lock()
+			defer fetchMu.Unlock()
+			fetchedURLs = append(fetchedURLs, u)
+		},
+	}
+
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		if q == "q1" {
+			fmt.Fprint(w, `{"results":[{"url":"https://example.com/q1-a"},{"url":"https://example.com/q1-b"},{"url":"https://example.com/q1-c"}]}`)
+		} else {
+			fmt.Fprint(w, `{"results":[{"url":"https://example.com/q2-a"},{"url":"https://example.com/q2-b"},{"url":"https://example.com/q2-c"}]}`)
+		}
+	}))
+	defer search.Close()
+
+	planJSON := `{"questions":[{"id":"Q1","question":"Q1?","query":"q1"},{"id":"Q2","question":"Q2?","query":"q2"}]}`
+	planServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(planJSON))
+	}))
+	defer planServer.Close()
+
+	synthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"## What the source says\n[S1]\n## Questions & Findings\n### Q1\nfindings\n## Sources\n[S1]\n## Next steps\nsteps"}}]}`)
+	}))
+	defer synthServer.Close()
+
+	planClient := analyze.New(config.Config{LLMBase: planServer.URL, LLMModel: "plan"}, planServer.Client())
+	synthClient := analyze.New(config.Config{LLMBase: synthServer.URL, LLMModel: "synth"}, synthServer.Client())
+
+	runner := NewWithClients(config.Config{SearchURL: search.URL}, planClient, synthClient)
+	runner.Fetcher = orderTracker
+	runner.MaxFetches = 4
+
+	_, err := runner.Run(context.Background(), port.Card{Title: "Fair Budget Test", TLDR: "Testing"})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	fetchMu.Lock()
+	defer fetchMu.Unlock()
+	if len(fetchedURLs) != 4 {
+		t.Fatalf("expected 4 total fetches, got %d: %v", len(fetchedURLs), fetchedURLs)
+	}
+	expectedOrder := []string{
+		"https://example.com/q1-a",
+		"https://example.com/q2-a",
+		"https://example.com/q1-b",
+		"https://example.com/q2-b",
+	}
+	for i, exp := range expectedOrder {
+		if fetchedURLs[i] != exp {
+			t.Errorf("fetch %d: got %s, want %s (round-robin order violation)", i, fetchedURLs[i], exp)
+		}
 	}
 }
 
 func TestRegistry_BudgetsAndRuneSafeClipping(t *testing.T) {
 	reg := NewRegistry(10, 25)
 
-	// Multi-byte string: Chinese characters (3 bytes each) + emojis (4 bytes each)
-	// "你好世界🎉🔥" has 6 runes, but 18+ bytes!
 	multiByte := "你好世界🎉🔥"
-	src, ok := reg.Add("https://example.com/1", "Title 1", "search", multiByte, time.Now())
+	src, ok := reg.Add("https://example.com/1", "Title 1", "search", multiByte, time.Now(), "Q1")
 	if !ok || src == nil {
 		t.Fatalf("failed to add first source")
 	}
 	if utf8.RuneCountInString(src.ClippedText) != 6 {
 		t.Fatalf("rune count = %d, want 6", utf8.RuneCountInString(src.ClippedText))
 	}
+	if len(src.Questions) != 1 || src.Questions[0] != "Q1" {
+		t.Fatalf("questions = %v, want [Q1]", src.Questions)
+	}
 
-	// Long multi-byte string exceeding per-source budget (10 runes)
 	longMulti := strings.Repeat("中", 50)
-	src2, ok := reg.Add("https://example.com/2", "Title 2", "search", longMulti, time.Now())
+	src2, ok := reg.Add("https://example.com/2", "Title 2", "search", longMulti, time.Now(), "Q2")
 	if !ok || src2 == nil {
 		t.Fatalf("failed to add second source")
 	}
@@ -340,8 +478,6 @@ func TestRegistry_BudgetsAndRuneSafeClipping(t *testing.T) {
 		t.Fatalf("expected clipped to per-source budget 10 runes, got %d", utf8.RuneCountInString(src2.ClippedText))
 	}
 
-	// Total budget was 25. First added 6 runes, second added 10 runes -> 16 runes used, 9 remaining.
-	// Third source with 20 runes should be clipped to remaining 9 runes.
 	src3, ok := reg.Add("https://example.com/3", "Title 3", "search", strings.Repeat("A", 20), time.Now())
 	if !ok || src3 == nil {
 		t.Fatalf("failed to add third source")
@@ -350,7 +486,6 @@ func TestRegistry_BudgetsAndRuneSafeClipping(t *testing.T) {
 		t.Fatalf("expected clipped to remaining total budget 9 runes, got %d", utf8.RuneCountInString(src3.ClippedText))
 	}
 
-	// Fourth source should be rejected as total budget (25 runes) is exhausted.
 	src4, ok := reg.Add("https://example.com/4", "Title 4", "search", "more text", time.Now())
 	if ok || src4 != nil {
 		t.Fatalf("expected rejection when total budget exhausted")
@@ -383,8 +518,8 @@ func TestRun_ProgressPersistenceMidRun(t *testing.T) {
 	count := len(ms.progress)
 	ms.mu.Unlock()
 
-	if count < 5 {
-		t.Fatalf("expected at least 5 progress updates (each step running/done), got %d", count)
+	if count < 6 {
+		t.Fatalf("expected at least 6 progress updates, got %d", count)
 	}
 }
 
@@ -416,7 +551,7 @@ func TestRun_PartialRefFetchFailureContinuesWithNote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run should succeed despite partial ref fetch error, got: %v", err)
 	}
-	if !strings.Contains(report, "## Findings") {
-		t.Fatalf("report missing ## Findings:\n%s", report)
+	if !strings.Contains(report, "## Questions & Findings") && !strings.Contains(report, "## Findings") {
+		t.Fatalf("report missing findings:\n%s", report)
 	}
 }

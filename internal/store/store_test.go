@@ -28,8 +28,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 8 {
-		t.Fatalf("version = %d, want 8", version)
+	if version != 9 {
+		t.Fatalf("version = %d, want 9", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -343,8 +343,13 @@ func TestResearchCRUD(t *testing.T) {
 	}
 	nowTime := time.Now().Truncate(time.Second)
 	step1 := port.ResearchStep{ID: "ground", Status: "done", StartedAt: nowTime, FinishedAt: nowTime, Note: "grounded"}
-	src1 := port.Source{ID: "S1", URL: "https://example.com/1", Title: "Doc 1", Origin: "reference", ClippedText: "sample text"}
-	if err := s.UpdateResearchProgress(ctx, r.ID, "running", "refined query", []port.ResearchStep{step1}, []port.Source{src1}, 150); err != nil {
+	src1 := port.Source{ID: "S1", URL: "https://example.com/1", Title: "Doc 1", Origin: "reference", ClippedText: "sample text", Questions: []string{"Q1"}}
+	plan := &port.ResearchPlan{
+		Questions: []port.ResearchQuestion{
+			{ID: "Q1", Question: "What is it?", Query: "cli-fi reading list", PreferDomains: []string{"github.com"}},
+		},
+	}
+	if err := s.UpdateResearchProgress(ctx, r.ID, "running", "refined query", []port.ResearchStep{step1}, []port.Source{src1}, plan, 150); err != nil {
 		t.Fatalf("UpdateResearchProgress: %v", err)
 	}
 
@@ -355,8 +360,11 @@ func TestResearchCRUD(t *testing.T) {
 	if progressGot.Status != "running" || progressGot.Query != "refined query" || len(progressGot.Steps) != 1 || len(progressGot.Sources) != 1 || progressGot.Tokens != 150 {
 		t.Fatalf("unexpected progress got: %+v", progressGot)
 	}
-	if progressGot.Steps[0].ID != "ground" || progressGot.Sources[0].ID != "S1" {
+	if progressGot.Steps[0].ID != "ground" || progressGot.Sources[0].ID != "S1" || len(progressGot.Sources[0].Questions) != 1 {
 		t.Fatalf("unexpected step/source content: %+v", progressGot)
+	}
+	if progressGot.Plan == nil || len(progressGot.Plan.Questions) != 1 || progressGot.Plan.Questions[0].ID != "Q1" {
+		t.Fatalf("unexpected plan content: %+v", progressGot.Plan)
 	}
 
 	updated, err := s.SetResearch(ctx, r.ID, "done", "findings here", "")
@@ -942,13 +950,13 @@ func TestMigrationBackfill(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	// Verify schema version is 8
+	// Verify schema version is 9
 	var version int
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 8 {
-		t.Fatalf("version = %d, want 8", version)
+	if version != 9 {
+		t.Fatalf("version = %d, want 9", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1060,8 +1068,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 8 {
-		t.Fatalf("version = %d, want 8", version)
+	if version != 9 {
+		t.Fatalf("version = %d, want 9", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care

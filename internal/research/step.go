@@ -21,6 +21,7 @@ type RunState struct {
 	Sources     *Registry
 	StepOutputs map[string]any
 	Steps       []port.ResearchStep
+	Plan        *port.ResearchPlan
 	Query       string
 	Tokens      int
 	ResearchID  int64
