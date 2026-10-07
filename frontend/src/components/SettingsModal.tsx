@@ -22,6 +22,9 @@ import {
   BookOpen,
   User,
   Clock,
+  Plug,
+  MessageSquare,
+  Terminal,
 } from 'lucide-react';
 import * as api from '../api';
 import { LLMProfile, LLMProfileInput } from '../types';
@@ -69,7 +72,7 @@ export interface SettingsModalProps {
   onOpenLicenseModal?: () => void;
 }
 
-type SettingsTab = 'appearance' | 'profile' | 'ai' | 'playbooks' | 'schedule' | 'security';
+type SettingsTab = 'appearance' | 'profile' | 'ai' | 'playbooks' | 'schedule' | 'integrations' | 'security';
 
 const LANGUAGE_OPTIONS = [
   'Same as source / English',
@@ -187,6 +190,11 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
   const [hasAuthToken, setHasAuthToken] = useState(false);
   const [showAuthToken, setShowAuthToken] = useState(false);
 
+  // Integrations settings
+  const [tgToken, setTgToken] = useState('');
+  const [hasTgToken, setHasTgToken] = useState(false);
+  const [tgChatId, setTgChatId] = useState('');
+
   // Dashboard display preferences (persisted locally)
   const [defaultView, setDefaultView] = useState<'kanban' | 'triage' | 'digest'>(() => {
     if (typeof window !== 'undefined') {
@@ -264,6 +272,10 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
           if (up.interests) setProfileInterests(up.interests.join(', '));
           if (up.constraints) setProfileConstraints(up.constraints);
           if (up.language) setProfileLanguage(up.language);
+        }
+        setHasTgToken(Boolean(res.settings.has_tg_token));
+        if (res.settings.tg_chat_id) {
+          setTgChatId(res.settings.tg_chat_id);
         }
         setLoading(false);
       })
@@ -564,6 +576,10 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
         await api.patchSettings({ auth_token: authToken.trim() });
       }
 
+      if (tgToken.trim()) {
+        await api.patchSettings({ tg_token: tgToken.trim() });
+      }
+
       showToast('Platform preferences saved successfully.');
       onClose();
     } catch (err: unknown) {
@@ -662,6 +678,16 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
             >
               <Clock size={15} />
               <span>Scheduled Research</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'integrations'}
+              className={`settings-tab-btn ${activeTab === 'integrations' ? 'active' : ''}`}
+              onClick={() => setActiveTab('integrations')}
+            >
+              <Plug size={15} />
+              <span>Integrations & API</span>
             </button>
             <button
               type="button"
@@ -1260,7 +1286,105 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
               </div>
             )}
 
-            {/* TAB 4: Security & Access */}
+            {/* TAB 5: Integrations */}
+            {activeTab === 'integrations' && (
+              <div className="settings-panel" role="tabpanel">
+                <div className="settings-section">
+                  <div className="settings-section-header">
+                    <span className="settings-section-title">Universal Webhook API</span>
+                    <span className="settings-section-desc">
+                      Send data from Apple Shortcuts, Zapier, n8n, or browser extensions
+                    </span>
+                  </div>
+                  
+                  <div className="setup-info-box">
+                    <Terminal size={16} />
+                    <span>
+                      Use your master passphrase as the Bearer token to authorize requests.
+                    </span>
+                  </div>
+
+                  <div className="setup-form-group">
+                    <label>Example cURL Request</label>
+                    <pre style={{
+                      background: '#090a0f',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '12px',
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-dim)',
+                      overflowX: 'auto',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+{`curl -X POST ${window.location.origin}/api/v1/capture \\
+  -H "Authorization: Bearer YOUR_MASTER_PASSPHRASE" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "url": "https://example.com/article",
+    "text": "Some optional caption or notes"
+  }'`}
+                    </pre>
+                  </div>
+                </div>
+
+                <div className="settings-section" style={{ marginTop: '24px' }}>
+                  <div className="settings-section-header">
+                    <span className="settings-section-title">Telegram Bot Link</span>
+                    <span className="settings-section-desc">
+                      Forward messages, share links, and record voice notes directly into Sparkkeep
+                    </span>
+                  </div>
+
+                  <div className="setup-form-group">
+                    <label>Telegram Bot Token {hasTgToken ? '(Configured)' : ''}</label>
+                    <input
+                      type="password"
+                      value={tgToken}
+                      onChange={(e) => setTgToken(e.target.value)}
+                      className="setup-input"
+                      placeholder={hasTgToken ? '••••••••••••••••' : 'Enter BotFather Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)'}
+                    />
+                    <span className="setup-hint">
+                      Get this by creating a new bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{color: 'var(--accent)'}}>@BotFather</a> on Telegram.
+                    </span>
+                  </div>
+
+                  {hasTgToken && (
+                    <div className="setup-info-box" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                      <MessageSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
+                      <div>
+                        <strong style={{ color: 'var(--accent-emerald)' }}>Bot is Active! Connect your account:</strong>
+                        <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-dim)' }}>
+                          Send this exact command to your Telegram bot to pair your device:
+                        </div>
+                        <code style={{
+                          display: 'inline-block',
+                          marginTop: '8px',
+                          padding: '6px 10px',
+                          background: '#090a0f',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: '4px',
+                          color: 'var(--accent)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '14px',
+                          userSelect: 'all'
+                        }}>
+                          /start YOUR_MASTER_PASSPHRASE
+                        </code>
+                        {tgChatId && (
+                          <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                            ✓ Currently linked to chat ID: {tgChatId}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 6: Security & Access */}
             {activeTab === 'security' && (
               <div className="settings-panel" role="tabpanel">
                 {/* Security Status Card */}

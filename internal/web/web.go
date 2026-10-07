@@ -435,11 +435,11 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var b struct {
 		AuthToken string `json:"auth_token"`
 		LLMBase   string `json:"llm_base"`
 		LLMKey    string `json:"llm_key"`
 		LLMModel  string `json:"llm_model"`
+		TGToken   string `json:"tg_token,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -466,6 +466,12 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 	}
 	if b.LLMModel != "" {
 		if err := a.store.SetSetting(ctx, "llm_model", b.LLMModel); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	if b.TGToken != "" {
+		if err := a.store.SetSetting(ctx, "tg_token", b.TGToken); err != nil {
 			a.fail(w, err)
 			return
 		}
@@ -655,6 +661,12 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal([]byte(userProfJSON), &userProfile)
 	}
 
+	tgChatID, _ := a.store.GetSetting(ctx, "tg_chat_id")
+	tgToken, _ := a.store.GetSetting(ctx, "tg_token")
+	if tgToken == "" {
+		tgToken = a.cfg.TGToken
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
@@ -667,6 +679,8 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 			"llm_token_caps":      tokenCaps,
 			"default_playbook_id": defaultPlaybookID,
 			"user_profile":        userProfile,
+			"tg_chat_id":          tgChatID,
+			"has_tg_token":        tgToken != "",
 		},
 	})
 }
@@ -684,6 +698,8 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 		LLMTokenCaps      *map[string]int    `json:"llm_token_caps,omitempty"`
 		DefaultPlaybookID *int64             `json:"default_playbook_id,omitempty"`
 		UserProfile       *port.UserProfile  `json:"user_profile,omitempty"`
+		TGToken           *string            `json:"tg_token,omitempty"`
+		TGChatID          *string            `json:"tg_chat_id,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -715,6 +731,20 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 
 	if b.AuthToken != nil {
 		if err := a.store.SetSetting(ctx, "auth_token", *b.AuthToken); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+
+	if b.TGToken != nil {
+		if err := a.store.SetSetting(ctx, "tg_token", *b.TGToken); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+
+	if b.TGChatID != nil {
+		if err := a.store.SetSetting(ctx, "tg_chat_id", *b.TGChatID); err != nil {
 			a.fail(w, err)
 			return
 		}

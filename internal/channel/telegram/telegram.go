@@ -217,8 +217,15 @@ func (a *Adapter) call(ctx context.Context, method string, body any) (json.RawMe
 // and returns the bot message id. cardID>0 records message_id→card so the
 // "reaction on a card message" refinement can find the card.
 func (a *Adapter) sendMessage(ctx context.Context, text string, cardID int64, buttons [][]button) (int64, error) {
+	chatID := a.OwnerID
+	if dbIDStr, err := a.Store.GetSetting(ctx, "tg_chat_id"); err == nil && dbIDStr != "" {
+		if parsed, err := strconv.ParseInt(dbIDStr, 10, 64); err == nil {
+			chatID = parsed
+		}
+	}
+
 	msg := map[string]any{
-		"chat_id":    a.OwnerID,
+		"chat_id":    chatID,
 		"text":       text,
 		"parse_mode": "Markdown",
 	}
@@ -545,11 +552,35 @@ func (a *Adapter) handleUpdate(u update) {
 // chat that is not the owner. A reply to one of the bot's own card messages is
 // the organize-by-reply signal instead of a new share.
 func (a *Adapter) handleMessage(m *message) {
-	if m.Chat == nil || m.Chat.ID != a.OwnerID {
-		return // owner lock: single-user bot ignores everyone else
+	if m.Chat == nil {
+		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+
+	ownerID := a.OwnerID
+	if dbIDStr, err := a.Store.GetSetting(ctx, "tg_chat_id"); err == nil && dbIDStr != "" {
+		if parsed, err := strconv.ParseInt(dbIDStr, 10, 64); err == nil {
+			ownerID = parsed
+		}
+	}
+
+	// Intercept /start <magic_token> for dynamic linking
+	if strings.HasPrefix(m.Text, "/start ") {
+		token := strings.TrimSpace(strings.TrimPrefix(m.Text, "/start "))
+		masterToken, err := a.Store.GetSetting(ctx, "auth_token")
+		if err == nil && masterToken != "" && token == masterToken {
+			if err := a.Store.SetSetting(ctx, "tg_chat_id", strconv.FormatInt(m.Chat.ID, 10)); err == nil {
+				_, _ = a.sendMessage(ctx, "✅ *Successfully linked!* You can now send me links, files, and notes.", 0, nil)
+				return
+			}
+		}
+	}
+
+	if m.Chat.ID != ownerID {
+		return // owner lock: single-user bot ignores everyone else
+	}
+
 	switch commandOf(m.Text) {
 	case "digest", "weekly":
 		a.sendDigest(ctx)

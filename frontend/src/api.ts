@@ -141,7 +141,7 @@ export async function getSetupStatus(): Promise<{ ok: boolean; is_configured: bo
   return res.json();
 }
 
-export async function submitSetup(payload: { auth_token?: string; llm_base?: string; llm_key?: string; llm_model?: string }): Promise<{ ok: boolean; token?: string }> {
+export async function submitSetup(payload: { auth_token?: string; llm_base?: string; llm_key?: string; llm_model?: string; tg_token?: string }): Promise<{ ok: boolean; token?: string }> {
   const res = await fetch('/api/v1/setup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -197,6 +197,8 @@ export async function getSettings(): Promise<{
     llm_token_caps?: Record<string, number>;
     default_playbook_id?: number | null;
     user_profile?: UserProfile;
+    has_tg_token?: boolean;
+    tg_chat_id?: string;
   };
 }> {
   return request('/api/v1/settings');
@@ -213,6 +215,8 @@ export async function patchSettings(payload: {
   llm_token_caps?: Record<string, number>;
   default_playbook_id?: number;
   user_profile?: UserProfile;
+  tg_token?: string;
+  tg_chat_id?: string;
 }): Promise<{ ok: boolean }> {
   return request('/api/v1/settings', {
     method: 'PATCH',

@@ -11,10 +11,12 @@ interface SetupWizardProps {
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const { theme, resolvedTheme } = useTheme();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [authToken, setAuthToken] = useState('');
   const [confirmToken, setConfirmToken] = useState('');
   const [showToken, setShowToken] = useState(false);
+
+  const [tgToken, setTgToken] = useState('');
 
   const [llmBase, setLlmBase] = useState('https://api.openai.com/v1');
   const [llmKey, setLlmKey] = useState('');
@@ -54,6 +56,11 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     setStep(3);
   };
 
+  const handleStep3Next = () => {
+    setError(null);
+    setStep(4);
+  };
+
   const handleFinish = async () => {
     setError(null);
     setSubmitting(true);
@@ -63,6 +70,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         llm_base: llmBase.trim(),
         llm_key: llmKey.trim(),
         llm_model: llmModel.trim(),
+        tg_token: tgToken.trim(),
       });
       onComplete();
     } catch (err: unknown) {
@@ -126,8 +134,13 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             <span className="step-label">AI Engine</span>
           </div>
           <div className="step-line" />
-          <div className={`step-item ${step === 3 ? 'active' : ''}`}>
-            <div className="step-circle">3</div>
+          <div className={`step-item ${step >= 3 ? 'active' : ''} ${step > 3 ? 'done' : ''}`}>
+            <div className="step-circle">{step > 3 ? <CheckCircle2 size={16} /> : '3'}</div>
+            <span className="step-label">Integrations</span>
+          </div>
+          <div className="step-line" />
+          <div className={`step-item ${step === 4 ? 'active' : ''}`}>
+            <div className="step-circle">4</div>
             <span className="step-label">Launch</span>
           </div>
         </div>
@@ -280,14 +293,51 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 Back
               </button>
               <button type="button" className="setup-btn-primary" onClick={handleStep2Next}>
+                Continue <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Integrations (Optional) */}
+        {step === 3 && (
+          <div className="setup-body">
+            <div className="setup-section-intro">
+              <Sparkles className="section-icon" size={20} />
+              <div>
+                <h3>Integrations (Optional)</h3>
+                <p>Configure Telegram for frictionless capturing on the go.</p>
+              </div>
+            </div>
+
+            <div className="setup-form-group">
+              <label htmlFor="tg-token-input">Telegram Bot Token (Optional)</label>
+              <input
+                id="tg-token-input"
+                type="password"
+                value={tgToken}
+                onChange={(e) => setTgToken(e.target.value)}
+                className="setup-input"
+                placeholder="Enter BotFather Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)"
+              />
+              <span className="setup-hint">
+                Get this by creating a new bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{color: 'var(--accent)'}}>@BotFather</a> on Telegram. You can always configure this later in Settings.
+              </span>
+            </div>
+
+            <div className="setup-actions">
+              <button type="button" className="setup-btn-secondary" onClick={() => setStep(2)}>
+                Back
+              </button>
+              <button type="button" className="setup-btn-primary" onClick={handleStep3Next}>
                 Review & Launch <ArrowRight size={16} />
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Review & Finish */}
-        {step === 3 && (
+        {/* Step 4: Review & Finish */}
+        {step === 4 && (
           <div className="setup-body">
             <div className="setup-section-intro">
               <CheckCircle2 className="section-icon success" size={20} />
@@ -321,6 +371,10 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 <span className="summary-value">{llmKey ? 'Yes' : 'No'}</span>
               </div>
               <div className="summary-row">
+                <span className="summary-key">Telegram Bot</span>
+                <span className="summary-value">{tgToken ? 'Configured' : 'Skipped'}</span>
+              </div>
+              <div className="summary-row">
                 <span className="summary-key">Storage Location</span>
                 <span className="summary-value">Local SQLite DB (Persistent)</span>
               </div>
@@ -331,7 +385,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 type="button"
                 className="setup-btn-secondary"
                 disabled={submitting}
-                onClick={() => setStep(2)}
+                onClick={() => setStep(3)}
               >
                 Back
               </button>
