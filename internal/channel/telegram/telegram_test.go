@@ -204,7 +204,7 @@ func stubTelegram(t *testing.T, build func() *Adapter, fn func(a *Adapter)) []st
 // server and returns the text of the message it posted.
 func captureSendMessage(t *testing.T, fn func(a *Adapter)) string {
 	t.Helper()
-	sent := stubTelegram(t, func() *Adapter { return &Adapter{Token: "tok", OwnerID: 1} }, fn)
+	sent := stubTelegram(t, func() *Adapter { return &Adapter{Token: "tok", OwnerID: 1, Store: newStubStore()} }, fn)
 	if len(sent) != 1 {
 		t.Fatalf("posted %d messages, want 1", len(sent))
 	}
@@ -474,7 +474,7 @@ func TestNotifyVariants(t *testing.T) {
 
 	// 1. Notify duplicate
 	sent := stubTelegram(t, func() *Adapter {
-		return &Adapter{Token: "tok", OwnerID: 1}
+		return &Adapter{Token: "tok", OwnerID: 1, Store: newStubStore()}
 	}, func(a *Adapter) {
 		err := a.Notify(context.Background(), port.Notification{
 			Kind: "duplicate",
@@ -491,7 +491,7 @@ func TestNotifyVariants(t *testing.T) {
 
 	// 2. Notify default (e.g. done)
 	sent = stubTelegram(t, func() *Adapter {
-		return &Adapter{Token: "tok", OwnerID: 1}
+		return &Adapter{Token: "tok", OwnerID: 1, Store: newStubStore()}
 	}, func(a *Adapter) {
 		err := a.Notify(context.Background(), port.Notification{
 			Kind: "done",
