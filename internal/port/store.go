@@ -64,5 +64,6 @@ type Store interface {
 	DeletePlaybook(ctx context.Context, id int64) error
 	DuplicatePlaybook(ctx context.Context, id int64) (Playbook, error)
 	GetDefaultPlaybook(ctx context.Context) (Playbook, error)
+	ResolvePlaybook(ctx context.Context, cardID int64, explicitPlaybookID ...*int64) (Playbook, error)
 }
 

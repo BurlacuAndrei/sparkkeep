@@ -1438,5 +1438,102 @@ func TestStore_Playbooks(t *testing.T) {
 	}
 }
 
+func TestStore_ResolvePlaybook(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	// Create test cards with different types
+	cRepo, err := s.CreateCard(ctx, port.Card{Title: "Golang Repo", Type: "repo"})
+	if err != nil {
+		t.Fatalf("CreateCard repo: %v", err)
+	}
+	cTool, err := s.CreateCard(ctx, port.Card{Title: "CLI Tool", Type: "tool"})
+	if err != nil {
+		t.Fatalf("CreateCard tool: %v", err)
+	}
+	cUntyped, err := s.CreateCard(ctx, port.Card{Title: "Random Note"})
+	if err != nil {
+		t.Fatalf("CreateCard untyped: %v", err)
+	}
+
+	// 1. Fallback to Default (ID=1) when no custom playbooks exist
+	pbDefault, err := s.ResolvePlaybook(ctx, cRepo.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook default fallback: %v", err)
+	}
+	if pbDefault.ID != 1 || pbDefault.Name != "Default" {
+		t.Fatalf("expected Default playbook (id=1), got: %+v", pbDefault)
+	}
+
+	// 2. Setting default_playbook_id overrides Default
+	_ = s.SetSetting(ctx, "default_playbook_id", "2") // Claim check only is ID=2
+	pbSetting, err := s.ResolvePlaybook(ctx, cUntyped.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook setting override: %v", err)
+	}
+	if pbSetting.ID != 2 || pbSetting.Name != "Claim check only" {
+		t.Fatalf("expected Claim check only (id=2), got: %+v", pbSetting)
+	}
+
+	// 3. User playbook matching card type ("repo") beats setting override!
+	pbRepoOld, err := s.CreatePlaybook(ctx, port.Playbook{
+		Name:      "User Repo Scan v1",
+		CardTypes: []string{"repo"},
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Position: 2, Kind: port.StepKindReport, Name: "Report", Enabled: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlaybook repo: %v", err)
+	}
+
+	pbResolved, err := s.ResolvePlaybook(ctx, cRepo.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook repo: %v", err)
+	}
+	if pbResolved.ID != pbRepoOld.ID {
+		t.Fatalf("expected user repo playbook %d, got %d", pbRepoOld.ID, pbResolved.ID)
+	}
+
+	// 4. Multiple user playbooks matching: most recently updated wins
+	time.Sleep(10 * time.Millisecond)
+	pbRepoNew, err := s.CreatePlaybook(ctx, port.Playbook{
+		Name:      "User Repo Scan v2 (Newer)",
+		CardTypes: []string{"repo"},
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Position: 2, Kind: port.StepKindReport, Name: "Report", Enabled: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlaybook repo v2: %v", err)
+	}
+
+	pbResolvedNew, err := s.ResolvePlaybook(ctx, cRepo.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook repo newer: %v", err)
+	}
+	if pbResolvedNew.ID != pbRepoNew.ID {
+		t.Fatalf("expected newer user repo playbook %d, got %d", pbRepoNew.ID, pbResolvedNew.ID)
+	}
+
+	// 5. Explicit playbook_id override beats everything
+	pbExplicit, err := s.ResolvePlaybook(ctx, cRepo.ID, &pbDefault.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook explicit: %v", err)
+	}
+	if pbExplicit.ID != pbDefault.ID {
+		t.Fatalf("expected explicit playbook %d, got %d", pbDefault.ID, pbExplicit.ID)
+	}
+
+	// 6. Deleted or non-existent explicit playbook returns ErrNotFound
+	nonExistentID := int64(99999)
+	_, err = s.ResolvePlaybook(ctx, cTool.ID, &nonExistentID)
+	if !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for non-existent explicit playbook, got: %v", err)
+	}
+}
+
+
 
 

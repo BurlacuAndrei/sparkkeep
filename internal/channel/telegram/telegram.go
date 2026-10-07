@@ -364,6 +364,7 @@ func (a *Adapter) sendFailed(ctx context.Context, c port.Card) error {
 func cardButtons(id int64, retry bool) [][]button {
 	btns := [][]button{{
 		{Text: "🔬 Research", CallbackData: fmt.Sprintf("%d:research", id)},
+		{Text: "▾", CallbackData: fmt.Sprintf("%d:pb_menu", id)},
 		{Text: "→ Doing", CallbackData: fmt.Sprintf("%d:doing", id)},
 		{Text: "Shelve", CallbackData: fmt.Sprintf("%d:shelve", id)},
 		{Text: "✕ Dismiss", CallbackData: fmt.Sprintf("%d:dismiss", id)},
@@ -889,30 +890,97 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	switch action {
-	case "doing":
+	switch {
+	case action == "doing":
 		a.setStatus(ctx, id, port.StatusDoing, cb)
-	case "done":
+	case action == "done":
 		a.setStatus(ctx, id, port.StatusDone, cb)
-	case "shelve":
+	case action == "shelve":
 		a.setStatus(ctx, id, port.StatusShelved, cb)
-	case "dismiss":
+	case action == "dismiss":
 		a.setStatus(ctx, id, port.StatusDismissed, cb)
-	case "research":
-		if active, err := a.Store.HasActiveResearch(ctx, id); err != nil {
-			a.logf("telegram: HasActiveResearch(%d): %v", id, err)
-		} else if active {
-			a.ackCallback(cb.ID, "Research already running")
-			return
-		}
-		a.ackCallback(cb.ID, "")
-		a.Service.GoResearch(ctx, id)
-	case "retry":
+	case action == "retry":
 		a.ackCallback(cb.ID, "")
 		if _, err := a.Service.Retry(ctx, id); err != nil {
 			a.logf("telegram: retry %d: %v", id, err)
 		}
+	case action == "pb_menu":
+		a.handlePlaybookMenu(ctx, id, cb)
+	case action == "pb_back":
+		a.handlePlaybookBack(ctx, id, cb)
+	case strings.HasPrefix(action, "research"):
+		a.handleResearchCallback(ctx, id, action, cb)
 	}
+}
+
+func (a *Adapter) handlePlaybookMenu(ctx context.Context, cardID int64, cb *callbackQuery) {
+	if a.Store == nil || cb.Message == nil || cb.Message.Chat == nil {
+		a.ackCallback(cb.ID, "")
+		return
+	}
+	pbs, err := a.Store.ListPlaybooks(ctx)
+	if err != nil {
+		a.ackCallback(cb.ID, "Failed to load playbooks")
+		return
+	}
+	var rows [][]button
+	limit := 6
+	if len(pbs) < limit {
+		limit = len(pbs)
+	}
+	for i := 0; i < limit; i++ {
+		pb := pbs[i]
+		name := pb.Name
+		if len(name) > 28 {
+			name = name[:25] + "..."
+		}
+		rows = append(rows, []button{
+			{
+				Text:         "📖 " + name,
+				CallbackData: fmt.Sprintf("%d:research:%d", cardID, pb.ID),
+			},
+		})
+	}
+	rows = append(rows, []button{
+		{Text: "« Back", CallbackData: fmt.Sprintf("%d:pb_back", cardID)},
+	})
+	a.ackCallback(cb.ID, "")
+	a.editReplyMarkupWithButtons(ctx, cb.Message.Chat.ID, cb.Message.MessageID, rows)
+}
+
+func (a *Adapter) handlePlaybookBack(ctx context.Context, cardID int64, cb *callbackQuery) {
+	a.ackCallback(cb.ID, "")
+	if cb.Message != nil && cb.Message.Chat != nil {
+		a.editReplyMarkupWithButtons(ctx, cb.Message.Chat.ID, cb.Message.MessageID, cardButtons(cardID, false))
+	}
+}
+
+func (a *Adapter) handleResearchCallback(ctx context.Context, cardID int64, action string, cb *callbackQuery) {
+	parts := strings.Split(action, ":")
+	var explicitPID *int64
+	if len(parts) == 2 {
+		pid, err := strconv.ParseInt(parts[1], 10, 64)
+		if err == nil {
+			if _, gerr := a.Store.GetPlaybook(ctx, pid); gerr != nil {
+				a.ackCallback(cb.ID, "Playbook no longer exists")
+				return
+			}
+			explicitPID = &pid
+		}
+	}
+
+	if active, err := a.Store.HasActiveResearch(ctx, cardID); err != nil {
+		a.logf("telegram: HasActiveResearch(%d): %v", cardID, err)
+	} else if active {
+		a.ackCallback(cb.ID, "Research already running")
+		return
+	}
+
+	a.ackCallback(cb.ID, "")
+	if cb.Message != nil && cb.Message.Chat != nil {
+		a.editReplyMarkup(ctx, cb.Message.Chat.ID, cb.Message.MessageID)
+	}
+	a.Service.GoResearch(ctx, cardID, explicitPID)
 }
 
 func parseCallback(data string) (id int64, action string, ok bool) {
@@ -965,18 +1033,23 @@ func (a *Adapter) ackCallback(id, text string) {
 	}
 }
 
-// editReplyMarkup clears the inline keyboard once an action is taken so the
-// buttons can't be re-pressed.
-func (a *Adapter) editReplyMarkup(ctx context.Context, chatID, msgID int64) {
+// editReplyMarkupWithButtons updates the inline keyboard with new buttons.
+func (a *Adapter) editReplyMarkupWithButtons(ctx context.Context, chatID, msgID int64, btns [][]button) {
 	if _, err := a.call(ctx, "editMessageReplyMarkup", map[string]any{
 		"chat_id":    chatID,
 		"message_id": msgID,
 		"reply_markup": map[string]any{
-			"inline_keyboard": [][]button{},
+			"inline_keyboard": btns,
 		},
 	}); err != nil {
 		a.logf("telegram: editMessageReplyMarkup: %v", err)
 	}
+}
+
+// editReplyMarkup clears the inline keyboard once an action is taken so the
+// buttons can't be re-pressed.
+func (a *Adapter) editReplyMarkup(ctx context.Context, chatID, msgID int64) {
+	a.editReplyMarkupWithButtons(ctx, chatID, msgID, [][]button{})
 }
 
 // handleReaction refines a card's horizon from an emoji on its bot message:

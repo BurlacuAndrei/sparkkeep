@@ -161,10 +161,11 @@ function AppContent() {
   };
 
   // Trigger Research
-  const handleResearch = async (id: number) => {
+  const handleResearch = async (id: number, playbookId?: number) => {
     try {
-      await api.triggerResearch(id);
-      showToast(`Research queued for card #${id}`);
+      const res = await api.triggerResearch(id, playbookId);
+      const pbName = res.playbook?.name ? ` with "${res.playbook.name}"` : '';
+      showToast(`Research queued for card #${id}${pbName}`);
       reloadAll();
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));

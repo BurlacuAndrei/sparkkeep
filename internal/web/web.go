@@ -631,16 +631,25 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal([]byte(capsJSON), &tokenCaps)
 	}
 
+	defPbID, _ := a.store.GetSetting(ctx, "default_playbook_id")
+	var defaultPlaybookID *int64
+	if strings.TrimSpace(defPbID) != "" {
+		if idVal, err := strconv.ParseInt(defPbID, 10, 64); err == nil {
+			defaultPlaybookID = &idVal
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
-			"llm_base":       activeBase,
-			"llm_model":      activeModel,
-			"has_llm_key":    hasKey,
-			"has_auth_token": a.effectiveAuthToken(ctx) != "",
-			"llm_profiles":   pubProfiles,
-			"llm_roles":      llmRoles,
-			"llm_token_caps": tokenCaps,
+			"llm_base":            activeBase,
+			"llm_model":           activeModel,
+			"has_llm_key":         hasKey,
+			"has_auth_token":      a.effectiveAuthToken(ctx) != "",
+			"llm_profiles":        pubProfiles,
+			"llm_roles":           llmRoles,
+			"llm_token_caps":      tokenCaps,
+			"default_playbook_id": defaultPlaybookID,
 		},
 	})
 }
@@ -648,18 +657,26 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var b struct {
-		AuthToken        *string            `json:"auth_token,omitempty"`
-		LLMBase          *string            `json:"llm_base,omitempty"`
-		LLMKey           *string            `json:"llm_key,omitempty"`
-		LLMModel         *string            `json:"llm_model,omitempty"`
-		LLMProfiles      *[]llmProfileInput `json:"llm_profiles,omitempty"`
-		DefaultProfileID *string            `json:"default_profile_id,omitempty"`
-		LLMRoles         *map[string]string `json:"llm_roles,omitempty"`
-		LLMTokenCaps     *map[string]int    `json:"llm_token_caps,omitempty"`
+		AuthToken         *string            `json:"auth_token,omitempty"`
+		LLMBase           *string            `json:"llm_base,omitempty"`
+		LLMKey            *string            `json:"llm_key,omitempty"`
+		LLMModel          *string            `json:"llm_model,omitempty"`
+		LLMProfiles       *[]llmProfileInput `json:"llm_profiles,omitempty"`
+		DefaultProfileID  *string            `json:"default_profile_id,omitempty"`
+		LLMRoles          *map[string]string `json:"llm_roles,omitempty"`
+		LLMTokenCaps      *map[string]int    `json:"llm_token_caps,omitempty"`
+		DefaultPlaybookID *int64             `json:"default_playbook_id,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
 		return
+	}
+
+	if b.DefaultPlaybookID != nil {
+		if err := a.store.SetSetting(ctx, "default_playbook_id", strconv.FormatInt(*b.DefaultPlaybookID, 10)); err != nil {
+			a.fail(w, err)
+			return
+		}
 	}
 
 	if b.AuthToken != nil {
@@ -1371,8 +1388,17 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "research already running")
 		return
 	}
-	a.svc.GoResearch(r.Context(), b.CardID, b.PlaybookID)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "accepted": true})
+	pb, err := a.store.ResolvePlaybook(r.Context(), b.CardID, b.PlaybookID)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	a.svc.GoResearch(r.Context(), b.CardID, &pb.ID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":       true,
+		"accepted": true,
+		"playbook": pb,
+	})
 }
 
 

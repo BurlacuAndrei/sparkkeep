@@ -410,6 +410,56 @@ func (s *stubStore) GetDefaultPlaybook(_ context.Context) (port.Playbook, error)
 	return port.Playbook{ID: 1, Name: "Default", IsBuiltin: true}, nil
 }
 
+func (s *stubStore) ResolvePlaybook(_ context.Context, cardID int64, explicitPlaybookID ...*int64) (port.Playbook, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(explicitPlaybookID) > 0 && explicitPlaybookID[0] != nil {
+		pb, ok := s.playbooks[*explicitPlaybookID[0]]
+		if !ok {
+			return port.Playbook{}, port.ErrNotFound
+		}
+		return pb, nil
+	}
+	var card port.Card
+	if cardID > 0 {
+		card = s.cards[cardID]
+	}
+	cardType := strings.TrimSpace(strings.ToLower(card.Type))
+	if cardType != "" {
+		for _, pb := range s.playbooks {
+			if !pb.IsBuiltin {
+				for _, ct := range pb.CardTypes {
+					if strings.TrimSpace(strings.ToLower(ct)) == cardType {
+						return pb, nil
+					}
+				}
+			}
+		}
+		for _, pb := range s.playbooks {
+			if pb.IsBuiltin {
+				for _, ct := range pb.CardTypes {
+					if strings.TrimSpace(strings.ToLower(ct)) == cardType {
+						return pb, nil
+					}
+				}
+			}
+		}
+	}
+	if defVal, ok := s.settings["default_playbook_id"]; ok && defVal != "" {
+		if defID, err := strconv.ParseInt(defVal, 10, 64); err == nil {
+			if pb, ok := s.playbooks[defID]; ok {
+				return pb, nil
+			}
+		}
+	}
+	for _, pb := range s.playbooks {
+		if pb.IsBuiltin && pb.ID == 1 {
+			return pb, nil
+		}
+	}
+	return port.Playbook{ID: 1, Name: "Default", IsBuiltin: true}, nil
+}
+
 
 func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {
 	s.mu.Lock()

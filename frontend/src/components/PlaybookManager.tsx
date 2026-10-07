@@ -62,21 +62,36 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
   const [addStepTab, setAddStepTab] = useState<'library' | 'blank'>('library');
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [defaultPlaybookId, setDefaultPlaybookId] = useState<number | null>(null);
 
   // Load playbooks & library
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pbs, lib] = await Promise.all([
+      const [pbs, lib, st] = await Promise.all([
         api.fetchPlaybooks(),
         api.fetchStepLibrary(),
+        api.getSettings(),
       ]);
       setPlaybooks(pbs);
       setLibraryTemplates(lib);
+      if (st.settings?.default_playbook_id) {
+        setDefaultPlaybookId(st.settings.default_playbook_id);
+      }
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDefaultPlaybookChange = async (newId: number) => {
+    try {
+      await api.patchSettings({ default_playbook_id: newId });
+      setDefaultPlaybookId(newId);
+      showToast('Default research playbook updated');
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   };
 
@@ -433,6 +448,27 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
             <div className="pb-empty-state">No playbooks found.</div>
           ) : (
             <>
+              {/* Default Playbook Selector Setting */}
+              <div className="pb-default-selector-card">
+                <div className="pb-default-info">
+                  <span className="pb-default-label">Default Playbook for Untyped Cards</span>
+                  <span className="pb-default-sub">
+                    Runs automatically when researching cards without a type-specific playbook.
+                  </span>
+                </div>
+                <select
+                  className="input-select pb-default-dropdown"
+                  value={defaultPlaybookId || 1}
+                  onChange={(e) => handleDefaultPlaybookChange(parseInt(e.target.value, 10))}
+                >
+                  {playbooks.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.is_builtin ? '(Built-in)' : '(Custom)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Built-ins */}
               <div className="pb-section-header">Built-in Playbooks (Read-Only)</div>
               <div className="pb-cards-grid">

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Card } from '../types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Card, Playbook } from '../types';
 import * as api from '../api';
-import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw, AlertTriangle, HelpCircle, Link2 } from 'lucide-react';
+import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw, AlertTriangle, HelpCircle, Link2, ChevronDown, BookOpen } from 'lucide-react';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 
 
@@ -38,7 +38,7 @@ const STAMP_LABEL = { doing: 'DOING', shelve: 'SHELVE', done: 'DONE' } as const;
 interface TriageViewProps {
   cards: Card[];
   onStatusChange: (id: number, status: string) => void;
-  onResearch: (id: number) => void;
+  onResearch: (id: number, playbookId?: number) => void;
   onRetry: (id: number) => void;
   onOpenCardDetail: (card: Card) => void;
   onRefresh?: () => void;
@@ -57,6 +57,12 @@ export const TriageView: React.FC<TriageViewProps> = ({
   const baseCards = inboxCards.length > 0 ? inboxCards : cards;
   const [staleOnly, setStaleOnly] = useState(false);
   const [shelveMsg, setShelveMsg] = useState('');
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+
+  useEffect(() => {
+    api.fetchPlaybooks().then(setPlaybooks).catch(() => {});
+  }, []);
   const triageCards = staleOnly
     ? baseCards.filter((c) => idleDays(c) >= STALE_DAYS)
     : baseCards;
@@ -141,13 +147,33 @@ export const TriageView: React.FC<TriageViewProps> = ({
         handleAction('dismissed');
       } else if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();
-        onResearch(currentCard.id);
+        if (e.shiftKey) {
+          setIsPickerOpen((v) => !v);
+        } else {
+          onResearch(currentCard.id);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentCard, handleAction, onResearch]);
+
+  const autoPlaybook = useMemo(() => {
+    if (!currentCard) return null;
+    const cardType = (currentCard.type || '').trim().toLowerCase();
+    if (cardType) {
+      const userMatch = playbooks.find(
+        (p) => !p.is_builtin && p.card_types?.some((ct) => ct.trim().toLowerCase() === cardType)
+      );
+      if (userMatch) return userMatch;
+      const builtinMatch = playbooks.find(
+        (p) => p.is_builtin && p.card_types?.some((ct) => ct.trim().toLowerCase() === cardType)
+      );
+      if (builtinMatch) return builtinMatch;
+    }
+    return playbooks.find((p) => p.is_builtin && p.id === 1) || playbooks[0] || null;
+  }, [currentCard, playbooks]);
 
   const staleControls = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -485,19 +511,63 @@ export const TriageView: React.FC<TriageViewProps> = ({
 
         <ResearchProgressStrip cardId={currentCard.id} />
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 4 }}>
+        <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 12, marginTop: 4 }}>
           {(() => {
             const isHigh = currentCard.worthiness?.level?.toLowerCase() === 'high';
+            const btnLabel = autoPlaybook ? `Research: ${autoPlaybook.name} (R)` : 'Autonomous Deep Research (R)';
             return (
-              <button
-                type="button"
-                className={isHigh ? 'triage-research-btn promoted' : 'btn-secondary'}
-                onClick={() => onResearch(currentCard.id)}
-                style={{ fontSize: 12, padding: isHigh ? '8px 18px' : '6px 14px' }}
-              >
-                <Sparkles size={14} color={isHigh ? '#fff' : '#c084fc'} />
-                <span>Autonomous Deep Research (R)</span>
-              </button>
+              <div className="pb-split-btn-wrapper">
+                <button
+                  type="button"
+                  className={isHigh ? 'triage-research-btn promoted pb-split-main' : 'btn-secondary pb-split-main'}
+                  onClick={() => onResearch(currentCard.id)}
+                  style={{ fontSize: 12, padding: isHigh ? '8px 14px' : '6px 12px' }}
+                  title="Run auto-selected playbook (R)"
+                >
+                  <Sparkles size={14} color={isHigh ? '#fff' : '#c084fc'} />
+                  <span>{btnLabel}</span>
+                </button>
+                <button
+                  type="button"
+                  className={isHigh ? 'triage-research-btn promoted pb-split-caret' : 'btn-secondary pb-split-caret'}
+                  onClick={() => setIsPickerOpen((v) => !v)}
+                  style={{ fontSize: 12, padding: isHigh ? '8px 10px' : '6px 8px' }}
+                  title="Choose research playbook (Shift+R)"
+                >
+                  <ChevronDown size={14} />
+                </button>
+
+                {isPickerOpen && (
+                  <div className="pb-picker-dropdown">
+                    <div className="pb-picker-header">
+                      <BookOpen size={13} />
+                      <span>Select Research Playbook</span>
+                    </div>
+                    <div className="pb-picker-list">
+                      {playbooks.map((pb) => {
+                        const isAuto = autoPlaybook?.id === pb.id;
+                        return (
+                          <button
+                            key={pb.id}
+                            type="button"
+                            className={`pb-picker-item ${isAuto ? 'auto-selected' : ''}`}
+                            onClick={() => {
+                              setIsPickerOpen(false);
+                              onResearch(currentCard.id, pb.id);
+                            }}
+                          >
+                            <div className="pb-picker-item-main">
+                              <span className="pb-picker-name">{pb.name}</span>
+                              {isAuto && <span className="pb-picker-badge">Auto</span>}
+                            </div>
+                            <span className="pb-picker-desc">{pb.description || `${pb.steps?.length || 0} steps`}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })()}
 

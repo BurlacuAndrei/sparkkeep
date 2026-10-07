@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -811,26 +812,11 @@ func (s *Store) ListTags(ctx context.Context) ([]port.Tag, error) {
 }
 
 func (s *Store) CreateResearch(ctx context.Context, cardID int64, query string, playbookID ...*int64) (port.Research, error) {
-	var pid *int64
-	if len(playbookID) > 0 && playbookID[0] != nil {
-		pid = playbookID[0]
+	pb, err := s.ResolvePlaybook(ctx, cardID, playbookID...)
+	if err != nil {
+		return port.Research{}, err
 	}
-	var pb port.Playbook
-	var err error
-	if pid != nil {
-		pb, err = s.GetPlaybook(ctx, *pid)
-		if err != nil {
-			return port.Research{}, fmt.Errorf("get playbook %d: %w", *pid, err)
-		}
-	} else {
-		pb, err = s.GetDefaultPlaybook(ctx)
-		if err != nil {
-			pb = research.DefaultPlaybook()
-		}
-		if pb.ID > 0 {
-			pid = &pb.ID
-		}
-	}
+	pid := &pb.ID
 
 	pbSnapshot := "{}"
 	if pbBytes, err := json.Marshal(pb); err == nil {
@@ -1193,6 +1179,91 @@ func (s *Store) GetDefaultPlaybook(ctx context.Context) (port.Playbook, error) {
 	}
 	return s.GetPlaybook(ctx, id)
 }
+
+// ResolvePlaybook implements the Prompt 14 resolution rule:
+// 1. Explicit playbook_id if provided (errors if not found).
+// 2. User playbook (is_builtin = false) matching card type (most recently updated wins).
+// 3. Built-in playbook (is_builtin = true) matching card type (most recently updated wins).
+// 4. Setting default_playbook_id overrides "Default" if valid.
+// 5. Default playbook (built-in Default).
+func (s *Store) ResolvePlaybook(ctx context.Context, cardID int64, explicitPlaybookID ...*int64) (port.Playbook, error) {
+	if len(explicitPlaybookID) > 0 && explicitPlaybookID[0] != nil {
+		return s.GetPlaybook(ctx, *explicitPlaybookID[0])
+	}
+
+	allPlaybooks, err := s.ListPlaybooks(ctx)
+	if err != nil {
+		return port.Playbook{}, err
+	}
+
+	var cardType string
+	if cardID > 0 {
+		if c, err := s.GetCard(ctx, cardID); err == nil {
+			cardType = strings.TrimSpace(strings.ToLower(c.Type))
+		}
+	}
+
+	if cardType != "" {
+		// Tier 2: User playbook matching card type (most recently updated wins)
+		var bestUser *port.Playbook
+		for i := range allPlaybooks {
+			pb := allPlaybooks[i]
+			if pb.IsBuiltin {
+				continue
+			}
+			for _, ct := range pb.CardTypes {
+				if strings.TrimSpace(strings.ToLower(ct)) == cardType {
+					if bestUser == nil || pb.UpdatedAt.After(bestUser.UpdatedAt) || (pb.UpdatedAt.Equal(bestUser.UpdatedAt) && pb.ID > bestUser.ID) {
+						cp := pb
+						bestUser = &cp
+					}
+					break
+				}
+			}
+		}
+		if bestUser != nil {
+			return *bestUser, nil
+		}
+
+		// Tier 3: Built-in playbook matching card type
+		var bestBuiltin *port.Playbook
+		for i := range allPlaybooks {
+			pb := allPlaybooks[i]
+			if !pb.IsBuiltin {
+				continue
+			}
+			for _, ct := range pb.CardTypes {
+				if strings.TrimSpace(strings.ToLower(ct)) == cardType {
+					if bestBuiltin == nil || pb.UpdatedAt.After(bestBuiltin.UpdatedAt) || (pb.UpdatedAt.Equal(bestBuiltin.UpdatedAt) && pb.ID > bestBuiltin.ID) {
+						cp := pb
+						bestBuiltin = &cp
+					}
+					break
+				}
+			}
+		}
+		if bestBuiltin != nil {
+			return *bestBuiltin, nil
+		}
+	}
+
+	// Tier 4: Setting default_playbook_id overrides "Default"
+	if defVal, _ := s.GetSetting(ctx, "default_playbook_id"); defVal != "" {
+		if defID, err := strconv.ParseInt(defVal, 10, 64); err == nil && defID > 0 {
+			if pb, err := s.GetPlaybook(ctx, defID); err == nil {
+				return pb, nil
+			}
+		}
+	}
+
+	// Tier 5: Default playbook
+	pb, err := s.GetDefaultPlaybook(ctx)
+	if err != nil {
+		return research.DefaultPlaybook(), nil
+	}
+	return pb, nil
+}
+
 
 func (s *Store) ListPlaybooks(ctx context.Context) ([]port.Playbook, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id FROM playbooks ORDER BY is_builtin DESC, id ASC`)

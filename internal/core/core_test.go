@@ -231,6 +231,12 @@ func (s *stubStore) DuplicatePlaybook(_ context.Context, id int64) (port.Playboo
 func (s *stubStore) GetDefaultPlaybook(_ context.Context) (port.Playbook, error) {
 	return port.Playbook{ID: 1, Name: "Default", IsBuiltin: true}, nil
 }
+func (s *stubStore) ResolvePlaybook(_ context.Context, cardID int64, explicitPlaybookID ...*int64) (port.Playbook, error) {
+	if len(explicitPlaybookID) > 0 && explicitPlaybookID[0] != nil {
+		return s.GetPlaybook(context.Background(), *explicitPlaybookID[0])
+	}
+	return s.GetDefaultPlaybook(context.Background())
+}
 
 
 func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {

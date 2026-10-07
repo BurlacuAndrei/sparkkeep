@@ -155,6 +155,25 @@ func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card
 	return out, nil
 }
 
+func (s *stubStore) ListPlaybooks(_ context.Context) ([]port.Playbook, error) {
+	return []port.Playbook{
+		{ID: 1, Name: "Default", IsBuiltin: true},
+		{ID: 2, Name: "Claim check only", IsBuiltin: true},
+		{ID: 3, Name: "A very long custom monetization playbook name exceeding twenty-eight characters", IsBuiltin: false},
+	}, nil
+}
+
+func (s *stubStore) GetPlaybook(_ context.Context, id int64) (port.Playbook, error) {
+	if id == 9999 {
+		return port.Playbook{}, port.ErrNotFound
+	}
+	return port.Playbook{ID: id, Name: fmt.Sprintf("Playbook %d", id)}, nil
+}
+
+func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {
+	return false, nil
+}
+
 // stubTelegram points the adapter built by build at a stub Telegram API
 // server, runs fn against it and returns the text of every message it posted.
 func stubTelegram(t *testing.T, build func() *Adapter, fn func(a *Adapter)) []string {
@@ -693,14 +712,15 @@ func TestCardButtons(t *testing.T) {
 	if len(btns) != 1 {
 		t.Fatalf("expected 1 row of buttons, got %d", len(btns))
 	}
-	if len(btns[0]) != 4 {
-		t.Fatalf("expected 4 buttons in row, got %d", len(btns[0]))
+	if len(btns[0]) != 5 {
+		t.Fatalf("expected 5 buttons in row, got %d", len(btns[0]))
 	}
 	expected := []struct {
 		text string
 		data string
 	}{
 		{"🔬 Research", "42:research"},
+		{"▾", "42:pb_menu"},
 		{"→ Doing", "42:doing"},
 		{"Shelve", "42:shelve"},
 		{"✕ Dismiss", "42:dismiss"},
@@ -712,11 +732,115 @@ func TestCardButtons(t *testing.T) {
 	}
 
 	retryBtns := cardButtons(42, true)
-	if len(retryBtns[0]) != 5 {
-		t.Fatalf("expected 5 buttons with retry, got %d", len(retryBtns[0]))
+	if len(retryBtns[0]) != 6 {
+		t.Fatalf("expected 6 buttons with retry, got %d", len(retryBtns[0]))
 	}
-	if retryBtns[0][4].Text != "Retry" || retryBtns[0][4].CallbackData != "42:retry" {
-		t.Errorf("unexpected retry button: %+v", retryBtns[0][4])
+	if retryBtns[0][5].Text != "Retry" || retryBtns[0][5].CallbackData != "42:retry" {
+		t.Errorf("unexpected retry button: %+v", retryBtns[0][5])
+	}
+}
+
+func TestTelegramPlaybookPicker(t *testing.T) {
+	st := newStubStore()
+	var answeredText string
+	var editedKeyboard [][]button
+	var editedMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method := strings.TrimPrefix(r.URL.Path, "/bottoken/")
+		if method == "answerCallbackQuery" {
+			var body struct {
+				Text string `json:"text"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			answeredText = body.Text
+			fmt.Fprint(w, `{"ok":true,"result":true}`)
+			return
+		}
+		if method == "editMessageReplyMarkup" {
+			editedMethod = method
+			var body struct {
+				ReplyMarkup struct {
+					InlineKeyboard [][]button `json:"inline_keyboard"`
+				} `json:"reply_markup"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			editedKeyboard = body.ReplyMarkup.InlineKeyboard
+			fmt.Fprint(w, `{"ok":true,"result":true}`)
+			return
+		}
+		fmt.Fprint(w, `{"ok":true,"result":true}`)
+	}))
+	defer srv.Close()
+
+	adapter := &Adapter{
+		Token:   "token",
+		OwnerID: 12345,
+		baseURL: srv.URL,
+		Store:   st,
+		Service: &core.Service{Store: st},
+		httpc:   srv.Client(),
+	}
+
+	// 1. Click ▾ menu button (42:pb_menu)
+	cbMenu := &callbackQuery{
+		ID:   "cb1",
+		Data: "42:pb_menu",
+		From: &user{ID: 12345},
+		Message: &message{
+			MessageID: 100,
+			Chat:      &chat{ID: 999},
+		},
+	}
+	adapter.handleCallback(cbMenu)
+
+	if editedMethod != "editMessageReplyMarkup" {
+		t.Fatalf("expected editMessageReplyMarkup call, got %q", editedMethod)
+	}
+	if len(editedKeyboard) != 4 { // 3 playbooks + Back
+		t.Fatalf("expected 4 rows in edited keyboard, got %d", len(editedKeyboard))
+	}
+	// Verify long playbook name was truncated and callback data stays <= 64 bytes
+	for _, row := range editedKeyboard {
+		for _, btn := range row {
+			if len(btn.CallbackData) > 64 {
+				t.Errorf("callback data exceeds 64 bytes: %q (%d bytes)", btn.CallbackData, len(btn.CallbackData))
+			}
+		}
+	}
+	// Check third playbook row truncated text
+	if !strings.HasSuffix(editedKeyboard[2][0].Text, "...") {
+		t.Errorf("expected long playbook name to be truncated with ..., got %q", editedKeyboard[2][0].Text)
+	}
+
+	// 2. Click deleted playbook (42:research:9999) -> friendly toast error
+	cbDeleted := &callbackQuery{
+		ID:   "cb2",
+		Data: "42:research:9999",
+		From: &user{ID: 12345},
+		Message: &message{
+			MessageID: 100,
+			Chat:      &chat{ID: 999},
+		},
+	}
+	adapter.handleCallback(cbDeleted)
+	if answeredText != "Playbook no longer exists" {
+		t.Errorf("expected 'Playbook no longer exists' toast, got %q", answeredText)
+	}
+
+	// 3. Click « Back (42:pb_back) -> restores card buttons
+	cbBack := &callbackQuery{
+		ID:   "cb3",
+		Data: "42:pb_back",
+		From: &user{ID: 12345},
+		Message: &message{
+			MessageID: 100,
+			Chat:      &chat{ID: 999},
+		},
+	}
+	adapter.handleCallback(cbBack)
+	if len(editedKeyboard) != 1 || len(editedKeyboard[0]) != 5 {
+		t.Fatalf("expected restored card buttons with 5 buttons, got %v", editedKeyboard)
 	}
 }
 

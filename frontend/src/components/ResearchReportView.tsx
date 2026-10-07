@@ -15,9 +15,11 @@ import {
   History,
   Check,
   Plus,
+  ChevronDown,
+  BookOpen,
 } from 'lucide-react';
-import { Card, ResearchItem, ResearchSource } from '../types';
-import { fetchCardResearchRuns, triggerResearch } from '../api';
+import { Card, ResearchItem, ResearchSource, Playbook } from '../types';
+import { fetchCardResearchRuns, triggerResearch, fetchPlaybooks } from '../api';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 
 interface ResearchReportViewProps {
@@ -167,6 +169,12 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
   const [selectedActions, setSelectedActions] = useState<Record<number, boolean>>({});
   const [appliedHorizon, setAppliedHorizon] = useState(false);
   const [appliedTags, setAppliedTags] = useState(false);
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+
+  useEffect(() => {
+    fetchPlaybooks().then(setPlaybooks).catch(() => {});
+  }, []);
 
   // Fetch full research history for this card
   useEffect(() => {
@@ -189,11 +197,13 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
     };
   }, [card.id]);
 
-  const handleReRun = async () => {
+  const handleReRun = async (playbookId?: number) => {
     setLoading(true);
+    setIsPickerOpen(false);
     try {
-      await triggerResearch(card.id);
-      showToast?.('Research started');
+      const res = await triggerResearch(card.id, playbookId);
+      const pbName = res.playbook?.name ? ` with "${res.playbook.name}"` : '';
+      showToast?.(`Research started${pbName}`);
       // Refresh after short delay
       setTimeout(() => {
         fetchCardResearchRuns(card.id).then((res) => {
@@ -340,16 +350,52 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             </div>
           )}
 
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleReRun}
-            disabled={loading || isActive}
-            style={{ fontSize: 12, padding: '5px 10px' }}
-          >
-            <RotateCw size={13} className={loading || isActive ? 'spin-slow' : ''} />
-            <span>{isActive ? 'Running...' : 'Re-run Research'}</span>
-          </button>
+          <div className="pb-split-btn-wrapper">
+            <button
+              type="button"
+              className="btn-secondary pb-split-main"
+              onClick={() => handleReRun()}
+              disabled={loading || isActive}
+              style={{ fontSize: 12, padding: '5px 10px' }}
+            >
+              <RotateCw size={13} className={loading || isActive ? 'spin-slow' : ''} />
+              <span>{isActive ? 'Running...' : 'Re-run Research'}</span>
+            </button>
+            <button
+              type="button"
+              className="btn-secondary pb-split-caret"
+              onClick={() => setIsPickerOpen((v) => !v)}
+              disabled={loading || isActive}
+              style={{ fontSize: 12, padding: '5px 8px' }}
+              title="Pick playbook for re-run"
+            >
+              <ChevronDown size={13} />
+            </button>
+
+            {isPickerOpen && (
+              <div className="pb-picker-dropdown">
+                <div className="pb-picker-header">
+                  <BookOpen size={13} />
+                  <span>Choose Playbook</span>
+                </div>
+                <div className="pb-picker-list">
+                  {playbooks.map((pb) => (
+                    <button
+                      key={pb.id}
+                      type="button"
+                      className="pb-picker-item"
+                      onClick={() => handleReRun(pb.id)}
+                    >
+                      <div className="pb-picker-item-main">
+                        <span className="pb-picker-name">{pb.name}</span>
+                      </div>
+                      <span className="pb-picker-desc">{pb.description || `${pb.steps?.length || 0} steps`}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -984,7 +1030,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
           <p style={{ color: '#94a3b8', margin: '0 0 12px', fontSize: 13 }}>
             No research report generated for this card yet.
           </p>
-          <button type="button" className="btn-primary" onClick={handleReRun} disabled={loading}>
+          <button type="button" className="btn-primary" onClick={() => handleReRun()} disabled={loading}>
             <RotateCw size={13} className={loading ? 'spin-slow' : ''} />
             <span>Start Deep Research</span>
           </button>

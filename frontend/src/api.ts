@@ -87,11 +87,11 @@ export async function fetchDigest(): Promise<DigestData> {
   return request<DigestData>('/api/v1/digest');
 }
 
-export async function triggerResearch(cardId: number): Promise<{ ok: boolean; accepted: boolean }> {
-  return request<{ ok: boolean; accepted: boolean }>('/api/v1/research', {
+export async function triggerResearch(cardId: number, playbookId?: number): Promise<{ ok: boolean; accepted: boolean; playbook?: Playbook }> {
+  return request<{ ok: boolean; accepted: boolean; playbook?: Playbook }>('/api/v1/research', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ card_id: cardId }),
+    body: JSON.stringify({ card_id: cardId, ...(playbookId ? { playbook_id: playbookId } : {}) }),
   });
 }
 
@@ -181,6 +181,7 @@ export async function getSettings(): Promise<{
     llm_profiles?: LLMProfile[];
     llm_roles?: Record<string, string>;
     llm_token_caps?: Record<string, number>;
+    default_playbook_id?: number | null;
   };
 }> {
   return request('/api/v1/settings');
@@ -195,6 +196,7 @@ export async function patchSettings(payload: {
   default_profile_id?: string;
   llm_roles?: Record<string, string>;
   llm_token_caps?: Record<string, number>;
+  default_playbook_id?: number;
 }): Promise<{ ok: boolean }> {
   return request('/api/v1/settings', {
     method: 'PATCH',
