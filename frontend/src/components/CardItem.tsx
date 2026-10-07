@@ -34,9 +34,21 @@ export const CardItem: React.FC<CardItemProps> = ({
       onClick={() => onSelect(card)}
     >
       <div className="card-top">
-        <span className={`horizon ${card.horizon} horizon-pill ${card.horizon}`}>
-          {card.horizon}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {card.type && (
+            <span className="card-type-badge">{card.type}</span>
+          )}
+          <span className={`horizon ${card.horizon} horizon-pill ${card.horizon}`}>
+            {card.horizon}
+          </span>
+          {card.worthiness?.level && (
+            <span
+              className={`worthiness-dot ${card.worthiness.level.toLowerCase()}`}
+              title={card.worthiness.reason ? `Worthiness: ${card.worthiness.level} — ${card.worthiness.reason}` : `Worthiness: ${card.worthiness.level}`}
+              aria-label={`Worthiness: ${card.worthiness.level}`}
+            />
+          )}
+        </div>
         <span className="card-status status">
           {card.status}
         </span>
@@ -44,20 +56,9 @@ export const CardItem: React.FC<CardItemProps> = ({
 
       <h3 className="card-title">{card.title}</h3>
       
-      <p className="card-summary">{card.summary}</p>
+      <p className="card-summary">{card.tldr || card.summary}</p>
 
-      {/* Briefing highlight if available */}
-      {card.executive_summary && (
-        <div className="card-briefing-snippet">
-          <div className="briefing-label">
-            <FileText size={11} strokeWidth={1.5} />
-            <span>Briefing</span>
-          </div>
-          <div>{card.executive_summary}</div>
-        </div>
-      )}
-
-      {card.proposed_actions && card.proposed_actions.length > 0 && (
+      {card.status !== 'inbox' && card.proposed_actions && card.proposed_actions.length > 0 && (
         <div className="card-actions-summary">
           <CheckCircle2 size={12} strokeWidth={1.5} />
           <span>{card.proposed_actions.length} action item{card.proposed_actions.length > 1 ? 's' : ''} planned</span>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, ResearchItem, Reference, ReferenceKind } from '../types';
 import { fetchCardResearch, getErrorMessage } from '../api';
-import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus, Link2 } from 'lucide-react';
+import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus, Link2, HelpCircle } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
 import { CARD_HORIZON_OPTIONS, CARD_STATUS_OPTIONS } from './selectOptions';
 
@@ -41,6 +41,12 @@ export const CardModal: React.FC<CardModalProps> = ({
 }) => {
   const [title, setTitle] = useState(card?.title || '');
   const [_summary, _setSummary] = useState(card?.summary || '');
+  const [tldr, setTldr] = useState(card?.tldr || card?.executive_summary || '');
+  const [whyCare, setWhyCare] = useState(card?.why_care || card?.value_proposition || '');
+  const [claims, setClaims] = useState<string[]>(card?.claims || []);
+  const [newClaim, setNewClaim] = useState('');
+  const [openQuestions, setOpenQuestions] = useState<string[]>(card?.open_questions || []);
+  const [newQuestion, setNewQuestion] = useState('');
   const [executiveSummary, setExecutiveSummary] = useState(card?.executive_summary || '');
   const [valueProposition, setValueProposition] = useState(card?.value_proposition || '');
   const [horizon, setHorizon] = useState(card?.horizon || 'short-term');
@@ -102,6 +108,36 @@ export const CardModal: React.FC<CardModalProps> = ({
     setNewAction('');
   };
 
+  const addClaim = () => {
+    const text = newClaim.trim();
+    if (!text) return;
+    setClaims((prev) => [...prev, text]);
+    setNewClaim('');
+  };
+
+  const editClaim = (index: number, text: string) => {
+    setClaims((prev) => prev.map((c, i) => (i === index ? text : c)));
+  };
+
+  const removeClaim = (index: number) => {
+    setClaims((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addQuestion = () => {
+    const text = newQuestion.trim();
+    if (!text) return;
+    setOpenQuestions((prev) => [...prev, text]);
+    setNewQuestion('');
+  };
+
+  const editQuestion = (index: number, text: string) => {
+    setOpenQuestions((prev) => prev.map((q, i) => (i === index ? text : q)));
+  };
+
+  const removeQuestion = (index: number) => {
+    setOpenQuestions((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const removeReference = (index: number) => {
     setReferences((prev) => prev.filter((_, i) => i !== index));
   };
@@ -138,8 +174,12 @@ export const CardModal: React.FC<CardModalProps> = ({
     onUpdate(card.id, {
       title,
       summary: _summary,
-      executive_summary: executiveSummary,
-      value_proposition: valueProposition,
+      tldr,
+      why_care: whyCare,
+      claims,
+      open_questions: openQuestions,
+      executive_summary: executiveSummary || tldr,
+      value_proposition: valueProposition || whyCare,
       horizon: horizon as 'short-term' | 'medium-term' | 'long-term' | 'lifetime',
       status: status as any,
       source_note: note,
@@ -203,76 +243,66 @@ export const CardModal: React.FC<CardModalProps> = ({
             />
           </div>
 
-          {/* Action Engine Briefing Box */}
+          {/* Structured Triage Briefing Box */}
           <div className="briefing-box">
             <div className="briefing-section">
               <div className="briefing-heading heading-summary">
                 <FileText size={13} strokeWidth={1.5} />
-                <span>Executive Summary ("What is this?")</span>
+                <span>TL;DR</span>
               </div>
               <textarea
                 className="form-textarea"
                 rows={2}
-                value={executiveSummary}
-                onChange={(e) => setExecutiveSummary(e.target.value)}
-                placeholder="Core takeaway and summary..."
+                value={tldr}
+                onChange={(e) => setTldr(e.target.value)}
+                placeholder="Core TL;DR takeaway..."
               />
             </div>
 
             <div className="briefing-section">
               <div className="briefing-heading heading-value">
                 <Lightbulb size={13} strokeWidth={1.5} />
-                <span>Value Proposition ("Why does it matter?")</span>
+                <span>Why You Might Care</span>
               </div>
               <textarea
                 className="form-textarea"
                 rows={2}
-                value={valueProposition}
-                onChange={(e) => setValueProposition(e.target.value)}
+                value={whyCare}
+                onChange={(e) => setWhyCare(e.target.value)}
                 placeholder="Why is this valuable or useful..."
               />
             </div>
 
+            {/* Claims Editor */}
             <div className="briefing-section">
-              <div className="briefing-heading heading-actions">
+              <div className="briefing-heading heading-claims">
                 <CheckCircle2 size={13} strokeWidth={1.5} />
-                <span>Proposed Actions Checklist</span>
+                <span>Key Claims</span>
               </div>
               <div className="actions-list">
-                {actions.map((act, idx) => (
-                  <div
-                    key={idx}
-                    className="action-item"
-                    style={{ alignItems: 'center', opacity: completedActions[idx] ? 0.6 : 1 }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(completedActions[idx])}
-                      onChange={() => toggleAction(idx)}
-                      style={{ cursor: 'pointer' }}
-                      aria-label={`Action ${idx + 1} done`}
-                    />
+                {claims.map((claim, idx) => (
+                  <div key={idx} className="action-item" style={{ alignItems: 'center' }}>
+                    <span style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>•</span>
                     <input
                       type="text"
                       className="form-input"
-                      value={act}
-                      onChange={(e) => editAction(idx, e.target.value)}
-                      aria-label={`Action ${idx + 1}`}
+                      value={claim}
+                      onChange={(e) => editClaim(idx, e.target.value)}
+                      aria-label={`Claim ${idx + 1}`}
                       style={{
                         flex: 1,
                         padding: '4px 8px',
                         fontSize: 13.5,
                         background: 'transparent',
                         border: '1px solid transparent',
-                        textDecoration: completedActions[idx] ? 'line-through' : 'none',
                       }}
                     />
                     <button
                       type="button"
                       className="close-btn"
-                      onClick={() => removeAction(idx)}
-                      title="Remove action"
-                      aria-label="Remove action"
+                      onClick={() => removeClaim(idx)}
+                      title="Remove claim"
+                      aria-label="Remove claim"
                     >
                       <Trash2 size={13} strokeWidth={1.5} />
                     </button>
@@ -283,22 +313,149 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <input
                   type="text"
                   className="form-input"
-                  value={newAction}
-                  placeholder="Add a step..."
-                  onChange={(e) => setNewAction(e.target.value)}
+                  value={newClaim}
+                  placeholder="Add a claim..."
+                  onChange={(e) => setNewClaim(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      addAction();
+                      addClaim();
                     }
                   }}
                 />
-                <button type="button" className="btn-secondary" onClick={addAction}>
+                <button type="button" className="btn-secondary" onClick={addClaim}>
                   <Plus size={13} strokeWidth={1.5} color="#34d399" />
-                  <span>Add Step</span>
+                  <span>Add Claim</span>
                 </button>
               </div>
             </div>
+
+            {/* Open Questions Editor */}
+            <div className="briefing-section">
+              <div className="briefing-heading heading-questions">
+                <HelpCircle size={13} strokeWidth={1.5} />
+                <span>Open Questions</span>
+              </div>
+              <div className="actions-list">
+                {openQuestions.map((q, idx) => (
+                  <div key={idx} className="action-item" style={{ alignItems: 'center' }}>
+                    <span style={{ color: 'var(--accent-amber)', fontWeight: 700 }}>?</span>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={q}
+                      onChange={(e) => editQuestion(idx, e.target.value)}
+                      aria-label={`Question ${idx + 1}`}
+                      style={{
+                        flex: 1,
+                        padding: '4px 8px',
+                        fontSize: 13.5,
+                        background: 'transparent',
+                        border: '1px solid transparent',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="close-btn"
+                      onClick={() => removeQuestion(idx)}
+                      title="Remove question"
+                      aria-label="Remove question"
+                    >
+                      <Trash2 size={13} strokeWidth={1.5} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newQuestion}
+                  placeholder="Add an open question..."
+                  onChange={(e) => setNewQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addQuestion();
+                    }
+                  }}
+                />
+                <button type="button" className="btn-secondary" onClick={addQuestion}>
+                  <Plus size={13} strokeWidth={1.5} color="#fbbf24" />
+                  <span>Add Question</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Proposed Actions Checklist (only visible when non-empty, populated by research) */}
+            {actions.length > 0 && (
+              <div className="briefing-section">
+                <div className="briefing-heading heading-actions">
+                  <CheckCircle2 size={13} strokeWidth={1.5} />
+                  <span>Proposed Actions Checklist</span>
+                </div>
+                <div className="actions-list">
+                  {actions.map((act, idx) => (
+                    <div
+                      key={idx}
+                      className="action-item"
+                      style={{ alignItems: 'center', opacity: completedActions[idx] ? 0.6 : 1 }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(completedActions[idx])}
+                        onChange={() => toggleAction(idx)}
+                        style={{ cursor: 'pointer' }}
+                        aria-label={`Action ${idx + 1} done`}
+                      />
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={act}
+                        onChange={(e) => editAction(idx, e.target.value)}
+                        aria-label={`Action ${idx + 1}`}
+                        style={{
+                          flex: 1,
+                          padding: '4px 8px',
+                          fontSize: 13.5,
+                          background: 'transparent',
+                          border: '1px solid transparent',
+                          textDecoration: completedActions[idx] ? 'line-through' : 'none',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="close-btn"
+                        onClick={() => removeAction(idx)}
+                        title="Remove action"
+                        aria-label="Remove action"
+                      >
+                        <Trash2 size={13} strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={newAction}
+                    placeholder="Add a step..."
+                    onChange={(e) => setNewAction(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addAction();
+                      }
+                    }}
+                  />
+                  <button type="button" className="btn-secondary" onClick={addAction}>
+                    <Plus size={13} strokeWidth={1.5} color="#34d399" />
+                    <span>Add Step</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {research && (
               <details className="briefing-section">

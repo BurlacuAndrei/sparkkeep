@@ -14,6 +14,28 @@ export interface Reference {
   url?: string;
 }
 
+export type CardType =
+  | 'tool'
+  | 'repo'
+  | 'article'
+  | 'idea'
+  | 'claim'
+  | 'tutorial'
+  | 'product'
+  | 'other';
+
+export interface CardSignals {
+  extraction?: 'full' | 'partial' | 'thin' | string;
+  promo?: boolean;
+  source_quality?: 'primary' | 'secondary' | 'social' | 'unknown' | string;
+  published_at?: string;
+}
+
+export interface CardWorthiness {
+  level?: 'high' | 'medium' | 'low' | string;
+  reason?: string;
+}
+
 export interface Card {
   id: number;
   capture_id?: number | null;
@@ -25,6 +47,13 @@ export interface Card {
   source_note: string;
   tags: string[];
   references?: Reference[];
+  type?: CardType | string;
+  tldr?: string;
+  why_care?: string;
+  claims?: string[];
+  open_questions?: string[];
+  signals?: CardSignals;
+  worthiness?: CardWorthiness;
   executive_summary?: string;
   value_proposition?: string;
   proposed_actions?: string[];

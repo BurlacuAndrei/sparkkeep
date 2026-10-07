@@ -582,3 +582,141 @@ func TestTelegramRetryCallback(t *testing.T) {
 		t.Fatalf("expected notification to contain retried card, got: %v", sent)
 	}
 }
+
+func TestCardCaption_NewSchema(t *testing.T) {
+	card := port.Card{
+		ID:    1,
+		Type:  "article",
+		Title: "Distributed Consensus in Go",
+		TLDR:  "A quick breakdown of Raft vs Paxos.",
+		Claims: []string{
+			"Raft is easier to understand than Multi-Paxos.",
+			"Leader election takes single-digit milliseconds.",
+			"Log compaction prevents disk exhaustion.",
+			"Extra claim 4 should be omitted in caption.",
+		},
+		Worthiness: port.Worthiness{
+			Level:  "high",
+			Reason: "Directly solves consensus bugs in production.",
+		},
+		Horizon: "now",
+		Tags:    []string{"raft", "distributed"},
+	}
+
+	caption := cardCaption(card)
+	if !strings.Contains(caption, "[ARTICLE] *Distributed Consensus in Go*") {
+		t.Errorf("missing type badge and title: %q", caption)
+	}
+	if !strings.Contains(caption, "A quick breakdown of Raft vs Paxos.") {
+		t.Errorf("missing TLDR: %q", caption)
+	}
+	if !strings.Contains(caption, "• Raft is easier to understand than Multi-Paxos.") {
+		t.Errorf("missing claim 1: %q", caption)
+	}
+	if !strings.Contains(caption, "• Log compaction prevents disk exhaustion.") {
+		t.Errorf("missing claim 3: %q", caption)
+	}
+	if strings.Contains(caption, "Extra claim 4") {
+		t.Errorf("expected max 3 claims, but claim 4 found: %q", caption)
+	}
+	if !strings.Contains(caption, "*Worth researching:* High — Directly solves consensus bugs in production.") {
+		t.Errorf("missing worthiness: %q", caption)
+	}
+	if !strings.Contains(caption, "[now]") {
+		t.Errorf("missing horizon: %q", caption)
+	}
+	if !strings.Contains(caption, "#raft #distributed") {
+		t.Errorf("missing tags: %q", caption)
+	}
+}
+
+func TestCardCaption_LegacyFallback(t *testing.T) {
+	card := port.Card{
+		ID:              2,
+		Title:           "Legacy Card",
+		Summary:         "Plain legacy summary text",
+		ProposedActions: []string{"Action 1", "Action 2"},
+		Horizon:         "short-term",
+		Tags:            []string{"legacy"},
+	}
+
+	caption := cardCaption(card)
+	if !strings.Contains(caption, "*Legacy Card*") {
+		t.Errorf("missing legacy title: %q", caption)
+	}
+	if strings.Contains(caption, "[") && strings.Contains(caption, "] *Legacy Card*") {
+		t.Errorf("unexpected type badge for legacy card without type: %q", caption)
+	}
+	if !strings.Contains(caption, "Plain legacy summary text") {
+		t.Errorf("missing legacy summary: %q", caption)
+	}
+	if !strings.Contains(caption, "*Next Steps:*\n• Action 1\n• Action 2") {
+		t.Errorf("missing next steps: %q", caption)
+	}
+	if !strings.Contains(caption, "[short-term]") {
+		t.Errorf("missing horizon: %q", caption)
+	}
+}
+
+func TestCardCaption_SafeTruncateLong(t *testing.T) {
+	longText := strings.Repeat("Long text sentence with *bold* words. ", 200)
+	card := port.Card{
+		ID:    3,
+		Type:  "paper",
+		Title: "Massive Paper Title",
+		TLDR:  longText,
+		Claims: []string{
+			"Claim 1 with lots of details " + longText,
+			"Claim 2 with lots of details " + longText,
+		},
+		Worthiness: port.Worthiness{
+			Level:  "medium",
+			Reason: "Some reason",
+		},
+	}
+
+	caption := cardCaption(card)
+	runeCount := len([]rune(caption))
+	if runeCount > 4096 {
+		t.Fatalf("caption exceeds Telegram limit: %d runes > 4096", runeCount)
+	}
+	if strings.Count(caption, "*")%2 != 0 {
+		t.Errorf("unbalanced asterisks in truncated caption: %q", caption)
+	}
+	if !strings.HasSuffix(caption, "…*") && !strings.HasSuffix(caption, "…") {
+		t.Errorf("expected truncation indicator, got tail: %q", caption[len(caption)-10:])
+	}
+}
+
+func TestCardButtons(t *testing.T) {
+	btns := cardButtons(42, false)
+	if len(btns) != 1 {
+		t.Fatalf("expected 1 row of buttons, got %d", len(btns))
+	}
+	if len(btns[0]) != 4 {
+		t.Fatalf("expected 4 buttons in row, got %d", len(btns[0]))
+	}
+	expected := []struct {
+		text string
+		data string
+	}{
+		{"🔬 Research", "42:research"},
+		{"→ Doing", "42:doing"},
+		{"Shelve", "42:shelve"},
+		{"✕ Dismiss", "42:dismiss"},
+	}
+	for i, exp := range expected {
+		if btns[0][i].Text != exp.text || btns[0][i].CallbackData != exp.data {
+			t.Errorf("button %d: got (%q, %q), want (%q, %q)", i, btns[0][i].Text, btns[0][i].CallbackData, exp.text, exp.data)
+		}
+	}
+
+	retryBtns := cardButtons(42, true)
+	if len(retryBtns[0]) != 5 {
+		t.Fatalf("expected 5 buttons with retry, got %d", len(retryBtns[0]))
+	}
+	if retryBtns[0][4].Text != "Retry" || retryBtns[0][4].CallbackData != "42:retry" {
+		t.Errorf("unexpected retry button: %+v", retryBtns[0][4])
+	}
+}
+

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from '../types';
 import * as api from '../api';
-import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw, AlertTriangle } from 'lucide-react';
+import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw, AlertTriangle, HelpCircle, Link2 } from 'lucide-react';
 
 // A card is stale once nothing has touched it for a month.
 const STALE_DAYS = 30;
@@ -243,9 +243,45 @@ export const TriageView: React.FC<TriageViewProps> = ({
         <div className="triage-header">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {currentCard.type && (
+                <span className="card-type-badge">{currentCard.type}</span>
+              )}
               <span className={`horizon-pill ${currentCard.horizon}`}>
                 {currentCard.horizon}
               </span>
+              {currentCard.worthiness?.level && (
+                <span
+                  className={`worthiness-badge ${currentCard.worthiness.level.toLowerCase()}`}
+                  title={currentCard.worthiness.reason ? `Worthiness: ${currentCard.worthiness.level} — ${currentCard.worthiness.reason}` : `Worthiness: ${currentCard.worthiness.level}`}
+                  aria-label={`Worthiness: ${currentCard.worthiness.level}`}
+                >
+                  ★ {currentCard.worthiness.level.toUpperCase()}
+                </span>
+              )}
+              {currentCard.signals?.extraction && currentCard.signals.extraction !== 'full' && (
+                <span
+                  className="signal-chip extraction-warning"
+                  title={`Extraction completeness: ${currentCard.signals.extraction}`}
+                >
+                  ⚠️ {currentCard.signals.extraction}
+                </span>
+              )}
+              {currentCard.signals?.promo && (
+                <span
+                  className="signal-chip promo-warning"
+                  title="Flagged as promotional content"
+                >
+                  📣 Promo
+                </span>
+              )}
+              {currentCard.signals?.source_quality && (
+                <span
+                  className="signal-chip source-quality"
+                  title={`Source quality: ${currentCard.signals.source_quality}`}
+                >
+                  🎯 {currentCard.signals.source_quality}
+                </span>
+              )}
               <span style={{ fontSize: 12, color: '#64748b' }}>ID #{currentCard.id}</span>
               {isStale && (
                 <span
@@ -287,42 +323,102 @@ export const TriageView: React.FC<TriageViewProps> = ({
           </div>
         </div>
 
-        {/* Structured "So What?" Briefing */}
+        {/* Structured Triage Briefing */}
         <div className="briefing-box">
-          <div className="briefing-section">
+          {/* TL;DR (prominent) */}
+          <div className="briefing-section triage-tldr-box">
             <div className="briefing-heading heading-summary">
               <FileText size={13} />
-              <span>Executive Summary</span>
+              <span>TL;DR</span>
             </div>
-            <p className="briefing-text">
-              {currentCard.executive_summary || currentCard.summary || 'No summary generated.'}
+            <p className="briefing-text triage-tldr-text">
+              {currentCard.tldr || currentCard.executive_summary || currentCard.summary || 'No summary generated.'}
             </p>
           </div>
 
-          {currentCard.value_proposition && (
+          {(currentCard.why_care || currentCard.value_proposition) && (
             <div className="briefing-section">
               <div className="briefing-heading heading-value">
                 <Lightbulb size={13} />
-                <span>Value Proposition (Why Care?)</span>
+                <span>Why You Might Care</span>
               </div>
-              <p className="briefing-text">{currentCard.value_proposition}</p>
+              <p className="briefing-text">{currentCard.why_care || currentCard.value_proposition}</p>
             </div>
           )}
 
-          {currentCard.proposed_actions && currentCard.proposed_actions.length > 0 && (
+          {currentCard.claims && currentCard.claims.length > 0 && (
             <div className="briefing-section">
-              <div className="briefing-heading heading-actions">
+              <div className="briefing-heading heading-claims">
                 <CheckCircle2 size={13} />
-                <span>Proposed Actions</span>
+                <span>Claims</span>
               </div>
               <div className="actions-list">
-                {currentCard.proposed_actions.map((act, i) => (
-                  <div key={i} className="action-item">
-                    <span className="action-bullet">{i + 1}.</span>
-                    <span>{act}</span>
+                {currentCard.claims.slice(0, 3).map((claim, i) => (
+                  <div key={i} className="action-item claim-item">
+                    <span className="claim-bullet">•</span>
+                    <span>{claim}</span>
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {currentCard.open_questions && currentCard.open_questions.length > 0 && (
+            <div className="briefing-section">
+              <div className="briefing-heading heading-questions">
+                <HelpCircle size={13} />
+                <span>Open questions research would answer</span>
+              </div>
+              <div className="actions-list">
+                {currentCard.open_questions.slice(0, 3).map((q, i) => (
+                  <div key={i} className="action-item question-item">
+                    <span className="question-bullet">?</span>
+                    <span>{q}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* References: compact chips, clickable */}
+          {currentCard.references && currentCard.references.length > 0 && (
+            <div className="briefing-section">
+              <div className="briefing-heading heading-refs">
+                <Link2 size={13} />
+                <span>References</span>
+              </div>
+              <div className="references-chips">
+                {currentCard.references.map((ref, i) =>
+                  ref.url ? (
+                    <a
+                      key={i}
+                      href={ref.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="ref-chip clickable"
+                      title={`${ref.kind}: ${ref.label}\n${ref.url}`}
+                    >
+                      <span className="ref-chip-kind">{ref.kind}</span>
+                      <span className="ref-chip-label">{ref.label}</span>
+                      <ExternalLink size={10} />
+                    </a>
+                  ) : (
+                    <span key={i} className="ref-chip" title={`${ref.kind}: ${ref.label}`}>
+                      <span className="ref-chip-kind">{ref.kind}</span>
+                      <span className="ref-chip-label">{ref.label}</span>
+                    </span>
+                  )
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Researched chip if card was researched (placeholder until Prompt 10) */}
+          {(currentCard.status === 'done' || (currentCard.proposed_actions && currentCard.proposed_actions.length > 0)) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              <span className="researched-chip" title="Card has research findings">
+                Researched ✓ — verdict
+              </span>
             </div>
           )}
         </div>
@@ -386,15 +482,20 @@ export const TriageView: React.FC<TriageViewProps> = ({
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 4 }}>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onResearch(currentCard.id)}
-            style={{ fontSize: 12, padding: '6px 14px' }}
-          >
-            <Sparkles size={14} color="#c084fc" />
-            <span>Autonomous Deep Research (R)</span>
-          </button>
+          {(() => {
+            const isHigh = currentCard.worthiness?.level?.toLowerCase() === 'high';
+            return (
+              <button
+                type="button"
+                className={isHigh ? 'triage-research-btn promoted' : 'btn-secondary'}
+                onClick={() => onResearch(currentCard.id)}
+                style={{ fontSize: 12, padding: isHigh ? '8px 18px' : '6px 14px' }}
+              >
+                <Sparkles size={14} color={isHigh ? '#fff' : '#c084fc'} />
+                <span>Autonomous Deep Research (R)</span>
+              </button>
+            );
+          })()}
 
           {isFailed && (
             <button

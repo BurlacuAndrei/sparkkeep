@@ -245,31 +245,114 @@ func (a *Adapter) sendCard(ctx context.Context, c port.Card) error {
 	return err
 }
 
-// cardCaption formats a card as Markdown: bold title, executive summary (or
-// the plain summary), the proposed actions as a "Next Steps" bullet list, then
-// horizon and tags. Parts are trimmed and blank actions dropped so a padded
-// field can't leave a stray empty line in the caption.
+// cardCaption formats a card as Markdown for Telegram:
+// [<TYPE>] *<Title>*
+//
+// <TLDR>
+//
+// • <claim 1>
+// • <claim 2>
+// • <claim 3>
+//
+// *Worth researching:* <Level> — <Reason>
+//
+// [<Horizon>]
+// #tag1 #tag2
 func cardCaption(c port.Card) string {
-	body := c.Summary
-	if c.ExecutiveSummary != "" {
-		body = c.ExecutiveSummary
+	var b strings.Builder
+	title := strings.TrimSpace(c.Title)
+	if c.Type != "" {
+		fmt.Fprintf(&b, "[%s] *%s*", strings.ToUpper(strings.TrimSpace(c.Type)), title)
+	} else {
+		fmt.Fprintf(&b, "*%s*", title)
 	}
-	var bullets []string
-	for _, a := range c.ProposedActions {
-		if a = strings.TrimSpace(a); a != "" {
-			bullets = append(bullets, "• "+a)
+
+	body := strings.TrimSpace(c.TLDR)
+	if body == "" {
+		body = strings.TrimSpace(c.ExecutiveSummary)
+	}
+	if body == "" {
+		body = strings.TrimSpace(c.Summary)
+	}
+	if body != "" {
+		b.WriteString("\n\n" + body)
+	}
+
+	var claims []string
+	for _, cl := range c.Claims {
+		if cl = strings.TrimSpace(cl); cl != "" {
+			claims = append(claims, "• "+cl)
+			if len(claims) == 3 {
+				break
+			}
 		}
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "*%s*\n\n%s", strings.TrimSpace(c.Title), strings.TrimSpace(body))
-	if len(bullets) > 0 {
-		b.WriteString("\n\n*Next Steps:*\n" + strings.Join(bullets, "\n"))
+	if len(claims) > 0 {
+		b.WriteString("\n\n" + strings.Join(claims, "\n"))
+	} else if len(c.ProposedActions) > 0 {
+		var bullets []string
+		for _, a := range c.ProposedActions {
+			if a = strings.TrimSpace(a); a != "" {
+				bullets = append(bullets, "• "+a)
+			}
+		}
+		if len(bullets) > 0 {
+			b.WriteString("\n\n*Next Steps:*\n" + strings.Join(bullets, "\n"))
+		}
 	}
-	fmt.Fprintf(&b, "\n\n[%s]", strings.TrimSpace(c.Horizon))
+
+	if c.Worthiness.Level != "" {
+		lvl := strings.TrimSpace(c.Worthiness.Level)
+		switch strings.ToLower(lvl) {
+		case "high":
+			lvl = "High"
+		case "med", "medium":
+			lvl = "Medium"
+		case "low":
+			lvl = "Low"
+		}
+		reason := strings.TrimSpace(c.Worthiness.Reason)
+		if reason != "" {
+			fmt.Fprintf(&b, "\n\n*Worth researching:* %s — %s", lvl, reason)
+		} else {
+			fmt.Fprintf(&b, "\n\n*Worth researching:* %s", lvl)
+		}
+	}
+
+	if h := strings.TrimSpace(c.Horizon); h != "" {
+		fmt.Fprintf(&b, "\n\n[%s]", h)
+	}
 	if len(c.Tags) > 0 {
-		b.WriteString("\n#" + strings.Join(c.Tags, " #"))
+		var tags []string
+		for _, t := range c.Tags {
+			if t = strings.TrimSpace(t); t != "" {
+				tags = append(tags, "#"+t)
+			}
+		}
+		if len(tags) > 0 {
+			b.WriteString("\n" + strings.Join(tags, " "))
+		}
 	}
-	return b.String()
+
+	return safeTruncate(b.String(), 4000)
+}
+
+func safeTruncate(text string, maxRunes int) string {
+	r := []rune(text)
+	if len(r) <= maxRunes {
+		return text
+	}
+	truncated := string(r[:maxRunes-1]) + "…"
+	if strings.Count(truncated, "*")%2 != 0 {
+		truncated += "*"
+	}
+	if strings.Count(truncated, "_")%2 != 0 {
+		truncated += "_"
+	}
+	if strings.Count(truncated, "`")%2 != 0 {
+		truncated += "`"
+	}
+	return truncated
 }
 
 // sendFailed renders the analysis-failure card: same buttons plus Retry.
@@ -280,12 +363,10 @@ func (a *Adapter) sendFailed(ctx context.Context, c port.Card) error {
 
 func cardButtons(id int64, retry bool) [][]button {
 	btns := [][]button{{
-		{Text: "Doing", CallbackData: fmt.Sprintf("%d:doing", id)},
-		{Text: "Done", CallbackData: fmt.Sprintf("%d:done", id)},
-		{Text: "Research", CallbackData: fmt.Sprintf("%d:research", id)},
+		{Text: "🔬 Research", CallbackData: fmt.Sprintf("%d:research", id)},
+		{Text: "→ Doing", CallbackData: fmt.Sprintf("%d:doing", id)},
 		{Text: "Shelve", CallbackData: fmt.Sprintf("%d:shelve", id)},
-	}, {
-		{Text: "Not interested", CallbackData: fmt.Sprintf("%d:dismiss", id)},
+		{Text: "✕ Dismiss", CallbackData: fmt.Sprintf("%d:dismiss", id)},
 	}}
 	if retry {
 		btns[0] = append(btns[0], button{Text: "Retry", CallbackData: fmt.Sprintf("%d:retry", id)})

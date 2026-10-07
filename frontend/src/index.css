@@ -835,6 +835,241 @@ body {
   font-weight: 700;
 }
 
+.heading-claims { color: var(--accent-emerald); }
+.heading-questions { color: var(--accent-amber); }
+.heading-refs { color: var(--accent-purple); }
+
+.claim-bullet {
+  color: var(--accent-emerald);
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.question-bullet {
+  color: var(--accent-amber);
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+/* Card Type Badges */
+.card-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  white-space: nowrap;
+}
+[data-theme="light"] .card-type-badge {
+  background: rgba(99, 102, 241, 0.08);
+  color: #4f46e5;
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+/* Worthiness Badges & Dots */
+.worthiness-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.worthiness-badge.high {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.worthiness-badge.medium,
+.worthiness-badge.med {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.worthiness-badge.low {
+  background: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+[data-theme="light"] .worthiness-badge.high {
+  background: #dcfce7;
+  color: #059669;
+  border-color: #86efac;
+}
+[data-theme="light"] .worthiness-badge.medium,
+[data-theme="light"] .worthiness-badge.med {
+  background: #fef3c7;
+  color: #d97706;
+  border-color: #fde68a;
+}
+[data-theme="light"] .worthiness-badge.low {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
+.worthiness-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.worthiness-dot.high {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+.worthiness-dot.medium,
+.worthiness-dot.med {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+}
+.worthiness-dot.low {
+  background: #64748b;
+}
+
+/* Signal Chips */
+.signal-chip {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.signal-chip.extraction-warning {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.signal-chip.promo-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.signal-chip.source-quality {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+[data-theme="light"] .signal-chip.extraction-warning {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+[data-theme="light"] .signal-chip.promo-warning {
+  background: #fef3c7;
+  color: #d97706;
+  border-color: #fde68a;
+}
+[data-theme="light"] .signal-chip.source-quality {
+  background: #e0f2fe;
+  color: #0284c7;
+  border-color: #bae6fd;
+}
+
+/* Triage TLDR box */
+.triage-tldr-box {
+  background: rgba(56, 189, 248, 0.05);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-left: 3px solid var(--accent-cyan);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+.triage-tldr-text {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: #f1f5f9;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+[data-theme="light"] .triage-tldr-box {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+  border-left-color: #0284c7;
+}
+[data-theme="light"] .triage-tldr-text {
+  color: #0f172a;
+}
+
+/* Promoted research button */
+.triage-research-btn.promoted {
+  background: linear-gradient(135deg, #6366f1, #9333ea);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 4px 15px -2px rgba(99, 102, 241, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.triage-research-btn.promoted:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px -2px rgba(99, 102, 241, 0.65);
+}
+
+/* References chips in triage */
+.references-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-dim);
+  text-decoration: none;
+}
+.ref-chip.clickable:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border-color: var(--border-card-hover);
+}
+.ref-chip-kind {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-purple);
+}
+.ref-chip-label {
+  font-weight: 500;
+}
+.researched-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+[data-theme="light"] .researched-chip {
+  background: #dcfce7;
+  color: #059669;
+  border-color: #86efac;
+}
+
 /* Triage Button Controls */
 .triage-controls {
   display: grid;
