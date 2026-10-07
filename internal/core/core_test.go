@@ -255,6 +255,16 @@ func (s *stubStore) ListResearch(context.Context) ([]port.Research, error) {
 	return nil, nil
 }
 
+func (s *stubStore) ListResearchByCard(_ context.Context, cardID int64) ([]port.Research, error) {
+	var out []port.Research
+	for _, r := range s.researches {
+		if r.CardID == cardID {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
 func (s *stubStore) GetResearchFindings(_ context.Context, id int64) (string, error) {
 	r, ok := s.researches[id]
 	if !ok {

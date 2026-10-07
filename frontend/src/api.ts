@@ -105,11 +105,22 @@ export async function fetchResearchItem(id: number): Promise<ResearchItem> {
   return res.data;
 }
 
-export async function fetchCardResearch(cardId: number): Promise<ResearchItem | null> {
-  const list = await fetchResearchList();
-  const latest = list.filter((r) => r.card_id === cardId).sort((a, b) => b.id - a.id)[0];
-  return latest ? fetchResearchItem(latest.id) : null;
+export async function fetchCardResearchRuns(cardId: number): Promise<{ latest: ResearchItem | null; history: ResearchItem[] }> {
+  const res = await request<{ ok: boolean; data: { latest: ResearchItem | null; history: ResearchItem[] } }>(`/api/v1/cards/${cardId}/research`);
+  return res.data || { latest: null, history: [] };
 }
+
+export async function fetchCardResearch(cardId: number): Promise<ResearchItem | null> {
+  try {
+    const runs = await fetchCardResearchRuns(cardId);
+    return runs.latest;
+  } catch {
+    const list = await fetchResearchList();
+    const latest = list.filter((r) => r.card_id === cardId).sort((a, b) => b.id - a.id)[0];
+    return latest ? fetchResearchItem(latest.id) : null;
+  }
+}
+
 
 export async function getSetupStatus(): Promise<{ ok: boolean; is_configured: boolean; has_auth: boolean; has_llm_key: boolean; llm_base?: string; llm_model?: string }> {
   const res = await fetch('/api/v1/setup/status');

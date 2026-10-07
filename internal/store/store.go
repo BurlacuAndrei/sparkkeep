@@ -979,6 +979,50 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	return list, rows.Err()
 }
 
+func (s *Store) ListResearchByCard(ctx context.Context, cardID int64) ([]port.Research, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, created_at FROM research WHERE card_id = ? ORDER BY id DESC`, cardID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []port.Research
+	for rows.Next() {
+		var r port.Research
+		var created, stepsJSON, sourcesJSON, planJSON, resultJSON string
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &created); err != nil {
+			return nil, err
+		}
+		r.CreatedAt, _ = parseTime(created)
+		if stepsJSON != "" {
+			_ = json.Unmarshal([]byte(stepsJSON), &r.Steps)
+		}
+		if r.Steps == nil {
+			r.Steps = []port.ResearchStep{}
+		}
+		if sourcesJSON != "" {
+			_ = json.Unmarshal([]byte(sourcesJSON), &r.Sources)
+		}
+		if r.Sources == nil {
+			r.Sources = []port.Source{}
+		}
+		if planJSON != "" && planJSON != "{}" {
+			var p port.ResearchPlan
+			if err := json.Unmarshal([]byte(planJSON), &p); err == nil && len(p.Questions) > 0 {
+				r.Plan = &p
+			}
+		}
+		if resultJSON != "" && resultJSON != "{}" {
+			var res port.ResearchResult
+			if err := json.Unmarshal([]byte(resultJSON), &res); err == nil {
+				r.Result = &res
+			}
+		}
+		list = append(list, r)
+	}
+	return list, rows.Err()
+}
+
 func (s *Store) GetResearchFindings(ctx context.Context, id int64) (string, error) {
 	var findings string
 	err := s.db.QueryRowContext(ctx,

@@ -3100,4 +3100,61 @@ body {
 .ref-kind-chip.ref-kind-paper { color: #facc15; border-color: rgba(250, 204, 21, 0.3); background: rgba(250, 204, 21, 0.08); }
 .ref-kind-chip.ref-kind-other { color: #94a3b8; border-color: rgba(148, 163, 184, 0.3); background: rgba(148, 163, 184, 0.08); }
 
+/* Research Report & Progress Tokens */
+.spin-slow {
+  animation: spin 1.2s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.badge-pursue {
+  background: rgba(52, 211, 153, 0.18) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(52, 211, 153, 0.45) !important;
+  font-weight: 700;
+  border-radius: 9999px;
+  letter-spacing: 0.04em;
+}
+
+.badge-watch {
+  background: rgba(251, 191, 36, 0.18) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(251, 191, 36, 0.45) !important;
+  font-weight: 700;
+  border-radius: 9999px;
+  letter-spacing: 0.04em;
+}
+
+.badge-skip {
+  background: rgba(248, 113, 113, 0.18) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(248, 113, 113, 0.45) !important;
+  font-weight: 700;
+  border-radius: 9999px;
+  letter-spacing: 0.04em;
+}
+
+.source-highlight {
+  animation: pulse-source-glow 2s ease;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+}
+
+@keyframes pulse-source-glow {
+  0% {
+    background-color: rgba(56, 189, 248, 0.3);
+  }
+  100% {
+    background-color: rgba(15, 23, 42, 0.6);
+  }
+}
+
+
 

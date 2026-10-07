@@ -2,6 +2,8 @@ import React from 'react';
 import { Card } from '../types';
 import { useCardActions } from '../context/CardActionsContext';
 import { ArrowRight, Check, Archive, Sparkles, RefreshCw, X, FileText, CheckCircle2 } from 'lucide-react';
+import { ResearchProgressStrip } from './ResearchProgressStrip';
+
 
 interface CardItemProps {
   card: Card;
@@ -64,6 +66,8 @@ export const CardItem: React.FC<CardItemProps> = ({
           <span>{card.proposed_actions.length} action item{card.proposed_actions.length > 1 ? 's' : ''} planned</span>
         </div>
       )}
+
+      <ResearchProgressStrip cardId={card.id} compact={true} />
 
       <div className="card-footer">
         <div className="card-tags card-tag-list">

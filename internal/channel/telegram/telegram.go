@@ -377,10 +377,6 @@ func cardButtons(id int64, retry bool) [][]button {
 // sendResearch renders a research outcome as summary text + a dashboard link
 // to the report row (/api/v1/research/{id}), base from SPARKKEEP_PUBLIC_URL.
 func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
-	text := n.Text
-	if text == "" {
-		text = "Research failed"
-	}
 	base := a.PublicURL
 	if base == "" {
 		base = "http://localhost:8080"
@@ -395,9 +391,65 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 		cardID = n.Res.CardID
 		buttons = cardButtons(cardID, false)
 	}
-	_, err := a.sendMessage(ctx, text+"\n"+link, cardID, buttons)
+
+	var b strings.Builder
+	if n.Kind == "research_done" {
+		if n.Res != nil && n.Res.Result != nil && n.Res.Result.Verdict != nil && n.Res.Result.Verdict.Recommendation != "" {
+			verd := n.Res.Result.Verdict
+			rec := strings.ToUpper(verd.Recommendation[:1]) + strings.ToLower(verd.Recommendation[1:])
+			fmt.Fprintf(&b, "🔬 *Research Complete*\n*Verdict:* %s · *Confidence:* %s", rec, verd.Confidence)
+			if len(verd.NextActions) > 0 {
+				b.WriteString("\n\n*Next actions:*")
+				limit := 3
+				if len(verd.NextActions) < limit {
+					limit = len(verd.NextActions)
+				}
+				for i := 0; i < limit; i++ {
+					act := strings.TrimSpace(verd.NextActions[i])
+					if act != "" {
+						b.WriteString("\n• " + act)
+					}
+				}
+			}
+		} else {
+			text := n.Text
+			if text == "" {
+				text = "Research complete"
+			}
+			b.WriteString(text)
+		}
+	} else if n.Kind == "research_failed" {
+		failedStep := ""
+		if n.Res != nil {
+			for _, st := range n.Res.Steps {
+				if st.Status == "failed" {
+					failedStep = st.ID
+					break
+				}
+			}
+		}
+		if failedStep != "" {
+			fmt.Fprintf(&b, "❌ *Research Failed*\n*Failed step:* %s", failedStep)
+		} else {
+			b.WriteString("❌ *Research Failed*")
+		}
+		if n.Text != "" && n.Text != failedStep {
+			b.WriteString("\n" + n.Text)
+		}
+	} else {
+		text := n.Text
+		if text == "" {
+			text = "Research update"
+		}
+		b.WriteString(text)
+	}
+
+	b.WriteString("\n\n" + link)
+	_, err := a.sendMessage(ctx, b.String(), cardID, buttons)
 	return err
 }
+
+
 
 // --- inbound ----------------------------------------------------------------
 

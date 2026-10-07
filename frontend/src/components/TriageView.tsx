@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from '../types';
 import * as api from '../api';
 import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw, AlertTriangle, HelpCircle, Link2 } from 'lucide-react';
+import { ResearchProgressStrip } from './ResearchProgressStrip';
+
 
 // A card is stale once nothing has touched it for a month.
 const STALE_DAYS = 30;
@@ -480,6 +482,8 @@ export const TriageView: React.FC<TriageViewProps> = ({
             <span className="hotkey-badge">D</span>
           </button>
         </div>
+
+        <ResearchProgressStrip cardId={currentCard.id} />
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 4 }}>
           {(() => {

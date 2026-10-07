@@ -4,6 +4,7 @@ import { fetchCardResearch, getErrorMessage } from '../api';
 import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus, Link2, HelpCircle } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
 import { CARD_HORIZON_OPTIONS, CARD_STATUS_OPTIONS } from './selectOptions';
+import { ResearchReportView } from './ResearchReportView';
 
 interface CardModalProps {
   card: Card | null;
@@ -459,46 +460,30 @@ export const CardModal: React.FC<CardModalProps> = ({
               </div>
             )}
 
-            {research && (
-              <details className="briefing-section">
-                <summary className="briefing-heading heading-summary" style={{ cursor: 'pointer' }}>
-                  <FileSearch size={13} strokeWidth={1.5} />
-                  <span>Research Findings</span>
-                  <span style={{ textTransform: 'none', letterSpacing: 0, color: '#94a3b8' }}>
-                    {research.status}
-                    {research.query ? ` · ${research.query}` : ''}
-                  </span>
-                </summary>
-                {research.error ? (
-                  <p style={{ color: '#ff8a8a', fontSize: 13 }}>{research.error}</p>
-                ) : (
-                  <pre
-                    style={{
-                      margin: 0,
-                      maxHeight: 220,
-                      overflow: 'auto',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      fontFamily: 'inherit',
-                      fontSize: 12.5,
-                      lineHeight: 1.5,
-                      color: '#cbd5e1',
-                      background: 'rgba(15, 23, 42, 0.6)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: 10,
-                    }}
-                  >
-                    {research.findings}
-                  </pre>
-                )}
-                <div>
-                  <button type="button" className="btn-secondary" onClick={appendFindingsAsActions}>
-                    <ListPlus size={13} strokeWidth={1.5} color="#c084fc" />
-                    <span>Append Findings as Actions</span>
-                  </button>
+            {card && (
+              <div className="briefing-section">
+                <div className="briefing-heading" style={{ marginBottom: 12 }}>
+                  <FileSearch size={14} strokeWidth={1.5} color="#38bdf8" />
+                  <span>Deep Research Report</span>
                 </div>
-              </details>
+                <ResearchReportView
+                  card={card}
+                  initialResearch={research}
+                  onUpdateCard={async (id, updates) => {
+                    onUpdate(id, updates);
+                    if (updates.horizon) setHorizon(updates.horizon as any);
+                    if (updates.tags) setTagsInput(updates.tags.join(', '));
+                  }}
+                  onAddActions={(newActions) => {
+                    const seen = new Set(actions.map((a) => a.trim().toLowerCase()));
+                    const fresh = newActions.filter((a) => !seen.has(a.trim().toLowerCase()));
+                    if (fresh.length > 0) {
+                      setActions((prev) => [...prev, ...fresh]);
+                    }
+                  }}
+                  showToast={showToast}
+                />
+              </div>
             )}
           </div>
 

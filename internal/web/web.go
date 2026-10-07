@@ -41,19 +41,122 @@ const researchReportHTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sparkkeep · research #{{.ID}}</title>
 <style>
-  body { margin: 0 auto; max-width: 46rem; padding: 24px; font-family: system-ui, sans-serif; background: #111; color: #eee; }
-  a { color: #9cdcfe; }
-  .meta { color: #aaa; font-size: 13px; margin-bottom: 16px; }
-  pre { white-space: pre-wrap; word-wrap: break-word; color: #ddd; font-family: inherit; line-height: 1.5; }
-  .error { color: #ff8a8a; }
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --border: #334155;
+    --text: #f8fafc;
+    --text-muted: #94a3b8;
+    --primary: #38bdf8;
+    --emerald: #34d399;
+    --amber: #fbbf24;
+    --rose: #f87171;
+  }
+  body { margin: 0 auto; max-width: 54rem; padding: 32px 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .header { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 24px; }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .badge-pursue { background: rgba(52, 211, 153, 0.2); color: var(--emerald); border: 1px solid rgba(52, 211, 153, 0.4); }
+  .badge-watch { background: rgba(251, 191, 36, 0.2); color: var(--amber); border: 1px solid rgba(251, 191, 36, 0.4); }
+  .badge-skip { background: rgba(248, 113, 113, 0.2); color: var(--rose); border: 1px solid rgba(248, 113, 113, 0.4); }
+  .card-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  .meta { color: var(--text-muted); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  th { color: var(--text-muted); font-weight: 600; }
+  pre { white-space: pre-wrap; word-wrap: break-word; color: #cbd5e1; font-family: inherit; line-height: 1.6; }
+  .error { color: var(--rose); }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
 </style>
 </head>
 <body>
   <p><a href="/">&larr; sparkkeep dashboard</a></p>
-  <h2>Research #{{.ID}} <span class="meta">[{{.Status}}]</span></h2>
-  {{if .Query}}<p><strong>Query:</strong> {{.Query}}</p>{{end}}
-  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
-  <pre>{{.Findings}}</pre>
+  <div class="header">
+    <h2>Research #{{.ID}} <span class="meta">[{{.Status}}]</span></h2>
+    {{if .Query}}<p class="meta"><strong>Query:</strong> {{.Query}}</p>{{end}}
+    {{if .Tokens}}<p class="meta"><strong>Tokens:</strong> {{.Tokens}}</p>{{end}}
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  </div>
+
+  {{if and .Result .Result.Verdict}}
+  <div class="card-box">
+    <h3>Executive Verdict</h3>
+    <p>
+      {{if eq .Result.Verdict.Recommendation "pursue"}}<span class="badge badge-pursue">PURSUE</span>{{end}}
+      {{if eq .Result.Verdict.Recommendation "watch"}}<span class="badge badge-watch">WATCH</span>{{end}}
+      {{if eq .Result.Verdict.Recommendation "skip"}}<span class="badge badge-skip">SKIP</span>{{end}}
+      &nbsp; Confidence: <strong>{{.Result.Verdict.Confidence}}</strong>
+      {{if .Result.Verdict.ForWhom}} &nbsp;·&nbsp; Target: <em>{{.Result.Verdict.ForWhom}}</em>{{end}}
+    </p>
+    {{if .Result.Verdict.NextActions}}
+    <h4>Recommended Next Actions</h4>
+    <ul>
+      {{range .Result.Verdict.NextActions}}<li>{{.}}</li>{{end}}
+    </ul>
+    {{end}}
+  </div>
+  {{end}}
+
+  {{if and .Result .Result.Claims}}
+  <div class="card-box">
+    <h3>Claim Verification</h3>
+    <table>
+      <thead><tr><th>Claim</th><th>Status</th><th>Rationale</th><th>Sources</th></tr></thead>
+      <tbody>
+        {{range .Result.Claims}}
+        <tr>
+          <td><strong>{{.Claim}}</strong></td>
+          <td>{{.Status}}</td>
+          <td>{{.Rationale}}</td>
+          <td>{{range .Sources}}<code>[{{.}}]</code> {{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  {{if and .Result .Result.Landscape}}
+  <div class="card-box">
+    <h3>Competitive Landscape</h3>
+    <table>
+      <thead><tr><th>Name</th><th>Summary</th><th>Difference</th><th>Sources</th></tr></thead>
+      <tbody>
+        {{range .Result.Landscape}}
+        <tr>
+          <td>{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Name}}</a>{{else}}{{.Name}}{{end}}</td>
+          <td>{{.OneLiner}}</td>
+          <td>{{.HowItDiffers}}</td>
+          <td>{{range .Sources}}<code>[{{.}}]</code> {{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  {{if .Findings}}
+  <div class="card-box">
+    <h3>Findings Report</h3>
+    <pre>{{.Findings}}</pre>
+  </div>
+  {{end}}
+
+  {{if .Sources}}
+  <div class="card-box">
+    <h3>Sources & Citations</h3>
+    <ul>
+      {{range .Sources}}
+      <li id="{{.ID}}">
+        <strong>[{{.ID}}]</strong> <a href="{{.URL}}" target="_blank" rel="noopener">{{.Title}}</a>
+        <span class="meta">({{if .URL}}{{.URL}}{{else}}no url{{end}} [{{.Origin}}])</span>
+      </li>
+      {{end}}
+    </ul>
+  </div>
+  {{end}}
 </body>
 </html>`
 
@@ -103,6 +206,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/v1/cards/{id}/retry", a.retryCard)
 	mux.HandleFunc("POST /api/v1/cards/batch-shelve-stale", a.batchShelveStale)
 	mux.HandleFunc("GET /api/v1/cards/{id}/export.md", a.exportMarkdown)
+	mux.HandleFunc("GET /api/v1/cards/{id}/research", a.getCardResearch)
 	mux.HandleFunc("GET /api/v1/tags", a.listTags)
 	mux.HandleFunc("GET /api/v1/digest", a.weeklyDigest)
 	mux.HandleFunc("GET /api/v1/research", a.listResearch)
@@ -1284,6 +1388,33 @@ func (a *api) getResearch(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
+}
+
+func (a *api) getCardResearch(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad card id")
+		return
+	}
+	history, err := a.store.ListResearchByCard(r.Context(), id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	if history == nil {
+		history = []port.Research{}
+	}
+	var latest *port.Research
+	if len(history) > 0 {
+		latest = &history[0]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true,
+		"data": map[string]any{
+			"latest":  latest,
+			"history": history,
+		},
+	})
 }
 
 // --- plumbing ---------------------------------------------------------------

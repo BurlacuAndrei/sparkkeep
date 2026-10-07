@@ -356,6 +356,18 @@ func (s *stubStore) ListResearch(context.Context) ([]port.Research, error) {
 	return out, nil
 }
 
+func (s *stubStore) ListResearchByCard(_ context.Context, cardID int64) ([]port.Research, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []port.Research
+	for _, r := range s.researches {
+		if r.CardID == cardID {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
 func (s *stubStore) GetResearchFindings(_ context.Context, id int64) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -921,6 +933,54 @@ func TestResearchTriggerActiveConflict(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+func TestCardResearchHistoryEndpoint(t *testing.T) {
+	st := newStubStore()
+	st.cards[7] = port.Card{ID: 7, Title: "Card 7"}
+	st.researches[1] = port.Research{
+		ID:        1,
+		CardID:    7,
+		Status:    "done",
+		Query:     "query 1",
+		Findings:  "findings 1",
+		CreatedAt: time.Now().Add(-time.Hour).UTC(),
+	}
+	st.researches[2] = port.Research{
+		ID:        2,
+		CardID:    7,
+		Status:    "done",
+		Query:     "query 2",
+		Findings:  "findings 2",
+		CreatedAt: time.Now().UTC(),
+	}
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/cards/7/research", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var out struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Latest  *port.Research  `json:"latest"`
+			History []port.Research `json:"history"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !out.OK {
+		t.Fatalf("expected ok: true")
+	}
+	if len(out.Data.History) != 2 {
+		t.Fatalf("history length = %d, want 2", len(out.Data.History))
+	}
+	if out.Data.Latest == nil {
+		t.Fatalf("expected latest research")
+	}
+}
+
 
 func TestCreateCardDuplicateSourceURLConflict(t *testing.T) {
 	st := newStubStore()

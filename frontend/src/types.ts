@@ -114,6 +114,35 @@ export interface DigestData {
   days: DayGroup[];
 }
 
+export interface ResearchStep {
+  id: string;
+  status: 'running' | 'done' | 'failed' | 'skipped' | 'queued' | string;
+  started_at?: string;
+  finished_at?: string;
+  note?: string;
+}
+
+export interface ResearchSource {
+  id: string;
+  url: string;
+  title: string;
+  fetched_at?: string;
+  origin: string;
+  clipped_text?: string;
+  questions?: string[];
+}
+
+export interface ResearchQuestion {
+  id: string;
+  question: string;
+  query: string;
+  prefer_domains?: string[];
+}
+
+export interface ResearchPlan {
+  questions: ResearchQuestion[];
+}
+
 export interface ResearchItem {
   id: number;
   card_id: number;
@@ -121,13 +150,14 @@ export interface ResearchItem {
   query: string;
   findings: string;
   error?: string;
-  steps?: any[];
-  sources?: any[];
-  plan?: any;
+  steps?: ResearchStep[];
+  sources?: ResearchSource[];
+  plan?: ResearchPlan;
   result?: ResearchResult;
   tokens?: number;
   created_at: string;
 }
+
 
 export interface CardFilter {
   horizon?: string;

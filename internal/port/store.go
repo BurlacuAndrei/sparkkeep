@@ -36,6 +36,7 @@ type Store interface {
 	UpdateResearchProgress(ctx context.Context, id int64, status, query string, steps []ResearchStep, sources []Source, plan *ResearchPlan, result *ResearchResult, tokens int) error
 	GetResearch(ctx context.Context, id int64) (Research, error)
 	ListResearch(ctx context.Context) ([]Research, error)
+	ListResearchByCard(ctx context.Context, cardID int64) ([]Research, error)
 	Close() error
 	// GetResearchFindings returns only the findings column for a research row.
 	// Used by the single-row endpoint; ListResearch omits findings.

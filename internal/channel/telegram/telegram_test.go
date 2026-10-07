@@ -720,3 +720,81 @@ func TestCardButtons(t *testing.T) {
 	}
 }
 
+func TestSendResearchNotifications(t *testing.T) {
+	// 1. research_done with structured result
+	doneMsg := captureSendMessage(t, func(a *Adapter) {
+		a.PublicURL = "https://app.sparkkeep.test"
+		res := &port.Research{
+			ID:     99,
+			CardID: 42,
+			Result: &port.ResearchResult{
+				Verdict: &port.ResearchVerdict{
+					Recommendation: "pursue",
+					Confidence:     "0.85",
+					NextActions: []string{
+						"Run benchmark against existing vector store",
+						"Verify memory footprint with 10k items",
+						"Draft RFC for architecture team",
+						"Fourth action that should not appear",
+					},
+				},
+			},
+		}
+		err := a.Notify(context.Background(), port.Notification{
+			Kind: "research_done",
+			Res:  res,
+		})
+		if err != nil {
+			t.Fatalf("Notify research_done failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(doneMsg, "*Verdict:* Pursue · *Confidence:* 0.85") {
+		t.Errorf("expected verdict line in message, got: %s", doneMsg)
+	}
+	if !strings.Contains(doneMsg, "Run benchmark against existing vector store") ||
+		!strings.Contains(doneMsg, "Verify memory footprint with 10k items") ||
+		!strings.Contains(doneMsg, "Draft RFC for architecture team") {
+		t.Errorf("expected top 3 actions in message, got: %s", doneMsg)
+	}
+	if strings.Contains(doneMsg, "Fourth action") {
+		t.Errorf("did not expect 4th action in message, got: %s", doneMsg)
+	}
+	if !strings.Contains(doneMsg, "https://app.sparkkeep.test/api/v1/research/99") {
+		t.Errorf("expected link in message, got: %s", doneMsg)
+	}
+
+	// 2. research_failed with failed step
+	failedMsg := captureSendMessage(t, func(a *Adapter) {
+		a.PublicURL = "https://app.sparkkeep.test"
+		res := &port.Research{
+			ID:     100,
+			CardID: 42,
+			Steps: []port.ResearchStep{
+				{ID: "planning", Status: "done"},
+				{ID: "search", Status: "failed"},
+			},
+		}
+		err := a.Notify(context.Background(), port.Notification{
+			Kind: "research_failed",
+			Res:  res,
+			Text: "rate limit exceeded",
+		})
+		if err != nil {
+			t.Fatalf("Notify research_failed failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(failedMsg, "*Failed step:* search") {
+		t.Errorf("expected failed step in message, got: %s", failedMsg)
+	}
+	if !strings.Contains(failedMsg, "rate limit exceeded") {
+		t.Errorf("expected error text in message, got: %s", failedMsg)
+	}
+	if !strings.Contains(failedMsg, "https://app.sparkkeep.test/api/v1/research/100") {
+		t.Errorf("expected link in message, got: %s", failedMsg)
+	}
+}
+
+
+
