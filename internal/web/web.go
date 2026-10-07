@@ -172,6 +172,7 @@ type api struct {
 	uploadDir string
 	maxUpload int64
 	authToken string
+	tgToken   string
 }
 
 // authCookie holds a token the client has already verified, so the dashboard
@@ -187,6 +188,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 		uploadDir: cfg.UploadDir,
 		maxUpload: int64(cfg.MaxUploadMB) << 20,
 		authToken: cfg.AuthToken,
+		tgToken:   cfg.TGToken,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", a.index)
@@ -435,6 +437,7 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var b struct {
 		AuthToken string `json:"auth_token"`
 		LLMBase   string `json:"llm_base"`
 		LLMKey    string `json:"llm_key"`
@@ -664,7 +667,7 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 	tgChatID, _ := a.store.GetSetting(ctx, "tg_chat_id")
 	tgToken, _ := a.store.GetSetting(ctx, "tg_token")
 	if tgToken == "" {
-		tgToken = a.cfg.TGToken
+		tgToken = a.tgToken
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
