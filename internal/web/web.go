@@ -212,6 +212,13 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/research", a.listResearch)
 	mux.HandleFunc("POST /api/v1/research", a.triggerResearch)
 	mux.HandleFunc("GET /api/v1/research/{id}", a.getResearch)
+	mux.HandleFunc("GET /api/v1/playbooks", a.listPlaybooks)
+	mux.HandleFunc("POST /api/v1/playbooks", a.createPlaybook)
+	mux.HandleFunc("GET /api/v1/playbooks/{id}", a.getPlaybook)
+	mux.HandleFunc("PUT /api/v1/playbooks/{id}", a.updatePlaybook)
+	mux.HandleFunc("DELETE /api/v1/playbooks/{id}", a.deletePlaybook)
+	mux.HandleFunc("POST /api/v1/playbooks/{id}/duplicate", a.duplicatePlaybook)
+
 	mux.HandleFunc("POST /api/v1/capture", a.capture)
 	mux.HandleFunc("GET /api/v1/media/{name}", a.media)
 	mux.HandleFunc("POST /api/v1/auth/verify", a.verifyToken)
@@ -1344,7 +1351,8 @@ func (a *api) listResearch(w http.ResponseWriter, r *http.Request) {
 // as the Telegram callback handler.
 func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		CardID int64 `json:"card_id"`
+		CardID     int64  `json:"card_id"`
+		PlaybookID *int64 `json:"playbook_id"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -1361,9 +1369,10 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "research already running")
 		return
 	}
-	a.svc.GoResearch(r.Context(), b.CardID)
+	a.svc.GoResearch(r.Context(), b.CardID, b.PlaybookID)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "accepted": true})
 }
+
 
 // getResearch serves the single-row report as HTML for the Telegram link.
 // A JSON client (Accept: application/json or ?format=json) gets the raw row
@@ -1417,6 +1426,93 @@ func (a *api) getCardResearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (a *api) listPlaybooks(w http.ResponseWriter, r *http.Request) {
+	list, err := a.store.ListPlaybooks(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	if list == nil {
+		list = []port.Playbook{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "playbooks": list})
+}
+
+func (a *api) getPlaybook(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad playbook id")
+		return
+	}
+	pb, err := a.store.GetPlaybook(r.Context(), id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "playbook": pb})
+}
+
+func (a *api) createPlaybook(w http.ResponseWriter, r *http.Request) {
+	var pb port.Playbook
+	if err := decodeJSON(w, r, &pb); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	created, err := a.store.CreatePlaybook(r.Context(), pb)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "playbook": created})
+}
+
+func (a *api) updatePlaybook(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad playbook id")
+		return
+	}
+	var pb port.Playbook
+	if err := decodeJSON(w, r, &pb); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	pb.ID = id
+	updated, err := a.store.UpdatePlaybook(r.Context(), pb)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "playbook": updated})
+}
+
+func (a *api) deletePlaybook(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad playbook id")
+		return
+	}
+	if err := a.store.DeletePlaybook(r.Context(), id); err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (a *api) duplicatePlaybook(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad playbook id")
+		return
+	}
+	dup, err := a.store.DuplicatePlaybook(r.Context(), id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "playbook": dup})
+}
+
 // --- plumbing ---------------------------------------------------------------
 
 func pathID(r *http.Request) (int64, bool) {
@@ -1433,15 +1529,24 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
 
-// fail maps a store/service error to the envelope: ErrNotFound → 404, else
-// 500.
+// fail maps a store/service error to the envelope: ErrNotFound → 404, ErrBuiltinReadOnly → 403,
+// ErrInvalidPlaybook → 400, else 500.
 func (a *api) fail(w http.ResponseWriter, err error) {
 	if errors.Is(err, port.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
+	if errors.Is(err, port.ErrBuiltinReadOnly) {
+		writeErr(w, http.StatusForbidden, "builtin playbook is read-only")
+		return
+	}
+	if errors.Is(err, port.ErrInvalidPlaybook) {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	writeErr(w, http.StatusInternalServerError, err.Error())
 }
+
 
 // writeJSON writes the {ok:..., ...} envelope as application/json.
 func writeJSON(w http.ResponseWriter, status int, v any) {

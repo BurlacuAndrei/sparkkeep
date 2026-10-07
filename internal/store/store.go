@@ -12,7 +12,9 @@ import (
 	_ "modernc.org/sqlite"
 
 	"sparkkeep/internal/port"
+	"sparkkeep/internal/research"
 )
+
 
 var _ port.Store = (*Store)(nil)
 
@@ -808,12 +810,38 @@ func (s *Store) ListTags(ctx context.Context) ([]port.Tag, error) {
 	return tags, rows.Err()
 }
 
-func (s *Store) CreateResearch(ctx context.Context, cardID int64, query string) (port.Research, error) {
+func (s *Store) CreateResearch(ctx context.Context, cardID int64, query string, playbookID ...*int64) (port.Research, error) {
+	var pid *int64
+	if len(playbookID) > 0 && playbookID[0] != nil {
+		pid = playbookID[0]
+	}
+	var pb port.Playbook
+	var err error
+	if pid != nil {
+		pb, err = s.GetPlaybook(ctx, *pid)
+		if err != nil {
+			return port.Research{}, fmt.Errorf("get playbook %d: %w", *pid, err)
+		}
+	} else {
+		pb, err = s.GetDefaultPlaybook(ctx)
+		if err != nil {
+			pb = research.DefaultPlaybook()
+		}
+		if pb.ID > 0 {
+			pid = &pb.ID
+		}
+	}
+
+	pbSnapshot := "{}"
+	if pbBytes, err := json.Marshal(pb); err == nil {
+		pbSnapshot = string(pbBytes)
+	}
+
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO research (card_id, status, query, findings, error, created_at)
-		 SELECT ?, 'queued', ?, '', '', ?
+		`INSERT INTO research (card_id, status, query, findings, error, playbook_id, playbook_snapshot, created_at)
+		 SELECT ?, 'queued', ?, '', '', ?, ?, ?
 		 WHERE NOT EXISTS (SELECT 1 FROM research WHERE card_id = ? AND status IN ('queued', 'running'))`,
-		cardID, query, now(), cardID)
+		cardID, query, pid, pbSnapshot, now(), cardID)
 	if err != nil {
 		return port.Research{}, err
 	}
@@ -897,15 +925,19 @@ func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, qu
 
 func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, created_at FROM research WHERE id = ?`, id)
+		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, created_at FROM research WHERE id = ?`, id)
 	var r port.Research
-	var created, stepsJSON, sourcesJSON, planJSON, resultJSON string
-	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &created)
+	var created, stepsJSON, sourcesJSON, planJSON, resultJSON, snapshotJSON string
+	var pid sql.NullInt64
+	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Research{}, port.ErrNotFound
 	}
 	if err != nil {
 		return port.Research{}, err
+	}
+	if pid.Valid {
+		r.PlaybookID = &pid.Int64
 	}
 	r.CreatedAt, _ = parseTime(created)
 	if stepsJSON != "" {
@@ -932,12 +964,18 @@ func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error
 			r.Result = &res
 		}
 	}
+	if snapshotJSON != "" && snapshotJSON != "{}" {
+		var snap port.Playbook
+		if err := json.Unmarshal([]byte(snapshotJSON), &snap); err == nil {
+			r.PlaybookSnapshot = &snap
+		}
+	}
 	return r, nil
 }
 
 func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, card_id, status, query, error, steps, sources, plan, result, tokens, created_at FROM research ORDER BY id`)
+		`SELECT id, card_id, status, query, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, created_at FROM research ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -945,9 +983,13 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	var list []port.Research
 	for rows.Next() {
 		var r port.Research
-		var created, stepsJSON, sourcesJSON, planJSON, resultJSON string
-		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &created); err != nil {
+		var created, stepsJSON, sourcesJSON, planJSON, resultJSON, snapshotJSON string
+		var pid sql.NullInt64
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &created); err != nil {
 			return nil, err
+		}
+		if pid.Valid {
+			r.PlaybookID = &pid.Int64
 		}
 		r.CreatedAt, _ = parseTime(created)
 		if stepsJSON != "" {
@@ -972,6 +1014,12 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 			var res port.ResearchResult
 			if err := json.Unmarshal([]byte(resultJSON), &res); err == nil {
 				r.Result = &res
+			}
+		}
+		if snapshotJSON != "" && snapshotJSON != "{}" {
+			var snap port.Playbook
+			if err := json.Unmarshal([]byte(snapshotJSON), &snap); err == nil {
+				r.PlaybookSnapshot = &snap
 			}
 		}
 		list = append(list, r)
@@ -981,7 +1029,7 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 
 func (s *Store) ListResearchByCard(ctx context.Context, cardID int64) ([]port.Research, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, created_at FROM research WHERE card_id = ? ORDER BY id DESC`, cardID)
+		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, created_at FROM research WHERE card_id = ? ORDER BY id DESC`, cardID)
 	if err != nil {
 		return nil, err
 	}
@@ -989,9 +1037,13 @@ func (s *Store) ListResearchByCard(ctx context.Context, cardID int64) ([]port.Re
 	var list []port.Research
 	for rows.Next() {
 		var r port.Research
-		var created, stepsJSON, sourcesJSON, planJSON, resultJSON string
-		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &created); err != nil {
+		var created, stepsJSON, sourcesJSON, planJSON, resultJSON, snapshotJSON string
+		var pid sql.NullInt64
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &created); err != nil {
 			return nil, err
+		}
+		if pid.Valid {
+			r.PlaybookID = &pid.Int64
 		}
 		r.CreatedAt, _ = parseTime(created)
 		if stepsJSON != "" {
@@ -1018,10 +1070,276 @@ func (s *Store) ListResearchByCard(ctx context.Context, cardID int64) ([]port.Re
 				r.Result = &res
 			}
 		}
+		if snapshotJSON != "" && snapshotJSON != "{}" {
+			var snap port.Playbook
+			if err := json.Unmarshal([]byte(snapshotJSON), &snap); err == nil {
+				r.PlaybookSnapshot = &snap
+			}
+		}
 		list = append(list, r)
 	}
 	return list, rows.Err()
 }
+
+// --- Playbook CRUD -----------------------------------------------------------
+
+func (s *Store) CreatePlaybook(ctx context.Context, pb port.Playbook) (port.Playbook, error) {
+	if err := research.ValidatePlaybook(pb); err != nil {
+		return port.Playbook{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return port.Playbook{}, err
+	}
+	defer tx.Rollback()
+
+	cardTypesJSON := "[]"
+	if len(pb.CardTypes) > 0 {
+		if b, err := json.Marshal(pb.CardTypes); err == nil {
+			cardTypesJSON = string(b)
+		}
+	}
+	tNow := now()
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO playbooks (name, description, is_builtin, card_types, version, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		pb.Name, pb.Description, pb.IsBuiltin, cardTypesJSON, 1, tNow, tNow)
+	if err != nil {
+		return port.Playbook{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return port.Playbook{}, err
+	}
+
+	for idx, step := range pb.Steps {
+		pos := step.Position
+		if pos <= 0 {
+			pos = idx + 1
+		}
+		cfgJSON := "{}"
+		if b, err := json.Marshal(step.Config); err == nil {
+			cfgJSON = string(b)
+		}
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO playbook_steps (playbook_id, position, kind, name, enabled, config)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			id, pos, step.Kind, step.Name, step.Enabled, cfgJSON)
+		if err != nil {
+			return port.Playbook{}, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return port.Playbook{}, err
+	}
+	return s.GetPlaybook(ctx, id)
+}
+
+func (s *Store) GetPlaybook(ctx context.Context, id int64) (port.Playbook, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, name, description, is_builtin, card_types, version, created_at, updated_at
+		 FROM playbooks WHERE id = ?`, id)
+	var pb port.Playbook
+	var cardTypesJSON, created, updated string
+	err := row.Scan(&pb.ID, &pb.Name, &pb.Description, &pb.IsBuiltin, &cardTypesJSON, &pb.Version, &created, &updated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return port.Playbook{}, port.ErrNotFound
+	}
+	if err != nil {
+		return port.Playbook{}, err
+	}
+	pb.CreatedAt, _ = parseTime(created)
+	pb.UpdatedAt, _ = parseTime(updated)
+	if cardTypesJSON != "" {
+		_ = json.Unmarshal([]byte(cardTypesJSON), &pb.CardTypes)
+	}
+	if pb.CardTypes == nil {
+		pb.CardTypes = []string{}
+	}
+
+	// Load steps
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, playbook_id, position, kind, name, enabled, config
+		 FROM playbook_steps WHERE playbook_id = ? ORDER BY position ASC, id ASC`, id)
+	if err != nil {
+		return port.Playbook{}, err
+	}
+	defer rows.Close()
+
+	pb.Steps = []port.PlaybookStep{}
+	for rows.Next() {
+		var st port.PlaybookStep
+		var cfgJSON string
+		if err := rows.Scan(&st.ID, &st.PlaybookID, &st.Position, &st.Kind, &st.Name, &st.Enabled, &cfgJSON); err != nil {
+			return port.Playbook{}, err
+		}
+		if cfgJSON != "" && cfgJSON != "{}" {
+			_ = json.Unmarshal([]byte(cfgJSON), &st.Config)
+		}
+		pb.Steps = append(pb.Steps, st)
+	}
+	return pb, rows.Err()
+}
+
+func (s *Store) GetDefaultPlaybook(ctx context.Context) (port.Playbook, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM playbooks WHERE is_builtin = 1 ORDER BY id ASC LIMIT 1`).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return port.Playbook{}, port.ErrNotFound
+	}
+	if err != nil {
+		return port.Playbook{}, err
+	}
+	return s.GetPlaybook(ctx, id)
+}
+
+func (s *Store) ListPlaybooks(ctx context.Context) ([]port.Playbook, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM playbooks ORDER BY is_builtin DESC, id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var list []port.Playbook
+	for _, id := range ids {
+		pb, err := s.GetPlaybook(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, pb)
+	}
+	return list, nil
+}
+
+func (s *Store) UpdatePlaybook(ctx context.Context, pb port.Playbook) (port.Playbook, error) {
+	existing, err := s.GetPlaybook(ctx, pb.ID)
+	if err != nil {
+		return port.Playbook{}, err
+	}
+	if existing.IsBuiltin {
+		return port.Playbook{}, port.ErrBuiltinReadOnly
+	}
+	if err := research.ValidatePlaybook(pb); err != nil {
+		return port.Playbook{}, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return port.Playbook{}, err
+	}
+	defer tx.Rollback()
+
+	cardTypesJSON := "[]"
+	if len(pb.CardTypes) > 0 {
+		if b, err := json.Marshal(pb.CardTypes); err == nil {
+			cardTypesJSON = string(b)
+		}
+	}
+	tNow := now()
+	_, err = tx.ExecContext(ctx,
+		`UPDATE playbooks SET name = ?, description = ?, card_types = ?, version = version + 1, updated_at = ?
+		 WHERE id = ?`,
+		pb.Name, pb.Description, cardTypesJSON, tNow, pb.ID)
+	if err != nil {
+		return port.Playbook{}, err
+	}
+
+	// Delete existing steps and insert new steps
+	_, err = tx.ExecContext(ctx, `DELETE FROM playbook_steps WHERE playbook_id = ?`, pb.ID)
+	if err != nil {
+		return port.Playbook{}, err
+	}
+
+	for idx, step := range pb.Steps {
+		pos := step.Position
+		if pos <= 0 {
+			pos = idx + 1
+		}
+		cfgJSON := "{}"
+		if b, err := json.Marshal(step.Config); err == nil {
+			cfgJSON = string(b)
+		}
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO playbook_steps (playbook_id, position, kind, name, enabled, config)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			pb.ID, pos, step.Kind, step.Name, step.Enabled, cfgJSON)
+		if err != nil {
+			return port.Playbook{}, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return port.Playbook{}, err
+	}
+	return s.GetPlaybook(ctx, pb.ID)
+}
+
+func (s *Store) DeletePlaybook(ctx context.Context, id int64) error {
+	existing, err := s.GetPlaybook(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing.IsBuiltin {
+		return port.ErrBuiltinReadOnly
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `DELETE FROM playbook_steps WHERE playbook_id = ?`, id)
+	if err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM playbooks WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return port.ErrNotFound
+	}
+	return tx.Commit()
+}
+
+func (s *Store) DuplicatePlaybook(ctx context.Context, id int64) (port.Playbook, error) {
+	src, err := s.GetPlaybook(ctx, id)
+	if err != nil {
+		return port.Playbook{}, err
+	}
+	clone := port.Playbook{
+		Name:        src.Name + " (Copy)",
+		Description: src.Description,
+		IsBuiltin:   false,
+		CardTypes:   src.CardTypes,
+		Version:     1,
+		Steps:       make([]port.PlaybookStep, len(src.Steps)),
+	}
+	for i, st := range src.Steps {
+		clone.Steps[i] = port.PlaybookStep{
+			Position: st.Position,
+			Kind:     st.Kind,
+			Name:     st.Name,
+			Enabled:  st.Enabled,
+			Config:   st.Config,
+		}
+	}
+	return s.CreatePlaybook(ctx, clone)
+}
+
 
 func (s *Store) GetResearchFindings(ctx context.Context, id int64) (string, error) {
 	var findings string

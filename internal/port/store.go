@@ -17,6 +17,12 @@ var ErrResearchActive = errors.New("research already running")
 // (such as duplicate source URL).
 var ErrConflict = errors.New("conflict: entity already exists")
 
+// ErrBuiltinReadOnly is returned when modifying or deleting a built-in playbook.
+var ErrBuiltinReadOnly = errors.New("builtin playbook is read-only")
+
+// ErrInvalidPlaybook is returned when a playbook violates validation rules.
+var ErrInvalidPlaybook = errors.New("invalid playbook")
+
 // Store provides CRUD for cards, research, and tags.
 type Store interface {
 	CreateCard(ctx context.Context, c Card) (Card, error)
@@ -30,7 +36,7 @@ type Store interface {
 	SetCardTags(ctx context.Context, id int64, tags []string) error
 	SetCardReferences(ctx context.Context, id int64, refs []Reference) error
 	ListTags(ctx context.Context) ([]Tag, error)
-	CreateResearch(ctx context.Context, cardID int64, query string) (Research, error)
+	CreateResearch(ctx context.Context, cardID int64, query string, playbookID ...*int64) (Research, error)
 	HasActiveResearch(ctx context.Context, cardID int64) (bool, error)
 	SetResearch(ctx context.Context, id int64, status, findings, errMsg string) (Research, error)
 	UpdateResearchProgress(ctx context.Context, id int64, status, query string, steps []ResearchStep, sources []Source, plan *ResearchPlan, result *ResearchResult, tokens int) error
@@ -50,4 +56,13 @@ type Store interface {
 	GetCapture(ctx context.Context, id int64) (Capture, error)
 	GetCaptureBySourceURL(ctx context.Context, url string) (Capture, error)
 	UpdateCapture(ctx context.Context, c Capture) (Capture, error)
+	// Playbooks
+	CreatePlaybook(ctx context.Context, pb Playbook) (Playbook, error)
+	GetPlaybook(ctx context.Context, id int64) (Playbook, error)
+	ListPlaybooks(ctx context.Context) ([]Playbook, error)
+	UpdatePlaybook(ctx context.Context, pb Playbook) (Playbook, error)
+	DeletePlaybook(ctx context.Context, id int64) error
+	DuplicatePlaybook(ctx context.Context, id int64) (Playbook, error)
+	GetDefaultPlaybook(ctx context.Context) (Playbook, error)
 }
+

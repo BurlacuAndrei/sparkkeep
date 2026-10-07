@@ -140,20 +140,67 @@ type ResearchPlan struct {
 	Questions []ResearchQuestion `json:"questions"`
 }
 
-type Research struct {
-	ID        int64          `json:"id"`
-	CardID    int64          `json:"card_id"`
-	Status    string         `json:"status"`
-	Query     string         `json:"query"`
-	Findings  string         `json:"findings"`
-	Error     string         `json:"error,omitempty"`
-	Steps     []ResearchStep `json:"steps"`
-	Sources   []Source       `json:"sources"`
-	Plan      *ResearchPlan   `json:"plan,omitempty"`
-	Result    *ResearchResult `json:"result,omitempty"`
-	Tokens    int             `json:"tokens"`
-	CreatedAt time.Time       `json:"created_at"`
+const (
+	StepKindGround       = "ground"
+	StepKindResolveRefs  = "resolve_refs"
+	StepKindPlan         = "plan"
+	StepKindSearch       = "search"
+	StepKindRead         = "read"
+	StepKindVerifyClaims = "verify_claims"
+	StepKindLandscape    = "landscape"
+	StepKindVerdict      = "verdict"
+	StepKindReport       = "report"
+	StepKindCustom       = "custom"
+)
+
+type CustomStepConfig struct {
+	Instruction   string   `json:"instruction,omitempty"`
+	OutputHeading string   `json:"output_heading,omitempty"`
+	Inputs        []string `json:"inputs,omitempty"`      // "capture", "references", "sources", "previous_steps"
+	ToolPolicy    string   `json:"tool_policy,omitempty"` // "none", "search"
+	Role          string   `json:"role,omitempty"`        // "research_plan", "research_synthesis"
+	MaxQueries    int      `json:"max_queries,omitempty"`
 }
+
+type PlaybookStep struct {
+	ID         int64            `json:"id,omitempty"`
+	PlaybookID int64            `json:"playbook_id,omitempty"`
+	Position   int              `json:"position"`
+	Kind       string           `json:"kind"` // ground | resolve_refs | plan | search | read | verify_claims | landscape | verdict | report | custom
+	Name       string           `json:"name"`
+	Enabled    bool             `json:"enabled"`
+	Config     CustomStepConfig `json:"config"`
+}
+
+type Playbook struct {
+	ID          int64          `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	IsBuiltin   bool           `json:"is_builtin"`
+	CardTypes   []string       `json:"card_types"`
+	Version     int            `json:"version"`
+	Steps       []PlaybookStep `json:"steps"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+}
+
+type Research struct {
+	ID               int64           `json:"id"`
+	CardID           int64           `json:"card_id"`
+	Status           string          `json:"status"`
+	Query            string          `json:"query"`
+	Findings         string          `json:"findings"`
+	Error            string          `json:"error,omitempty"`
+	Steps            []ResearchStep  `json:"steps"`
+	Sources          []Source        `json:"sources"`
+	Plan             *ResearchPlan   `json:"plan,omitempty"`
+	Result           *ResearchResult `json:"result,omitempty"`
+	Tokens           int             `json:"tokens"`
+	PlaybookID       *int64          `json:"playbook_id,omitempty"`
+	PlaybookSnapshot *Playbook       `json:"playbook_snapshot,omitempty"`
+	CreatedAt        time.Time       `json:"created_at"`
+}
+
 
 type ClaimVerdict struct {
 	Claim     string   `json:"claim"`

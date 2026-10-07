@@ -148,6 +148,15 @@ func (m *memoryStore) GetCard(_ context.Context, id int64) (port.Card, error) {
 	return card, nil
 }
 
+func (m *memoryStore) GetResearch(_ context.Context, id int64) (port.Research, error) {
+	return port.Research{}, port.ErrNotFound
+}
+
+func (m *memoryStore) GetDefaultPlaybook(_ context.Context) (port.Playbook, error) {
+	return DefaultPlaybook(), nil
+}
+
+
 func (m *memoryStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (port.Card, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -849,3 +858,178 @@ func TestStep_InvalidJSON_RepairAndFallback(t *testing.T) {
 		t.Fatalf("expected verdict error, got: %v", err)
 	}
 }
+
+func TestValidatePlaybook(t *testing.T) {
+	// 1. Valid default playbook
+	def := DefaultPlaybook()
+	if err := ValidatePlaybook(def); err != nil {
+		t.Fatalf("DefaultPlaybook should be valid: %v", err)
+	}
+
+	// 2. Empty name
+	invalidName := def
+	invalidName.Name = "   "
+	if err := ValidatePlaybook(invalidName); err == nil {
+		t.Error("expected error for empty name")
+	}
+
+	// 3. Empty steps
+	noSteps := def
+	noSteps.Steps = []port.PlaybookStep{}
+	if err := ValidatePlaybook(noSteps); err == nil {
+		t.Error("expected error for empty steps")
+	}
+
+	// 4. Over 12 steps
+	tooMany := def
+	for i := 0; i < 15; i++ {
+		tooMany.Steps = append(tooMany.Steps, port.PlaybookStep{Kind: port.StepKindGround, Name: "Step"})
+	}
+	if err := ValidatePlaybook(tooMany); err == nil {
+		t.Error("expected error for > 12 steps")
+	}
+
+	// 5. Unknown step kind
+	badKind := def
+	badKind.Steps = []port.PlaybookStep{{Kind: "unknown_step", Name: "Bad"}}
+	if err := ValidatePlaybook(badKind); err == nil {
+		t.Error("expected error for unknown step kind")
+	}
+
+	// 6. Read without search or resolve_refs before it
+	readFirst := port.Playbook{
+		Name: "Read First",
+		Steps: []port.PlaybookStep{
+			{Kind: port.StepKindRead, Name: "Read", Enabled: true},
+			{Kind: port.StepKindSearch, Name: "Search", Enabled: true},
+		},
+	}
+	if err := ValidatePlaybook(readFirst); err == nil {
+		t.Error("expected error when read appears before search or resolve_refs")
+	}
+
+	// 7. Verdict not at the end
+	verdictMiddle := port.Playbook{
+		Name: "Verdict Middle",
+		Steps: []port.PlaybookStep{
+			{Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Kind: port.StepKindVerdict, Name: "Verdict", Enabled: true},
+			{Kind: port.StepKindSearch, Name: "Search", Enabled: true},
+		},
+	}
+	if err := ValidatePlaybook(verdictMiddle); err == nil {
+		t.Error("expected error when steps follow verdict")
+	}
+
+	// 8. Custom step validation
+	customBadHeading := port.Playbook{
+		Name: "Custom Bad Heading",
+		Steps: []port.PlaybookStep{
+			{Kind: port.StepKindCustom, Name: "Custom", Enabled: true, Config: port.CustomStepConfig{OutputHeading: ""}},
+		},
+	}
+	if err := ValidatePlaybook(customBadHeading); err == nil {
+		t.Error("expected error when custom step output_heading is empty")
+	}
+
+	customLongInstruction := port.Playbook{
+		Name: "Custom Long Instruction",
+		Steps: []port.PlaybookStep{
+			{
+				Kind:    port.StepKindCustom,
+				Name:    "Custom",
+				Enabled: true,
+				Config: port.CustomStepConfig{
+					OutputHeading: "Heading",
+					Instruction:   strings.Repeat("a", 2001),
+				},
+			},
+		},
+	}
+	if err := ValidatePlaybook(customLongInstruction); err == nil {
+		t.Error("expected error when custom instruction exceeds 2000 chars")
+	}
+
+	customMaxQueries := port.Playbook{
+		Name: "Custom Max Queries",
+		Steps: []port.PlaybookStep{
+			{
+				Kind:    port.StepKindCustom,
+				Name:    "Custom",
+				Enabled: true,
+				Config: port.CustomStepConfig{
+					OutputHeading: "Heading",
+					Instruction:   "inst",
+					MaxQueries:    10,
+				},
+			},
+		},
+	}
+	if err := ValidatePlaybook(customMaxQueries); err == nil {
+		t.Error("expected error when custom max_queries exceeds 5")
+	}
+}
+
+func TestRunWithPlaybook_CustomStep(t *testing.T) {
+	customLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+		if strings.Contains(str, "Monetization angle") || strings.Contains(str, "How can I make money") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":"Monetization strategy based on [S1]: Launch SaaS tiered pricing with enterprise SLA."}}]}`)
+			return
+		}
+		if strings.Contains(str, "research synthesis and executive decision assistant") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+				strconv.Quote(`{"recommendation":"pursue","for_whom":"founders","risks":[],"confidence":"high","next_actions":["Build MVP"]}`))
+			return
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":"Default LLM response"}}]}`)
+	}))
+	defer customLLM.Close()
+
+	runner := stubRunner(customLLM, "")
+	tf := newTraceFetcher()
+	runner.Fetcher = tf
+
+	pb := port.Playbook{
+		Name: "Custom Monetization Playbook",
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Position: 2, Kind: port.StepKindResolveRefs, Name: "Refs", Enabled: true},
+			{
+				Position: 3,
+				Kind:     port.StepKindCustom,
+				Name:     "Monetization",
+				Enabled:  true,
+				Config: port.CustomStepConfig{
+					Instruction:   "How can I make money from this idea?",
+					OutputHeading: "Monetization Angle",
+					Inputs:        []string{"capture", "sources"},
+					ToolPolicy:    "none",
+				},
+			},
+			{Position: 4, Kind: port.StepKindVerdict, Name: "Verdict", Enabled: true},
+			{Position: 5, Kind: port.StepKindReport, Name: "Report", Enabled: true},
+		},
+	}
+
+	card := port.Card{
+		ID:         7,
+		Title:      "MicroSaaS Idea",
+		SourceURL:  "https://example.com/idea",
+		SourceNote: "A smart automation tool for freelancers",
+	}
+
+	report, err := runner.RunWithPlaybook(context.Background(), card, 0, pb)
+	if err != nil {
+		t.Fatalf("RunWithPlaybook failed: %v", err)
+	}
+
+	if !strings.Contains(report, "## Monetization Angle") {
+		t.Errorf("expected report to contain custom section '## Monetization Angle', got:\n%s", report)
+	}
+	if !strings.Contains(report, "Monetization strategy based on [S1]") {
+		t.Errorf("expected report to contain custom LLM content with citations, got:\n%s", report)
+	}
+}
+

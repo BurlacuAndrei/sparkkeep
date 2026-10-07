@@ -139,8 +139,29 @@ func (r *Runner) Run(ctx context.Context, card port.Card) (string, error) {
 }
 
 // RunWithID executes the step-based research pipeline, tracking progress mid-run
-// against researchID in the configured Store.
+// against researchID in the configured Store. It loads the exact playbook_snapshot
+// associated with researchID (or falls back to the default playbook).
 func (r *Runner) RunWithID(ctx context.Context, card port.Card, researchID int64) (string, error) {
+	var pb port.Playbook
+	if researchID > 0 && r.Store != nil {
+		row, err := r.Store.GetResearch(ctx, researchID)
+		if err == nil && row.PlaybookSnapshot != nil && len(row.PlaybookSnapshot.Steps) > 0 {
+			pb = *row.PlaybookSnapshot
+		}
+	}
+	if len(pb.Steps) == 0 && r.Store != nil {
+		if def, err := r.Store.GetDefaultPlaybook(ctx); err == nil && len(def.Steps) > 0 {
+			pb = def
+		}
+	}
+	if len(pb.Steps) == 0 {
+		pb = DefaultPlaybook()
+	}
+	return r.RunWithPlaybook(ctx, card, researchID, pb)
+}
+
+// RunWithPlaybook executes the research pipeline configured by the given Playbook.
+func (r *Runner) RunWithPlaybook(ctx context.Context, card port.Card, researchID int64, pb port.Playbook) (string, error) {
 	timeout := r.Timeout
 	if timeout <= 0 {
 		timeout = defaultTimeout
@@ -159,7 +180,7 @@ func (r *Runner) RunWithID(ctx context.Context, card port.Card, researchID int64
 
 	state := NewRunState(card, researchID, r.Store, perSource, total)
 
-	pipeline := r.buildPipeline()
+	pipeline := r.buildPipelineFromPlaybook(pb)
 	for _, step := range pipeline {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
@@ -210,18 +231,248 @@ func (r *Runner) persistProgress(ctx context.Context, state *RunState, status st
 }
 
 func (r *Runner) buildPipeline() []Step {
-	return []Step{
-		{ID: "ground", Name: "Ground context", Run: r.stepGround},
-		{ID: "resolve_refs", Name: "Resolve URL references", Run: r.stepResolveRefs},
-		{ID: "plan", Name: "Plan research questions", Run: r.stepPlan},
-		{ID: "search", Name: "Search per question", Run: r.stepSearch},
-		{ID: "read", Name: "Fetch search results", Run: r.stepRead},
-		{ID: "verify_claims", Name: "Verify claims", Run: r.stepVerifyClaims},
-		{ID: "landscape", Name: "Analyze landscape", Run: r.stepLandscape},
-		{ID: "verdict", Name: "Synthesize verdict", Run: r.stepVerdict},
-		{ID: "report", Name: "Generate final report", Run: r.stepReport},
-	}
+	return r.buildPipelineFromPlaybook(DefaultPlaybook())
 }
+
+func (r *Runner) buildPipelineFromPlaybook(pb port.Playbook) []Step {
+	if len(pb.Steps) == 0 {
+		return []Step{
+			{ID: "ground", Name: "Ground context", Run: r.stepGround},
+			{ID: "resolve_refs", Name: "Resolve URL references", Run: r.stepResolveRefs},
+			{ID: "plan", Name: "Plan research questions", Run: r.stepPlan},
+			{ID: "search", Name: "Search per question", Run: r.stepSearch},
+			{ID: "read", Name: "Fetch search results", Run: r.stepRead},
+			{ID: "verify_claims", Name: "Verify claims", Run: r.stepVerifyClaims},
+			{ID: "landscape", Name: "Analyze landscape", Run: r.stepLandscape},
+			{ID: "verdict", Name: "Verdict & structured results", Run: r.stepVerdict},
+			{ID: "report", Name: "Synthesize report", Run: r.stepReport},
+		}
+	}
+	var steps []Step
+	for _, s := range pb.Steps {
+		if !s.Enabled {
+			continue
+		}
+		switch s.Kind {
+		case port.StepKindGround:
+			name := s.Name
+			if name == "" {
+				name = "Ground context"
+			}
+			steps = append(steps, Step{ID: "ground", Name: name, Run: r.stepGround})
+		case port.StepKindResolveRefs:
+			name := s.Name
+			if name == "" {
+				name = "Resolve URL references"
+			}
+			steps = append(steps, Step{ID: "resolve_refs", Name: name, Run: r.stepResolveRefs})
+		case port.StepKindPlan:
+			name := s.Name
+			if name == "" {
+				name = "Plan research questions"
+			}
+			steps = append(steps, Step{ID: "plan", Name: name, Run: r.stepPlan})
+		case port.StepKindSearch:
+			name := s.Name
+			if name == "" {
+				name = "Search per question"
+			}
+			steps = append(steps, Step{ID: "search", Name: name, Run: r.stepSearch})
+		case port.StepKindRead:
+			name := s.Name
+			if name == "" {
+				name = "Fetch search results"
+			}
+			steps = append(steps, Step{ID: "read", Name: name, Run: r.stepRead})
+		case port.StepKindVerifyClaims:
+			name := s.Name
+			if name == "" {
+				name = "Verify claims"
+			}
+			steps = append(steps, Step{ID: "verify_claims", Name: name, Run: r.stepVerifyClaims})
+		case port.StepKindLandscape:
+			name := s.Name
+			if name == "" {
+				name = "Analyze landscape"
+			}
+			steps = append(steps, Step{ID: "landscape", Name: name, Run: r.stepLandscape})
+		case port.StepKindVerdict:
+			name := s.Name
+			if name == "" {
+				name = "Verdict & structured results"
+			}
+			steps = append(steps, Step{ID: "verdict", Name: name, Run: r.stepVerdict})
+		case port.StepKindReport:
+			name := s.Name
+			if name == "" {
+				name = "Synthesize report"
+			}
+			steps = append(steps, Step{ID: "report", Name: name, Run: r.stepReport})
+		case port.StepKindCustom:
+			cfg := s.Config
+			name := s.Name
+			if name == "" {
+				name = cfg.OutputHeading
+			}
+			stepID := fmt.Sprintf("custom_%d", s.Position)
+			steps = append(steps, Step{
+				ID:   stepID,
+				Name: name,
+				Run: func(ctx context.Context, state *RunState) error {
+					return r.stepCustom(ctx, state, cfg, stepID)
+				},
+			})
+		}
+	}
+	return steps
+}
+
+type CustomSection struct {
+	Heading string
+	Content string
+}
+
+func (r *Runner) stepCustom(ctx context.Context, state *RunState, cfg port.CustomStepConfig, stepID string) error {
+	// 1. Tool policy: search
+	if cfg.ToolPolicy == "search" {
+		maxQ := cfg.MaxQueries
+		if maxQ <= 0 {
+			maxQ = 2
+		}
+		if maxQ > 5 {
+			maxQ = 5
+		}
+		qClient := r.planClient()
+		if qClient != nil {
+			prompt := fmt.Sprintf("Generate up to %d search queries to investigate: %q for topic: %q. Output each query on a new line without numbers or bullets.",
+				maxQ, cfg.Instruction, state.Card.Title)
+			qResp, err := qClient.Ask(ctx, prompt)
+			if err == nil {
+				for _, line := range strings.Split(qResp, "\n") {
+					q := strings.TrimSpace(line)
+					if q != "" && len(q) > 3 {
+						urls, sErr := r.search(ctx, q, state.Card.SourceURL)
+						if sErr == nil && len(urls) > 0 {
+							for i, u := range urls {
+								if i >= 2 {
+									break
+								}
+								if !state.Sources.HasURL(u) {
+									f := r.fetcher().FetchWithContext(ctx, capture.Share{Kind: capture.KindLink, URL: u})
+									if f.Err == nil && strings.TrimSpace(f.Text) != "" {
+										title := f.Title
+										if title == "" {
+											title = u
+										}
+										state.Sources.Add(u, title, "search", f.Text, time.Now())
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Select client
+	client := r.synthesisClient()
+	if cfg.Role == "research_plan" {
+		client = r.planClient()
+	}
+	if client == nil {
+		return fmt.Errorf("no LLM client configured for custom step")
+	}
+
+	// 3. Assemble inputs
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Card Title: %s\n", state.Card.Title))
+	if state.Card.TLDR != "" {
+		b.WriteString(fmt.Sprintf("TLDR: %s\n", state.Card.TLDR))
+	} else if state.Card.Summary != "" {
+		b.WriteString(fmt.Sprintf("Summary: %s\n", state.Card.Summary))
+	}
+
+	includeCapture := true
+	includeRefs := true
+	includeSources := true
+	includePrev := true
+	if len(cfg.Inputs) > 0 {
+		includeCapture = false
+		includeRefs = false
+		includeSources = false
+		includePrev = false
+		for _, inp := range cfg.Inputs {
+			switch inp {
+			case "capture":
+				includeCapture = true
+			case "references":
+				includeRefs = true
+			case "sources":
+				includeSources = true
+			case "previous_steps":
+				includePrev = true
+			}
+		}
+	}
+
+	if includeCapture && state.Capture != nil {
+		txt := state.Capture.Text
+		if len(txt) > 3000 {
+			txt = txt[:3000] + "..."
+		}
+		b.WriteString(fmt.Sprintf("\nCapture Content:\n%s\n", txt))
+	}
+
+	if includeRefs && len(state.References) > 0 {
+		b.WriteString("\nReferences:\n")
+		for _, ref := range state.References {
+			b.WriteString(fmt.Sprintf("- %s: %s\n", ref.Label, ref.URL))
+		}
+	}
+
+	if includeSources {
+		b.WriteString("\nRegistered Sources:\n")
+		b.WriteString(state.Sources.FormatForSynthesis())
+	}
+
+	if includePrev {
+		if state.Result != nil && len(state.Result.Claims) > 0 {
+			b.WriteString("\nVerified Claims:\n")
+			for _, c := range state.Result.Claims {
+				b.WriteString(fmt.Sprintf("- %s: %s\n", c.Claim, c.Status))
+			}
+		}
+	}
+
+	b.WriteString(fmt.Sprintf("\nInstruction:\n%s\n", cfg.Instruction))
+	b.WriteString("\nWrite a clear, structured markdown section under heading '### " + cfg.OutputHeading + "' citing facts using source IDs like [S1], [S2] where applicable.")
+
+	out, err := client.Ask(ctx, b.String())
+	if err != nil {
+		return fmt.Errorf("custom step %q failed: %w", cfg.OutputHeading, err)
+	}
+
+
+	trimmed := strings.TrimSpace(out)
+	state.StepOutputs[stepID] = trimmed
+
+	heading := cfg.OutputHeading
+	if heading == "" {
+		heading = "Analysis"
+	}
+
+	var sections []CustomSection
+	if existing, ok := state.StepOutputs["custom_sections"].([]CustomSection); ok {
+		sections = existing
+	}
+	sections = append(sections, CustomSection{Heading: heading, Content: trimmed})
+	state.StepOutputs["custom_sections"] = sections
+
+	state.SetNote(stepID, fmt.Sprintf("Completed %s", heading))
+	return nil
+}
+
 
 // 1. ground — load capture; restate claims/references.
 func (r *Runner) stepGround(ctx context.Context, state *RunState) error {
@@ -859,6 +1110,13 @@ func (r *Runner) stepReport(ctx context.Context, state *RunState) error {
 		for _, q := range state.Plan.Questions {
 			b.WriteString(fmt.Sprintf("### %s: %s\n", q.ID, q.Question))
 			b.WriteString(fmt.Sprintf("Search query: `%s`\n\n", q.Query))
+		}
+	}
+
+	// Custom Playbook Sections
+	if customSecs, ok := state.StepOutputs["custom_sections"].([]CustomSection); ok && len(customSecs) > 0 {
+		for _, cs := range customSecs {
+			b.WriteString(fmt.Sprintf("## %s\n\n%s\n\n", cs.Heading, strings.TrimSpace(cs.Content)))
 		}
 	}
 

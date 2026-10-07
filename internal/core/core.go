@@ -97,7 +97,7 @@ func (s *Service) describerForVision() Describer {
 }
 
 // GoResearch runs Research in a background goroutine tracked by s.WG.
-func (s *Service) GoResearch(ctx context.Context, cardID int64) {
+func (s *Service) GoResearch(ctx context.Context, cardID int64, playbookID ...*int64) {
 	bgCtx := ctx
 	if bgCtx == nil {
 		bgCtx = s.ctx
@@ -108,11 +108,12 @@ func (s *Service) GoResearch(ctx context.Context, cardID int64) {
 	s.WG.Add(1)
 	go func() {
 		defer s.WG.Done()
-		if err := s.Research(bgCtx, cardID); err != nil && !errors.Is(err, port.ErrResearchActive) {
+		if err := s.Research(bgCtx, cardID, playbookID...); err != nil && !errors.Is(err, port.ErrResearchActive) {
 			s.Logf("core: background research %d: %v", cardID, err)
 		}
 	}()
 }
+
 
 // New constructs a Service with the default capture adapter, an analyze
 // client and research runner for cfg, and logf (default log.Printf).
@@ -632,7 +633,7 @@ func cardFromIdea(idea analyze.Idea, res analyze.AnalysisResult, url, note strin
 // Research stores a 'queued' research row, runs the bounded research
 // pipeline, persists the outcome and notifies. Any run failure marks the
 // row 'failed' and notifies research_failed; it never panics.
-func (s *Service) Research(ctx context.Context, cardID int64) error {
+func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int64) error {
 	card, err := s.Store.GetCard(ctx, cardID)
 	if err != nil {
 		return err
@@ -642,7 +643,8 @@ func (s *Service) Research(ctx context.Context, cardID int64) error {
 	} else if active {
 		return port.ErrResearchActive
 	}
-	row, err := s.Store.CreateResearch(ctx, cardID, "")
+	row, err := s.Store.CreateResearch(ctx, cardID, "", playbookID...)
+
 	if err != nil {
 		return err
 	}

@@ -35,18 +35,45 @@ type stubStore struct {
 	cards      map[int64]port.Card
 	captures   map[int64]port.Capture
 	researches map[int64]port.Research
+	playbooks  map[int64]port.Playbook
 	tags       []port.Tag
 	settings   map[string]string
 	nextCard   int64
 	nextCap    int64
 	nextRes    int64
+	nextPb     int64
 	lastFilter port.CardFilter
 	lastPatch  port.CardPatch
 }
 
 func newStubStore() *stubStore {
-	return &stubStore{cards: map[int64]port.Card{}, captures: map[int64]port.Capture{}, researches: map[int64]port.Research{}, settings: map[string]string{}}
+	st := &stubStore{
+		cards:      map[int64]port.Card{},
+		captures:   map[int64]port.Capture{},
+		researches: map[int64]port.Research{},
+		playbooks:  map[int64]port.Playbook{},
+		settings:   map[string]string{},
+		nextPb:     1,
+	}
+	st.playbooks[1] = port.Playbook{
+		ID:        1,
+		Name:      "Default",
+		IsBuiltin: true,
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Grounding", Enabled: true},
+			{Position: 2, Kind: port.StepKindResolveRefs, Name: "Resolve References", Enabled: true},
+			{Position: 3, Kind: port.StepKindPlan, Name: "Question Planning", Enabled: true},
+			{Position: 4, Kind: port.StepKindSearch, Name: "Multi-query Search", Enabled: true},
+			{Position: 5, Kind: port.StepKindRead, Name: "Round-robin Reading", Enabled: true},
+			{Position: 6, Kind: port.StepKindVerifyClaims, Name: "Claim Verification", Enabled: true},
+			{Position: 7, Kind: port.StepKindLandscape, Name: "Competitive Landscape", Enabled: true},
+			{Position: 8, Kind: port.StepKindVerdict, Name: "Synthesis & Verdict", Enabled: true},
+			{Position: 9, Kind: port.StepKindReport, Name: "Report Generation", Enabled: true},
+		},
+	}
+	return st
 }
+
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
 	if c.SourceURL != "" {
@@ -284,14 +311,119 @@ func (s *stubStore) ListTags(context.Context) ([]port.Tag, error) {
 	return s.tags, nil
 }
 
-func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string) (port.Research, error) {
+func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string, playbookID ...*int64) (port.Research, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextRes++
-	r := port.Research{ID: s.nextRes, CardID: cardID, Status: "queued", Query: query, CreatedAt: time.Now().UTC()}
+	var pid *int64
+	if len(playbookID) > 0 {
+		pid = playbookID[0]
+	}
+	r := port.Research{ID: s.nextRes, CardID: cardID, Status: "queued", Query: query, PlaybookID: pid, CreatedAt: time.Now().UTC()}
 	s.researches[r.ID] = r
 	return r, nil
 }
+
+func (s *stubStore) CreatePlaybook(_ context.Context, pb port.Playbook) (port.Playbook, error) {
+	if err := research.ValidatePlaybook(pb); err != nil {
+		return port.Playbook{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nextPb++
+	pb.ID = s.nextPb
+	pb.CreatedAt = time.Now().UTC()
+	pb.UpdatedAt = pb.CreatedAt
+	s.playbooks[pb.ID] = pb
+	return pb, nil
+}
+
+func (s *stubStore) GetPlaybook(_ context.Context, id int64) (port.Playbook, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pb, ok := s.playbooks[id]
+	if !ok {
+		return port.Playbook{}, port.ErrNotFound
+	}
+	return pb, nil
+}
+
+func (s *stubStore) ListPlaybooks(_ context.Context) ([]port.Playbook, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var list []port.Playbook
+	for _, pb := range s.playbooks {
+		list = append(list, pb)
+	}
+	return list, nil
+}
+
+func (s *stubStore) UpdatePlaybook(_ context.Context, pb port.Playbook) (port.Playbook, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	existing, ok := s.playbooks[pb.ID]
+	if !ok {
+		return port.Playbook{}, port.ErrNotFound
+	}
+	if existing.IsBuiltin {
+		return port.Playbook{}, port.ErrBuiltinReadOnly
+	}
+	if err := research.ValidatePlaybook(pb); err != nil {
+		return port.Playbook{}, err
+	}
+	pb.UpdatedAt = time.Now().UTC()
+	s.playbooks[pb.ID] = pb
+	return pb, nil
+}
+
+func (s *stubStore) DeletePlaybook(_ context.Context, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	existing, ok := s.playbooks[id]
+	if !ok {
+		return port.ErrNotFound
+	}
+	if existing.IsBuiltin {
+		return port.ErrBuiltinReadOnly
+	}
+	delete(s.playbooks, id)
+	return nil
+}
+
+func (s *stubStore) DuplicatePlaybook(_ context.Context, id int64) (port.Playbook, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	src, ok := s.playbooks[id]
+	if !ok {
+		return port.Playbook{}, port.ErrNotFound
+	}
+	s.nextPb++
+	clone := port.Playbook{
+		ID:          s.nextPb,
+		Name:        src.Name + " (Copy)",
+		Description: src.Description,
+		IsBuiltin:   false,
+		CardTypes:   src.CardTypes,
+		Version:     1,
+		Steps:       src.Steps,
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+	s.playbooks[clone.ID] = clone
+	return clone, nil
+}
+
+func (s *stubStore) GetDefaultPlaybook(_ context.Context) (port.Playbook, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, pb := range s.playbooks {
+		if pb.IsBuiltin {
+			return pb, nil
+		}
+	}
+	return port.Playbook{ID: 1, Name: "Default", IsBuiltin: true}, nil
+}
+
 
 func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {
 	s.mu.Lock()
@@ -2166,3 +2298,104 @@ func TestTriageBriefAPIFields(t *testing.T) {
 		t.Errorf("patched mismatch: %+v", patched)
 	}
 }
+
+func TestPlaybookAPI(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, Logf: t.Logf})
+
+	// 1. GET /api/v1/playbooks (should contain Default)
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/playbooks", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET playbooks: %d: %s", rr.Code, rr.Body.String())
+	}
+	var listResp struct {
+		Playbooks []port.Playbook `json:"playbooks"`
+		OK        bool            `json:"ok"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(listResp.Playbooks) == 0 {
+		t.Fatalf("expected at least default playbook, got 0")
+	}
+
+	// 2. Reject invalid playbook creation (empty name or invalid steps)
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/playbooks", `{"name": "", "steps": []}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty playbook, got %d", rr.Code)
+	}
+
+	// 3. Create valid custom playbook
+	createPayload := `{
+		"name": "Custom Monetization",
+		"description": "Test custom playbook",
+		"steps": [
+			{"position": 1, "kind": "ground", "name": "Grounding", "enabled": true},
+			{"position": 2, "kind": "custom", "name": "Monetization", "enabled": true, "config": {"output_heading": "Monetization Strategy", "instruction": "Evaluate cash flow."}},
+			{"position": 3, "kind": "verdict", "name": "Verdict", "enabled": true},
+			{"position": 4, "kind": "report", "name": "Report", "enabled": true}
+		]
+	}`
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/playbooks", createPayload)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create playbook failed: %d: %s", rr.Code, rr.Body.String())
+	}
+	var createResp struct {
+		Playbook port.Playbook `json:"playbook"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("unmarshal created playbook: %v", err)
+	}
+	customPB := createResp.Playbook
+	if customPB.ID == 0 || customPB.Name != "Custom Monetization" {
+		t.Fatalf("unexpected custom playbook: %+v", customPB)
+	}
+
+	// 4. GET /api/v1/playbooks/{id}
+	rr = doJSON(t, h, http.MethodGet, fmt.Sprintf("/api/v1/playbooks/%d", customPB.ID), "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get custom playbook: %d", rr.Code)
+	}
+
+	// 5. Try modifying built-in playbook (id=1) -> 403 Forbidden
+	rr = doJSON(t, h, http.MethodPut, "/api/v1/playbooks/1", createPayload)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when updating builtin playbook, got %d", rr.Code)
+	}
+
+	// 6. Try deleting built-in playbook (id=1) -> 403 Forbidden
+	rr = doJSON(t, h, http.MethodDelete, "/api/v1/playbooks/1", "")
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when deleting builtin playbook, got %d", rr.Code)
+	}
+
+	// 7. Duplicate built-in playbook
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/playbooks/1/duplicate", "")
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("duplicate builtin playbook failed: %d: %s", rr.Code, rr.Body.String())
+	}
+	var dupResp struct {
+		Playbook port.Playbook `json:"playbook"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &dupResp); err != nil {
+		t.Fatalf("unmarshal duplicated playbook: %v", err)
+	}
+	if dupResp.Playbook.IsBuiltin {
+		t.Errorf("duplicated playbook should not be builtin")
+	}
+
+	// 8. Delete custom playbook -> 200 OK
+	rr = doJSON(t, h, http.MethodDelete, fmt.Sprintf("/api/v1/playbooks/%d", customPB.ID), "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("delete custom playbook failed: %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// 9. Trigger research with playbook_id
+	c, _ := st.CreateCard(context.Background(), port.Card{Title: "Card for Research"})
+	triggerPayload := fmt.Sprintf(`{"card_id": %d, "playbook_id": %d}`, c.ID, dupResp.Playbook.ID)
+	rr = doJSON(t, h, http.MethodPost, "/api/v1/research", triggerPayload)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("trigger research with playbook failed: %d: %s", rr.Code, rr.Body.String())
+	}
+}
+

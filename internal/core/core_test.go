@@ -199,12 +199,39 @@ func (s *stubStore) ListTags(context.Context) ([]port.Tag, error) {
 	return nil, nil
 }
 
-func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string) (port.Research, error) {
+func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string, playbookID ...*int64) (port.Research, error) {
 	s.nextRes++
-	r := port.Research{ID: s.nextRes, CardID: cardID, Status: "queued", Query: query, CreatedAt: time.Now().UTC()}
+	var pid *int64
+	if len(playbookID) > 0 {
+		pid = playbookID[0]
+	}
+	r := port.Research{ID: s.nextRes, CardID: cardID, Status: "queued", Query: query, PlaybookID: pid, CreatedAt: time.Now().UTC()}
 	s.researches[r.ID] = r
 	return r, nil
 }
+
+func (s *stubStore) CreatePlaybook(_ context.Context, pb port.Playbook) (port.Playbook, error) {
+	return pb, nil
+}
+func (s *stubStore) GetPlaybook(_ context.Context, id int64) (port.Playbook, error) {
+	return port.Playbook{ID: id, Name: "Default", IsBuiltin: true}, nil
+}
+func (s *stubStore) ListPlaybooks(_ context.Context) ([]port.Playbook, error) {
+	return []port.Playbook{{ID: 1, Name: "Default", IsBuiltin: true}}, nil
+}
+func (s *stubStore) UpdatePlaybook(_ context.Context, pb port.Playbook) (port.Playbook, error) {
+	return pb, nil
+}
+func (s *stubStore) DeletePlaybook(_ context.Context, id int64) error {
+	return nil
+}
+func (s *stubStore) DuplicatePlaybook(_ context.Context, id int64) (port.Playbook, error) {
+	return port.Playbook{ID: 2, Name: "Copy"}, nil
+}
+func (s *stubStore) GetDefaultPlaybook(_ context.Context) (port.Playbook, error) {
+	return port.Playbook{ID: 1, Name: "Default", IsBuiltin: true}, nil
+}
+
 
 func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {
 	for _, r := range s.researches {

@@ -28,8 +28,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 10 {
-		t.Fatalf("version = %d, want 10", version)
+	if version != 11 {
+		t.Fatalf("version = %d, want 11", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -973,8 +973,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 10 {
-		t.Fatalf("version = %d, want 10", version)
+	if version != 11 {
+		t.Fatalf("version = %d, want 11", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1086,8 +1086,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 10 {
-		t.Fatalf("version = %d, want 10", version)
+	if version != 11 {
+		t.Fatalf("version = %d, want 11", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -1334,5 +1334,109 @@ func TestCardActionsSourceAndWriteback(t *testing.T) {
 		t.Fatalf("ListCards unexpected data: %+v", list[0])
 	}
 }
+
+func TestStore_Playbooks(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	// 1. Check seeded Default playbook
+	def, err := s.GetDefaultPlaybook(ctx)
+	if err != nil {
+		t.Fatalf("GetDefaultPlaybook: %v", err)
+	}
+	if def.Name != "Default" || !def.IsBuiltin {
+		t.Fatalf("expected Default built-in playbook, got %+v", def)
+	}
+	if len(def.Steps) != 9 {
+		t.Fatalf("expected 9 steps in default playbook, got %d", len(def.Steps))
+	}
+
+	// 2. Built-in cannot be modified or deleted
+	def.Description = "Modified description"
+	if _, err := s.UpdatePlaybook(ctx, def); !errors.Is(err, port.ErrBuiltinReadOnly) {
+		t.Fatalf("expected ErrBuiltinReadOnly on update, got: %v", err)
+	}
+	if err := s.DeletePlaybook(ctx, def.ID); !errors.Is(err, port.ErrBuiltinReadOnly) {
+		t.Fatalf("expected ErrBuiltinReadOnly on delete, got: %v", err)
+	}
+
+	// 3. Create a custom playbook
+	custom := port.Playbook{
+		Name:        "Founder Scan",
+		Description: "Playbook for startup analysis",
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Position: 2, Kind: port.StepKindResolveRefs, Name: "Refs", Enabled: true},
+			{
+				Position: 3,
+				Kind:     port.StepKindCustom,
+				Name:     "TAM",
+				Enabled:  true,
+				Config: port.CustomStepConfig{
+					Instruction:   "Estimate total addressable market",
+					OutputHeading: "Market Size",
+					ToolPolicy:    "none",
+				},
+			},
+			{Position: 4, Kind: port.StepKindVerdict, Name: "Verdict", Enabled: true},
+			{Position: 5, Kind: port.StepKindReport, Name: "Report", Enabled: true},
+		},
+	}
+	created, err := s.CreatePlaybook(ctx, custom)
+	if err != nil {
+		t.Fatalf("CreatePlaybook: %v", err)
+	}
+	if created.ID <= 0 || created.IsBuiltin {
+		t.Fatalf("unexpected created playbook: %+v", created)
+	}
+	if len(created.Steps) != 5 {
+		t.Fatalf("expected 5 steps, got %d", len(created.Steps))
+	}
+
+	// 4. Duplicate custom playbook
+	dup, err := s.DuplicatePlaybook(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("DuplicatePlaybook: %v", err)
+	}
+	if dup.Name != "Founder Scan (Copy)" || dup.IsBuiltin {
+		t.Fatalf("unexpected duplicate: %+v", dup)
+	}
+	if len(dup.Steps) != 5 {
+		t.Fatalf("expected 5 steps in copy, got %d", len(dup.Steps))
+	}
+
+	// 5. Create card and research with created playbook
+	c, _ := s.CreateCard(ctx, port.Card{Title: "Test Startup"})
+	r, err := s.CreateResearch(ctx, c.ID, "analyze TAM", &created.ID)
+	if err != nil {
+		t.Fatalf("CreateResearch with playbook: %v", err)
+	}
+	if r.PlaybookID == nil || *r.PlaybookID != created.ID {
+		t.Fatalf("expected playbook ID %d, got %v", created.ID, r.PlaybookID)
+	}
+	if r.PlaybookSnapshot == nil || len(r.PlaybookSnapshot.Steps) != 5 {
+		t.Fatalf("expected 5-step snapshot, got: %+v", r.PlaybookSnapshot)
+	}
+
+	// 6. Update playbook and verify snapshot immutability
+	created.Name = "Founder Scan v2"
+	created.Steps = append(created.Steps[:2], created.Steps[3:]...) // Remove custom step
+	updated, err := s.UpdatePlaybook(ctx, created)
+	if err != nil {
+		t.Fatalf("UpdatePlaybook: %v", err)
+	}
+	if len(updated.Steps) != 4 {
+		t.Fatalf("expected 4 steps after update, got %d", len(updated.Steps))
+	}
+
+	// Reload original research row — its snapshot must remain untouched with 5 steps!
+	loadedR, err := s.GetResearch(ctx, r.ID)
+	if err != nil {
+		t.Fatalf("GetResearch: %v", err)
+	}
+	if loadedR.PlaybookSnapshot == nil || len(loadedR.PlaybookSnapshot.Steps) != 5 {
+		t.Fatalf("past research snapshot was mutated! expected 5 steps, got: %d", len(loadedR.PlaybookSnapshot.Steps))
+	}
+}
+
 
 
