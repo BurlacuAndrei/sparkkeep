@@ -69,30 +69,16 @@ No need to hand-edit `.env` files or mount API key secrets before booting. When 
 
 ---
 
-## 💎 Features: Community vs. Pro
+## ✨ Key Features
 
-Sparkkeep is built on an **Open Core** model. The core capture, two-stage triage brief, and baseline research pipeline is 100% free and MIT open-source.
+Sparkkeep is designed to be a lightweight, privacy-first engine that helps you move from an idea to execution without friction.
 
-| Capability | Community (Free / MIT) | Pro License ($49 Lifetime) |
-|---|:---:|:---:|
-| Raw Share Capture & Two-Stage Triage | ✅ | ✅ |
-| Kanban Triage (Inbox, Doing, Done, Shelved) | ✅ | ✅ |
-| Horizon Routing (Now, Next, Later) | ✅ | ✅ |
-| Full-Text Search & Card Filtering | ✅ | ✅ |
-| BYOK AI Models (OpenAI, DeepSeek, Ollama) | ✅ | ✅ |
-| Automated Weekly Digest & Local Pipeline Metrics | ✅ | ✅ |
-| Single-Binary Embedded Architecture | ✅ | ✅ |
-| Default (lite) Research Pipeline (`ground, resolve_refs, search, read, report`) | ✅ | ✅ |
-| Built-in "Claim check only" Playbook | ✅ | ✅ |
-| **Full Default Research Playbook (Planning, Claims Verification, Landscape, Verdict)** | — | ✅ |
-| **Custom Research Playbooks & Step Library (Create, Edit, Duplicate)** | — | ✅ |
-| **Per-Role AI Model Routing & Token Caps (Triage, Vision, Planning, Synthesis)** | — | ✅ |
-| **User Profile ("About Me") Personal Fit Scoring** | — | ✅ |
-| **Scheduled & Batch Overnight Research (Queue Worker, Quiet Window, Rules)** | — | ✅ |
-| **Obsidian Vault 2-Way Markdown Sync** | — | ✅ |
-| **Outbound Webhooks (n8n, Zapier, Home Assistant)** | — | ✅ |
-
-> **Privacy-First Offline Verification:** Pro licenses are cryptographically verified offline inside your instance using Ed25519 signatures. Your instance never phones home.
+- **Seamless Capture & Triage:** Instantly capture links, repos, and notes from the web or Telegram and turn them into actionable cards.
+- **Kanban-Style Organization:** Organize ideas smoothly into Inbox, Doing, Done, and Shelved workflows.
+- **Horizon Routing:** Keep your focus sharp with Now, Next, and Later horizons.
+- **Bring Your Own Keys (BYOK):** Use your preferred AI models. Sparkkeep supports OpenAI, DeepSeek, local Ollama, and any custom OpenAI-compatible endpoint.
+- **Local-First & Embedded Architecture:** Zero external database dependencies. The entire app, including the embedded SQLite database, runs from a single lightweight binary.
+- **Powerful Search:** Instantly locate any card or past idea using built-in full-text search.
 
 ---
 
