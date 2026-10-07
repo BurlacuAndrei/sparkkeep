@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -132,6 +133,11 @@ func (a *Adapter) Run(ctx context.Context) error {
 			wg.Add(1)
 			go func(u update) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						a.logf("telegram: panic in handleUpdate: %v\n%s", r, debug.Stack())
+					}
+				}()
 				select {
 				case a.sem <- struct{}{}:
 					defer func() { <-a.sem }()

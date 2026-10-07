@@ -424,9 +424,10 @@ func stripTagsAndCondense(s string) string {
 	s = tagRe.ReplaceAllString(s, "")
 	s = blankRe.ReplaceAllString(s, "\n")
 	s = strings.TrimSpace(s)
-	if len(s) > condenseMax {
+	runes := []rune(s)
+	if len(runes) > condenseMax {
 		// Truncate at rune boundary to avoid splitting multi-byte UTF-8.
-		s = string([]rune(s)[:condenseMax])
+		s = string(runes[:condenseMax])
 	}
 	if s == "" {
 		return ""

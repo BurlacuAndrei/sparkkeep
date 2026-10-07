@@ -201,6 +201,7 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 
 	res, err := s.Analyze.Analyze(ctx, fetched)
 	if err != nil {
+		s.Logf("core: analyze failed for %s: %v", share.URL, err)
 		return s.failCard(ctx, fetched, share.URL)
 	}
 	if len(res.Cards) == 0 {
@@ -358,6 +359,7 @@ func (s *Service) Retry(ctx context.Context, cardID int64) (port.Card, error) {
 	}
 	res, err := s.Analyze.Analyze(ctx, fetched)
 	if err != nil {
+		s.Logf("core: retry analyze card %d: %v", cardID, err)
 		return card, err
 	}
 	if len(res.Cards) == 0 {
@@ -547,8 +549,9 @@ func readTextFile(f capture.File) (string, bool) {
 	if strings.Contains(m, "html") {
 		s = strings.TrimSpace(stripHTML(s))
 	}
-	if len(s) > 4000 {
-		s = string([]rune(s)[:4000])
+	runes := []rune(s)
+	if len(runes) > 4000 {
+		s = string(runes[:4000])
 	}
 	return s, s != ""
 }

@@ -430,8 +430,9 @@ EXTRACTION NOTES: %s`,
 // clip truncates at a rune boundary so a long transcript cannot split a
 // multi-byte character.
 func clip(s string, max int) string {
-	if len(s) <= max {
+	runes := []rune(s)
+	if len(runes) <= max {
 		return s
 	}
-	return string([]rune(s)[:max]) + "\n[truncated]"
+	return string(runes[:max]) + "\n[truncated]"
 }

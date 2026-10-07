@@ -206,8 +206,9 @@ func (r *Runner) fetchAndClip(ctx context.Context, urls []string) string {
 			continue
 		}
 		chunk := f.Text
-		if len(chunk) > remaining {
-			chunk = string([]rune(chunk)[:remaining])
+		runes := []rune(chunk)
+		if len(runes) > remaining {
+			chunk = string(runes[:remaining])
 		}
 		buf.WriteString(chunk)
 		remaining -= len(chunk)

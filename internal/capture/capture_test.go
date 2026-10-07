@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestRecognizeLink(t *testing.T) {
@@ -118,6 +119,24 @@ func TestStripTags(t *testing.T) {
 	}
 	if strings.Contains(got, "\n\n\n") {
 		t.Fatalf("blank lines not collapsed: %q", got)
+	}
+}
+
+func TestStripTagsAndCondense_MultiByteUnicodeBoundary(t *testing.T) {
+	// A string with multi-byte runes where byte length > condenseMax (4000)
+	// but rune count < condenseMax (e.g. 2500 3-byte runes = 7500 bytes).
+	// This previously triggered a slice bounds out of range panic [:4000] with capacity 2500.
+	input := strings.Repeat("€", 2500)
+	got := stripTagsAndCondense(input)
+	if utf8.RuneCountInString(strings.TrimSuffix(got, "\n")) != 2500 {
+		t.Fatalf("expected 2500 runes, got %d", utf8.RuneCountInString(strings.TrimSuffix(got, "\n")))
+	}
+
+	// Input where rune count > condenseMax
+	longInput := strings.Repeat("€", 5000)
+	longGot := stripTagsAndCondense(longInput)
+	if utf8.RuneCountInString(strings.TrimSuffix(longGot, "\n")) != condenseMax {
+		t.Fatalf("expected %d runes, got %d", condenseMax, utf8.RuneCountInString(strings.TrimSuffix(longGot, "\n")))
 	}
 }
 

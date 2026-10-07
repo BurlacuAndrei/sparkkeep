@@ -365,3 +365,21 @@ func TestPromptForCarriesTranscriptAndNotes(t *testing.T) {
 		}
 	}
 }
+
+func TestClipMultiByteUnicode(t *testing.T) {
+	// Byte length is 300 (100 * 3 bytes), but rune count is 100.
+	// Calling clip with max=200 should NOT panic with slice bounds out of range.
+	input := strings.Repeat("€", 100)
+	got := clip(input, 200)
+	if got != input {
+		t.Fatalf("expected untouched input, got %q", got)
+	}
+
+	// Calling clip with max=50 should truncate to 50 runes
+	gotTrunc := clip(input, 50)
+	expected := strings.Repeat("€", 50) + "\n[truncated]"
+	if gotTrunc != expected {
+		t.Fatalf("expected %q, got %q", expected, gotTrunc)
+	}
+}
+
