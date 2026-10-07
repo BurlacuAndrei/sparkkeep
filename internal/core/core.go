@@ -9,9 +9,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,6 +58,7 @@ type Service struct {
 	Vision           Describer           // nil disables image digests
 	ASR              Transcriber         // nil disables transcription
 	Runner           *research.Runner    // field named Runner: Research collided with the method
+	Router           *analyze.Router     // per-role LLM routing
 	UploadDir        string              // "" disables upload retention
 	UploadMaxAgeDays int                 // 0 disables age-based cleanup
 	UploadMaxSizeMB  int                 // 0 disables size-based cleanup
@@ -65,6 +68,32 @@ type Service struct {
 	Logf             func(format string, args ...any)
 	WG               sync.WaitGroup
 	ctx              context.Context
+	mu               sync.RWMutex
+}
+
+func (s *Service) clientFor(role string) *analyze.Client {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.Router != nil {
+		if c := s.Router.For(role); c != nil {
+			return c
+		}
+	}
+	return s.Analyze
+}
+
+func (s *Service) describerForVision() Describer {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.Router != nil {
+		if c := s.Router.For(analyze.RoleVision); c != nil {
+			return c
+		}
+	}
+	if s.Vision != nil {
+		return s.Vision
+	}
+	return s.Analyze
 }
 
 // GoResearch runs Research in a background goroutine tracked by s.WG.
@@ -88,8 +117,60 @@ func (s *Service) GoResearch(ctx context.Context, cardID int64) {
 // New constructs a Service with the default capture adapter, an analyze
 // client and research runner for cfg, and logf (default log.Printf).
 func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format string, args ...any)) *Service {
-	llm := analyze.New(cfg, nil)
 	licMgr := license.NewManager(st)
+
+	base := cfg.LLMBase
+	key := cfg.LLMKey
+	model := cfg.LLMModel
+	if st != nil {
+		if k, err := st.GetSetting(ctx, "llm_key"); err == nil && k != "" {
+			key = k
+		}
+		if b, err := st.GetSetting(ctx, "llm_base"); err == nil && b != "" {
+			base = b
+		}
+		if m, err := st.GetSetting(ctx, "llm_model"); err == nil && m != "" {
+			model = m
+		}
+	}
+
+	var profiles []analyze.Profile
+	var roles map[string]string
+	var tokenCaps map[string]int
+	if st != nil {
+		if val, err := st.GetSetting(ctx, "llm_profiles"); err == nil && strings.TrimSpace(val) != "" {
+			_ = json.Unmarshal([]byte(val), &profiles)
+		}
+		if val, err := st.GetSetting(ctx, "llm_roles"); err == nil && strings.TrimSpace(val) != "" {
+			_ = json.Unmarshal([]byte(val), &roles)
+		}
+		if val, err := st.GetSetting(ctx, "llm_token_caps"); err == nil && strings.TrimSpace(val) != "" {
+			_ = json.Unmarshal([]byte(val), &tokenCaps)
+		}
+	}
+
+	if len(profiles) == 0 {
+		profiles = []analyze.Profile{{
+			ID:        "default",
+			Name:      "Default",
+			BaseURL:   base,
+			APIKey:    key,
+			Model:     model,
+			IsDefault: true,
+		}}
+	}
+
+	router := analyze.NewRouter(analyze.RouterConfig{
+		Profiles:  profiles,
+		Roles:     roles,
+		TokenCaps: tokenCaps,
+	})
+
+	triageClient := router.For(analyze.RoleTriage)
+	visionClient := router.For(analyze.RoleVision)
+	planClient := router.For(analyze.RoleResearchPlan)
+	synthClient := router.For(analyze.RoleResearchSynthesis)
+
 	s := &Service{
 		Store: st,
 		Fetcher: capture.Capture{
@@ -99,10 +180,11 @@ func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format
 			CookiesFile:     cfg.CookiesFile,
 			TranscriptLangs: cfg.TranscriptLangs,
 		},
-		Analyze:          llm,
-		Vision:           llm,
+		Analyze:          triageClient,
+		Vision:           visionClient,
 		ASR:              asr.New(cfg),
-		Runner:           research.New(cfg, llm),
+		Runner:           research.NewWithClients(cfg, planClient, synthClient),
+		Router:           router,
 		UploadDir:        cfg.UploadDir,
 		UploadMaxAgeDays: cfg.UploadMaxAgeDays,
 		UploadMaxSizeMB:  cfg.UploadMaxSizeMB,
@@ -115,23 +197,14 @@ func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format
 	if s.Logf == nil {
 		s.Logf = log.Printf
 	}
-	if st != nil {
-		if k, err := st.GetSetting(ctx, "llm_key"); err == nil && k != "" {
-			llm.APIKey = k
-		}
-		if b, err := st.GetSetting(ctx, "llm_base"); err == nil && b != "" {
-			llm.BaseURL = b
-		}
-		if m, err := st.GetSetting(ctx, "llm_model"); err == nil && m != "" {
-			llm.Model = m
-			llm.VisionModel = m
-		}
-	}
 	return s
 }
 
 // UpdateLLMConfig updates active LLM client parameters dynamically.
 func (s *Service) UpdateLLMConfig(base, key, model string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.Analyze != nil {
 		if base != "" {
 			s.Analyze.BaseURL = base
@@ -140,6 +213,105 @@ func (s *Service) UpdateLLMConfig(base, key, model string) {
 		if model != "" {
 			s.Analyze.Model = model
 			s.Analyze.VisionModel = model
+		}
+	}
+	if s.Router != nil {
+		s.Router.UpdateDefaultProfile(base, key, model)
+		s.Analyze = s.Router.For(analyze.RoleTriage)
+		s.Vision = s.Router.For(analyze.RoleVision)
+		if s.Runner != nil {
+			s.Runner.PlanLLM = s.Router.For(analyze.RoleResearchPlan)
+			s.Runner.SynthesisLLM = s.Router.For(analyze.RoleResearchSynthesis)
+		}
+	}
+}
+
+// RebuildRouter re-reads profile, role and cap settings from store and refreshes the router and clients.
+func (s *Service) RebuildRouter(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var profiles []analyze.Profile
+	var roles map[string]string
+	var tokenCaps map[string]int
+
+	if s.Store != nil {
+		if val, err := s.Store.GetSetting(ctx, "llm_profiles"); err == nil && strings.TrimSpace(val) != "" {
+			_ = json.Unmarshal([]byte(val), &profiles)
+		}
+		if val, err := s.Store.GetSetting(ctx, "llm_roles"); err == nil && strings.TrimSpace(val) != "" {
+			_ = json.Unmarshal([]byte(val), &roles)
+		}
+		if val, err := s.Store.GetSetting(ctx, "llm_token_caps"); err == nil && strings.TrimSpace(val) != "" {
+			_ = json.Unmarshal([]byte(val), &tokenCaps)
+		}
+	}
+
+	if len(profiles) == 0 {
+		base := ""
+		model := ""
+		key := ""
+		if s.Store != nil {
+			base, _ = s.Store.GetSetting(ctx, "llm_base")
+			model, _ = s.Store.GetSetting(ctx, "llm_model")
+			key, _ = s.Store.GetSetting(ctx, "llm_key")
+		}
+		if base == "" && model == "" && s.Analyze != nil {
+			base = s.Analyze.BaseURL
+			model = s.Analyze.Model
+			key = s.Analyze.APIKey
+		}
+		if base != "" || model != "" {
+			profiles = []analyze.Profile{{
+				ID:        "default",
+				Name:      "Default",
+				BaseURL:   base,
+				APIKey:    key,
+				Model:     model,
+				IsDefault: true,
+			}}
+		}
+	}
+
+	var httpCl *http.Client
+	if s.Router != nil {
+		httpCl = s.Router.HTTPClient()
+	} else if s.Analyze != nil {
+		httpCl = s.Analyze.HTTP
+	}
+
+	newRouter := analyze.NewRouter(analyze.RouterConfig{
+		Profiles:   profiles,
+		Roles:      roles,
+		TokenCaps:  tokenCaps,
+		HTTPClient: httpCl,
+	})
+
+	s.Router = newRouter
+	s.Analyze = newRouter.For(analyze.RoleTriage)
+	s.Vision = newRouter.For(analyze.RoleVision)
+	if s.Runner != nil {
+		s.Runner.PlanLLM = newRouter.For(analyze.RoleResearchPlan)
+		s.Runner.SynthesisLLM = newRouter.For(analyze.RoleResearchSynthesis)
+	}
+	return nil
+}
+
+// SetRouter replaces the active LLMRouter on the service and refreshes dependent clients.
+func (s *Service) SetRouter(router *analyze.Router) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.Router = router
+	if router != nil {
+		s.Analyze = router.For(analyze.RoleTriage)
+		s.Vision = router.For(analyze.RoleVision)
+		if s.Runner != nil {
+			s.Runner.PlanLLM = router.For(analyze.RoleResearchPlan)
+			s.Runner.SynthesisLLM = router.For(analyze.RoleResearchSynthesis)
 		}
 	}
 }
@@ -231,7 +403,11 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 		s.Logf("core: persist capture %s: %v", share.URL, cerr)
 	}
 
-	res, err := s.Analyze.Analyze(ctx, fetched)
+	llmClient := s.clientFor(analyze.RoleTriage)
+	if llmClient == nil {
+		return nil, errors.New("core: no LLM client configured for triage")
+	}
+	res, err := llmClient.Analyze(ctx, fetched)
 	if err != nil {
 		s.Logf("core: analyze failed for %s: %v", share.URL, err)
 		return s.failCard(ctx, fetched, share.URL, capRow.ID)
@@ -395,7 +571,15 @@ func (s *Service) Research(ctx context.Context, cardID int64) error {
 	if err != nil {
 		return err
 	}
-	findings, err := s.Runner.Run(ctx, card)
+	if s.Runner == nil {
+		return errors.New("core: research runner not initialized")
+	}
+	runner := *s.Runner
+	if s.Router != nil {
+		runner.PlanLLM = s.Router.For(analyze.RoleResearchPlan)
+		runner.SynthesisLLM = s.Router.For(analyze.RoleResearchSynthesis)
+	}
+	findings, err := runner.Run(ctx, card)
 	if err != nil {
 		row, rerr := s.Store.SetResearch(ctx, row.ID, "failed", "", err.Error())
 		if rerr != nil {
@@ -546,7 +730,11 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 		}
 	}
 
-	res, err := s.Analyze.Analyze(ctx, fetched)
+	llmClient := s.clientFor(analyze.RoleTriage)
+	if llmClient == nil {
+		return nil, errors.New("core: no LLM client configured for triage")
+	}
+	res, err := llmClient.Analyze(ctx, fetched)
 	if err != nil {
 		s.Logf("core: retry analyze card %d: %v", cardID, err)
 		return nil, err
@@ -650,11 +838,12 @@ func (s *Service) resolveMedia(ctx context.Context, share capture.Share) capture
 	}
 
 	if share.Kind == capture.KindImage {
-		if s.Vision == nil {
+		describer := s.describerForVision()
+		if describer == nil {
 			f.Notes = append(f.Notes, "image unreadable")
 			return f
 		}
-		digest, err := s.Vision.Describe(ctx, file, "")
+		digest, err := describer.Describe(ctx, file, "")
 		if err != nil {
 			s.Logf("core: vision %s: %v", file.Name, err)
 			f.Notes = append(f.Notes, "image unreadable")

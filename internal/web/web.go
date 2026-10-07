@@ -115,6 +115,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/v1/setup", a.setup)
 	mux.HandleFunc("GET /api/v1/settings", a.getSettings)
 	mux.HandleFunc("PATCH /api/v1/settings", a.patchSettings)
+	mux.HandleFunc("PUT /api/v1/settings", a.patchSettings)
 	mux.HandleFunc("GET /api/v1/license/status", a.getLicenseStatus)
 	mux.HandleFunc("POST /api/v1/license/activate", a.activateLicense)
 	mux.HandleFunc("POST /api/v1/export/obsidian", a.syncObsidian)
@@ -391,14 +392,7 @@ type LLMProfile struct {
 	IsDefault bool   `json:"is_default"`
 }
 
-type storedLLMProfile struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	BaseURL   string `json:"base_url"`
-	Model     string `json:"model"`
-	APIKey    string `json:"api_key"`
-	IsDefault bool   `json:"is_default"`
-}
+type storedLLMProfile = analyze.Profile
 
 type llmProfileInput struct {
 	ID        string `json:"id"`
@@ -512,6 +506,18 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	rolesJSON, _ := a.store.GetSetting(ctx, "llm_roles")
+	llmRoles := map[string]string{}
+	if strings.TrimSpace(rolesJSON) != "" {
+		_ = json.Unmarshal([]byte(rolesJSON), &llmRoles)
+	}
+
+	capsJSON, _ := a.store.GetSetting(ctx, "llm_token_caps")
+	tokenCaps := map[string]int{}
+	if strings.TrimSpace(capsJSON) != "" {
+		_ = json.Unmarshal([]byte(capsJSON), &tokenCaps)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
@@ -520,6 +526,8 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 			"has_llm_key":    hasKey,
 			"has_auth_token": a.effectiveAuthToken(ctx) != "",
 			"llm_profiles":   pubProfiles,
+			"llm_roles":      llmRoles,
+			"llm_token_caps": tokenCaps,
 		},
 	})
 }
@@ -533,6 +541,8 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 		LLMModel         *string            `json:"llm_model,omitempty"`
 		LLMProfiles      *[]llmProfileInput `json:"llm_profiles,omitempty"`
 		DefaultProfileID *string            `json:"default_profile_id,omitempty"`
+		LLMRoles         *map[string]string `json:"llm_roles,omitempty"`
+		LLMTokenCaps     *map[string]int    `json:"llm_token_caps,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -672,6 +682,28 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+
+	if b.LLMRoles != nil && a.store != nil {
+		if data, err := json.Marshal(*b.LLMRoles); err == nil {
+			if err := a.store.SetSetting(ctx, "llm_roles", string(data)); err != nil {
+				a.fail(w, err)
+				return
+			}
+		}
+	}
+
+	if b.LLMTokenCaps != nil && a.store != nil {
+		if data, err := json.Marshal(*b.LLMTokenCaps); err == nil {
+			if err := a.store.SetSetting(ctx, "llm_token_caps", string(data)); err != nil {
+				a.fail(w, err)
+				return
+			}
+		}
+	}
+
+	if a.svc != nil && (profilesChanged || b.LLMRoles != nil || b.LLMTokenCaps != nil) {
+		_ = a.svc.RebuildRouter(ctx)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

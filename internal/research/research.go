@@ -52,27 +52,53 @@ type searchResp struct {
 }
 
 type Runner struct {
-	SearchURL  string          // e.g. http://localhost:8080/search or cleared for dev
-	Client     *http.Client    // search client
-	LLM        *analyze.Client // LLM reuse
-	Fetcher    capture.Fetcher // fetcher for scraping search result URLs
-	MaxResults int             // 6
-	ClipChars  int             // 8000
-	Timeout    time.Duration   // 1500s
+	SearchURL    string          // e.g. http://localhost:8080/search or cleared for dev
+	Client       *http.Client    // search client
+	LLM          *analyze.Client // LLM fallback
+	PlanLLM      *analyze.Client // LLM for query build / planning (RoleResearchPlan)
+	SynthesisLLM *analyze.Client // LLM for synthesis (RoleResearchSynthesis)
+	Fetcher      capture.Fetcher // fetcher for scraping search result URLs
+	MaxResults   int             // 6
+	ClipChars    int             // 8000
+	Timeout      time.Duration   // 1500s
+}
+
+func (r *Runner) planClient() *analyze.Client {
+	if r.PlanLLM != nil {
+		return r.PlanLLM
+	}
+	return r.LLM
+}
+
+func (r *Runner) synthesisClient() *analyze.Client {
+	if r.SynthesisLLM != nil {
+		return r.SynthesisLLM
+	}
+	return r.LLM
 }
 
 // New returns a Runner with the design defaults. Tests override the knobs
 // directly (small MaxResults, short Timeout) so they run fast.
 func New(cfg config.Config, llm *analyze.Client) *Runner {
 	return &Runner{
-		SearchURL:  cfg.SearchURL,
-		Client:     &http.Client{Timeout: searchTimeout},
-		LLM:        llm,
-		Fetcher:    capture.Capture{HeadlessEnabled: cfg.HeadlessEnabled, ChromeBin: cfg.ChromeBin, YtDlpBin: cfg.YtDlpBin},
-		MaxResults: defaultMaxResults,
-		ClipChars:  defaultClipChars,
-		Timeout:    defaultTimeout,
+		SearchURL:    cfg.SearchURL,
+		Client:       &http.Client{Timeout: searchTimeout},
+		LLM:          llm,
+		PlanLLM:      llm,
+		SynthesisLLM: llm,
+		Fetcher:      capture.Capture{HeadlessEnabled: cfg.HeadlessEnabled, ChromeBin: cfg.ChromeBin, YtDlpBin: cfg.YtDlpBin},
+		MaxResults:   defaultMaxResults,
+		ClipChars:    defaultClipChars,
+		Timeout:      defaultTimeout,
 	}
+}
+
+// NewWithClients returns a Runner with distinct plan and synthesis clients.
+func NewWithClients(cfg config.Config, planLLM, synthesisLLM *analyze.Client) *Runner {
+	r := New(cfg, planLLM)
+	r.PlanLLM = planLLM
+	r.SynthesisLLM = synthesisLLM
+	return r
 }
 
 // Run executes one research pass for a card and returns the findings
@@ -120,7 +146,11 @@ func (r *Runner) buildQuery(ctx context.Context, card port.Card) (string, error)
 	prompt := fmt.Sprintf("%s\n\nTitle: %s\nSummary: %s\nSource URL: %s",
 		"Create a concise web search query for investigating this idea. Reply with one line: the query.",
 		card.Title, card.Summary, card.SourceURL)
-	out, err := r.LLM.Ask(ctx, prompt)
+	client := r.planClient()
+	if client == nil {
+		return "", errors.New("research: no LLM client configured for plan")
+	}
+	out, err := client.Ask(ctx, prompt)
 	if err != nil {
 		return "", err
 	}
@@ -221,7 +251,11 @@ func (r *Runner) fetchAndClip(ctx context.Context, urls []string) string {
 func (r *Runner) synthesize(ctx context.Context, card port.Card, urls []string, clip string) (string, error) {
 	prompt := fmt.Sprintf("Synthesize findings into actionable markdown report. Structure:\n## Findings, ## Sources, ## Next steps. Max 600 words. Source URLs:\n%s. Context: %s\n%s\n\nFetched text:\n%s",
 		strings.Join(urls, ", "), card.Title, card.Summary, clip)
-	out, err := r.LLM.Ask(ctx, prompt)
+	client := r.synthesisClient()
+	if client == nil {
+		return "", errors.New("research: no LLM client configured for synthesis")
+	}
+	out, err := client.Ask(ctx, prompt)
 	if err != nil {
 		return "", err
 	}

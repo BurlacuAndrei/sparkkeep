@@ -30,13 +30,19 @@ type stubStore struct {
 	cards      map[int64]port.Card
 	captures   map[int64]port.Capture
 	researches map[int64]port.Research
+	settings   map[string]string
 	nextCard   int64
 	nextCap    int64
 	nextRes    int64
 }
 
 func newStubStore() *stubStore {
-	return &stubStore{cards: map[int64]port.Card{}, captures: map[int64]port.Capture{}, researches: map[int64]port.Research{}}
+	return &stubStore{
+		cards:      map[int64]port.Card{},
+		captures:   map[int64]port.Capture{},
+		researches: map[int64]port.Research{},
+		settings:   map[string]string{},
+	}
 }
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
@@ -220,16 +226,32 @@ func (s *stubStore) GetResearchFindings(_ context.Context, id int64) (string, er
 
 func (s *stubStore) ShelveStale(context.Context, int) (int64, error) { return 0, nil }
 
-func (s *stubStore) GetSetting(_ context.Context, _ string) (string, error) {
+func (s *stubStore) GetSetting(_ context.Context, key string) (string, error) {
+	if s.settings != nil {
+		if v, ok := s.settings[key]; ok {
+			return v, nil
+		}
+	}
 	return "", port.ErrNotFound
 }
 
-func (s *stubStore) SetSetting(_ context.Context, _, _ string) error {
+func (s *stubStore) SetSetting(_ context.Context, key, val string) error {
+	if s.settings == nil {
+		s.settings = map[string]string{}
+	}
+	s.settings[key] = val
 	return nil
 }
 
 func (s *stubStore) ListSettings(context.Context) (map[string]string, error) {
-	return nil, nil
+	if s.settings == nil {
+		return map[string]string{}, nil
+	}
+	out := make(map[string]string, len(s.settings))
+	for k, v := range s.settings {
+		out[k] = v
+	}
+	return out, nil
 }
 
 func (s *stubStore) Close() error { return nil }

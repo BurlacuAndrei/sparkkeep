@@ -18,10 +18,45 @@ import {
   Pencil,
   Star,
   Server,
+  Network,
 } from 'lucide-react';
 import * as api from '../api';
 import { LLMProfile, LLMProfileInput } from '../types';
 import { ThemeSelector } from './ThemeSelector';
+
+interface RoleDefinition {
+  key: string;
+  label: string;
+  description: string;
+  hint: string;
+}
+
+const ROLE_DEFINITIONS: RoleDefinition[] = [
+  {
+    key: 'triage',
+    label: 'Triage & Extraction',
+    description: 'Processes incoming links and notes into structured idea cards.',
+    hint: 'fast & cheap recommended',
+  },
+  {
+    key: 'vision',
+    label: 'Vision & Image Analysis',
+    description: 'Transcribes text and digests screenshot / photo uploads.',
+    hint: 'fast & cheap recommended',
+  },
+  {
+    key: 'research_plan',
+    label: 'Research Planning',
+    description: 'Generates targeted web search queries and reading plans.',
+    hint: 'fast & cheap recommended',
+  },
+  {
+    key: 'research_synthesis',
+    label: 'Research Synthesis',
+    description: 'Synthesizes deep-dive findings into a comprehensive markdown report.',
+    hint: 'strongest model recommended',
+  },
+];
 
 export interface SettingsModalProps {
   onClose: () => void;
@@ -134,6 +169,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     return 'default';
   });
 
+  const [llmRoles, setLlmRoles] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -164,6 +200,9 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
             has_key: Boolean(res.settings.has_llm_key),
             is_default: true,
           }]);
+        }
+        if (res.settings.llm_roles) {
+          setLlmRoles(res.settings.llm_roles);
         }
         setLoading(false);
       })
@@ -244,6 +283,17 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     setActionLoading(profile.id);
     try {
       const remaining = profiles.filter((p) => p.id !== profile.id);
+      const newRoles = { ...llmRoles };
+      let rolesCleaned = false;
+      for (const [r, pid] of Object.entries(newRoles)) {
+        if (pid === profile.id) {
+          delete newRoles[r];
+          rolesCleaned = true;
+        }
+      }
+      if (rolesCleaned) {
+        setLlmRoles(newRoles);
+      }
       await api.patchSettings({
         llm_profiles: remaining.map((p) => ({
           id: p.id,
@@ -252,6 +302,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
           model: p.model,
           is_default: p.is_default,
         })),
+        llm_roles: newRoles,
       });
       setProfiles(remaining);
       showToast(`Removed model "${profile.name || profile.model}".`);
@@ -259,6 +310,24 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
       setError(api.getErrorMessage(err));
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleRoleChange = async (roleKey: string, profileId: string) => {
+    setError(null);
+    const newRoles = { ...llmRoles };
+    if (!profileId) {
+      delete newRoles[roleKey];
+    } else {
+      newRoles[roleKey] = profileId;
+    }
+    setLlmRoles(newRoles);
+    try {
+      await api.patchSettings({ llm_roles: newRoles });
+      const roleDef = ROLE_DEFINITIONS.find((r) => r.key === roleKey);
+      showToast(`Assigned model for ${roleDef ? roleDef.label : roleKey}.`);
+    } catch (err: unknown) {
+      setError(api.getErrorMessage(err));
     }
   };
 
@@ -834,6 +903,74 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                         </div>
                       ))
                     )}
+                  </div>
+
+                  {/* Model Routing ("Use for") Section */}
+                  <div className="llm-roles-section" style={{ marginTop: '20px' }}>
+                    <div className="llm-header-row" style={{ marginBottom: '8px' }}>
+                      <div className="llm-header-title">
+                        <Network size={16} />
+                        <span>Use for (Role Routing)</span>
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '0 0 12px 0', lineHeight: 1.5 }}>
+                      Assign different LLM models to each pipeline role. Unassigned roles fall back to the default model.
+                    </p>
+
+                    <div className="llm-roles-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {ROLE_DEFINITIONS.map((role) => {
+                        const currentProfileId = llmRoles[role.key] || '';
+                        return (
+                          <div key={role.key} className="pref-item-card">
+                            <div className="pref-item-text" style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span className="pref-item-title">{role.label}</span>
+                                <span
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    backgroundColor: role.hint.includes('strongest')
+                                      ? 'rgba(234, 179, 8, 0.15)'
+                                      : 'rgba(16, 185, 129, 0.15)',
+                                    color: role.hint.includes('strongest')
+                                      ? 'var(--accent-amber, #eab308)'
+                                      : 'var(--accent-emerald, #10b981)',
+                                    border: role.hint.includes('strongest')
+                                      ? '1px solid rgba(234, 179, 8, 0.3)'
+                                      : '1px solid rgba(16, 185, 129, 0.3)',
+                                  }}
+                                >
+                                  {role.hint}
+                                </span>
+                              </div>
+                              <span className="pref-item-desc" style={{ marginTop: '3px' }}>
+                                {role.description}
+                              </span>
+                            </div>
+
+                            <select
+                              value={currentProfileId}
+                              onChange={(e) => handleRoleChange(role.key, e.target.value)}
+                              className="pref-select"
+                              style={{ minWidth: '180px', maxWidth: '240px' }}
+                              aria-label={`Select model for ${role.label}`}
+                              disabled={actionLoading !== null}
+                            >
+                              <option value="">
+                                Default ({defaultProfile?.name || defaultProfile?.model || 'Active Default'})
+                              </option>
+                              {profiles.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name || p.model}{p.is_default ? ' (Default)' : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div className="setup-info-box">

@@ -1844,3 +1844,106 @@ func TestMultipleLLMProfiles(t *testing.T) {
 		t.Fatalf("svc.Analyze not switched back: model=%q key=%q", svc.Analyze.Model, svc.Analyze.APIKey)
 	}
 }
+
+func TestSettingsLLMRolesRoundTrip(t *testing.T) {
+	st := newStubStore()
+	analyzeClient := analyze.New(config.Config{
+		LLMBase:  "https://api.openai.com/v1",
+		LLMModel: "gpt-4o",
+		LLMKey:   "sk-openai-key",
+	}, nil)
+	svc := &core.Service{
+		Store:   st,
+		Analyze: analyzeClient,
+		Logf:    t.Logf,
+	}
+	h := New(st, svc, config.Config{MaxUploadMB: 25})
+	ctx := context.Background()
+
+	// Initial profiles in store: prof-a (default) and prof-b
+	profiles := []analyze.Profile{
+		{
+			ID:        "prof-a",
+			Name:      "Model A",
+			BaseURL:   "https://api.a.com/v1",
+			Model:     "model-a",
+			APIKey:    "key-a",
+			IsDefault: true,
+		},
+		{
+			ID:        "prof-b",
+			Name:      "Model B",
+			BaseURL:   "https://api.b.com/v1",
+			Model:     "model-b",
+			APIKey:    "key-b",
+			IsDefault: false,
+		},
+	}
+	profsData, _ := json.Marshal(profiles)
+	_ = st.SetSetting(ctx, "llm_profiles", string(profsData))
+	_ = svc.RebuildRouter(ctx)
+
+	// 1. GET /api/v1/settings returns empty llm_roles initially
+	reqGet, _ := http.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+	rrGet := httptest.NewRecorder()
+	h.ServeHTTP(rrGet, reqGet)
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings failed: %d", rrGet.Code)
+	}
+	var getResp struct {
+		Settings struct {
+			LLMRoles map[string]string `json:"llm_roles"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(rrGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("unmarshal GET settings: %v", err)
+	}
+	if getResp.Settings.LLMRoles == nil {
+		t.Fatal("expected non-nil llm_roles in GET settings")
+	}
+
+	// 2. PUT /api/v1/settings updates llm_roles
+	putBody := `{"llm_roles": {"research_synthesis": "prof-b", "triage": "prof-a"}}`
+	reqPut, _ := http.NewRequest(http.MethodPut, "/api/v1/settings", strings.NewReader(putBody))
+	reqPut.Header.Set("Content-Type", "application/json")
+	rrPut := httptest.NewRecorder()
+	h.ServeHTTP(rrPut, reqPut)
+	if rrPut.Code != http.StatusOK {
+		t.Fatalf("PUT /api/v1/settings failed: %d: %s", rrPut.Code, rrPut.Body.String())
+	}
+
+	// 3. GET /api/v1/settings round-trip reflects updated roles
+	reqGet2, _ := http.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+	rrGet2 := httptest.NewRecorder()
+	h.ServeHTTP(rrGet2, reqGet2)
+	if rrGet2.Code != http.StatusOK {
+		t.Fatalf("GET 2 /api/v1/settings failed: %d", rrGet2.Code)
+	}
+	var getResp2 struct {
+		Settings struct {
+			LLMRoles map[string]string `json:"llm_roles"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(rrGet2.Body.Bytes(), &getResp2); err != nil {
+		t.Fatalf("unmarshal GET settings 2: %v", err)
+	}
+	if getResp2.Settings.LLMRoles["research_synthesis"] != "prof-b" {
+		t.Fatalf("expected research_synthesis -> prof-b, got: %v", getResp2.Settings.LLMRoles)
+	}
+	if getResp2.Settings.LLMRoles["triage"] != "prof-a" {
+		t.Fatalf("expected triage -> prof-a, got: %v", getResp2.Settings.LLMRoles)
+	}
+
+	// 4. Verify svc router was rebuilt and routes research_synthesis to prof-b
+	if svc.Router == nil {
+		t.Fatal("expected svc.Router to be initialized")
+	}
+	synthClient := svc.Router.For("research_synthesis")
+	if synthClient.BaseURL != "https://api.b.com/v1" || synthClient.Model != "model-b" {
+		t.Fatalf("synth client not routed to prof-b: base=%s model=%s", synthClient.BaseURL, synthClient.Model)
+	}
+	triageClient := svc.Router.For("triage")
+	if triageClient.BaseURL != "https://api.a.com/v1" || triageClient.Model != "model-a" {
+		t.Fatalf("triage client not routed to prof-a: base=%s model=%s", triageClient.BaseURL, triageClient.Model)
+	}
+}

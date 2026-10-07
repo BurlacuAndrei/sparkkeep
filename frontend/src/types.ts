@@ -112,3 +112,6 @@ export interface LLMProfileInput {
   is_default?: boolean;
 }
 
+export type LLMRole = 'triage' | 'vision' | 'research_plan' | 'research_synthesis';
+export type LLMRolesMapping = Record<string, string>;
+

@@ -168,6 +168,8 @@ export async function getSettings(): Promise<{
     has_llm_key: boolean;
     has_auth_token: boolean;
     llm_profiles?: LLMProfile[];
+    llm_roles?: Record<string, string>;
+    llm_token_caps?: Record<string, number>;
   };
 }> {
   return request('/api/v1/settings');
@@ -180,6 +182,8 @@ export async function patchSettings(payload: {
   llm_model?: string;
   llm_profiles?: LLMProfileInput[];
   default_profile_id?: string;
+  llm_roles?: Record<string, string>;
+  llm_token_caps?: Record<string, number>;
 }): Promise<{ ok: boolean }> {
   return request('/api/v1/settings', {
     method: 'PATCH',

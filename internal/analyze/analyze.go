@@ -110,6 +110,10 @@ func (c *Client) Describe(ctx context.Context, img capture.File, hint string) (s
 	if strings.TrimSpace(hint) == "" {
 		hint = "Describe this image. Transcribe any visible text verbatim. State clearly if the image is unreadable or contains no useful information."
 	}
+	maxTokens := c.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 512
+	}
 	content, err := c.doCompletion(ctx, map[string]any{
 		"model": c.VisionModel,
 		"messages": []map[string]any{{
@@ -121,7 +125,7 @@ func (c *Client) Describe(ctx context.Context, img capture.File, hint string) (s
 				}},
 			},
 		}},
-		"max_tokens":  512,
+		"max_tokens":  maxTokens,
 		"temperature": 0.1,
 	})
 	if err != nil {

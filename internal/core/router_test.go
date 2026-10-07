@@ -1,0 +1,416 @@
+package core
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"sparkkeep/internal/analyze"
+	"sparkkeep/internal/capture"
+	"sparkkeep/internal/config"
+	"sparkkeep/internal/port"
+)
+
+func testJPEG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 32; x++ {
+			img.Set(x, y, color.RGBA{R: 100, G: 150, B: 200, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// stubSearchServer returns a canned SearXNG JSON response with one search result.
+func stubSearchServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"results":[{"url":"https://example.com/source"}]}`)
+	}))
+}
+
+// stubTestFetcher implements capture.Fetcher for router tests.
+type stubTestFetcher struct{}
+
+func (s stubTestFetcher) Recognize(raw string) capture.Share {
+	return capture.Share{Kind: capture.KindLink, URL: raw}
+}
+
+func (s stubTestFetcher) Fetch(share capture.Share) capture.Fetched {
+	return capture.Fetched{URL: share.URL, Text: "Extracted source content for synthesis", Title: "Sample Source"}
+}
+
+func (s stubTestFetcher) FetchWithContext(ctx context.Context, share capture.Share) capture.Fetched {
+	return s.Fetch(share)
+}
+
+func (s stubTestFetcher) MediaMeta(share capture.Share) capture.Fetched {
+	return s.Fetch(share)
+}
+
+func (s stubTestFetcher) Subtitles(share capture.Share) string {
+	return ""
+}
+
+// TestCoreRouterPerRoleEndpoints verifies:
+// With two profiles A (default) and B, mapping research_synthesis→B sends synthesis
+// requests to B's base URL/model and everything else (triage, vision, plan) to A.
+func TestCoreRouterPerRoleEndpoints(t *testing.T) {
+	var aTriageHits, aVisionHits, aPlanHits int64
+	var bSynthesisHits int64
+
+	serverA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Model    string `json:"model"`
+			Messages []struct {
+				Role    string `json:"role"`
+				Content any    `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		// Check if vision call (user message content is array of parts with image_url)
+		for _, m := range req.Messages {
+			if arr, ok := m.Content.([]any); ok && len(arr) > 0 {
+				atomic.AddInt64(&aVisionHits, 1)
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"choices":[{"message":{"content":"A detailed diagram of architecture and system components."}}]}`)
+				return
+			}
+		}
+
+		// Check if plan call or triage call
+		isPlan := false
+		for _, m := range req.Messages {
+			if str, ok := m.Content.(string); ok && strings.Contains(str, "Create a concise web search query") {
+				isPlan = true
+				break
+			}
+		}
+
+		if isPlan {
+			atomic.AddInt64(&aPlanHits, 1)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"vector search query"}}]}`)
+			return
+		}
+
+		// Otherwise triage / analyze call
+		atomic.AddInt64(&aTriageHits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"cards\":[{\"title\":\"Idea 1\",\"summary\":\"Summary 1\",\"horizon\":\"short-term\",\"tags\":[\"ai\"]}]}"}}]}`)
+	}))
+	defer serverA.Close()
+
+	serverB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&bSynthesisHits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"## Findings\nSynthesized by Model B\n## Sources\nhttps://example.com/source\n## Next steps\nExecute"}}]}`)
+	}))
+	defer serverB.Close()
+
+	searchSrv := stubSearchServer()
+	defer searchSrv.Close()
+
+	st := newStubStore()
+	ctx := context.Background()
+
+	profA := analyze.Profile{
+		ID:        "prof-a",
+		Name:      "Model A",
+		BaseURL:   serverA.URL,
+		Model:     "model-a",
+		APIKey:    "key-a",
+		IsDefault: true,
+	}
+	profB := analyze.Profile{
+		ID:        "prof-b",
+		Name:      "Model B",
+		BaseURL:   serverB.URL,
+		Model:     "model-b",
+		APIKey:    "key-b",
+		IsDefault: false,
+	}
+
+	profsJSON, _ := json.Marshal([]analyze.Profile{profA, profB})
+	rolesJSON, _ := json.Marshal(map[string]string{
+		analyze.RoleResearchSynthesis: "prof-b",
+	})
+	_ = st.SetSetting(ctx, "llm_profiles", string(profsJSON))
+	_ = st.SetSetting(ctx, "llm_roles", string(rolesJSON))
+
+	svc := New(ctx, st, config.Config{SearchURL: searchSrv.URL}, t.Logf)
+	svc.Fetcher = stubTestFetcher{}
+	// Use test http client so httptest servers work
+	svc.Router = analyze.NewRouter(analyze.RouterConfig{
+		Profiles:   []analyze.Profile{profA, profB},
+		Roles:      map[string]string{analyze.RoleResearchSynthesis: "prof-b"},
+		HTTPClient: serverA.Client(),
+	})
+	svc.Analyze = svc.Router.For(analyze.RoleTriage)
+	svc.Vision = svc.Router.For(analyze.RoleVision)
+	svc.Runner.PlanLLM = svc.Router.For(analyze.RoleResearchPlan)
+	svc.Runner.SynthesisLLM = svc.Router.For(analyze.RoleResearchSynthesis)
+	svc.Runner.Fetcher = stubTestFetcher{}
+	svc.Runner.Timeout = 5 * time.Second
+
+	// 1. Run Triage (Capture) -> should hit Server A
+	cardIDs, err := svc.Capture(ctx, "Check this AI architecture")
+	if err != nil || len(cardIDs) == 0 {
+		t.Fatalf("Capture failed: %v, cards=%v", err, cardIDs)
+	}
+	if atomic.LoadInt64(&aTriageHits) != 1 {
+		t.Fatalf("expected 1 triage hit on Server A, got %d", atomic.LoadInt64(&aTriageHits))
+	}
+
+	// 2. Run Vision (CaptureShare image) -> should hit Server A
+	_, err = svc.CaptureShare(ctx, capture.Share{
+		Kind:  capture.KindImage,
+		Files: []capture.File{{Name: "test.jpg", Mime: "image/jpeg", Data: testJPEG(t)}},
+	})
+	if err != nil {
+		t.Fatalf("CaptureShare image failed: %v", err)
+	}
+	if atomic.LoadInt64(&aVisionHits) != 1 {
+		t.Fatalf("expected 1 vision hit on Server A, got %d", atomic.LoadInt64(&aVisionHits))
+	}
+
+	// 3. Run Research -> Plan hits Server A, Synthesis hits Server B
+	cardID := cardIDs[0]
+	err = svc.Research(ctx, cardID)
+	if err != nil {
+		t.Fatalf("Research failed: %v", err)
+	}
+
+	if atomic.LoadInt64(&aPlanHits) != 1 {
+		t.Fatalf("expected 1 research plan hit on Server A, got %d", atomic.LoadInt64(&aPlanHits))
+	}
+	if atomic.LoadInt64(&bSynthesisHits) != 1 {
+		t.Fatalf("expected 1 research synthesis hit on Server B, got %d", atomic.LoadInt64(&bSynthesisHits))
+	}
+}
+
+// TestCoreRouterDeletionFallback verifies:
+// Deleting profile B falls back to default without errors.
+func TestCoreRouterDeletionFallback(t *testing.T) {
+	var aSynthesisHits int64
+
+	serverA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Messages []struct {
+				Content any `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		for _, m := range req.Messages {
+			if str, ok := m.Content.(string); ok && strings.Contains(str, "Create a concise web search query") {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"choices":[{"message":{"content":"search query"}}]}`)
+				return
+			}
+		}
+		// synthesis call on Server A fallback
+		atomic.AddInt64(&aSynthesisHits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"## Findings\nFell back to Model A\n## Sources\nhttps://example.com/source\n## Next steps\nOK"}}]}`)
+	}))
+	defer serverA.Close()
+
+	searchSrv := stubSearchServer()
+	defer searchSrv.Close()
+
+	st := newStubStore()
+	ctx := context.Background()
+
+	profA := analyze.Profile{
+		ID:        "prof-a",
+		Name:      "Model A",
+		BaseURL:   serverA.URL,
+		Model:     "model-a",
+		APIKey:    "key-a",
+		IsDefault: true,
+	}
+
+	// Only profA exists in profiles, but role mapping points to deleted "prof-b"
+	profsJSON, _ := json.Marshal([]analyze.Profile{profA})
+	rolesJSON, _ := json.Marshal(map[string]string{
+		analyze.RoleResearchSynthesis: "prof-b", // deleted profile
+	})
+	_ = st.SetSetting(ctx, "llm_profiles", string(profsJSON))
+	_ = st.SetSetting(ctx, "llm_roles", string(rolesJSON))
+
+	svc := New(ctx, st, config.Config{SearchURL: searchSrv.URL}, t.Logf)
+	svc.Fetcher = stubTestFetcher{}
+	svc.Router = analyze.NewRouter(analyze.RouterConfig{
+		Profiles:   []analyze.Profile{profA},
+		Roles:      map[string]string{analyze.RoleResearchSynthesis: "prof-b"},
+		HTTPClient: serverA.Client(),
+	})
+	svc.Runner.Fetcher = stubTestFetcher{}
+	svc.Runner.Timeout = 5 * time.Second
+
+	card, err := st.CreateCard(ctx, port.Card{Title: "Idea", Summary: "Summary"})
+	if err != nil {
+		t.Fatalf("CreateCard failed: %v", err)
+	}
+
+	err = svc.Research(ctx, card.ID)
+	if err != nil {
+		t.Fatalf("expected fallback to default profile without error, got: %v", err)
+	}
+	if atomic.LoadInt64(&aSynthesisHits) != 1 {
+		t.Fatalf("expected 1 synthesis hit on Server A as fallback, got %d", atomic.LoadInt64(&aSynthesisHits))
+	}
+}
+
+// TestCoreRouterSettingsChangeTakesEffectWithoutRestart verifies:
+// Changing mappings in Settings takes effect on the next request without restart.
+func TestCoreRouterSettingsChangeTakesEffectWithoutRestart(t *testing.T) {
+	var aSynthesisHits, bSynthesisHits int64
+
+	serverA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Messages []struct {
+				Content any `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		for _, m := range req.Messages {
+			if str, ok := m.Content.(string); ok && strings.Contains(str, "Create a concise web search query") {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"choices":[{"message":{"content":"query"}}]}`)
+				return
+			}
+		}
+		atomic.AddInt64(&aSynthesisHits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"## Findings\nReport A\n## Sources\nhttps://example.com/source\n## Next steps\nDone"}}]}`)
+	}))
+	defer serverA.Close()
+
+	serverB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&bSynthesisHits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"## Findings\nReport B\n## Sources\nhttps://example.com/source\n## Next steps\nDone"}}]}`)
+	}))
+	defer serverB.Close()
+
+	searchSrv := stubSearchServer()
+	defer searchSrv.Close()
+
+	st := newStubStore()
+	ctx := context.Background()
+
+	profA := analyze.Profile{
+		ID:        "prof-a",
+		Name:      "Model A",
+		BaseURL:   serverA.URL,
+		Model:     "model-a",
+		IsDefault: true,
+	}
+	profB := analyze.Profile{
+		ID:        "prof-b",
+		Name:      "Model B",
+		BaseURL:   serverB.URL,
+		Model:     "model-b",
+		IsDefault: false,
+	}
+
+	profsJSON, _ := json.Marshal([]analyze.Profile{profA, profB})
+	_ = st.SetSetting(ctx, "llm_profiles", string(profsJSON))
+
+	svc := New(ctx, st, config.Config{SearchURL: searchSrv.URL}, t.Logf)
+	svc.Fetcher = stubTestFetcher{}
+	// Initially no role mapping -> synthesis goes to server A
+	svc.Router = analyze.NewRouter(analyze.RouterConfig{
+		Profiles:   []analyze.Profile{profA, profB},
+		HTTPClient: serverA.Client(),
+	})
+	svc.Runner.Fetcher = stubTestFetcher{}
+	svc.Runner.Timeout = 5 * time.Second
+
+	card1, _ := st.CreateCard(ctx, port.Card{Title: "Card 1", Summary: "Summary 1"})
+	if err := svc.Research(ctx, card1.ID); err != nil {
+		t.Fatalf("first research failed: %v", err)
+	}
+	if atomic.LoadInt64(&aSynthesisHits) != 1 || atomic.LoadInt64(&bSynthesisHits) != 0 {
+		t.Fatalf("first run: want aHits=1, bHits=0, got a=%d b=%d", atomic.LoadInt64(&aSynthesisHits), atomic.LoadInt64(&bSynthesisHits))
+	}
+
+	// Change mapping in settings to prof-b and rebuild router (no process restart)
+	newRolesJSON, _ := json.Marshal(map[string]string{
+		analyze.RoleResearchSynthesis: "prof-b",
+	})
+	_ = st.SetSetting(ctx, "llm_roles", string(newRolesJSON))
+	_ = svc.RebuildRouter(ctx)
+
+	// Second request should now immediately hit server B for synthesis
+	card2, _ := st.CreateCard(ctx, port.Card{Title: "Card 2", Summary: "Summary 2"})
+	if err := svc.Research(ctx, card2.ID); err != nil {
+		t.Fatalf("second research failed: %v", err)
+	}
+	if atomic.LoadInt64(&bSynthesisHits) != 1 {
+		t.Fatalf("second run: want bHits=1, got %d", atomic.LoadInt64(&bSynthesisHits))
+	}
+}
+
+// TestCoreFreshInstallWithOneProfile verifies:
+// Fresh install with one profile behaves exactly as today.
+func TestCoreFreshInstallWithOneProfile(t *testing.T) {
+	var triageHits int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&triageHits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"cards\":[{\"title\":\"Card Fresh\",\"summary\":\"Summary Fresh\",\"horizon\":\"short-term\"}]}"}}]}`)
+	}))
+	defer server.Close()
+
+	st := newStubStore()
+	ctx := context.Background()
+
+	// Only SPARKKEEP_LLM_* config, no stored profiles or roles
+	cfg := config.Config{
+		LLMBase:  server.URL,
+		LLMModel: "fresh-model",
+		LLMKey:   "fresh-key",
+	}
+
+	svc := New(ctx, st, cfg, t.Logf)
+	svc.Fetcher = stubTestFetcher{}
+	// Hook client for httptest
+	svc.Router = analyze.NewRouter(analyze.RouterConfig{
+		Profiles: []analyze.Profile{{
+			ID:        "default",
+			Name:      "Default",
+			BaseURL:   server.URL,
+			Model:     "fresh-model",
+			APIKey:    "fresh-key",
+			IsDefault: true,
+		}},
+		HTTPClient: server.Client(),
+	})
+	svc.Analyze = svc.Router.For(analyze.RoleTriage)
+
+	cards, err := svc.Capture(ctx, "Fresh install content")
+	if err != nil || len(cards) == 0 {
+		t.Fatalf("Capture on fresh install failed: %v", err)
+	}
+	if atomic.LoadInt64(&triageHits) != 1 {
+		t.Fatalf("expected 1 triage hit on fresh install, got %d", atomic.LoadInt64(&triageHits))
+	}
+}

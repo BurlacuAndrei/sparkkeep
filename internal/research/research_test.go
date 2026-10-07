@@ -230,3 +230,47 @@ func TestFetchAndClipWithInjectedFetcher(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, "stubbed content stubbed conten")
 	}
 }
+
+func TestRunnerSeparatePlanAndSynthesisClients(t *testing.T) {
+	var planHits, synthHits int
+	planServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		planHits++
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"investigation query"}}]}`)
+	}))
+	defer planServer.Close()
+
+	synthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		synthHits++
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"## Findings\nGreat report\n## Sources\nhttp://a\n## Next steps\nDo it"}}]}`)
+	}))
+	defer synthServer.Close()
+
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"results":[{"url":"http://a"}]}`)
+	}))
+	defer search.Close()
+
+	planClient := analyze.New(config.Config{LLMBase: planServer.URL, LLMModel: "plan-model"}, planServer.Client())
+	synthClient := analyze.New(config.Config{LLMBase: synthServer.URL, LLMModel: "synth-model"}, synthServer.Client())
+
+	runner := NewWithClients(config.Config{SearchURL: search.URL}, planClient, synthClient)
+	runner.Timeout = 5 * time.Second
+	runner.Fetcher = stubFetcher{text: "article body"}
+
+	report, err := runner.Run(context.Background(), port.Card{Title: "Topic", Summary: "Summary"})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !strings.Contains(report, "## Findings") {
+		t.Fatalf("unexpected report: %s", report)
+	}
+	if planHits != 1 {
+		t.Fatalf("expected 1 plan hit, got %d", planHits)
+	}
+	if synthHits != 1 {
+		t.Fatalf("expected 1 synth hit, got %d", synthHits)
+	}
+}
