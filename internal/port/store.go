@@ -42,4 +42,8 @@ type Store interface {
 	GetSetting(ctx context.Context, key string) (string, error)
 	SetSetting(ctx context.Context, key, value string) error
 	ListSettings(ctx context.Context) (map[string]string, error)
+	// Capture persistence and lookup.
+	CreateCapture(ctx context.Context, c Capture) (Capture, error)
+	GetCapture(ctx context.Context, id int64) (Capture, error)
+	GetCaptureBySourceURL(ctx context.Context, url string) (Capture, error)
 }

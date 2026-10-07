@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,13 +24,15 @@ import (
 type stubStore struct {
 	port.Store
 	cards      map[int64]port.Card
+	captures   map[int64]port.Capture
 	researches map[int64]port.Research
 	nextCard   int64
+	nextCap    int64
 	nextRes    int64
 }
 
 func newStubStore() *stubStore {
-	return &stubStore{cards: map[int64]port.Card{}, researches: map[int64]port.Research{}}
+	return &stubStore{cards: map[int64]port.Card{}, captures: map[int64]port.Capture{}, researches: map[int64]port.Research{}}
 }
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
@@ -45,6 +48,54 @@ func (s *stubStore) GetCard(_ context.Context, id int64) (port.Card, error) {
 		return port.Card{}, port.ErrNotFound
 	}
 	return c, nil
+}
+
+func (s *stubStore) GetCardBySourceURL(_ context.Context, url string) (port.Card, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return port.Card{}, port.ErrNotFound
+	}
+	for _, c := range s.cards {
+		if c.SourceURL == url {
+			return c, nil
+		}
+	}
+	return port.Card{}, port.ErrNotFound
+}
+
+func (s *stubStore) CreateCapture(_ context.Context, c port.Capture) (port.Capture, error) {
+	if c.SourceURL != "" {
+		for _, existing := range s.captures {
+			if existing.SourceURL == c.SourceURL {
+				return port.Capture{}, fmt.Errorf("UNIQUE constraint failed: idx_captures_source")
+			}
+		}
+	}
+	s.nextCap++
+	c.ID = s.nextCap
+	s.captures[c.ID] = c
+	return c, nil
+}
+
+func (s *stubStore) GetCapture(_ context.Context, id int64) (port.Capture, error) {
+	c, ok := s.captures[id]
+	if !ok {
+		return port.Capture{}, port.ErrNotFound
+	}
+	return c, nil
+}
+
+func (s *stubStore) GetCaptureBySourceURL(_ context.Context, url string) (port.Capture, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return port.Capture{}, port.ErrNotFound
+	}
+	for _, c := range s.captures {
+		if c.SourceURL == url {
+			return c, nil
+		}
+	}
+	return port.Capture{}, port.ErrNotFound
 }
 
 func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (port.Card, error) {
@@ -408,5 +459,58 @@ func TestNotifyVariants(t *testing.T) {
 	})
 	if len(sent) != 1 || !slices.Contains(sent, "Notify Card\nSummary text") {
 		t.Fatalf("unexpected done sent: %v", sent)
+	}
+}
+
+func TestTelegramNotificationCounts(t *testing.T) {
+	st := newStubStore()
+	llmJSON := `[
+		{"title":"Card One","summary":"First card","horizon":"short-term","tags":[],"links":[]},
+		{"title":"Card Two","summary":"Second card","horizon":"short-term","tags":[],"links":[]},
+		{"title":"Card Three","summary":"Third card","horizon":"short-term","tags":[],"links":[]}
+	]`
+	llm := llmStub(t, llmJSON)
+	svc := stubService(t, st, llm)
+
+	var adapter *Adapter
+	sent := stubTelegram(t, func() *Adapter {
+		adapter = &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		svc.Channel = adapter
+		return adapter
+	}, func(a *Adapter) {
+		// First share of a URL yielding 3 cards
+		a.handleMessage(&message{
+			MessageID: 100,
+			Chat:      &chat{ID: 1},
+			Text:      "https://example.com/multi-tool-post",
+		})
+	})
+
+	if len(st.cards) != 3 {
+		t.Fatalf("stored cards = %d, want 3", len(st.cards))
+	}
+	if len(sent) != 3 {
+		t.Fatalf("sent notifications = %d, want 3", len(sent))
+	}
+
+	// Capture the same URL again
+	dupSent := stubTelegram(t, func() *Adapter {
+		return adapter
+	}, func(a *Adapter) {
+		a.handleMessage(&message{
+			MessageID: 101,
+			Chat:      &chat{ID: 1},
+			Text:      "https://example.com/multi-tool-post",
+		})
+	})
+
+	if len(st.cards) != 3 {
+		t.Fatalf("stored cards after duplicate = %d, want 3 (no new cards)", len(st.cards))
+	}
+	if len(dupSent) != 1 {
+		t.Fatalf("sent notifications on duplicate = %d, want 1", len(dupSent))
+	}
+	if !strings.Contains(dupSent[0], "Already captured") {
+		t.Errorf("duplicate message text = %q, want 'Already captured...'", dupSent[0])
 	}
 }

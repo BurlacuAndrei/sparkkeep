@@ -28,23 +28,18 @@ import (
 // stubStore is an in-memory port.Store.
 type stubStore struct {
 	cards      map[int64]port.Card
+	captures   map[int64]port.Capture
 	researches map[int64]port.Research
 	nextCard   int64
+	nextCap    int64
 	nextRes    int64
 }
 
 func newStubStore() *stubStore {
-	return &stubStore{cards: map[int64]port.Card{}, researches: map[int64]port.Research{}}
+	return &stubStore{cards: map[int64]port.Card{}, captures: map[int64]port.Capture{}, researches: map[int64]port.Research{}}
 }
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
-	if c.SourceURL != "" {
-		for _, existing := range s.cards {
-			if existing.SourceURL == c.SourceURL {
-				return port.Card{}, fmt.Errorf("UNIQUE constraint failed: idx_cards_source")
-			}
-		}
-	}
 	s.nextCard++
 	c.ID = s.nextCard
 	c.CreatedAt = time.Now().UTC()
@@ -95,9 +90,48 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if p.SourceURL != nil {
 		c.SourceURL = *p.SourceURL
 	}
+	if p.CaptureID != nil {
+		c.CaptureID = p.CaptureID
+	}
 	c.UpdatedAt = time.Now().UTC()
 	s.cards[id] = c
 	return c, nil
+}
+
+func (s *stubStore) CreateCapture(_ context.Context, c port.Capture) (port.Capture, error) {
+	if c.SourceURL != "" {
+		for _, existing := range s.captures {
+			if existing.SourceURL == c.SourceURL {
+				return port.Capture{}, fmt.Errorf("UNIQUE constraint failed: idx_captures_source")
+			}
+		}
+	}
+	s.nextCap++
+	c.ID = s.nextCap
+	c.CreatedAt = time.Now().UTC()
+	s.captures[c.ID] = c
+	return c, nil
+}
+
+func (s *stubStore) GetCapture(_ context.Context, id int64) (port.Capture, error) {
+	c, ok := s.captures[id]
+	if !ok {
+		return port.Capture{}, port.ErrNotFound
+	}
+	return c, nil
+}
+
+func (s *stubStore) GetCaptureBySourceURL(_ context.Context, url string) (port.Capture, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return port.Capture{}, port.ErrNotFound
+	}
+	for _, c := range s.captures {
+		if c.SourceURL == url {
+			return c, nil
+		}
+	}
+	return port.Capture{}, port.ErrNotFound
 }
 
 func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) error {
@@ -524,6 +558,114 @@ func TestCaptureNotifyErrorStillStores(t *testing.T) {
 	}
 	if len(ids) != 2 {
 		t.Fatalf("ids = %v, want two cards stored", ids)
+	}
+}
+
+func TestCaptureMultiCardSplitStoresAllLinkedToCapture(t *testing.T) {
+	llmJSON := `[
+		{"title":"Tool 1","summary":"First tool","horizon":"short-term","tags":[],"links":[]},
+		{"title":"Tool 2","summary":"Second tool","horizon":"medium-term","tags":[],"links":[]},
+		{"title":"Tool 3","summary":"Third tool","horizon":"long-term","tags":[],"links":[]}
+	]`
+	llm := llmStub(http.StatusOK, llmJSON)
+	defer llm.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+
+	ctx := context.Background()
+	url := "https://example.com/10-tools-post"
+	ids, err := s.Capture(ctx, url)
+	if err != nil {
+		t.Fatalf("Capture err: %v", err)
+	}
+	if len(ids) != 3 {
+		t.Fatalf("Capture returned %d ids, want 3", len(ids))
+	}
+	if len(st.cards) != 3 {
+		t.Fatalf("stored cards = %d, want 3", len(st.cards))
+	}
+	if len(ch.notifies) != 3 {
+		t.Fatalf("notifications = %d, want 3", len(ch.notifies))
+	}
+	for _, n := range ch.notifies {
+		if n.Kind != "created" {
+			t.Errorf("notification kind = %q, want 'created'", n.Kind)
+		}
+	}
+
+	// Verify all cards have the same capture_id and source_url
+	var firstCapID *int64
+	for _, id := range ids {
+		c := st.cards[id]
+		if c.SourceURL != url {
+			t.Errorf("card %d source_url = %q, want %q", id, c.SourceURL, url)
+		}
+		if c.CaptureID == nil {
+			t.Errorf("card %d capture_id is nil, want non-nil", id)
+		} else if firstCapID == nil {
+			firstCapID = c.CaptureID
+		} else if *c.CaptureID != *firstCapID {
+			t.Errorf("card %d capture_id = %d, want %d", id, *c.CaptureID, *firstCapID)
+		}
+	}
+
+	if len(st.captures) != 1 {
+		t.Fatalf("captures count = %d, want 1", len(st.captures))
+	}
+	capRow := st.captures[*firstCapID]
+	if capRow.SourceURL != url {
+		t.Errorf("capture source_url = %q, want %q", capRow.SourceURL, url)
+	}
+
+	// Now re-capture the same URL → duplicate path once
+	dupIDs, err := s.Capture(ctx, url)
+	if err != nil {
+		t.Fatalf("repeat Capture err: %v", err)
+	}
+	if len(dupIDs) != 0 {
+		t.Fatalf("repeat Capture ids = %v, want 0", dupIDs)
+	}
+	if len(st.cards) != 3 {
+		t.Fatalf("cards after repeat capture = %d, want 3 (no new cards)", len(st.cards))
+	}
+	if len(ch.notifies) != 4 {
+		t.Fatalf("notifications after repeat = %d, want 4 (3 created + 1 duplicate)", len(ch.notifies))
+	}
+	lastNotify := ch.notifies[len(ch.notifies)-1]
+	if lastNotify.Kind != "duplicate" {
+		t.Errorf("last notification kind = %q, want 'duplicate'", lastNotify.Kind)
+	}
+}
+
+func TestCaptureFailurePersistsCapture(t *testing.T) {
+	fail := llmStub(http.StatusInternalServerError, "")
+	defer fail.Close()
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, fail)
+
+	url := "https://example.com/fail-post"
+	ids, err := s.Capture(context.Background(), url)
+	if err != nil {
+		t.Fatalf("Capture err: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("failCard returned %d ids, want 1", len(ids))
+	}
+	failedCard := st.cards[ids[0]]
+	if failedCard.Title != "Analysis failed" {
+		t.Errorf("card title = %q, want 'Analysis failed'", failedCard.Title)
+	}
+	if failedCard.CaptureID == nil {
+		t.Fatalf("failed card capture_id is nil, want persisted capture")
+	}
+	savedCap, err := st.GetCapture(context.Background(), *failedCard.CaptureID)
+	if err != nil {
+		t.Fatalf("GetCapture: %v", err)
+	}
+	if savedCap.SourceURL != url {
+		t.Errorf("saved capture source_url = %q, want %q", savedCap.SourceURL, url)
 	}
 }
 

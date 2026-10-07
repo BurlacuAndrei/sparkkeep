@@ -33,17 +33,19 @@ import (
 type stubStore struct {
 	mu         sync.Mutex
 	cards      map[int64]port.Card
+	captures   map[int64]port.Capture
 	researches map[int64]port.Research
 	tags       []port.Tag
 	settings   map[string]string
 	nextCard   int64
+	nextCap    int64
 	nextRes    int64
 	lastFilter port.CardFilter
 	lastPatch  port.CardPatch
 }
 
 func newStubStore() *stubStore {
-	return &stubStore{cards: map[int64]port.Card{}, researches: map[int64]port.Research{}, settings: map[string]string{}}
+	return &stubStore{cards: map[int64]port.Card{}, captures: map[int64]port.Capture{}, researches: map[int64]port.Research{}, settings: map[string]string{}}
 }
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
@@ -81,6 +83,48 @@ func (s *stubStore) GetCardBySourceURL(_ context.Context, url string) (port.Card
 		}
 	}
 	return port.Card{}, port.ErrNotFound
+}
+
+func (s *stubStore) CreateCapture(_ context.Context, c port.Capture) (port.Capture, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c.SourceURL != "" {
+		for _, existing := range s.captures {
+			if existing.SourceURL == c.SourceURL {
+				return port.Capture{}, fmt.Errorf("UNIQUE constraint failed: idx_captures_source")
+			}
+		}
+	}
+	s.nextCap++
+	c.ID = s.nextCap
+	c.CreatedAt = time.Now().UTC()
+	s.captures[c.ID] = c
+	return c, nil
+}
+
+func (s *stubStore) GetCapture(_ context.Context, id int64) (port.Capture, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.captures[id]
+	if !ok {
+		return port.Capture{}, port.ErrNotFound
+	}
+	return c, nil
+}
+
+func (s *stubStore) GetCaptureBySourceURL(_ context.Context, url string) (port.Capture, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return port.Capture{}, port.ErrNotFound
+	}
+	for _, c := range s.captures {
+		if c.SourceURL == url {
+			return c, nil
+		}
+	}
+	return port.Capture{}, port.ErrNotFound
 }
 
 func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card, error) {

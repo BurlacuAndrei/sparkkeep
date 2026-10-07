@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -27,8 +28,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 4 {
-		t.Fatalf("version = %d, want 4", version)
+	if version != 5 {
+		t.Fatalf("version = %d, want 5", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -742,3 +743,214 @@ func TestSettingsCRUD(t *testing.T) {
 		t.Fatalf("unexpected settings map: %+v", all)
 	}
 }
+
+func TestCaptureCRUD(t *testing.T) {
+	s, ctx := newTestStore(t)
+	c, err := s.CreateCapture(ctx, port.Capture{
+		Kind:        "link",
+		SourceURL:   "https://example.com/post",
+		Title:       "Post Title",
+		Description: "Post Description",
+		Text:        "Extracted article text",
+		Caption:     "User caption",
+		Transcript:  "Audio transcript",
+		ImageDigest: "Image summary",
+		Notes:       []string{"warning 1", "warning 2"},
+	})
+	if err != nil {
+		t.Fatalf("CreateCapture: %v", err)
+	}
+	if c.ID <= 0 {
+		t.Fatalf("CreateCapture returned non-positive ID: %d", c.ID)
+	}
+	if c.CreatedAt.IsZero() {
+		t.Fatalf("CreateCapture zero CreatedAt")
+	}
+
+	got, err := s.GetCapture(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("GetCapture: %v", err)
+	}
+	if got.ID != c.ID || got.Kind != "link" || got.SourceURL != "https://example.com/post" ||
+		got.Title != "Post Title" || got.Description != "Post Description" ||
+		got.Text != "Extracted article text" || got.Caption != "User caption" ||
+		got.Transcript != "Audio transcript" || got.ImageDigest != "Image summary" {
+		t.Fatalf("GetCapture fields mismatch: %+v", got)
+	}
+	if len(got.Notes) != 2 || got.Notes[0] != "warning 1" || got.Notes[1] != "warning 2" {
+		t.Fatalf("GetCapture notes = %v, want 2 notes", got.Notes)
+	}
+
+	// Lookup by URL with whitespace
+	byURL, err := s.GetCaptureBySourceURL(ctx, " https://example.com/post ")
+	if err != nil {
+		t.Fatalf("GetCaptureBySourceURL: %v", err)
+	}
+	if byURL.ID != c.ID {
+		t.Fatalf("GetCaptureBySourceURL got id %d, want %d", byURL.ID, c.ID)
+	}
+
+	// Not found
+	if _, err := s.GetCapture(ctx, 999999); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("GetCapture missing err = %v, want port.ErrNotFound", err)
+	}
+	if _, err := s.GetCaptureBySourceURL(ctx, "https://example.com/missing"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("GetCaptureBySourceURL missing err = %v, want port.ErrNotFound", err)
+	}
+	if _, err := s.GetCaptureBySourceURL(ctx, "   "); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("GetCaptureBySourceURL whitespace err = %v, want port.ErrNotFound", err)
+	}
+}
+
+func TestCaptureUniqueByURL(t *testing.T) {
+	s, ctx := newTestStore(t)
+	_, err := s.CreateCapture(ctx, port.Capture{
+		Kind:      "link",
+		SourceURL: "https://example.com/duplicate-test",
+		Title:     "First",
+	})
+	if err != nil {
+		t.Fatalf("first CreateCapture: %v", err)
+	}
+
+	// Duplicate URL should conflict
+	_, err = s.CreateCapture(ctx, port.Capture{
+		Kind:      "link",
+		SourceURL: "https://example.com/duplicate-test",
+		Title:     "Second",
+	})
+	if err == nil {
+		t.Fatalf("expected error on duplicate SourceURL, got nil")
+	}
+	if !errors.Is(err, port.ErrConflict) {
+		t.Fatalf("duplicate error = %v, want port.ErrConflict", err)
+	}
+
+	// Empty URLs must never conflict (partial index)
+	c1, err := s.CreateCapture(ctx, port.Capture{Kind: "text", SourceURL: "", Text: "thought 1"})
+	if err != nil {
+		t.Fatalf("empty url c1: %v", err)
+	}
+	c2, err := s.CreateCapture(ctx, port.Capture{Kind: "text", SourceURL: "", Text: "thought 2"})
+	if err != nil {
+		t.Fatalf("empty url c2: %v", err)
+	}
+	if c1.ID == c2.ID {
+		t.Fatalf("expected different IDs for empty url captures: %d == %d", c1.ID, c2.ID)
+	}
+}
+
+func TestMigrationBackfill(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "backfill_test.db")
+
+	// 1. Manually apply migrations 1..4 on a fresh DB
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatalf("open seed db: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create schema_version: %v", err)
+	}
+
+	for v, file := range []string{
+		"migrations/0001_init.sql",
+		"migrations/0002_add_briefings.sql",
+		"migrations/0003_dedup_source_url.sql",
+		"migrations/0004_settings.sql",
+	} {
+		sqlBytes, err := migrationFS.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		if _, err := db.Exec(string(sqlBytes)); err != nil {
+			t.Fatalf("apply %s: %v", file, err)
+		}
+		if _, err := db.Exec(`INSERT INTO schema_version (version, applied_at) VALUES (?, ?)`, v+1, "2026-01-01T00:00:00Z"); err != nil {
+			t.Fatalf("record %s: %v", file, err)
+		}
+	}
+
+	// 2. Seed cards: two with source_url, one without
+	ts := "2026-01-01T12:00:00Z"
+	if _, err := db.Exec(`INSERT INTO cards (title, summary, horizon, status, source_url, source_note, created_at, updated_at) VALUES
+		('Seed Card 1', 'Summary 1', 'short-term', 'inbox', 'https://example.com/seed1', 'Note 1', ?, ?),
+		('Seed Card 2', 'Summary 2', 'short-term', 'shelved', 'https://example.com/seed2', 'Note 2', ?, ?),
+		('Seed Card 3', 'Summary 3', 'short-term', 'inbox', '', 'Note 3', ?, ?)`,
+		ts, ts, ts, ts, ts, ts); err != nil {
+		t.Fatalf("seed cards: %v", err)
+	}
+	db.Close()
+
+	// 3. Open store with store.New to trigger migration 0005_captures.sql
+	s, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("store.New on seeded db: %v", err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	// Verify schema version is 5
+	var version int
+	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
+		t.Fatalf("schema_version: %v", err)
+	}
+	if version != 5 {
+		t.Fatalf("version = %d, want 5", version)
+	}
+
+	// Verify backfilled captures exist
+	cap1, err := s.GetCaptureBySourceURL(ctx, "https://example.com/seed1")
+	if err != nil {
+		t.Fatalf("GetCaptureBySourceURL seed1: %v", err)
+	}
+	if cap1.Title != "Seed Card 1" || cap1.Caption != "Note 1" {
+		t.Fatalf("cap1 mismatch: Title=%q, Caption=%q", cap1.Title, cap1.Caption)
+	}
+
+	cap2, err := s.GetCaptureBySourceURL(ctx, "https://example.com/seed2")
+	if err != nil {
+		t.Fatalf("GetCaptureBySourceURL seed2: %v", err)
+	}
+	if cap2.Title != "Seed Card 2" || cap2.Caption != "Note 2" {
+		t.Fatalf("cap2 mismatch: Title=%q, Caption=%q", cap2.Title, cap2.Caption)
+	}
+
+	// Verify cards are linked
+	cards, err := s.ListCards(ctx, port.CardFilter{})
+	if err != nil {
+		t.Fatalf("ListCards: %v", err)
+	}
+	if len(cards) != 3 {
+		t.Fatalf("cards count = %d, want 3", len(cards))
+	}
+	for _, c := range cards {
+		switch c.Title {
+		case "Seed Card 1":
+			if c.CaptureID == nil || *c.CaptureID != cap1.ID {
+				t.Errorf("card 1 capture_id = %v, want %d", c.CaptureID, cap1.ID)
+			}
+		case "Seed Card 2":
+			if c.CaptureID == nil || *c.CaptureID != cap2.ID {
+				t.Errorf("card 2 capture_id = %v, want %d", c.CaptureID, cap2.ID)
+			}
+		case "Seed Card 3":
+			if c.CaptureID != nil {
+				t.Errorf("card 3 capture_id = %v, want nil", c.CaptureID)
+			}
+		}
+	}
+
+	// Verify that multiple cards can now share the same source_url (split cards supported)
+	splitCard, err := s.CreateCard(ctx, port.Card{
+		Title:     "Seed Card 1 Split",
+		SourceURL: "https://example.com/seed1",
+		CaptureID: &cap1.ID,
+	})
+	if err != nil {
+		t.Fatalf("creating card with duplicate source_url failed: %v", err)
+	}
+	if splitCard.ID == 0 {
+		t.Fatal("splitCard zero ID")
+	}
+}
+

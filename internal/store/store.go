@@ -86,10 +86,14 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 			actionsJSON = string(b)
 		}
 	}
+	var captureID any
+	if c.CaptureID != nil {
+		captureID = *c.CaptureID
+	}
 	res, err := exec.ExecContext(ctx,
-		`INSERT INTO cards (title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.Title, c.Summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, c.ExecutiveSummary, c.ValueProposition, actionsJSON, ts, ts)
+		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		captureID, c.Title, c.Summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, c.ExecutiveSummary, c.ValueProposition, actionsJSON, ts, ts)
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return port.Card{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
@@ -135,17 +139,21 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 
 func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at
+		`SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at
 		 FROM cards WHERE id = ?`, id)
 	var c port.Card
+	var captureID sql.NullInt64
 	var created, updated string
 	var actionsRaw string
-	err := row.Scan(&c.ID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &created, &updated)
+	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Card{}, port.ErrNotFound
 	}
 	if err != nil {
 		return port.Card{}, err
+	}
+	if captureID.Valid {
+		c.CaptureID = &captureID.Int64
 	}
 	c.CreatedAt, _ = parseTime(created)
 	c.UpdatedAt, _ = parseTime(updated)
@@ -235,7 +243,7 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	if limit <= 0 {
 		limit = defaultLimit
 	}
-	sqlq := `SELECT id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at FROM cards`
+	sqlq := `SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at FROM cards`
 	if len(where) > 0 {
 		sqlq += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -254,10 +262,14 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	var cards []port.Card
 	for rows.Next() {
 		var c port.Card
+		var captureID sql.NullInt64
 		var created, updated string
 		var actionsRaw string
-		if err := rows.Scan(&c.ID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &created, &updated); err != nil {
+		if err := rows.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &created, &updated); err != nil {
 			return nil, err
+		}
+		if captureID.Valid {
+			c.CaptureID = &captureID.Int64
 		}
 		c.CreatedAt, _ = parseTime(created)
 		c.UpdatedAt, _ = parseTime(updated)
@@ -372,6 +384,9 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 			actionsJSON = string(data)
 		}
 		b.set("proposed_actions", actionsJSON)
+	}
+	if p.CaptureID != nil {
+		b.set("capture_id", *p.CaptureID)
 	}
 	if b.empty() {
 		return s.GetCard(ctx, id)
@@ -559,6 +574,78 @@ func (s *Store) ListSettings(ctx context.Context) (map[string]string, error) {
 	return res, rows.Err()
 }
 
+func (s *Store) CreateCapture(ctx context.Context, c port.Capture) (port.Capture, error) {
+	ts := now()
+	notesJSON := "[]"
+	if len(c.Notes) > 0 {
+		if b, err := json.Marshal(c.Notes); err == nil {
+			notesJSON = string(b)
+		}
+	}
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO captures (kind, source_url, title, description, text, caption, transcript, image_digest, notes, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.Kind, c.SourceURL, c.Title, c.Description, c.Text, c.Caption, c.Transcript, c.ImageDigest, notesJSON, ts)
+	if err != nil {
+		if isUniqueConstraint(err) {
+			return port.Capture{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
+		}
+		return port.Capture{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return port.Capture{}, err
+	}
+	c.ID = id
+	t, _ := parseTime(ts)
+	c.CreatedAt = t
+	if c.Notes == nil {
+		c.Notes = []string{}
+	}
+	return c, nil
+}
+
+func (s *Store) GetCapture(ctx context.Context, id int64) (port.Capture, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, kind, source_url, title, description, text, caption, transcript, image_digest, notes, created_at
+		 FROM captures WHERE id = ?`, id)
+	var c port.Capture
+	var notesJSON string
+	var created string
+	err := row.Scan(&c.ID, &c.Kind, &c.SourceURL, &c.Title, &c.Description, &c.Text, &c.Caption, &c.Transcript, &c.ImageDigest, &notesJSON, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return port.Capture{}, port.ErrNotFound
+	}
+	if err != nil {
+		return port.Capture{}, err
+	}
+	if notesJSON != "" {
+		_ = json.Unmarshal([]byte(notesJSON), &c.Notes)
+	}
+	if c.Notes == nil {
+		c.Notes = []string{}
+	}
+	c.CreatedAt, _ = parseTime(created)
+	return c, nil
+}
+
+func (s *Store) GetCaptureBySourceURL(ctx context.Context, url string) (port.Capture, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return port.Capture{}, port.ErrNotFound
+	}
+	var id int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM captures WHERE source_url = ? ORDER BY id LIMIT 1`, url).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return port.Capture{}, port.ErrNotFound
+	}
+	if err != nil {
+		return port.Capture{}, err
+	}
+	return s.GetCapture(ctx, id)
+}
+
 func isUniqueConstraint(err error) bool {
 	if err == nil {
 		return false
@@ -566,5 +653,6 @@ func isUniqueConstraint(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "UNIQUE constraint failed") ||
 		strings.Contains(msg, "unique constraint") ||
-		strings.Contains(msg, "idx_cards_source")
+		strings.Contains(msg, "idx_cards_source") ||
+		strings.Contains(msg, "idx_captures_source")
 }

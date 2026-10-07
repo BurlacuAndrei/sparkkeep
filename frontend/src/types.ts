@@ -1,5 +1,6 @@
 export interface Card {
   id: number;
+  capture_id?: number | null;
   title: string;
   summary: string;
   horizon: 'short-term' | 'medium-term' | 'long-term' | 'lifetime';

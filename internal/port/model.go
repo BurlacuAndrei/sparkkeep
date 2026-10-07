@@ -25,6 +25,7 @@ func ValidStatus(s string) bool {
 
 type Card struct {
 	ID               int64     `json:"id"`
+	CaptureID        *int64    `json:"capture_id,omitempty"`
 	Title            string    `json:"title"`
 	Summary          string    `json:"summary"`
 	Horizon          string    `json:"horizon"`
@@ -37,6 +38,20 @@ type Card struct {
 	ProposedActions  []string  `json:"proposed_actions"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type Capture struct {
+	ID          int64     `json:"id"`
+	Kind        string    `json:"kind"`
+	SourceURL   string    `json:"source_url"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Text        string    `json:"text"`
+	Caption     string    `json:"caption"`
+	Transcript  string    `json:"transcript"`
+	ImageDigest string    `json:"image_digest"`
+	Notes       []string  `json:"notes"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type Research struct {
@@ -74,6 +89,7 @@ type CardPatch struct {
 	ValueProposition *string
 	ProposedActions  *[]string
 	SourceURL        *string
+	CaptureID        *int64
 }
 
 type TagPair struct {

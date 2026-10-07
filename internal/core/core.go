@@ -197,12 +197,44 @@ func (s *Service) Capture(ctx context.Context, raw string) ([]int64, error) {
 // degrades into a stored "Analysis failed" card so the source + retry
 // button survive. All cards are stored even if a later notify fails.
 func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
+	sourceURL := strings.TrimSpace(share.URL)
+	if sourceURL != "" && s.Store != nil {
+		if existingCap, err := s.Store.GetCaptureBySourceURL(ctx, sourceURL); err == nil {
+			if derr := s.handleDuplicate(ctx, existingCap, share.Caption); derr != nil {
+				s.Logf("core: duplicate handle: %v", derr)
+			}
+			return []int64{}, nil
+		} else if existingCard, err := s.Store.GetCardBySourceURL(ctx, sourceURL); err == nil {
+			cap := port.Capture{
+				SourceURL: existingCard.SourceURL,
+				Title:     existingCard.Title,
+			}
+			if derr := s.handleDuplicate(ctx, cap, share.Caption); derr != nil {
+				s.Logf("core: duplicate handle legacy: %v", derr)
+			}
+			return []int64{}, nil
+		}
+	}
+
 	fetched := s.resolve(ctx, share)
+
+	capRow, cerr := s.persistCapture(ctx, share, fetched)
+	if cerr != nil {
+		if errors.Is(cerr, port.ErrConflict) || isUniqueConstraint(cerr) {
+			if existingCap, gerr := s.Store.GetCaptureBySourceURL(ctx, sourceURL); gerr == nil {
+				if derr := s.handleDuplicate(ctx, existingCap, share.Caption); derr != nil {
+					s.Logf("core: duplicate handle on conflict: %v", derr)
+				}
+				return []int64{}, nil
+			}
+		}
+		s.Logf("core: persist capture %s: %v", share.URL, cerr)
+	}
 
 	res, err := s.Analyze.Analyze(ctx, fetched)
 	if err != nil {
 		s.Logf("core: analyze failed for %s: %v", share.URL, err)
-		return s.failCard(ctx, fetched, share.URL)
+		return s.failCard(ctx, fetched, share.URL, capRow.ID)
 	}
 	if len(res.Cards) == 0 {
 		return []int64{}, nil
@@ -212,13 +244,11 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 	for _, idea := range res.Cards {
 		url := firstURL(fetched, idea.Links)
 		card := cardFromIdea(idea, res, url, fetched.Caption)
+		if capRow.ID > 0 {
+			card.CaptureID = &capRow.ID
+		}
 		created, err := s.Store.CreateCard(ctx, card)
 		if err != nil {
-			if errors.Is(err, port.ErrConflict) || isUniqueConstraint(err) {
-				if derr := s.handleDuplicateCard(ctx, card); derr == nil {
-					continue
-				}
-			}
 			return ids, err
 		}
 		ids = append(ids, created.ID)
@@ -232,13 +262,49 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 	return ids, nil
 }
 
-func (s *Service) handleDuplicateCard(ctx context.Context, card port.Card) error {
-	existing, err := s.Store.GetCardBySourceURL(ctx, card.SourceURL)
+func (s *Service) persistCapture(ctx context.Context, share capture.Share, fetched capture.Fetched) (port.Capture, error) {
+	if s.Store == nil {
+		return port.Capture{}, nil
+	}
+	kind := share.Kind
+	if kind == "" {
+		kind = fetched.Kind
+	}
+	if kind == "" {
+		kind = capture.KindText
+	}
+	sourceURL := strings.TrimSpace(share.URL)
+	capRecord := port.Capture{
+		Kind:        kind,
+		SourceURL:   sourceURL,
+		Title:       clipRunes(fetched.Title, 1000),
+		Description: clipRunes(fetched.Description, 5000),
+		Text:        clipRunes(fetched.Text, 20000),
+		Caption:     clipRunes(fetched.Caption, 5000),
+		Transcript:  clipRunes(fetched.Transcript, 50000),
+		ImageDigest: clipRunes(fetched.ImageDigest, 5000),
+		Notes:       fetched.Notes,
+	}
+	return s.Store.CreateCapture(ctx, capRecord)
+}
+
+func (s *Service) handleDuplicate(ctx context.Context, existingCap port.Capture, caption string) error {
+	caption = strings.TrimSpace(caption)
+	existing, err := s.Store.GetCardBySourceURL(ctx, existingCap.SourceURL)
 	if err != nil {
-		return err
+		title := existingCap.Title
+		if title == "" {
+			title = existingCap.SourceURL
+		}
+		text := "Already captured: " + title
+		return s.notify(ctx, port.Notification{
+			Kind: "duplicate",
+			Card: port.Card{Title: title, SourceURL: existingCap.SourceURL},
+			Text: text,
+		})
 	}
 	text := "Already captured: " + existing.Title
-	if caption := strings.TrimSpace(card.SourceNote); caption != "" {
+	if caption != "" {
 		note := caption
 		if existing.SourceNote != "" {
 			note = existing.SourceNote + "\n\n" + caption
@@ -261,6 +327,11 @@ func (s *Service) handleDuplicateCard(ctx context.Context, card port.Card) error
 	return nil
 }
 
+func (s *Service) handleDuplicateCard(ctx context.Context, card port.Card) error {
+	cap := port.Capture{SourceURL: card.SourceURL, Title: card.Title}
+	return s.handleDuplicate(ctx, cap, card.SourceNote)
+}
+
 func isUniqueConstraint(err error) bool {
 	if err == nil {
 		return false
@@ -271,7 +342,8 @@ func isUniqueConstraint(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "UNIQUE constraint failed") ||
 		strings.Contains(msg, "unique constraint") ||
-		strings.Contains(msg, "idx_cards_source")
+		strings.Contains(msg, "idx_cards_source") ||
+		strings.Contains(msg, "idx_captures_source")
 }
 
 func cardFromIdea(idea analyze.Idea, res analyze.AnalysisResult, url, note string) port.Card {
@@ -376,7 +448,9 @@ func (s *Service) Retry(ctx context.Context, cardID int64) (port.Card, error) {
 		s.Logf("core: dismiss original failed card %d: %v", cardID, err)
 	}
 
-	created, err := s.Store.CreateCard(ctx, cardFromIdea(idea, res, card.SourceURL, card.SourceNote))
+	newCard := cardFromIdea(idea, res, card.SourceURL, card.SourceNote)
+	newCard.CaptureID = card.CaptureID
+	created, err := s.Store.CreateCard(ctx, newCard)
 	if err != nil {
 		if card.SourceURL != "" {
 			_, _ = s.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &card.Status, SourceURL: &card.SourceURL})
@@ -531,6 +605,14 @@ func (s *Service) extractAudio(ctx context.Context, in capture.File) (capture.Fi
 	return capture.File{Name: "audio.wav", Mime: "audio/wav", Data: wav}, nil
 }
 
+func clipRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}
+
 func clipText(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -589,8 +671,32 @@ func (s *Service) persistUpload(f capture.File) string {
 
 // failCard stores the "analysis failed, see source / retry" card. It is the
 // LLM-failure degradation path and never returns a hard error to Capture.
-func (s *Service) failCard(ctx context.Context, fetched capture.Fetched, raw string) ([]int64, error) {
+func (s *Service) failCard(ctx context.Context, fetched capture.Fetched, raw string, captureID int64) ([]int64, error) {
+	var capID *int64
+	if captureID > 0 {
+		capID = &captureID
+	} else if s.Store != nil {
+		sourceURL := ""
+		if fetched.Kind == capture.KindLink || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+			sourceURL = strings.TrimSpace(raw)
+		}
+		capRecord := port.Capture{
+			Kind:        fetched.Kind,
+			SourceURL:   sourceURL,
+			Title:       clipRunes(fetched.Title, 1000),
+			Description: clipRunes(fetched.Description, 5000),
+			Text:        clipRunes(fetched.Text, 20000),
+			Caption:     clipRunes(fetched.Caption, 5000),
+			Transcript:  clipRunes(fetched.Transcript, 50000),
+			ImageDigest: clipRunes(fetched.ImageDigest, 5000),
+			Notes:       fetched.Notes,
+		}
+		if c, err := s.Store.CreateCapture(ctx, capRecord); err == nil {
+			capID = &c.ID
+		}
+	}
 	card := port.Card{
+		CaptureID:  capID,
 		Title:      "Analysis failed",
 		Summary:    "Analysis failed, see source.",
 		Status:     port.StatusInbox,
