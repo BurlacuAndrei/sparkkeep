@@ -215,3 +215,47 @@ export interface LLMProfileInput {
 export type LLMRole = 'triage' | 'vision' | 'research_plan' | 'research_synthesis';
 export type LLMRolesMapping = Record<string, string>;
 
+export interface CustomStepConfig {
+  instruction?: string;
+  output_heading?: string;
+  inputs?: string[];
+  tool_policy?: 'none' | 'search';
+  role?: 'research_plan' | 'research_synthesis';
+  max_queries?: number;
+}
+
+export interface PlaybookStep {
+  id?: number;
+  playbook_id?: number;
+  position: number;
+  kind: string;
+  name: string;
+  enabled: boolean;
+  config: CustomStepConfig;
+}
+
+export interface Playbook {
+  id: number;
+  name: string;
+  description: string;
+  is_builtin: boolean;
+  card_types: string[];
+  version: number;
+  created_at?: string;
+  updated_at?: string;
+  steps: PlaybookStep[];
+}
+
+export interface StepLibraryTemplate {
+  id: string;
+  icon: string;
+  name: string;
+  description: string;
+  heading: string;
+  instruction: string;
+  tool_policy: 'none' | 'search';
+  role: 'research_plan' | 'research_synthesis';
+  inputs: string[];
+  max_queries: number;
+}
+

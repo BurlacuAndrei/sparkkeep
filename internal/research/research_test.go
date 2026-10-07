@@ -1033,3 +1033,62 @@ func TestRunWithPlaybook_CustomStep(t *testing.T) {
 	}
 }
 
+func TestClaimCheckPlaybook(t *testing.T) {
+	pb := ClaimCheckPlaybook()
+	if err := ValidatePlaybook(pb); err != nil {
+		t.Fatalf("ClaimCheckPlaybook failed validation: %v", err)
+	}
+	if len(pb.Steps) != 7 {
+		t.Fatalf("expected 7 steps, got %d", len(pb.Steps))
+	}
+	if pb.Steps[len(pb.Steps)-1].Kind != port.StepKindReport {
+		t.Errorf("last step must be report, got %s", pb.Steps[len(pb.Steps)-1].Kind)
+	}
+}
+
+func TestLibraryTemplates_ValidateAndRun(t *testing.T) {
+	templates := BuiltinStepTemplates()
+	if len(templates) != 6 {
+		t.Fatalf("expected 6 templates, got %d", len(templates))
+	}
+
+	for _, tpl := range templates {
+		if tpl.Heading == "" {
+			t.Errorf("template %s has empty heading", tpl.ID)
+		}
+		if len(tpl.Instruction) == 0 || len(tpl.Instruction) > 2000 {
+			t.Errorf("template %s instruction invalid length %d", tpl.ID, len(tpl.Instruction))
+		}
+		if tpl.ToolPolicy != "none" && tpl.ToolPolicy != "search" {
+			t.Errorf("template %s tool_policy invalid: %q", tpl.ID, tpl.ToolPolicy)
+		}
+
+		// Verify this template as a custom step passes ValidatePlaybook
+		pb := port.Playbook{
+			Name: "Test PB with " + tpl.Name,
+			Steps: []port.PlaybookStep{
+				{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+				{
+					Position: 2,
+					Kind:     port.StepKindCustom,
+					Name:     tpl.Name,
+					Enabled:  true,
+					Config: port.CustomStepConfig{
+						Instruction:   tpl.Instruction,
+						OutputHeading: tpl.Heading,
+						Inputs:        tpl.Inputs,
+						ToolPolicy:    tpl.ToolPolicy,
+						Role:          tpl.Role,
+						MaxQueries:    tpl.MaxQueries,
+					},
+				},
+				{Position: 3, Kind: port.StepKindReport, Name: "Report", Enabled: true},
+			},
+		}
+		if err := ValidatePlaybook(pb); err != nil {
+			t.Errorf("template %s failed validation in playbook: %v", tpl.ID, err)
+		}
+	}
+}
+
+

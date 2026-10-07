@@ -25,6 +25,7 @@ import (
 	"sparkkeep/internal/license"
 	"sparkkeep/internal/obsidian"
 	"sparkkeep/internal/port"
+	"sparkkeep/internal/research"
 	"sparkkeep/internal/webhook"
 )
 
@@ -218,6 +219,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("PUT /api/v1/playbooks/{id}", a.updatePlaybook)
 	mux.HandleFunc("DELETE /api/v1/playbooks/{id}", a.deletePlaybook)
 	mux.HandleFunc("POST /api/v1/playbooks/{id}/duplicate", a.duplicatePlaybook)
+	mux.HandleFunc("GET /api/v1/playbook-steps/library", a.getPlaybookStepLibrary)
 
 	mux.HandleFunc("POST /api/v1/capture", a.capture)
 	mux.HandleFunc("GET /api/v1/media/{name}", a.media)
@@ -1511,6 +1513,13 @@ func (a *api) duplicatePlaybook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "playbook": dup})
+}
+
+func (a *api) getPlaybookStepLibrary(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":        true,
+		"templates": research.BuiltinStepTemplates(),
+	})
 }
 
 // --- plumbing ---------------------------------------------------------------

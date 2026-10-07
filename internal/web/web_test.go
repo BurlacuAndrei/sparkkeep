@@ -53,24 +53,10 @@ func newStubStore() *stubStore {
 		researches: map[int64]port.Research{},
 		playbooks:  map[int64]port.Playbook{},
 		settings:   map[string]string{},
-		nextPb:     1,
+		nextPb:     2,
 	}
-	st.playbooks[1] = port.Playbook{
-		ID:        1,
-		Name:      "Default",
-		IsBuiltin: true,
-		Steps: []port.PlaybookStep{
-			{Position: 1, Kind: port.StepKindGround, Name: "Grounding", Enabled: true},
-			{Position: 2, Kind: port.StepKindResolveRefs, Name: "Resolve References", Enabled: true},
-			{Position: 3, Kind: port.StepKindPlan, Name: "Question Planning", Enabled: true},
-			{Position: 4, Kind: port.StepKindSearch, Name: "Multi-query Search", Enabled: true},
-			{Position: 5, Kind: port.StepKindRead, Name: "Round-robin Reading", Enabled: true},
-			{Position: 6, Kind: port.StepKindVerifyClaims, Name: "Claim Verification", Enabled: true},
-			{Position: 7, Kind: port.StepKindLandscape, Name: "Competitive Landscape", Enabled: true},
-			{Position: 8, Kind: port.StepKindVerdict, Name: "Synthesis & Verdict", Enabled: true},
-			{Position: 9, Kind: port.StepKindReport, Name: "Report Generation", Enabled: true},
-		},
-	}
+	st.playbooks[1] = research.DefaultPlaybook()
+	st.playbooks[2] = research.ClaimCheckPlaybook()
 	return st
 }
 
@@ -2396,6 +2382,35 @@ func TestPlaybookAPI(t *testing.T) {
 	rr = doJSON(t, h, http.MethodPost, "/api/v1/research", triggerPayload)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("trigger research with playbook failed: %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// 10. GET /api/v1/playbook-steps/library
+	rr = doJSON(t, h, http.MethodGet, "/api/v1/playbook-steps/library", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get step library failed: %d: %s", rr.Code, rr.Body.String())
+	}
+	var libResp struct {
+		Templates []research.LibraryStepTemplate `json:"templates"`
+		OK        bool                           `json:"ok"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &libResp); err != nil {
+		t.Fatalf("unmarshal library templates: %v", err)
+	}
+	if len(libResp.Templates) != 6 {
+		t.Fatalf("expected 6 library templates, got %d", len(libResp.Templates))
+	}
+	// Verify monetization template is present
+	foundMonetization := false
+	for _, tpl := range libResp.Templates {
+		if tpl.ID == "monetization" {
+			foundMonetization = true
+			if tpl.Heading != "Monetization Angle" || tpl.ToolPolicy != "search" {
+				t.Errorf("unexpected monetization template config: %+v", tpl)
+			}
+		}
+	}
+	if !foundMonetization {
+		t.Errorf("monetization template not found in library")
 	}
 }
 

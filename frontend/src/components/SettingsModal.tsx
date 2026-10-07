@@ -19,10 +19,12 @@ import {
   Star,
   Server,
   Network,
+  BookOpen,
 } from 'lucide-react';
 import * as api from '../api';
 import { LLMProfile, LLMProfileInput } from '../types';
 import { ThemeSelector } from './ThemeSelector';
+import { PlaybookManager } from './PlaybookManager';
 
 interface RoleDefinition {
   key: string;
@@ -63,7 +65,7 @@ export interface SettingsModalProps {
   showToast: (msg: string) => void;
 }
 
-type SettingsTab = 'appearance' | 'ai' | 'security';
+type SettingsTab = 'appearance' | 'ai' | 'playbooks' | 'security';
 
 interface PresetTemplate {
   label: string;
@@ -511,6 +513,16 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
           >
             <Cpu size={15} />
             <span>AI Engine</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'playbooks'}
+            className={`settings-tab-btn ${activeTab === 'playbooks' ? 'active' : ''}`}
+            onClick={() => setActiveTab('playbooks')}
+          >
+            <BookOpen size={15} />
+            <span>Research Playbooks</span>
           </button>
           <button
             type="button"
@@ -983,7 +995,14 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               </div>
             )}
 
-            {/* TAB 3: Security & Access */}
+            {/* TAB 3: Research Playbooks */}
+            {activeTab === 'playbooks' && (
+              <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
+                <PlaybookManager showToast={showToast} />
+              </div>
+            )}
+
+            {/* TAB 4: Security & Access */}
             {activeTab === 'security' && (
               <div className="settings-panel" role="tabpanel">
                 {/* Security Status Card */}
@@ -1053,20 +1072,22 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
         )}
 
         {/* Modal Footer */}
-        <div className="settings-modal-footer">
-          <button type="button" className="setup-btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="setup-btn-primary"
-            onClick={handleSave}
-            disabled={submitting || loading}
-          >
-            <Save size={16} />
-            <span>{submitting ? 'Saving Preferences...' : 'Save Settings'}</span>
-          </button>
-        </div>
+        {activeTab !== 'playbooks' && (
+          <div className="settings-modal-footer">
+            <button type="button" className="setup-btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="setup-btn-primary"
+              onClick={handleSave}
+              disabled={submitting || loading}
+            >
+              <Save size={16} />
+              <span>{submitting ? 'Saving Preferences...' : 'Save Settings'}</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>,
     document.body

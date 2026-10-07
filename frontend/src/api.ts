@@ -1,4 +1,4 @@
-import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput } from './types';
+import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate } from './types';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -202,4 +202,51 @@ export async function patchSettings(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+export async function fetchPlaybooks(): Promise<Playbook[]> {
+  const data = await request<{ ok: boolean; playbooks: Playbook[] }>('/api/v1/playbooks');
+  return data.playbooks || [];
+}
+
+export async function fetchPlaybook(id: number): Promise<Playbook> {
+  const data = await request<{ ok: boolean; playbook: Playbook }>(`/api/v1/playbooks/${id}`);
+  return data.playbook;
+}
+
+export async function createPlaybook(pb: Partial<Playbook>): Promise<Playbook> {
+  const data = await request<{ ok: boolean; playbook: Playbook }>('/api/v1/playbooks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pb),
+  });
+  return data.playbook;
+}
+
+export async function updatePlaybook(id: number, pb: Partial<Playbook>): Promise<Playbook> {
+  const data = await request<{ ok: boolean; playbook: Playbook }>(`/api/v1/playbooks/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pb),
+  });
+  return data.playbook;
+}
+
+export async function deletePlaybook(id: number): Promise<void> {
+  await request<{ ok: boolean }>(`/api/v1/playbooks/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function duplicatePlaybook(id: number): Promise<Playbook> {
+  const data = await request<{ ok: boolean; playbook: Playbook }>(`/api/v1/playbooks/${id}/duplicate`, {
+    method: 'POST',
+  });
+  return data.playbook;
+}
+
+export async function fetchStepLibrary(): Promise<StepLibraryTemplate[]> {
+  const data = await request<{ ok: boolean; templates: StepLibraryTemplate[] }>('/api/v1/playbook-steps/library');
+  return data.templates || [];
+}
+
 

@@ -108,3 +108,25 @@ func DefaultPlaybook() port.Playbook {
 		},
 	}
 }
+
+// ClaimCheckPlaybook returns the built-in "Claim check only" playbook definition.
+func ClaimCheckPlaybook() port.Playbook {
+	return port.Playbook{
+		ID:          2,
+		Name:        "Claim check only",
+		Description: "Fast claim verification pipeline without landscape or synthesis verdict",
+		IsBuiltin:   true,
+		CardTypes:   []string{},
+		Version:     1,
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Grounding", Enabled: true},
+			{Position: 2, Kind: port.StepKindResolveRefs, Name: "Resolve References", Enabled: true},
+			{Position: 3, Kind: port.StepKindPlan, Name: "Question Planning", Enabled: true},
+			{Position: 4, Kind: port.StepKindSearch, Name: "Multi-query Search", Enabled: true},
+			{Position: 5, Kind: port.StepKindRead, Name: "Round-robin Reading", Enabled: true},
+			{Position: 6, Kind: port.StepKindVerifyClaims, Name: "Claim Verification", Enabled: true},
+			{Position: 7, Kind: port.StepKindReport, Name: "Report Generation", Enabled: true},
+		},
+	}
+}
+
