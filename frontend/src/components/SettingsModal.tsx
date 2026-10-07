@@ -64,6 +64,7 @@ const ROLE_DEFINITIONS: RoleDefinition[] = [
 export interface SettingsModalProps {
   onClose: () => void;
   showToast: (msg: string) => void;
+  onOpenLicenseModal?: () => void;
 }
 
 type SettingsTab = 'appearance' | 'profile' | 'ai' | 'playbooks' | 'security';
@@ -133,7 +134,7 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
   },
 ];
 
-export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
+export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
 
   // Backend AI settings & multi-LLM profiles
@@ -1261,7 +1262,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
             {/* TAB 3: Research Playbooks */}
             {activeTab === 'playbooks' && (
               <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
-                <PlaybookManager showToast={showToast} />
+                <PlaybookManager showToast={showToast} onOpenLicenseModal={onOpenLicenseModal} />
               </div>
             )}
 

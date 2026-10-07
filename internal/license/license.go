@@ -198,3 +198,47 @@ func SignLicenseForTest(priv ed25519.PrivateKey, payload LicensePayload) (string
 	encodedSig := base64.RawURLEncoding.EncodeToString(sig)
 	return fmt.Sprintf("%s.%s", encodedPayload, encodedSig), nil
 }
+
+// SetupProForTest configures a Manager with a valid Pro license (including FeatureDeepResearchV2) in the given store.
+func SetupProForTest(ctx context.Context, st port.Store) *Manager {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		panic(err)
+	}
+	mgr := NewManager(st)
+	mgr.SetPublicKeyForTest(pub)
+	key, err := SignLicenseForTest(priv, LicensePayload{
+		Tier:     TierPro,
+		Email:    "pro-test@sparkkeep.dev",
+		Features: []string{FeatureObsidianSync, FeatureWebhooks, FeatureDeepResearchV2},
+	})
+	if err != nil {
+		panic(err)
+	}
+	_, _ = mgr.Activate(ctx, key)
+	return mgr
+}
+
+// SetupLapsedForTest configures a Manager with an expired Pro license in the given store.
+func SetupLapsedForTest(ctx context.Context, st port.Store) *Manager {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		panic(err)
+	}
+	mgr := NewManager(st)
+	mgr.SetPublicKeyForTest(pub)
+	key, err := SignLicenseForTest(priv, LicensePayload{
+		Tier:      TierPro,
+		Email:     "lapsed-test@sparkkeep.dev",
+		Features:  []string{FeatureObsidianSync, FeatureWebhooks, FeatureDeepResearchV2},
+		ExpiresAt: time.Now().Add(-24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		panic(err)
+	}
+	if st != nil {
+		_ = st.SetSetting(ctx, "license_key", key)
+		_ = st.SetSetting(ctx, "license_tier", TierPro)
+	}
+	return mgr
+}

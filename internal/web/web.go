@@ -213,6 +213,8 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/research", a.listResearch)
 	mux.HandleFunc("POST /api/v1/research", a.triggerResearch)
 	mux.HandleFunc("GET /api/v1/research/{id}", a.getResearch)
+	mux.HandleFunc("POST /api/v1/research/{id}/feedback", a.setResearchFeedback)
+	mux.HandleFunc("GET /api/v1/metrics/pipeline", a.getPipelineMetrics)
 	mux.HandleFunc("GET /api/v1/playbooks", a.listPlaybooks)
 	mux.HandleFunc("POST /api/v1/playbooks", a.createPlaybook)
 	mux.HandleFunc("GET /api/v1/playbooks/{id}", a.getPlaybook)
@@ -1412,10 +1414,40 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "research already running")
 		return
 	}
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		if b.PlaybookID != nil {
+			reqPB, err := a.store.GetPlaybook(r.Context(), *b.PlaybookID)
+			if err != nil {
+				a.fail(w, err)
+				return
+			}
+			if !reqPB.IsBuiltin {
+				writeJSON(w, http.StatusForbidden, map[string]any{
+					"ok":      false,
+					"error":   "Custom playbooks require an active Pro license",
+					"feature": license.FeatureDeepResearchV2,
+				})
+				return
+			}
+			if reqPB.ID != 1 && reqPB.ID != 2 && !strings.EqualFold(reqPB.Name, "Default") && !strings.EqualFold(reqPB.Name, "Claim check only") {
+				writeJSON(w, http.StatusForbidden, map[string]any{
+					"ok":      false,
+					"error":   "This playbook requires an active Pro license",
+					"feature": license.FeatureDeepResearchV2,
+				})
+				return
+			}
+		}
+	}
 	pb, err := a.store.ResolvePlaybook(r.Context(), b.CardID, b.PlaybookID)
 	if err != nil {
 		a.fail(w, err)
 		return
+	}
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		if pb.ID != 2 && !strings.EqualFold(pb.Name, "Claim check only") {
+			pb = research.DefaultLitePlaybook()
+		}
 	}
 	a.svc.GoResearch(r.Context(), b.CardID, &pb.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1505,6 +1537,14 @@ func (a *api) getPlaybook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) createPlaybook(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Custom playbooks require an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
 	var pb port.Playbook
 	if err := decodeJSON(w, r, &pb); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -1519,6 +1559,14 @@ func (a *api) createPlaybook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) updatePlaybook(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Custom playbooks require an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
 	id, ok := pathID(r)
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "bad playbook id")
@@ -1552,6 +1600,14 @@ func (a *api) deletePlaybook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) duplicatePlaybook(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Custom playbooks require an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
 	id, ok := pathID(r)
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "bad playbook id")
@@ -1569,6 +1625,52 @@ func (a *api) getPlaybookStepLibrary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":        true,
 		"templates": research.BuiltinStepTemplates(),
+	})
+}
+
+func (a *api) setResearchFeedback(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad research id")
+		return
+	}
+	var b struct {
+		Rating  string `json:"rating"`
+		Comment string `json:"comment"`
+	}
+	if err := decodeJSON(w, r, &b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	b.Rating = strings.TrimSpace(b.Rating)
+	if b.Rating != "thumbs_up" && b.Rating != "thumbs_down" {
+		writeErr(w, http.StatusBadRequest, "invalid rating: must be 'thumbs_up' or 'thumbs_down'")
+		return
+	}
+	if err := a.store.SetResearchFeedback(r.Context(), id, b.Rating, b.Comment); err != nil {
+		a.fail(w, err)
+		return
+	}
+	res, err := a.store.GetResearch(r.Context(), id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":       true,
+		"research": res,
+	})
+}
+
+func (a *api) getPipelineMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics, err := a.store.GetPipelineMetrics(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"metrics": metrics,
 	})
 }
 

@@ -65,5 +65,8 @@ type Store interface {
 	DuplicatePlaybook(ctx context.Context, id int64) (Playbook, error)
 	GetDefaultPlaybook(ctx context.Context) (Playbook, error)
 	ResolvePlaybook(ctx context.Context, cardID int64, explicitPlaybookID ...*int64) (Playbook, error)
+	// Feedback and metrics
+	SetResearchFeedback(ctx context.Context, researchID int64, rating, comment string) error
+	GetPipelineMetrics(ctx context.Context) (PipelineMetrics, error)
 }
 

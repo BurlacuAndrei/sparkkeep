@@ -17,9 +17,11 @@ import {
   Plus,
   ChevronDown,
   BookOpen,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 import { Card, ResearchItem, ResearchSource, Playbook } from '../types';
-import { fetchCardResearchRuns, triggerResearch, fetchPlaybooks } from '../api';
+import { fetchCardResearchRuns, triggerResearch, fetchPlaybooks, submitResearchFeedback } from '../api';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 
 interface ResearchReportViewProps {
@@ -171,6 +173,22 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
   const [appliedTags, setAppliedTags] = useState(false);
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState<'thumbs_up' | 'thumbs_down' | null>(
+    initialResearch?.feedback_rating || null
+  );
+  const [feedbackComment, setFeedbackComment] = useState<string>(
+    initialResearch?.feedback_comment || ''
+  );
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackSaved, setFeedbackSaved] = useState(false);
+
+  useEffect(() => {
+    if (selectedRun) {
+      setFeedbackRating(selectedRun.feedback_rating || null);
+      setFeedbackComment(selectedRun.feedback_comment || '');
+      setFeedbackSaved(Boolean(selectedRun.feedback_rating));
+    }
+  }, [selectedRun?.id]);
 
   useEffect(() => {
     fetchPlaybooks().then(setPlaybooks).catch(() => {});
@@ -260,6 +278,23 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
     if (actions.length === 0) return;
     onAddActions?.(actions);
     showToast?.(`Added ${actions.length} actions to card`);
+  };
+
+  const handleFeedback = async (rating: 'thumbs_up' | 'thumbs_down', commentText?: string) => {
+    if (!selectedRun) return;
+    setFeedbackSubmitting(true);
+    try {
+      const commentToSubmit = commentText !== undefined ? commentText : feedbackComment;
+      const updated = await submitResearchFeedback(selectedRun.id, rating, commentToSubmit);
+      setFeedbackRating(rating);
+      setFeedbackSaved(true);
+      setSelectedRun(updated);
+      showToast?.(rating === 'thumbs_up' ? 'Feedback recorded: Helpful! 👍' : 'Feedback recorded: Needs improvement 👎');
+    } catch (err: any) {
+      showToast?.(err.message || 'Failed to submit feedback');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
   };
 
   const result = selectedRun?.result;
@@ -1011,6 +1046,106 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Report Quality Feedback */}
+          {selectedRun && selectedRun.status === 'done' && (
+            <div
+              style={{
+                background: 'rgba(30, 41, 59, 0.4)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 8,
+                padding: '14px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                marginTop: 8,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>
+                  Was this research report useful?
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12.5,
+                      borderRadius: 6,
+                      border: feedbackRating === 'thumbs_up' ? '1px solid #10b981' : '1px solid rgba(148, 163, 184, 0.2)',
+                      background: feedbackRating === 'thumbs_up' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+                      color: feedbackRating === 'thumbs_up' ? '#34d399' : '#cbd5e1',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: feedbackSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                    disabled={feedbackSubmitting}
+                    onClick={() => handleFeedback('thumbs_up')}
+                  >
+                    <ThumbsUp size={14} />
+                    <span>Helpful</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12.5,
+                      borderRadius: 6,
+                      border: feedbackRating === 'thumbs_down' ? '1px solid #ef4444' : '1px solid rgba(148, 163, 184, 0.2)',
+                      background: feedbackRating === 'thumbs_down' ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+                      color: feedbackRating === 'thumbs_down' ? '#f87171' : '#cbd5e1',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: feedbackSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                    disabled={feedbackSubmitting}
+                    onClick={() => handleFeedback('thumbs_down')}
+                  >
+                    <ThumbsDown size={14} />
+                    <span>Needs work</span>
+                  </button>
+                </div>
+              </div>
+
+              {feedbackRating && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+                  <input
+                    type="text"
+                    placeholder="Optional comment on what worked or what was missing..."
+                    value={feedbackComment}
+                    onChange={(e) => setFeedbackComment(e.target.value)}
+                    style={{
+                      flex: 1,
+                      background: 'rgba(15, 23, 42, 0.6)',
+                      border: '1px solid rgba(148, 163, 184, 0.2)',
+                      borderRadius: 6,
+                      padding: '6px 10px',
+                      color: '#f8fafc',
+                      fontSize: 12,
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleFeedback(feedbackRating, feedbackComment);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: 12, padding: '5px 12px' }}
+                    disabled={feedbackSubmitting}
+                    onClick={() => handleFeedback(feedbackRating, feedbackComment)}
+                  >
+                    {feedbackSaved ? 'Update' : 'Save'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </>

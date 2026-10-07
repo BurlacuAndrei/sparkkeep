@@ -305,8 +305,40 @@ type Research struct {
 	Tokens           int             `json:"tokens"`
 	PlaybookID       *int64          `json:"playbook_id,omitempty"`
 	PlaybookSnapshot *Playbook       `json:"playbook_snapshot,omitempty"`
+	FeedbackRating   *string         `json:"feedback_rating,omitempty"` // "thumbs_up" | "thumbs_down"
+	FeedbackComment  *string         `json:"feedback_comment,omitempty"`
+	FeedbackAt       *time.Time      `json:"feedback_at,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
 }
+
+type StepMetric struct {
+	Step        string  `json:"step"`
+	Runs        int     `json:"runs"`
+	Success     int     `json:"success"`
+	Failed      int     `json:"failed"`
+	SuccessRate float64 `json:"success_rate"`
+}
+
+type FeedbackMetrics struct {
+	Total         int     `json:"total"`
+	ThumbsUp      int     `json:"thumbs_up"`
+	ThumbsDown    int     `json:"thumbs_down"`
+	ThumbsUpRatio float64 `json:"thumbs_up_ratio"`
+}
+
+type PipelineMetrics struct {
+	CapturesCount          int             `json:"captures_count"`
+	CardsCount             int             `json:"cards_count"`
+	TriageByStatus         map[string]int  `json:"triage_by_status"`
+	MedianInboxTimeSeconds int64           `json:"median_inbox_time_seconds"`
+	ResearchConversionRate float64         `json:"research_conversion_rate"`
+	RunsByPlaybook         map[string]int  `json:"runs_by_playbook"`
+	StepMetrics            []StepMetric    `json:"step_metrics"`
+	Feedback               FeedbackMetrics `json:"feedback"`
+	AvgTokens              int             `json:"avg_tokens"`
+	AvgTokensByRole        map[string]int  `json:"avg_tokens_by_role"`
+}
+
 
 
 type ClaimVerdict struct {

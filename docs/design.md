@@ -106,48 +106,39 @@ SQLite, single file. Three tables.
 
 Dashboard is read-heavy; no pagination beyond `?limit=` for now (`ponytail: fine until a user has thousands of cards; add cursor paging then`).
 
-## 4. Analysis pipeline — post → cards
+## 4. Two-stage pipeline — captures → triage brief → cards
 
-Pipeline runs on every incoming share. Pure function: bytes in, `[]Card` out.
+Sparkkeep decouples raw ingestion from synthesis via a two-stage pipeline: **Capture** followed by **Triage**.
 
-**Step 1 — Recognize.** `capture.Recognize(rawText, media)` classifies the
-incoming share:
-- plain link (http/https) → fetch in Step 2
-- YouTube/Instagram/video URL → shell out to `yt-dlp -j` for title/description
-  (`ponytail: yt-dlp is the only subprocess; swap for Go libs if metadata
-  needs ever grow past title/desc`)
-- text-with-link (captioned post) → use caption as `source_note`, may still
-  fetch the link
-- bare text → analyze as-is
+### Stage 1: Capture (Raw Ingestion)
+Incoming shares (links, text, images, or audio voice notes) are first saved into the `captures` table with `status=pending`:
+- **Plain links (HTTP/HTTPS):** fetched and parsed into clean readable text.
+- **YouTube / Video URLs:** metadata extracted via `yt-dlp -j`.
+- **Audio / Voice Notes:** transcribed into text via Whisper ASR client.
+- **Images & Screenshots:** digested into text descriptions using the `vision` model role.
+- **Captioned Posts:** caption preserved in `source_note`; linked URL fetched if open.
 
-Fetching is best-effort and time-boxed (5s). Failure is not an error: the
-caption/link text still gets analyzed.
+Captures preserve the raw source content immutably, ensuring re-analysis and multi-card decomposition have complete provenance.
 
-**Step 2 — Analyze.** `analyze.Analyze(payload)` calls the configured
-OpenAI-compatible endpoint once with a strict prompt. Returns JSON, validated:
+### Stage 2: Triage & Brief Synthesis
+The capture is evaluated by the LLM client routed for the `triage` role:
+- **Personal Fit Context Injection:** If a user profile ("About Me") is configured, background context (goals, skills, stack, constraints) is injected as a passive context block.
+- **Triage Brief Generation:** The model produces an actionable structured brief:
+  - `tldr`: 1–2 sentence executive summary.
+  - `why_care`: specific value proposition, tailored to personal fit.
+  - `worthiness`: `high` | `medium` | `low` rating with concrete rationale.
+  - `type`: card typology (`tool`, `reading`, `architecture`, `company`, `idea`, etc.).
+  - `claims`: key factual claims to verify during research.
+  - `open_questions`: targeted investigative angles.
+  - `suggested_horizon`: `short-term` (actionable now) vs `lifetime` (long-term reference).
+  - `tags`: topic categorization tags.
+- **Distinct Idea Splitting:** Multi-item posts or digests are split into distinct cards, each linked to the parent capture via `capture_id`. Cards share the source URL without unique constraint conflicts.
+- **Persistence & Notification:** Cards are saved in `inbox` status and dispatched via `Channel.Notify` with inline action buttons (`→ Doing`, `→ Done`, `Research`, `Shelve`).
 
-```json
-[{"title":"…","summary":"2–3 lines…","horizon":"short-term|lifetime",
-  "tags":["…"],"links":["https://…"]}]
-```
-
-Prompt contract: *split the post into one card per distinct idea/tool; never
-merge; if only one idea, return one card; 10 items → 10 cards; horizon =
-"lifetime" for bucket-list/long-horizon, "short-term" for actionable now;
-tags ≤ 5 lowercase.*
-
-**Step 3 — Persist & notify.** Cards stored; each triggers `Channel.Notify`
-with a compact Telegram message: title, one-line summary, horizon badge,
-tags, and inline buttons (`→ Doing`, `→ Done`, `Research`, `Shelve`).
-
-**Failure handling:** step 1 always yields *something* to analyze. Step 2
-fails → card saved with `status=inbox`, summary "analysis failed, see
-source" and a retry button (`ponytail: no retry queue; the Research/re-analyze
-button on the card is the retry path`).
-
-**Concurrency:** per-incoming-share goroutine; the LLM call is the only
-serialization point (one at a time via a mutex around the endpoint call,
-`ponytail: single endpoint, cheap; fan out only if one user saturates`).
+### Model Roles & Router
+Sparkkeep supports multiple AI endpoints configured through profiles:
+- **Roles:** `triage`, `vision`, `research_plan`, `research_synthesis`.
+- **Pro Gating:** Pro instances can route each role to separate providers/models (e.g. fast cheap models for triage/planning, high-reasoning models for research synthesis) with per-role token caps. Community instances route all roles to the default profile.
 
 ## 5. Telegram channel adapter
 
@@ -180,36 +171,43 @@ parsed commands.
 **Config (env):** `SPARKKEEP_TG_TOKEN`, `SPARKKEEP_TG_CHAT_ID` (owner),
 `SPARKKEEP_TG_ENABLED` (off = dashboard-only mode).
 
-## 6. Research loop
+## 6. Research playbooks & execution pipeline
 
-"Investigate this" on a card spawns one bounded run. No agent, no infinite
-loop — a deterministic pipeline with a hard stop.
+Research investigations in Sparkkeep are deterministic, step-based workflows governed by **Playbooks**. There is no unbounded autonomous loop: every research run executes an ordered sequence of discrete, verifiable steps with hard stop conditions.
 
-```
-request ──► build query (LLM, from card title+summary)
-      ──► search (SearXNG instance ── or any JSON/HTML search config)
-      ──► fetch top N results (reuse capture.Fetch, time-boxed)
-      ──► extract text → trim to context budget (chars)
-      ──► synthesize: one LLM call → findings (markdown report)
-      ──► store + Channel.Notify(report link)
-```
+### Playbook Architecture
+A playbook (`port.Playbook`) consists of a sequence of `PlaybookStep` items:
+- **`ground`:** Ingests card context, raw capture text, and metadata into run memory.
+- **`resolve_refs`:** Discovers and fetches URLs referenced in card notes or content.
+- **`plan`:** Formulates decomposing investigative questions and web search queries (`RoleResearchPlan`).
+- **`search`:** Executes queries against SearXNG or search APIs, tracking candidate source URLs.
+- **`read`:** Fetches and clips content from discovered sources in round-robin fashion.
+- **`verify_claims`:** Fact-checks assertions against extracted evidence with `[S#]` citations.
+- **`landscape`:** Evaluates competitive alternatives and industry positioning.
+- **`verdict`:** Synthesizes pursue/skip/watch recommendation, confidence, and next actions.
+- **`report`:** Compiles the complete Markdown briefing.
+- **`custom`:** User-defined prompts with customizable role, tools (`search` / `none`), and heading.
 
-**Deterministic stops (no unbounded recursion):**
-- search returns up to N=6 results
-- each result clipped to ~8K chars of text before synthesis
-- one synthesis LLM call, no follow-up passes
-- hard wall-clock timeout per run (default 120s)
+### Tiers & Gating
+- **Community:**
+  - Includes **Default (lite)** playbook: `ground, resolve_refs, search, read, report`.
+  - Includes built-in **"Claim check only"** playbook: `ground, resolve_refs, verify_claims, report`.
+  - Runs all steps through the single default AI model profile.
+- **Pro (`deep_research_v2`):**
+  - Full 7-step **Default** playbook with planning, claim verification, landscape, and verdict.
+  - Built-in specialist playbooks: **Deep Investigation** and **Vendor Comparison**.
+  - **Custom Playbooks:** Create, edit, duplicate, and assign card-type affinities (up to 12 steps).
+  - **Curated Step Library:** Instant insertion of pre-built domain analysis modules.
+  - Per-role model routing (planning vs synthesis).
+- **Graceful License Lapsing:** Custom playbooks remain readable if a Pro license expires, but cannot be run or edited until reactivated. User data is never deleted.
 
-**State:** `research` table row: `queued → running → done|failed`. Runs
-serialized (one at a time, same mutex pattern as analysis — `ponytail:
-single-user; a worker pool only matters if research queues grow past a few
-runs`). Failure stores the error on the row and notifies the channel.
-
-**Search backend:** configurable `SPARKKEEP_SEARCH_URL`. Default expectation
-is a SearXNG JSON API (already on your NAS); v1 ships a generic
-`?q=` + parse-JSON reader, documented so other backends can follow
-(`ponytail: one parser today; a provider interface only when a second
-search vendor actually appears`).
+### Run Snapshots & Observability
+- **Immutable Snapshot:** The exact playbook configuration is captured in `playbook_snapshot` on every research row, guaranteeing historical reproducibility.
+- **Live Progress:** Progress is updated per-step (`steps` JSON array) and streamed to the UI.
+- **Feedback & Metrics:**
+  - Reports collect user 👍 / 👎 feedback and optional comments directly on the run.
+  - Local endpoint `GET /api/v1/metrics/pipeline` computes funnel conversion %, median inbox time, playbook run counts, step success rates, feedback satisfaction, and average token consumption.
+  - **Zero Telemetry:** All metrics remain 100% private and on-instance.
 
 ## 7. Web dashboard & API
 

@@ -71,20 +71,25 @@ No need to hand-edit `.env` files or mount API key secrets before booting. When 
 
 ## 💎 Features: Community vs. Pro
 
-Sparkkeep is built on an **Open Core** model. The core capture, kanban triage, and AI synthesis workflow is 100% free and MIT open-source.
+Sparkkeep is built on an **Open Core** model. The core capture, two-stage triage brief, and baseline research pipeline is 100% free and MIT open-source.
 
 | Capability | Community (Free / MIT) | Pro License ($49 Lifetime) |
 |---|:---:|:---:|
-| Web Capture & Smart Analysis | ✅ | ✅ |
+| Raw Share Capture & Two-Stage Triage | ✅ | ✅ |
 | Kanban Triage (Inbox, Doing, Done, Shelved) | ✅ | ✅ |
 | Horizon Routing (Now, Next, Later) | ✅ | ✅ |
 | Full-Text Search & Card Filtering | ✅ | ✅ |
 | BYOK AI Models (OpenAI, DeepSeek, Ollama) | ✅ | ✅ |
-| Automated Weekly Digest | ✅ | ✅ |
+| Automated Weekly Digest & Local Pipeline Metrics | ✅ | ✅ |
 | Single-Binary Embedded Architecture | ✅ | ✅ |
+| Default (lite) Research Pipeline (`ground, resolve_refs, search, read, report`) | ✅ | ✅ |
+| Built-in "Claim check only" Playbook | ✅ | ✅ |
+| **Full Default Research Playbook (Planning, Claims Verification, Landscape, Verdict)** | — | ✅ |
+| **Custom Research Playbooks & Step Library (Create, Edit, Duplicate)** | — | ✅ |
+| **Per-Role AI Model Routing & Token Caps (Triage, Vision, Planning, Synthesis)** | — | ✅ |
+| **User Profile ("About Me") Personal Fit Scoring** | — | ✅ |
 | **Obsidian Vault 2-Way Markdown Sync** | — | ✅ |
 | **Outbound Webhooks (n8n, Zapier, Home Assistant)** | — | ✅ |
-| **Autonomous Deep Research Agent v2** | — | ✅ |
 
 > **Privacy-First Offline Verification:** Pro licenses are cryptographically verified offline inside your instance using Ed25519 signatures. Your instance never phones home.
 

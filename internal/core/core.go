@@ -74,6 +74,13 @@ type Service struct {
 func (s *Service) clientFor(role string) *analyze.Client {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	ctx := s.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
+		role = ""
+	}
 	if s.Router != nil {
 		if c := s.Router.For(role); c != nil {
 			return c
@@ -282,6 +289,12 @@ func (s *Service) RebuildRouter(ctx context.Context) error {
 		httpCl = s.Router.HTTPClient()
 	} else if s.Analyze != nil {
 		httpCl = s.Analyze.HTTP
+	}
+
+	// Pro gating: if not Pro (FeatureDeepResearchV2 capability missing), ignore role mappings
+	// and route all roles to the default profile.
+	if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
+		roles = nil
 	}
 
 	newRouter := analyze.NewRouter(analyze.RouterConfig{
@@ -652,6 +665,22 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 	} else if active {
 		return port.ErrResearchActive
 	}
+	if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
+		var reqPB *port.Playbook
+		if len(playbookID) > 0 && playbookID[0] != nil {
+			if pb, err := s.Store.GetPlaybook(ctx, *playbookID[0]); err == nil {
+				reqPB = &pb
+			}
+		}
+		if reqPB != nil {
+			if !reqPB.IsBuiltin {
+				return errors.New("custom playbooks require Pro license")
+			}
+			if reqPB.ID != 1 && reqPB.ID != 2 && !strings.EqualFold(reqPB.Name, "Default") && !strings.EqualFold(reqPB.Name, "Claim check only") {
+				return errors.New("this playbook requires Pro license")
+			}
+		}
+	}
 	row, err := s.Store.CreateResearch(ctx, cardID, "", playbookID...)
 
 	if err != nil {
@@ -663,10 +692,24 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 	runner := *s.Runner
 	runner.Store = s.Store
 	if s.Router != nil {
-		runner.PlanLLM = s.Router.For(analyze.RoleResearchPlan)
-		runner.SynthesisLLM = s.Router.For(analyze.RoleResearchSynthesis)
+		if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
+			runner.PlanLLM = s.Analyze
+			runner.SynthesisLLM = s.Analyze
+		} else {
+			runner.PlanLLM = s.Router.For(analyze.RoleResearchPlan)
+			runner.SynthesisLLM = s.Router.For(analyze.RoleResearchSynthesis)
+		}
 	}
-	findings, err := runner.RunWithID(ctx, card, row.ID)
+	var findings string
+	if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
+		runPB := research.DefaultLitePlaybook()
+		if row.PlaybookSnapshot != nil && (row.PlaybookSnapshot.ID == 2 || strings.EqualFold(row.PlaybookSnapshot.Name, "Claim check only")) {
+			runPB = *row.PlaybookSnapshot
+		}
+		findings, err = runner.RunWithPlaybook(ctx, card, row.ID, runPB)
+	} else {
+		findings, err = runner.RunWithID(ctx, card, row.ID)
+	}
 	if err != nil {
 		row, rerr := s.Store.SetResearch(ctx, row.ID, "failed", "", err.Error())
 		if rerr != nil {

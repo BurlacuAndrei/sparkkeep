@@ -19,6 +19,7 @@ import (
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
+	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
 )
 
@@ -156,6 +157,7 @@ func TestCoreRouterPerRoleEndpoints(t *testing.T) {
 	_ = st.SetSetting(ctx, "llm_roles", string(rolesJSON))
 
 	svc := New(ctx, st, config.Config{SearchURL: searchSrv.URL}, t.Logf)
+	svc.License = license.SetupProForTest(ctx, st)
 	svc.Fetcher = stubTestFetcher{}
 	// Use test http client so httptest servers work
 	svc.Router = analyze.NewRouter(analyze.RouterConfig{
@@ -256,6 +258,7 @@ func TestCoreRouterDeletionFallback(t *testing.T) {
 	_ = st.SetSetting(ctx, "llm_roles", string(rolesJSON))
 
 	svc := New(ctx, st, config.Config{SearchURL: searchSrv.URL}, t.Logf)
+	svc.License = license.SetupProForTest(ctx, st)
 	svc.Fetcher = stubTestFetcher{}
 	svc.Router = analyze.NewRouter(analyze.RouterConfig{
 		Profiles:   []analyze.Profile{profA},
@@ -336,6 +339,7 @@ func TestCoreRouterSettingsChangeTakesEffectWithoutRestart(t *testing.T) {
 	_ = st.SetSetting(ctx, "llm_profiles", string(profsJSON))
 
 	svc := New(ctx, st, config.Config{SearchURL: searchSrv.URL}, t.Logf)
+	svc.License = license.SetupProForTest(ctx, st)
 	svc.Fetcher = stubTestFetcher{}
 	// Initially no role mapping -> synthesis goes to server A
 	svc.Router = analyze.NewRouter(analyze.RouterConfig{
@@ -484,6 +488,7 @@ func TestCaptureTriageBriefDistinctCards(t *testing.T) {
 	ctx := context.Background()
 
 	svc := New(ctx, st, config.Config{}, t.Logf)
+	svc.License = license.SetupProForTest(ctx, st)
 	svc.Fetcher = stubTestFetcher{}
 	svc.Router = analyze.NewRouter(analyze.RouterConfig{
 		Profiles: []analyze.Profile{
@@ -568,5 +573,47 @@ func TestCaptureTriageBriefDistinctCards(t *testing.T) {
 	}
 	if card1.Worthiness.Level != "high" || card2.Worthiness.Level != "low" {
 		t.Errorf("worthiness: %+v, %+v", card1.Worthiness, card2.Worthiness)
+	}
+}
+
+func TestCommunitySingleModelRouting(t *testing.T) {
+	st := newStubStore()
+	ctx := context.Background()
+
+	profDefault := analyze.Profile{
+		ID:        "prof-default",
+		Name:      "Default Model",
+		BaseURL:   "https://api.default.com/v1",
+		Model:     "gpt-4o",
+		IsDefault: true,
+	}
+	profOther := analyze.Profile{
+		ID:        "prof-other",
+		Name:      "Other Model",
+		BaseURL:   "https://api.other.com/v1",
+		Model:     "claude-3-opus",
+		IsDefault: false,
+	}
+	profsJSON, _ := json.Marshal([]analyze.Profile{profDefault, profOther})
+	rolesJSON, _ := json.Marshal(map[string]string{
+		analyze.RoleResearchPlan:      "prof-other",
+		analyze.RoleResearchSynthesis: "prof-other",
+	})
+	_ = st.SetSetting(ctx, "llm_profiles", string(profsJSON))
+	_ = st.SetSetting(ctx, "llm_roles", string(rolesJSON))
+
+	// In Community (no Pro license), role mappings are ignored and all roles route to the default profile.
+	svc := New(ctx, st, config.Config{}, t.Logf)
+	if err := svc.RebuildRouter(ctx); err != nil {
+		t.Fatalf("RebuildRouter: %v", err)
+	}
+
+	planCl := svc.clientFor(analyze.RoleResearchPlan)
+	if planCl.BaseURL != "https://api.default.com/v1" || planCl.Model != "gpt-4o" {
+		t.Errorf("Community: expected plan role to route to default profile, got base=%s model=%s", planCl.BaseURL, planCl.Model)
+	}
+	synthCl := svc.clientFor(analyze.RoleResearchSynthesis)
+	if synthCl.BaseURL != "https://api.default.com/v1" || synthCl.Model != "gpt-4o" {
+		t.Errorf("Community: expected synth role to route to default profile, got base=%s model=%s", synthCl.BaseURL, synthCl.Model)
 	}
 }

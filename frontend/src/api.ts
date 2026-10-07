@@ -1,4 +1,4 @@
-import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile } from './types';
+import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics } from './types';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -119,6 +119,20 @@ export async function fetchCardResearch(cardId: number): Promise<ResearchItem | 
     const latest = list.filter((r) => r.card_id === cardId).sort((a, b) => b.id - a.id)[0];
     return latest ? fetchResearchItem(latest.id) : null;
   }
+}
+
+export async function submitResearchFeedback(id: number, rating: 'thumbs_up' | 'thumbs_down', comment?: string): Promise<ResearchItem> {
+  const res = await request<{ ok: boolean; research: ResearchItem }>(`/api/v1/research/${id}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rating, comment: comment || '' }),
+  });
+  return res.research;
+}
+
+export async function fetchPipelineMetrics(): Promise<PipelineMetrics> {
+  const res = await request<{ ok: boolean; metrics: PipelineMetrics }>('/api/v1/metrics/pipeline');
+  return res.metrics;
 }
 
 

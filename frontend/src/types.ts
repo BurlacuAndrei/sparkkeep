@@ -155,7 +155,38 @@ export interface ResearchItem {
   plan?: ResearchPlan;
   result?: ResearchResult;
   tokens?: number;
+  feedback_rating?: 'thumbs_up' | 'thumbs_down';
+  feedback_comment?: string;
+  feedback_at?: string;
   created_at: string;
+}
+
+export interface StepMetric {
+  step: string;
+  runs: number;
+  success: number;
+  failed: number;
+  success_rate: number;
+}
+
+export interface FeedbackMetrics {
+  total: number;
+  thumbs_up: number;
+  thumbs_down: number;
+  thumbs_up_ratio: number;
+}
+
+export interface PipelineMetrics {
+  captures_count: number;
+  cards_count: number;
+  triage_by_status: Record<string, number>;
+  median_inbox_time_seconds: number;
+  research_conversion_rate: number;
+  runs_by_playbook: Record<string, number>;
+  step_metrics: StepMetric[];
+  feedback: FeedbackMetrics;
+  avg_tokens: number;
+  avg_tokens_by_role?: Record<string, number>;
 }
 
 

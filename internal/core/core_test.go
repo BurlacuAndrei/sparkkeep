@@ -248,6 +248,24 @@ func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, er
 	return false, nil
 }
 
+func (s *stubStore) SetResearchFeedback(_ context.Context, id int64, rating, comment string) error {
+	r, ok := s.researches[id]
+	if !ok {
+		return port.ErrNotFound
+	}
+	r.FeedbackRating = &rating
+	r.FeedbackComment = &comment
+	s.researches[id] = r
+	return nil
+}
+
+func (s *stubStore) GetPipelineMetrics(_ context.Context) (port.PipelineMetrics, error) {
+	return port.PipelineMetrics{
+		RunsByPlaybook: make(map[string]int),
+		TriageByStatus: make(map[string]int),
+	}, nil
+}
+
 func (s *stubStore) SetResearch(_ context.Context, id int64, status, findings, errMsg string) (port.Research, error) {
 	r, ok := s.researches[id]
 	if !ok {

@@ -387,6 +387,7 @@ function AppContent() {
             setIsSettingsModalOpen(false);
             reloadAll();
           }}
+          onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
           showToast={showToast}
         />
       )}

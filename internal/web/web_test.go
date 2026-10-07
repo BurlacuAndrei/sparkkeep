@@ -546,6 +546,31 @@ func (s *stubStore) GetResearchFindings(_ context.Context, id int64) (string, er
 	return r.Findings, nil
 }
 
+func (s *stubStore) SetResearchFeedback(_ context.Context, id int64, rating, comment string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.researches[id]
+	if !ok {
+		return port.ErrNotFound
+	}
+	r.FeedbackRating = &rating
+	r.FeedbackComment = &comment
+	now := time.Now().UTC()
+	r.FeedbackAt = &now
+	s.researches[id] = r
+	return nil
+}
+
+func (s *stubStore) GetPipelineMetrics(_ context.Context) (port.PipelineMetrics, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return port.PipelineMetrics{
+		RunsByPlaybook:  make(map[string]int),
+		TriageByStatus:  make(map[string]int),
+		AvgTokensByRole: make(map[string]int),
+	}, nil
+}
+
 func (s *stubStore) GetSetting(_ context.Context, key string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2142,13 +2167,14 @@ func TestSettingsLLMRolesRoundTrip(t *testing.T) {
 		LLMModel: "gpt-4o",
 		LLMKey:   "sk-openai-key",
 	}, nil)
+	ctx := context.Background()
 	svc := &core.Service{
 		Store:   st,
 		Analyze: analyzeClient,
+		License: license.SetupProForTest(ctx, st),
 		Logf:    t.Logf,
 	}
 	h := New(st, svc, config.Config{MaxUploadMB: 25})
-	ctx := context.Background()
 
 	// Initial profiles in store: prof-a (default) and prof-b
 	profiles := []analyze.Profile{
@@ -2337,7 +2363,8 @@ func TestTriageBriefAPIFields(t *testing.T) {
 
 func TestPlaybookAPI(t *testing.T) {
 	st := newStubStore()
-	h := webHandler(st, &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, Logf: t.Logf})
+	ctx := context.Background()
+	h := webHandler(st, &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, License: license.SetupProForTest(ctx, st), Logf: t.Logf})
 
 	// 1. GET /api/v1/playbooks (should contain Default)
 	rr := doJSON(t, h, http.MethodGet, "/api/v1/playbooks", "")
@@ -2537,6 +2564,206 @@ func TestUserProfileSettings_RoundTripAndLengthValidation(t *testing.T) {
 	}
 	if !strings.Contains(rrTooLong.Body.String(), "1,500 characters") {
 		t.Errorf("expected error message to mention '1,500 characters', got: %s", rrTooLong.Body.String())
+	}
+}
+
+func TestPlaybookLicenseMatrix(t *testing.T) {
+	st := newStubStore()
+	ctx := context.Background()
+
+	// 1. Community instance (no license)
+	commSvc := &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, Logf: t.Logf}
+	commH := webHandler(st, commSvc)
+
+	validCustomPB := `{
+		"name": "Custom Community Attempt",
+		"description": "Custom playbook",
+		"steps": [
+			{"position": 1, "kind": "ground", "name": "Ground", "enabled": true},
+			{"position": 2, "kind": "report", "name": "Report", "enabled": true}
+		]
+	}`
+
+	// Create -> 403
+	rrCreate := doJSON(t, commH, http.MethodPost, "/api/v1/playbooks", validCustomPB)
+	if rrCreate.Code != http.StatusForbidden {
+		t.Fatalf("Community: expected 403 for create playbook, got %d: %s", rrCreate.Code, rrCreate.Body.String())
+	}
+	var errResp struct {
+		OK      bool   `json:"ok"`
+		Error   string `json:"error"`
+		Feature string `json:"feature"`
+	}
+	_ = json.Unmarshal(rrCreate.Body.Bytes(), &errResp)
+	if errResp.Feature != license.FeatureDeepResearchV2 {
+		t.Errorf("Community create: expected feature %q, got %q", license.FeatureDeepResearchV2, errResp.Feature)
+	}
+
+	// Duplicate -> 403
+	rrDup := doJSON(t, commH, http.MethodPost, "/api/v1/playbooks/1/duplicate", "")
+	if rrDup.Code != http.StatusForbidden {
+		t.Fatalf("Community: expected 403 for duplicate playbook, got %d", rrDup.Code)
+	}
+
+	// Update -> 403
+	rrUpd := doJSON(t, commH, http.MethodPut, "/api/v1/playbooks/1", validCustomPB)
+	if rrUpd.Code != http.StatusForbidden {
+		t.Fatalf("Community: expected 403 for update playbook, got %d", rrUpd.Code)
+	}
+
+	// Seed custom playbook directly into store (e.g. created while on Pro)
+	st.nextPb++
+	customID := st.nextPb
+	st.playbooks[customID] = port.Playbook{
+		ID:        customID,
+		Name:      "Legacy Custom Playbook",
+		IsBuiltin: false,
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: "ground", Name: "Ground", Enabled: true},
+			{Position: 2, Kind: "report", Name: "Report", Enabled: true},
+		},
+	}
+
+	// GET playbooks: readable!
+	rrList := doJSON(t, commH, http.MethodGet, "/api/v1/playbooks", "")
+	if rrList.Code != http.StatusOK {
+		t.Fatalf("Community: expected 200 for GET playbooks, got %d", rrList.Code)
+	}
+	var listResp struct {
+		Playbooks []port.Playbook `json:"playbooks"`
+	}
+	_ = json.Unmarshal(rrList.Body.Bytes(), &listResp)
+	foundCustom := false
+	for _, pb := range listResp.Playbooks {
+		if pb.ID == customID {
+			foundCustom = true
+			break
+		}
+	}
+	if !foundCustom {
+		t.Errorf("Community: expected custom playbook %d to be readable in list", customID)
+	}
+
+	// Create test card
+	card, _ := st.CreateCard(ctx, port.Card{Title: "AI Search Paper"})
+
+	// Trigger research with custom playbook -> 403
+	runCustomPayload := fmt.Sprintf(`{"card_id": %d, "playbook_id": %d}`, card.ID, customID)
+	rrRunCustom := doJSON(t, commH, http.MethodPost, "/api/v1/research", runCustomPayload)
+	if rrRunCustom.Code != http.StatusForbidden {
+		t.Fatalf("Community: expected 403 for running custom playbook, got %d: %s", rrRunCustom.Code, rrRunCustom.Body.String())
+	}
+
+	// Trigger research without playbook -> 200 and uses Default (lite) variant
+	runDefPayload := fmt.Sprintf(`{"card_id": %d}`, card.ID)
+	rrRunDef := doJSON(t, commH, http.MethodPost, "/api/v1/research", runDefPayload)
+	if rrRunDef.Code != http.StatusOK {
+		t.Fatalf("Community: expected 200 for running default research, got %d: %s", rrRunDef.Code, rrRunDef.Body.String())
+	}
+	var runResp struct {
+		OK       bool          `json:"ok"`
+		Playbook port.Playbook `json:"playbook"`
+	}
+	_ = json.Unmarshal(rrRunDef.Body.Bytes(), &runResp)
+	if len(runResp.Playbook.Steps) != 5 {
+		t.Errorf("Community: expected Default (lite) with 5 steps, got %d steps", len(runResp.Playbook.Steps))
+	}
+
+	// 2. Pro instance
+	proSvc := &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, License: license.SetupProForTest(ctx, st), Logf: t.Logf}
+	proH := webHandler(st, proSvc)
+
+	// Create succeeds
+	rrProCreate := doJSON(t, proH, http.MethodPost, "/api/v1/playbooks", validCustomPB)
+	if rrProCreate.Code != http.StatusCreated {
+		t.Fatalf("Pro: expected 201 for create playbook, got %d: %s", rrProCreate.Code, rrProCreate.Body.String())
+	}
+
+	// Trigger research with custom playbook succeeds
+	card2, _ := st.CreateCard(ctx, port.Card{Title: "Second Card"})
+	runProCustomPayload := fmt.Sprintf(`{"card_id": %d, "playbook_id": %d}`, card2.ID, customID)
+	rrProRun := doJSON(t, proH, http.MethodPost, "/api/v1/research", runProCustomPayload)
+	if rrProRun.Code != http.StatusOK {
+		t.Fatalf("Pro: expected 200 for running custom playbook, got %d: %s", rrProRun.Code, rrProRun.Body.String())
+	}
+
+	// 3. Lapsed instance
+	lapsedSvc := &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, License: license.SetupLapsedForTest(ctx, st), Logf: t.Logf}
+	lapsedH := webHandler(st, lapsedSvc)
+
+	// Custom playbook still readable
+	rrLapsedGet := doJSON(t, lapsedH, http.MethodGet, fmt.Sprintf("/api/v1/playbooks/%d", customID), "")
+	if rrLapsedGet.Code != http.StatusOK {
+		t.Fatalf("Lapsed: expected 200 for GET custom playbook, got %d", rrLapsedGet.Code)
+	}
+
+	// Creating / running custom is locked with 403
+	rrLapsedCreate := doJSON(t, lapsedH, http.MethodPost, "/api/v1/playbooks", validCustomPB)
+	if rrLapsedCreate.Code != http.StatusForbidden {
+		t.Fatalf("Lapsed: expected 403 for create playbook, got %d", rrLapsedCreate.Code)
+	}
+}
+
+func TestResearchFeedbackAPI(t *testing.T) {
+	st := newStubStore()
+	ctx := context.Background()
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	// Seed research row
+	res, err := st.CreateResearch(ctx, 42, "investigate vector db")
+	if err != nil {
+		t.Fatalf("CreateResearch: %v", err)
+	}
+
+	// 1. Submit valid thumbs_up feedback
+	body := `{"rating": "thumbs_up", "comment": "Excellent synthesis with sources."}`
+	rr := doJSON(t, h, http.MethodPost, fmt.Sprintf("/api/v1/research/%d/feedback", res.ID), body)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("POST feedback: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		OK       bool          `json:"ok"`
+		Research port.Research `json:"research"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal feedback response: %v", err)
+	}
+	if resp.Research.FeedbackRating == nil || *resp.Research.FeedbackRating != "thumbs_up" {
+		t.Errorf("feedback_rating = %v, want thumbs_up", resp.Research.FeedbackRating)
+	}
+	if resp.Research.FeedbackComment == nil || *resp.Research.FeedbackComment != "Excellent synthesis with sources." {
+		t.Errorf("feedback_comment = %v, want 'Excellent synthesis with sources.'", resp.Research.FeedbackComment)
+	}
+
+	// 2. Reject invalid rating
+	badBody := `{"rating": "neutral"}`
+	rrBad := doJSON(t, h, http.MethodPost, fmt.Sprintf("/api/v1/research/%d/feedback", res.ID), badBody)
+	if rrBad.Code != http.StatusBadRequest {
+		t.Fatalf("POST feedback with bad rating: expected 400, got %d", rrBad.Code)
+	}
+}
+
+func TestPipelineMetricsAPI(t *testing.T) {
+	st := newStubStore()
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/metrics/pipeline", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/metrics/pipeline: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		OK      bool                 `json:"ok"`
+		Metrics port.PipelineMetrics `json:"metrics"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal metrics: %v", err)
+	}
+	if !resp.OK {
+		t.Errorf("expected ok: true")
 	}
 }
 

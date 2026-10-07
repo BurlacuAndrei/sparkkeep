@@ -130,3 +130,23 @@ func ClaimCheckPlaybook() port.Playbook {
 	}
 }
 
+// DefaultLitePlaybook returns the community-tier Default (lite) playbook variant.
+func DefaultLitePlaybook() port.Playbook {
+	return port.Playbook{
+		ID:          1,
+		Name:        "Default (lite)",
+		Description: "Fast community research pipeline (grounding, references, search, read, report)",
+		IsBuiltin:   true,
+		CardTypes:   []string{},
+		Version:     1,
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Grounding", Enabled: true},
+			{Position: 2, Kind: port.StepKindResolveRefs, Name: "Resolve References", Enabled: true},
+			{Position: 3, Kind: port.StepKindSearch, Name: "Search", Enabled: true},
+			{Position: 4, Kind: port.StepKindRead, Name: "Reading", Enabled: true},
+			{Position: 5, Kind: port.StepKindReport, Name: "Report Generation", Enabled: true},
+		},
+	}
+}
+
+
