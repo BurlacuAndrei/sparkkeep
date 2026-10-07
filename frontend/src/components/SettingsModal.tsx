@@ -21,11 +21,13 @@ import {
   Network,
   BookOpen,
   User,
+  Clock,
 } from 'lucide-react';
 import * as api from '../api';
 import { LLMProfile, LLMProfileInput } from '../types';
 import { ThemeSelector } from './ThemeSelector';
 import { PlaybookManager } from './PlaybookManager';
+import { ResearchScheduler } from './ResearchScheduler';
 
 interface RoleDefinition {
   key: string;
@@ -67,7 +69,7 @@ export interface SettingsModalProps {
   onOpenLicenseModal?: () => void;
 }
 
-type SettingsTab = 'appearance' | 'profile' | 'ai' | 'playbooks' | 'security';
+type SettingsTab = 'appearance' | 'profile' | 'ai' | 'playbooks' | 'schedule' | 'security';
 
 const LANGUAGE_OPTIONS = [
   'Same as source / English',
@@ -624,6 +626,16 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
           >
             <BookOpen size={15} />
             <span>Research Playbooks</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'schedule'}
+            className={`settings-tab-btn ${activeTab === 'schedule' ? 'active' : ''}`}
+            onClick={() => setActiveTab('schedule')}
+          >
+            <Clock size={15} />
+            <span>Scheduled Research</span>
           </button>
           <button
             type="button"
@@ -1266,6 +1278,13 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
               </div>
             )}
 
+            {/* TAB 4: Scheduled Research & Overnight Queue */}
+            {activeTab === 'schedule' && (
+              <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
+                <ResearchScheduler showToast={showToast} onOpenLicenseModal={onOpenLicenseModal} />
+              </div>
+            )}
+
             {/* TAB 4: Security & Access */}
             {activeTab === 'security' && (
               <div className="settings-panel" role="tabpanel">
@@ -1336,7 +1355,7 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
         )}
 
         {/* Modal Footer */}
-        {activeTab !== 'playbooks' && (
+        {activeTab !== 'playbooks' && activeTab !== 'schedule' && (
           <div className="settings-modal-footer">
             <button type="button" className="setup-btn-secondary" onClick={onClose}>
               Cancel

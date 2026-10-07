@@ -88,6 +88,7 @@ Sparkkeep is built on an **Open Core** model. The core capture, two-stage triage
 | **Custom Research Playbooks & Step Library (Create, Edit, Duplicate)** | — | ✅ |
 | **Per-Role AI Model Routing & Token Caps (Triage, Vision, Planning, Synthesis)** | — | ✅ |
 | **User Profile ("About Me") Personal Fit Scoring** | — | ✅ |
+| **Scheduled & Batch Overnight Research (Queue Worker, Quiet Window, Rules)** | — | ✅ |
 | **Obsidian Vault 2-Way Markdown Sync** | — | ✅ |
 | **Outbound Webhooks (n8n, Zapier, Home Assistant)** | — | ✅ |
 

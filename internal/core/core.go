@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/asr"
@@ -62,13 +63,26 @@ type Service struct {
 	UploadDir        string              // "" disables upload retention
 	UploadMaxAgeDays int                 // 0 disables age-based cleanup
 	UploadMaxSizeMB  int                 // 0 disables size-based cleanup
-	FFmpegBin        string              // "" disables video audio extraction
-	License          *license.Manager    // offline Tier/capability manager
-	Webhook          *webhook.Dispatcher // outbound webhook dispatcher
-	Logf             func(format string, args ...any)
-	WG               sync.WaitGroup
-	ctx              context.Context
-	mu               sync.RWMutex
+	FFmpegBin         string              // "" disables video audio extraction
+	License           *license.Manager    // offline Tier/capability manager
+	Webhook           *webhook.Dispatcher // outbound webhook dispatcher
+	Logf              func(format string, args ...any)
+	WG                sync.WaitGroup
+	QueueConcurrency  int
+	QueuePollInterval time.Duration
+	Clock             func() time.Time
+	queueWakeup       chan struct{}
+	queueWorkerStop   context.CancelFunc
+	workerMu          sync.Mutex
+	ctx               context.Context
+	mu                sync.RWMutex
+}
+
+func (s *Service) now() time.Time {
+	if s.Clock != nil {
+		return s.Clock()
+	}
+	return time.Now().UTC()
 }
 
 func (s *Service) clientFor(role string) *analyze.Client {
@@ -199,8 +213,12 @@ func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format
 		FFmpegBin:        ffmpegBin(cfg),
 		License:          licMgr,
 		Webhook:          webhook.NewDispatcher(st, licMgr, logf),
-		Logf:             logf,
-		ctx:              ctx,
+		Logf:              logf,
+		QueueConcurrency:  1,
+		QueuePollInterval: 1 * time.Second,
+		Clock:             func() time.Time { return time.Now().UTC() },
+		queueWakeup:       make(chan struct{}, 1),
+		ctx:               ctx,
 	}
 	if s.Logf == nil {
 		s.Logf = log.Printf
@@ -682,10 +700,13 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 		}
 	}
 	row, err := s.Store.CreateResearch(ctx, cardID, "", playbookID...)
-
 	if err != nil {
 		return err
 	}
+	return s.executeResearch(ctx, row, card)
+}
+
+func (s *Service) executeResearch(ctx context.Context, row port.Research, card port.Card) error {
 	if s.Runner == nil {
 		return errors.New("core: research runner not initialized")
 	}
@@ -701,6 +722,7 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 		}
 	}
 	var findings string
+	var err error
 	if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
 		runPB := research.DefaultLitePlaybook()
 		if row.PlaybookSnapshot != nil && (row.PlaybookSnapshot.ID == 2 || strings.EqualFold(row.PlaybookSnapshot.Name, "Claim check only")) {

@@ -3,6 +3,7 @@ package port
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // ErrNotFound is returned by Store methods when the requested row does not
@@ -68,5 +69,12 @@ type Store interface {
 	// Feedback and metrics
 	SetResearchFeedback(ctx context.Context, researchID int64, rating, comment string) error
 	GetPipelineMetrics(ctx context.Context) (PipelineMetrics, error)
+	// Scheduled, queued and batch research
+	RecoverInterruptedResearch(ctx context.Context) (int, error)
+	GetNextQueuedResearch(ctx context.Context, asOf time.Time) (*Research, error)
+	CountQueuedAhead(ctx context.Context, researchID int64) (int, error)
+	BatchQueueResearch(ctx context.Context, cardIDs []int64, playbookID *int64, scheduledFor *time.Time, batchID string) ([]Research, error)
+	FindCardsForRule(ctx context.Context, filter ResearchRuleFilter, maxCards int, asOf time.Time) ([]Card, error)
+	ListCompletedResearchSince(ctx context.Context, since time.Time) ([]Research, error)
 }
 

@@ -354,6 +354,110 @@ func (s *stubStore) ListSettings(context.Context) (map[string]string, error) {
 	return out, nil
 }
 
+func (s *stubStore) RecoverInterruptedResearch(_ context.Context) (int, error) {
+	n := 0
+	for id, r := range s.researches {
+		if r.Status == "running" {
+			r.Status = "failed"
+			r.Error = "interrupted by server restart"
+			s.researches[id] = r
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (s *stubStore) GetNextQueuedResearch(_ context.Context, asOf time.Time) (*port.Research, error) {
+	var best *port.Research
+	for _, r := range s.researches {
+		if r.Status != "queued" {
+			continue
+		}
+		if r.ScheduledFor != nil && r.ScheduledFor.After(asOf) {
+			continue
+		}
+		if best == nil || r.ID < best.ID {
+			curr := r
+			best = &curr
+		}
+	}
+	return best, nil
+}
+
+func (s *stubStore) CountQueuedAhead(_ context.Context, researchID int64) (int, error) {
+	target, ok := s.researches[researchID]
+	if !ok {
+		return 0, nil
+	}
+	n := 0
+	for _, r := range s.researches {
+		if r.Status == "queued" && r.ID < target.ID {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (s *stubStore) BatchQueueResearch(ctx context.Context, cardIDs []int64, playbookID *int64, scheduledFor *time.Time, batchID string) ([]port.Research, error) {
+	var queued []port.Research
+	for _, cid := range cardIDs {
+		active, _ := s.HasActiveResearch(ctx, cid)
+		if active {
+			continue
+		}
+		r, err := s.CreateResearch(ctx, cid, "", playbookID)
+		if err != nil {
+			return nil, err
+		}
+		r.ScheduledFor = scheduledFor
+		if batchID != "" {
+			r.BatchID = &batchID
+		}
+		s.researches[r.ID] = r
+		queued = append(queued, r)
+	}
+	return queued, nil
+}
+
+func (s *stubStore) FindCardsForRule(ctx context.Context, filter port.ResearchRuleFilter, maxCards int, asOf time.Time) ([]port.Card, error) {
+	if maxCards <= 0 {
+		maxCards = 10
+	}
+	var res []port.Card
+	for _, c := range s.cards {
+		if len(res) >= maxCards {
+			break
+		}
+		active, _ := s.HasActiveResearch(ctx, c.ID)
+		if active {
+			continue
+		}
+		if filter.Status != "" && !strings.EqualFold(c.Status, filter.Status) {
+			continue
+		}
+		if filter.Worthiness != "" && !strings.EqualFold(c.Worthiness.Level, filter.Worthiness) {
+			continue
+		}
+		if filter.Type != "" && !strings.EqualFold(c.Type, filter.Type) {
+			continue
+		}
+		res = append(res, c)
+	}
+	return res, nil
+}
+
+func (s *stubStore) ListCompletedResearchSince(_ context.Context, since time.Time) ([]port.Research, error) {
+	var res []port.Research
+	for _, r := range s.researches {
+		if r.Status == "done" || r.Status == "failed" {
+			if r.CreatedAt.After(since) || r.CreatedAt.Equal(since) {
+				res = append(res, r)
+			}
+		}
+	}
+	return res, nil
+}
+
 func (s *stubStore) Close() error { return nil }
 
 // stubChannel records notifications; when err is set Notify returns it.

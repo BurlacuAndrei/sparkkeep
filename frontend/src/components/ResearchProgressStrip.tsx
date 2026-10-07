@@ -137,9 +137,20 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
           margin: '6px 0',
         }}
       >
-        <Loader2 size={12} className="spin-slow" />
-        <span style={{ fontWeight: 600 }}>Researching</span>
-        <span style={{ color: '#94a3b8' }}>· {formatElapsed(elapsedSeconds)}</span>
+        {research.status === 'queued' ? (
+          <>
+            <Clock size={12} color="#a5b4fc" />
+            <span style={{ fontWeight: 600, color: '#a5b4fc' }}>
+              Queued {research.queue_position ? `(#${research.queue_position})` : ''}
+            </span>
+          </>
+        ) : (
+          <>
+            <Loader2 size={12} className="spin-slow" />
+            <span style={{ fontWeight: 600 }}>Researching</span>
+            <span style={{ color: '#94a3b8' }}>· {formatElapsed(elapsedSeconds)}</span>
+          </>
+        )}
         <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }}>
           {renderedSteps.map((st) => {
             let dotColor = '#475569';
@@ -195,7 +206,7 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
           <span style={{ fontWeight: 600, fontSize: 13, color: '#f8fafc' }}>
             {isActive
               ? research.status === 'queued'
-                ? 'Research Queued'
+                ? `Research Queued (Position #${research.queue_position || 1})`
                 : 'Researching in Progress'
               : research.status === 'done'
               ? 'Research Completed'

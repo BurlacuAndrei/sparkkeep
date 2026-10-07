@@ -42,6 +42,9 @@ interface TriageViewProps {
   onRetry: (id: number) => void;
   onOpenCardDetail: (card: Card) => void;
   onRefresh?: () => void;
+  isPro?: boolean;
+  onOpenLicenseModal?: () => void;
+  showToast?: (msg: string) => void;
 }
 
 export const TriageView: React.FC<TriageViewProps> = ({
@@ -51,6 +54,9 @@ export const TriageView: React.FC<TriageViewProps> = ({
   onRetry,
   onOpenCardDetail,
   onRefresh,
+  isPro = false,
+  onOpenLicenseModal,
+  showToast,
 }) => {
   // Focus primarily on inbox cards first, or all cards
   const inboxCards = cards.filter((c) => c.status === 'inbox');
@@ -58,6 +64,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
   const [staleOnly, setStaleOnly] = useState(false);
   const [shelveMsg, setShelveMsg] = useState('');
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
+  const [batching, setBatching] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   useEffect(() => {
@@ -88,6 +95,24 @@ export const TriageView: React.FC<TriageViewProps> = ({
       setShelveMsg(api.getErrorMessage(err));
     }
   }, [onRefresh]);
+
+  const handleQueueAll = useCallback(async () => {
+    if (triageCards.length === 0) return;
+    if (!isPro) {
+      onOpenLicenseModal?.();
+      return;
+    }
+    setBatching(true);
+    try {
+      const res = await api.batchQueueResearch(triageCards.map((c) => c.id));
+      showToast?.(`Queued ${res.queued.length} card(s) for deep research`);
+      onRefresh?.();
+    } catch (err) {
+      showToast?.(api.getErrorMessage(err));
+    } finally {
+      setBatching(false);
+    }
+  }, [triageCards, isPro, onOpenLicenseModal, showToast, onRefresh]);
 
   const handleAction = useCallback((status: string) => {
     if (!currentCard) return;
@@ -232,7 +257,31 @@ export const TriageView: React.FC<TriageViewProps> = ({
           <span>Card {safeIndex + 1} of {triageCards.length}</span>
           {staleControls}
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            style={{ fontSize: 11.5, padding: '3px 8px', height: 26 }}
+            disabled={batching || triageCards.length === 0}
+            onClick={handleQueueAll}
+            title="Queue all remaining cards for research"
+          >
+            <Sparkles size={12} style={{ marginRight: 4 }} />
+            {batching ? 'Queueing...' : `Queue All (${triageCards.length})`}
+            {!isPro && (
+              <span
+                style={{
+                  marginLeft: 4,
+                  fontSize: 9.5,
+                  padding: '0 4px',
+                  borderRadius: 3,
+                  background: 'rgba(255, 255, 255, 0.15)',
+                }}
+              >
+                PRO
+              </span>
+            )}
+          </button>
           <button
             type="button"
             className="icon-btn"

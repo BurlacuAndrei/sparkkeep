@@ -604,6 +604,139 @@ func (s *stubStore) ListSettings(_ context.Context) (map[string]string, error) {
 	return res, nil
 }
 
+func (s *stubStore) RecoverInterruptedResearch(_ context.Context) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, r := range s.researches {
+		if r.Status == "running" {
+			r.Status = "failed"
+			r.Error = "interrupted by server restart"
+			s.researches[id] = r
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (s *stubStore) GetNextQueuedResearch(_ context.Context, asOf time.Time) (*port.Research, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var best *port.Research
+	for _, r := range s.researches {
+		if r.Status != "queued" {
+			continue
+		}
+		if r.ScheduledFor != nil && r.ScheduledFor.After(asOf) {
+			continue
+		}
+		if best == nil || r.ID < best.ID {
+			curr := r
+			best = &curr
+		}
+	}
+	return best, nil
+}
+
+func (s *stubStore) CountQueuedAhead(_ context.Context, researchID int64) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	target, ok := s.researches[researchID]
+	if !ok {
+		return 0, nil
+	}
+	n := 0
+	for _, r := range s.researches {
+		if r.Status == "queued" && r.ID < target.ID {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (s *stubStore) BatchQueueResearch(ctx context.Context, cardIDs []int64, playbookID *int64, scheduledFor *time.Time, batchID string) ([]port.Research, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var queued []port.Research
+	for _, cid := range cardIDs {
+		// check active
+		var active bool
+		for _, r := range s.researches {
+			if r.CardID == cid && (r.Status == "queued" || r.Status == "running") {
+				active = true
+				break
+			}
+		}
+		if active {
+			continue
+		}
+		id := int64(len(s.researches) + 1)
+		r := port.Research{
+			ID:           id,
+			CardID:       cid,
+			Status:       "queued",
+			PlaybookID:   playbookID,
+			ScheduledFor: scheduledFor,
+			CreatedAt:    time.Now().UTC(),
+		}
+		if batchID != "" {
+			r.BatchID = &batchID
+		}
+		s.researches[id] = r
+		queued = append(queued, r)
+	}
+	return queued, nil
+}
+
+func (s *stubStore) FindCardsForRule(ctx context.Context, filter port.ResearchRuleFilter, maxCards int, asOf time.Time) ([]port.Card, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if maxCards <= 0 {
+		maxCards = 10
+	}
+	var res []port.Card
+	for _, c := range s.cards {
+		if len(res) >= maxCards {
+			break
+		}
+		var active bool
+		for _, r := range s.researches {
+			if r.CardID == c.ID && (r.Status == "queued" || r.Status == "running") {
+				active = true
+				break
+			}
+		}
+		if active {
+			continue
+		}
+		if filter.Status != "" && !strings.EqualFold(c.Status, filter.Status) {
+			continue
+		}
+		if filter.Worthiness != "" && !strings.EqualFold(c.Worthiness.Level, filter.Worthiness) {
+			continue
+		}
+		if filter.Type != "" && !strings.EqualFold(c.Type, filter.Type) {
+			continue
+		}
+		res = append(res, c)
+	}
+	return res, nil
+}
+
+func (s *stubStore) ListCompletedResearchSince(_ context.Context, since time.Time) ([]port.Research, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var res []port.Research
+	for _, r := range s.researches {
+		if r.Status == "done" || r.Status == "failed" {
+			if r.CreatedAt.After(since) || r.CreatedAt.Equal(since) {
+				res = append(res, r)
+			}
+		}
+	}
+	return res, nil
+}
+
 func (s *stubStore) Close() error { return nil }
 
 func (s *stubStore) researchFor(cardID int64) bool {
@@ -2764,6 +2897,159 @@ func TestPipelineMetricsAPI(t *testing.T) {
 	}
 	if !resp.OK {
 		t.Errorf("expected ok: true")
+	}
+}
+
+func TestBatchAndScheduledResearchAPI(t *testing.T) {
+	st := newStubStore()
+	ctx := context.Background()
+
+	c1, _ := st.CreateCard(ctx, port.Card{Title: "Card 1", Status: "inbox"})
+	c2, _ := st.CreateCard(ctx, port.Card{Title: "Card 2", Status: "inbox"})
+
+	// 1. Community instance (403 gating)
+	commSvc := &core.Service{Store: st, Logf: t.Logf}
+	commH := webHandler(st, commSvc)
+
+	// Batch queue -> 403
+	batchPayload := fmt.Sprintf(`{"card_ids": [%d, %d]}`, c1.ID, c2.ID)
+	rrBatchComm := doJSON(t, commH, http.MethodPost, "/api/v1/research/batch", batchPayload)
+	if rrBatchComm.Code != http.StatusForbidden {
+		t.Fatalf("Community batch: expected 403, got %d: %s", rrBatchComm.Code, rrBatchComm.Body.String())
+	}
+	var errResp struct {
+		Feature string `json:"feature"`
+	}
+	_ = json.Unmarshal(rrBatchComm.Body.Bytes(), &errResp)
+	if errResp.Feature != license.FeatureDeepResearchV2 {
+		t.Errorf("Community batch: expected feature %q, got %q", license.FeatureDeepResearchV2, errResp.Feature)
+	}
+
+	// Rules GET, POST, PUT, DELETE, RUN -> 403
+	if code := doJSON(t, commH, http.MethodGet, "/api/v1/research/rules", "").Code; code != http.StatusForbidden {
+		t.Errorf("Community rules GET: expected 403, got %d", code)
+	}
+	if code := doJSON(t, commH, http.MethodPost, "/api/v1/research/rules", `{"name": "Rule 1"}`).Code; code != http.StatusForbidden {
+		t.Errorf("Community rules POST: expected 403, got %d", code)
+	}
+	if code := doJSON(t, commH, http.MethodPut, "/api/v1/research/rules/rule-1", `{"name": "Rule 1"}`).Code; code != http.StatusForbidden {
+		t.Errorf("Community rules PUT: expected 403, got %d", code)
+	}
+	if code := doJSON(t, commH, http.MethodDelete, "/api/v1/research/rules/rule-1", "").Code; code != http.StatusForbidden {
+		t.Errorf("Community rules DELETE: expected 403, got %d", code)
+	}
+	if code := doJSON(t, commH, http.MethodPost, "/api/v1/research/rules/rule-1/run", "").Code; code != http.StatusForbidden {
+		t.Errorf("Community rules RUN: expected 403, got %d", code)
+	}
+	if code := doJSON(t, commH, http.MethodGet, "/api/v1/research/quiet-window", "").Code; code != http.StatusForbidden {
+		t.Errorf("Community quiet window GET: expected 403, got %d", code)
+	}
+	if code := doJSON(t, commH, http.MethodPut, "/api/v1/research/quiet-window", `{"enabled": true}`).Code; code != http.StatusForbidden {
+		t.Errorf("Community quiet window PUT: expected 403, got %d", code)
+	}
+
+	// 2. Pro instance
+	proSvc := &core.Service{
+		Store:   st,
+		License: license.SetupProForTest(ctx, st),
+		Logf:    t.Logf,
+	}
+	proH := webHandler(st, proSvc)
+
+	// Batch queue succeeds
+	rrBatchPro := doJSON(t, proH, http.MethodPost, "/api/v1/research/batch", batchPayload)
+	if rrBatchPro.Code != http.StatusOK {
+		t.Fatalf("Pro batch: expected 200, got %d: %s", rrBatchPro.Code, rrBatchPro.Body.String())
+	}
+	var batchResp struct {
+		OK     bool            `json:"ok"`
+		Queued []port.Research `json:"queued"`
+	}
+	if err := json.Unmarshal(rrBatchPro.Body.Bytes(), &batchResp); err != nil {
+		t.Fatalf("unmarshal batch response: %v", err)
+	}
+	if !batchResp.OK || len(batchResp.Queued) != 2 {
+		t.Errorf("expected 2 queued research items, got %d", len(batchResp.Queued))
+	}
+
+	// Create rule
+	ruleBody := `{
+		"id": "rule-nightly",
+		"name": "Nightly High Priority",
+		"time": "02:00",
+		"enabled": true,
+		"filters": {
+			"status": "inbox",
+			"worthiness": "high"
+		},
+		"max_cards": 5
+	}`
+	rrCreateRule := doJSON(t, proH, http.MethodPost, "/api/v1/research/rules", ruleBody)
+	if rrCreateRule.Code != http.StatusCreated {
+		t.Fatalf("Pro create rule: expected 201, got %d: %s", rrCreateRule.Code, rrCreateRule.Body.String())
+	}
+
+	// List rules
+	rrListRules := doJSON(t, proH, http.MethodGet, "/api/v1/research/rules", "")
+	if rrListRules.Code != http.StatusOK {
+		t.Fatalf("Pro list rules: expected 200, got %d", rrListRules.Code)
+	}
+	var listResp struct {
+		OK    bool                `json:"ok"`
+		Rules []port.ResearchRule `json:"rules"`
+	}
+	_ = json.Unmarshal(rrListRules.Body.Bytes(), &listResp)
+	if len(listResp.Rules) != 1 || listResp.Rules[0].ID != "rule-nightly" {
+		t.Errorf("expected rule-nightly in rules list, got: %+v", listResp.Rules)
+	}
+
+	// Update rule
+	ruleUpdateBody := `{
+		"name": "Nightly High Priority Updated",
+		"time": "03:00",
+		"enabled": false,
+		"filters": {
+			"status": "inbox"
+		},
+		"max_cards": 10
+	}`
+	rrUpdateRule := doJSON(t, proH, http.MethodPut, "/api/v1/research/rules/rule-nightly", ruleUpdateBody)
+	if rrUpdateRule.Code != http.StatusOK {
+		t.Fatalf("Pro update rule: expected 200, got %d", rrUpdateRule.Code)
+	}
+
+	// Run rule manually
+	rrRunRule := doJSON(t, proH, http.MethodPost, "/api/v1/research/rules/rule-nightly/run", "")
+	if rrRunRule.Code != http.StatusOK {
+		t.Fatalf("Pro run rule: expected 200, got %d: %s", rrRunRule.Code, rrRunRule.Body.String())
+	}
+
+	// Delete rule
+	rrDelRule := doJSON(t, proH, http.MethodDelete, "/api/v1/research/rules/rule-nightly", "")
+	if rrDelRule.Code != http.StatusOK {
+		t.Fatalf("Pro delete rule: expected 200, got %d", rrDelRule.Code)
+	}
+
+	// Quiet window
+	qwBody := `{"enabled": true, "start": "23:00", "end": "07:00"}`
+	rrSetQW := doJSON(t, proH, http.MethodPut, "/api/v1/research/quiet-window", qwBody)
+	if rrSetQW.Code != http.StatusOK {
+		t.Fatalf("Pro set quiet window: expected 200, got %d: %s", rrSetQW.Code, rrSetQW.Body.String())
+	}
+
+	rrGetQW := doJSON(t, proH, http.MethodGet, "/api/v1/research/quiet-window", "")
+	if rrGetQW.Code != http.StatusOK {
+		t.Fatalf("Pro get quiet window: expected 200, got %d: %s", rrGetQW.Code, rrGetQW.Body.String())
+	}
+	var qwResp struct {
+		OK      bool   `json:"ok"`
+		Enabled bool   `json:"enabled"`
+		Start   string `json:"start"`
+		End     string `json:"end"`
+	}
+	_ = json.Unmarshal(rrGetQW.Body.Bytes(), &qwResp)
+	if !qwResp.Enabled || qwResp.Start != "23:00" || qwResp.End != "07:00" {
+		t.Errorf("quiet window response mismatch: %+v", qwResp)
 	}
 }
 

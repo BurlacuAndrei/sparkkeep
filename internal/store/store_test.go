@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,8 +29,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 13 {
-		t.Fatalf("version = %d, want 13", version)
+	if version != 14 {
+		t.Fatalf("version = %d, want 14", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -973,8 +974,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 13 {
-		t.Fatalf("version = %d, want 13", version)
+	if version != 14 {
+		t.Fatalf("version = %d, want 14", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1086,8 +1087,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 13 {
-		t.Fatalf("version = %d, want 13", version)
+	if version != 14 {
+		t.Fatalf("version = %d, want 14", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -1531,6 +1532,132 @@ func TestStore_ResolvePlaybook(t *testing.T) {
 	_, err = s.ResolvePlaybook(ctx, cTool.ID, &nonExistentID)
 	if !errors.Is(err, port.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for non-existent explicit playbook, got: %v", err)
+	}
+}
+
+func TestStore_ScheduledAndBatchResearch(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	// Create 3 cards
+	c1, err := s.CreateCard(ctx, port.Card{Title: "Card 1", Status: "inbox", Type: "article", Worthiness: port.Worthiness{Level: "high"}})
+	if err != nil {
+		t.Fatalf("CreateCard 1: %v", err)
+	}
+	c2, err := s.CreateCard(ctx, port.Card{Title: "Card 2", Status: "inbox", Type: "repo", Worthiness: port.Worthiness{Level: "medium"}})
+	if err != nil {
+		t.Fatalf("CreateCard 2: %v", err)
+	}
+	c3, err := s.CreateCard(ctx, port.Card{Title: "Card 3", Status: "inbox", Type: "article", Worthiness: port.Worthiness{Level: "high"}})
+	if err != nil {
+		t.Fatalf("CreateCard 3: %v", err)
+	}
+
+	// 1. BatchQueueResearch
+	now := time.Now().UTC()
+	batchID := "batch_abc123"
+	queued, err := s.BatchQueueResearch(ctx, []int64{c1.ID, c2.ID, c3.ID}, nil, &now, batchID)
+	if err != nil {
+		t.Fatalf("BatchQueueResearch: %v", err)
+	}
+	if len(queued) != 3 {
+		t.Fatalf("expected 3 queued items, got %d", len(queued))
+	}
+	if queued[0].QueuePosition != 1 || queued[1].QueuePosition != 2 || queued[2].QueuePosition != 3 {
+		t.Errorf("expected positions 1, 2, 3; got %d, %d, %d", queued[0].QueuePosition, queued[1].QueuePosition, queued[2].QueuePosition)
+	}
+	if queued[0].BatchID == nil || *queued[0].BatchID != batchID {
+		t.Errorf("batch_id mismatch")
+	}
+
+	// 2. BatchQueueResearch with already active card should skip
+	queuedAgain, err := s.BatchQueueResearch(ctx, []int64{c1.ID}, nil, nil, "batch_2")
+	if err != nil {
+		t.Fatalf("BatchQueueResearch again: %v", err)
+	}
+	if len(queuedAgain) != 0 {
+		t.Fatalf("expected 0 queued items since c1 is already queued, got %d", len(queuedAgain))
+	}
+
+	// 3. CountQueuedAhead
+	ahead, err := s.CountQueuedAhead(ctx, queued[1].ID)
+	if err != nil {
+		t.Fatalf("CountQueuedAhead: %v", err)
+	}
+	if ahead != 1 {
+		t.Errorf("expected 1 ahead of queued[1], got %d", ahead)
+	}
+
+	// 4. GetNextQueuedResearch
+	next, err := s.GetNextQueuedResearch(ctx, now.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("GetNextQueuedResearch: %v", err)
+	}
+	if next == nil || next.ID != queued[0].ID {
+		t.Fatalf("expected next to be queued[0] (id %d), got %v", queued[0].ID, next)
+	}
+
+	// 5. Test future scheduled_for is not picked up before time
+	future := now.Add(2 * time.Hour)
+	c4, err := s.CreateCard(ctx, port.Card{Title: "Card 4", Status: "inbox"})
+	if err != nil {
+		t.Fatalf("CreateCard 4: %v", err)
+	}
+	queuedFuture, err := s.BatchQueueResearch(ctx, []int64{c4.ID}, nil, &future, "future_batch")
+	if err != nil {
+		t.Fatalf("BatchQueueResearch future: %v", err)
+	}
+	if len(queuedFuture) != 1 {
+		t.Fatalf("expected 1 queued future, got %d", len(queuedFuture))
+	}
+	pastNext, err := s.GetNextQueuedResearch(ctx, now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("GetNextQueuedResearch past: %v", err)
+	}
+	if pastNext != nil {
+		t.Fatalf("expected nil for past check, got %v", pastNext)
+	}
+
+	// 6. RecoverInterruptedResearch
+	_, err = s.db.ExecContext(ctx, `UPDATE research SET status = 'running' WHERE id = ?`, queued[0].ID)
+	if err != nil {
+		t.Fatalf("update to running: %v", err)
+	}
+	recovered, err := s.RecoverInterruptedResearch(ctx)
+	if err != nil {
+		t.Fatalf("RecoverInterruptedResearch: %v", err)
+	}
+	if recovered != 1 {
+		t.Fatalf("expected 1 recovered, got %d", recovered)
+	}
+	r1, err := s.GetResearch(ctx, queued[0].ID)
+	if err != nil {
+		t.Fatalf("GetResearch r1: %v", err)
+	}
+	if r1.Status != "failed" || !strings.Contains(r1.Error, "interrupted by server restart") {
+		t.Errorf("expected failed with interrupted error, got status %q, err %q", r1.Status, r1.Error)
+	}
+
+	// 7. FindCardsForRule
+	_, _ = s.SetResearch(ctx, queued[2].ID, "done", "findings", "")
+	matched, err := s.FindCardsForRule(ctx, port.ResearchRuleFilter{
+		Status:     "inbox",
+		Worthiness: "high",
+		Type:       "article",
+	}, 10, now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("FindCardsForRule: %v", err)
+	}
+	if len(matched) < 1 {
+		t.Fatalf("expected matched cards, got %d", len(matched))
+	}
+
+	// 8. ListCompletedResearchSince
+	completed, err := s.ListCompletedResearchSince(ctx, now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("ListCompletedResearchSince: %v", err)
+	}
+	if len(completed) < 2 {
+		t.Fatalf("expected at least 2 completed/failed items, got %d", len(completed))
 	}
 }
 

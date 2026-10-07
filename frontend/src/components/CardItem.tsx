@@ -11,6 +11,9 @@ interface CardItemProps {
   onStatusChange?: (id: number, status: string) => void;
   onResearch?: (id: number) => void;
   onRetry?: (id: number) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: number) => void;
 }
 
 export const CardItem: React.FC<CardItemProps> = ({
@@ -19,6 +22,9 @@ export const CardItem: React.FC<CardItemProps> = ({
   onStatusChange: propOnStatusChange,
   onResearch: propOnResearch,
   onRetry: propOnRetry,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
 }) => {
   const actions = useCardActions();
   const onSelect = propOnSelect || actions.onSelectCard;
@@ -29,14 +35,44 @@ export const CardItem: React.FC<CardItemProps> = ({
   const isFailed = card.title === 'Analysis failed';
   const _hasBriefing = Boolean(card.executive_summary || (card.proposed_actions && card.proposed_actions.length > 0));
 
+  const handleClick = (e: React.MouseEvent) => {
+    if (selectable && onToggleSelect) {
+      e.stopPropagation();
+      onToggleSelect(card.id);
+      return;
+    }
+    onSelect(card);
+  };
+
   return (
     <article
-      className="card action-card"
+      className={`card action-card ${selected ? 'is-selected' : ''}`}
       data-id={card.id}
-      onClick={() => onSelect(card)}
+      onClick={handleClick}
+      style={{
+        border: selected ? '1px solid var(--accent-indigo)' : undefined,
+        background: selected ? 'rgba(99, 102, 241, 0.08)' : undefined,
+      }}
     >
       <div className="card-top">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(e) => {
+                e.stopPropagation();
+                onToggleSelect?.(card.id);
+              }}
+              style={{
+                width: 15,
+                height: 15,
+                accentColor: 'var(--accent-indigo)',
+                cursor: 'pointer',
+                marginRight: 2,
+              }}
+            />
+          )}
           {card.type && (
             <span className="card-type-badge">{card.type}</span>
           )}

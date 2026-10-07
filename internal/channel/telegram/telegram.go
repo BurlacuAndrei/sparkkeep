@@ -554,6 +554,9 @@ func (a *Adapter) handleMessage(m *message) {
 	case "digest", "weekly":
 		a.sendDigest(ctx)
 		return
+	case "morning", "research":
+		a.sendMorningDigest(ctx)
+		return
 	case "help", "start":
 		if _, err := a.sendMessage(ctx, helpText, 0, nil); err != nil {
 			a.logf("telegram: help: sendMessage: %v", err)
@@ -667,6 +670,37 @@ func (a *Adapter) sendDigest(ctx context.Context) {
 	if _, err := a.sendMessage(ctx, b.String(), 0, nil); err != nil {
 		a.logf("telegram: digest: sendMessage: %v", err)
 	}
+}
+
+// sendMorningDigest sends the morning research summary to Telegram.
+func (a *Adapter) sendMorningDigest(ctx context.Context) {
+	since := time.Now().UTC().Add(-24 * time.Hour)
+	if val, err := a.Store.GetSetting(ctx, "last_morning_digest_at"); err == nil && strings.TrimSpace(val) != "" {
+		if t, err := time.Parse("2006-01-02T15:04:05Z", val); err == nil {
+			since = t
+		}
+	}
+
+	runs, err := a.Store.ListCompletedResearchSince(ctx, since)
+	if err != nil {
+		a.logf("telegram: morning digest: ListCompletedResearchSince: %v", err)
+		return
+	}
+
+	cardTitles := make(map[int64]string)
+	for _, r := range runs {
+		if c, err := a.Store.GetCard(ctx, r.CardID); err == nil {
+			cardTitles[r.CardID] = c.Title
+		}
+	}
+
+	msg := core.FormatMorningResearchDigest(runs, cardTitles, a.PublicURL)
+	if _, err := a.sendMessage(ctx, msg, 0, nil); err != nil {
+		a.logf("telegram: morning digest: sendMessage: %v", err)
+		return
+	}
+
+	_ = a.Store.SetSetting(ctx, "last_morning_digest_at", time.Now().UTC().Format("2006-01-02T15:04:05Z"))
 }
 
 // runDigestScheduler steps digestTick once a minute until ctx is cancelled —

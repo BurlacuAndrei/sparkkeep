@@ -158,7 +158,35 @@ export interface ResearchItem {
   feedback_rating?: 'thumbs_up' | 'thumbs_down';
   feedback_comment?: string;
   feedback_at?: string;
+  queue_position?: number;
+  scheduled_for?: string;
+  batch_id?: string;
   created_at: string;
+}
+
+export interface ResearchRuleFilter {
+  status?: string;
+  worthiness?: string;
+  type?: string;
+  tags?: string[];
+  max_age_hours?: number;
+}
+
+export interface ResearchRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  time: string; // "HH:MM" e.g. "02:00"
+  filters: ResearchRuleFilter;
+  max_cards: number;
+  playbook_id?: number;
+  last_run_at?: string;
+}
+
+export interface QuietWindowConfig {
+  enabled: boolean;
+  start: string;
+  end: string;
 }
 
 export interface StepMetric {

@@ -1,4 +1,4 @@
-import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics } from './types';
+import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig } from './types';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -265,6 +265,70 @@ export async function duplicatePlaybook(id: number): Promise<Playbook> {
 export async function fetchStepLibrary(): Promise<StepLibraryTemplate[]> {
   const data = await request<{ ok: boolean; templates: StepLibraryTemplate[] }>('/api/v1/playbook-steps/library');
   return data.templates || [];
+}
+
+export async function batchQueueResearch(
+  cardIDs: number[],
+  playbookID?: number,
+  scheduledFor?: string
+): Promise<{ ok: boolean; queued: ResearchItem[]; batch_id: string }> {
+  return request('/api/v1/research/batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      card_ids: cardIDs,
+      playbook_id: playbookID,
+      scheduled_for: scheduledFor,
+    }),
+  });
+}
+
+export async function fetchResearchRules(): Promise<ResearchRule[]> {
+  const data = await request<{ ok: boolean; rules: ResearchRule[] }>('/api/v1/research/rules');
+  return data.rules || [];
+}
+
+export async function createResearchRule(rule: Partial<ResearchRule>): Promise<ResearchRule> {
+  const data = await request<{ ok: boolean; rule: ResearchRule }>('/api/v1/research/rules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rule),
+  });
+  return data.rule;
+}
+
+export async function updateResearchRule(id: string, rule: Partial<ResearchRule>): Promise<ResearchRule> {
+  const data = await request<{ ok: boolean; rule: ResearchRule }>(`/api/v1/research/rules/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rule),
+  });
+  return data.rule;
+}
+
+export async function deleteResearchRule(id: string): Promise<void> {
+  await request<{ ok: boolean }>(`/api/v1/research/rules/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function runResearchRule(id: string): Promise<ResearchItem[]> {
+  const data = await request<{ ok: boolean; queued: ResearchItem[] }>(`/api/v1/research/rules/${id}/run`, {
+    method: 'POST',
+  });
+  return data.queued || [];
+}
+
+export async function fetchQuietWindow(): Promise<QuietWindowConfig> {
+  return request<QuietWindowConfig>('/api/v1/research/quiet-window');
+}
+
+export async function updateQuietWindow(cfg: QuietWindowConfig): Promise<void> {
+  await request<{ ok: boolean }>('/api/v1/research/quiet-window', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  });
 }
 
 

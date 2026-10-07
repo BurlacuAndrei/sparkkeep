@@ -209,6 +209,14 @@ A playbook (`port.Playbook`) consists of a sequence of `PlaybookStep` items:
   - Local endpoint `GET /api/v1/metrics/pipeline` computes funnel conversion %, median inbox time, playbook run counts, step success rates, feedback satisfaction, and average token consumption.
   - **Zero Telemetry:** All metrics remain 100% private and on-instance.
 
+### Scheduled & Batch Overnight Research (Pro)
+- **Persistent Bounded Queue:** Research requests can be queued with `scheduled_for` and `batch_id`. A dedicated background queue worker (default concurrency: 1) processes queued items sequentially.
+- **Restart Resilience:** On server boot, `RecoverInterruptedResearch` transitions stale `running` jobs to `failed` (`interrupted by server restart`) with immediate retry support. Remaining `queued` jobs survive restarts intact.
+- **Quiet Execution Window:** Configurable time window (e.g. `23:00` to `07:00`) halts processing during business hours and releases queue worker execution during off-peak hours.
+- **Automation Rules:** Configurable scheduled triggers (e.g. daily at `02:00`) query cards matching criteria (status, worthiness, type, max age, tags) up to a max limit, avoiding duplicate queued passes.
+- **Morning Research Digest:** Morning Telegram push (`/morning` command or scheduled delivery) summarizing overnight report counts, recommendations/verdicts, direct card links, and any interrupted runs.
+- **Pro Gating:** Batch queuing (`POST /api/v1/research/batch`), rules management (`/api/v1/research/rules`), and quiet window endpoints are gated by `deep_research_v2`.
+
 ## 7. Web dashboard & API
 
 **Dashboard** — one static HTML page + a single JS file, embedded via

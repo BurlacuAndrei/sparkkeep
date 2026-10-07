@@ -222,6 +222,14 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/playbooks/{id}", a.deletePlaybook)
 	mux.HandleFunc("POST /api/v1/playbooks/{id}/duplicate", a.duplicatePlaybook)
 	mux.HandleFunc("GET /api/v1/playbook-steps/library", a.getPlaybookStepLibrary)
+	mux.HandleFunc("POST /api/v1/research/batch", a.batchQueueResearch)
+	mux.HandleFunc("GET /api/v1/research/rules", a.listResearchRules)
+	mux.HandleFunc("POST /api/v1/research/rules", a.createResearchRule)
+	mux.HandleFunc("PUT /api/v1/research/rules/{id}", a.updateResearchRule)
+	mux.HandleFunc("DELETE /api/v1/research/rules/{id}", a.deleteResearchRule)
+	mux.HandleFunc("POST /api/v1/research/rules/{id}/run", a.runResearchRule)
+	mux.HandleFunc("GET /api/v1/research/quiet-window", a.getQuietWindow)
+	mux.HandleFunc("PUT /api/v1/research/quiet-window", a.setQuietWindow)
 
 	mux.HandleFunc("POST /api/v1/capture", a.capture)
 	mux.HandleFunc("GET /api/v1/media/{name}", a.media)
@@ -1731,4 +1739,215 @@ func isUniqueConstraint(err error) bool {
 	return strings.Contains(msg, "UNIQUE constraint failed") ||
 		strings.Contains(msg, "unique constraint") ||
 		strings.Contains(msg, "idx_cards_source")
+}
+
+type batchResearchReq struct {
+	CardIDs      []int64    `json:"card_ids"`
+	PlaybookID   *int64     `json:"playbook_id,omitempty"`
+	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
+}
+
+func (a *api) batchQueueResearch(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Batch research requires an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
+	var req batchResearchReq
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	if len(req.CardIDs) == 0 {
+		writeErr(w, http.StatusBadRequest, "card_ids cannot be empty")
+		return
+	}
+	batchID := fmt.Sprintf("batch_%d", time.Now().UnixNano())
+	queued, err := a.store.BatchQueueResearch(r.Context(), req.CardIDs, req.PlaybookID, req.ScheduledFor, batchID)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	a.svc.WakeQueueWorker()
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "queued": queued, "batch_id": batchID})
+}
+
+func (a *api) listResearchRules(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Scheduled research rules require an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
+	rules, err := a.svc.GetResearchRules(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "rules": rules})
+}
+
+func (a *api) createResearchRule(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Scheduled research rules require an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
+	var rule port.ResearchRule
+	if err := decodeJSON(w, r, &rule); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(rule.Name) == "" {
+		writeErr(w, http.StatusBadRequest, "rule name is required")
+		return
+	}
+	if rule.ID == "" {
+		rule.ID = fmt.Sprintf("rule_%d", time.Now().UnixNano())
+	}
+	if rule.MaxCards <= 0 {
+		rule.MaxCards = 10
+	}
+	if err := a.svc.SaveResearchRule(r.Context(), rule); err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "rule": rule})
+}
+
+func (a *api) updateResearchRule(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Scheduled research rules require an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		writeErr(w, http.StatusBadRequest, "rule id is required")
+		return
+	}
+	var rule port.ResearchRule
+	if err := decodeJSON(w, r, &rule); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	rule.ID = id
+	if err := a.svc.SaveResearchRule(r.Context(), rule); err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "rule": rule})
+}
+
+func (a *api) deleteResearchRule(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Scheduled research rules require an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		writeErr(w, http.StatusBadRequest, "rule id is required")
+		return
+	}
+	if err := a.svc.DeleteResearchRule(r.Context(), id); err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (a *api) runResearchRule(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Scheduled research rules require an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
+	id := r.PathValue("id")
+	rules, err := a.svc.GetResearchRules(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	var target *port.ResearchRule
+	for _, ru := range rules {
+		if ru.ID == id {
+			target = &ru
+			break
+		}
+	}
+	if target == nil {
+		writeErr(w, http.StatusNotFound, "rule not found")
+		return
+	}
+	queued, err := a.svc.ExecuteRule(r.Context(), *target, time.Now().UTC())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "queued": queued})
+}
+
+func (a *api) getQuietWindow(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Quiet window requires an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
+	enabled, start, end, err := a.svc.GetQuietWindow(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"enabled": enabled,
+		"start":   start,
+		"end":     end,
+	})
+}
+
+func (a *api) setQuietWindow(w http.ResponseWriter, r *http.Request) {
+	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"ok":      false,
+			"error":   "Quiet window requires an active Pro license",
+			"feature": license.FeatureDeepResearchV2,
+		})
+		return
+	}
+	var b struct {
+		Enabled bool   `json:"enabled"`
+		Start   string `json:"start"`
+		End     string `json:"end"`
+	}
+	if err := decodeJSON(w, r, &b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	if err := a.svc.SetQuietWindow(r.Context(), b.Enabled, b.Start, b.End); err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

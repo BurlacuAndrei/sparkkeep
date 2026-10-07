@@ -272,6 +272,9 @@ function AppContent() {
               onRetry={handleRetry}
               onOpenCardDetail={setSelectedCard}
               onRefresh={reloadAll}
+              isPro={licenseStatus?.tier === 'pro'}
+              onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
+              showToast={showToast}
             />
           )}
 
@@ -282,6 +285,10 @@ function AppContent() {
               onStatusChange={handleStatusChange}
               onResearch={handleResearch}
               onRetry={handleRetry}
+              isPro={licenseStatus?.tier === 'pro'}
+              onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
+              showToast={showToast}
+              onRefresh={reloadAll}
             />
           )}
 

@@ -32,6 +32,7 @@ func main() {
 	defer stop()
 
 	svc := core.New(ctx, st, cfg, logger)
+	svc.StartQueueWorker(ctx)
 
 	if cfg.TGToken != "" {
 		tg := &telegram.Adapter{

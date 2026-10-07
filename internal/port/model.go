@@ -308,7 +308,29 @@ type Research struct {
 	FeedbackRating   *string         `json:"feedback_rating,omitempty"` // "thumbs_up" | "thumbs_down"
 	FeedbackComment  *string         `json:"feedback_comment,omitempty"`
 	FeedbackAt       *time.Time      `json:"feedback_at,omitempty"`
+	ScheduledFor     *time.Time      `json:"scheduled_for,omitempty"`
+	BatchID          *string         `json:"batch_id,omitempty"`
+	QueuePosition    int             `json:"queue_position,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
+}
+
+type ResearchRuleFilter struct {
+	Status      string   `json:"status,omitempty"`
+	Worthiness  string   `json:"worthiness,omitempty"`
+	Type        string   `json:"type,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	MaxAgeHours int      `json:"max_age_hours,omitempty"`
+}
+
+type ResearchRule struct {
+	ID         string             `json:"id"`
+	Name       string             `json:"name"`
+	Enabled    bool               `json:"enabled"`
+	Time       string             `json:"time"` // "HH:MM", e.g. "02:00"
+	Filters    ResearchRuleFilter `json:"filters"`
+	MaxCards   int                `json:"max_cards"`
+	PlaybookID *int64             `json:"playbook_id,omitempty"`
+	LastRunAt  *time.Time         `json:"last_run_at,omitempty"`
 }
 
 type StepMetric struct {
