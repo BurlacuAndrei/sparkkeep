@@ -240,12 +240,12 @@ func (c *Client) doCompletion(ctx context.Context, body map[string]any) (string,
 
 // Analyze turns a Fetched payload into an AnalysisResult containing the briefing
 // and idea cards. ErrInvalidResponse if the model answer is invalid or empty.
-func (c *Client) Analyze(ctx context.Context, payload capture.Fetched) (AnalysisResult, error) {
+func (c *Client) Analyze(ctx context.Context, payload capture.Fetched, profile ...*port.UserProfile) (AnalysisResult, error) {
 	content, err := c.doCompletion(ctx, map[string]any{
 		"model": c.Model,
 		"messages": []map[string]any{
 			{"role": "system", "content": "You are a curator that returns strict JSON."},
-			{"role": "user", "content": PromptFor(payload)},
+			{"role": "user", "content": PromptFor(payload, profile...)},
 		},
 		"response_format": map[string]string{"type": "json_object"},
 		"max_tokens":      c.MaxTokens,
@@ -527,8 +527,9 @@ func stripFences(s string) string {
 
 // PromptFor builds the curator prompt for the Triage Brief. Notes are labelled
 // explicitly as extraction warnings so the model qualifies the card instead of
-// treating a login wall or a missing transcript as content.
-func PromptFor(payload capture.Fetched) string {
+// treating a login wall or a missing transcript as content. If a non-empty user profile
+// is provided, a compact USER PROFILE block is appended for personal fit tailoring.
+func PromptFor(payload capture.Fetched, profile ...*port.UserProfile) string {
 	notes := "(none)"
 	if len(payload.Notes) > 0 {
 		notes = strings.Join(payload.Notes, "; ")
@@ -541,7 +542,7 @@ func PromptFor(payload capture.Fetched) string {
 	if strings.TrimSpace(digest) == "" {
 		digest = "(none)"
 	}
-	return fmt.Sprintf(`You receive captured content of kind %q. You are the Sparkkeep Action Engine curator.
+	base := fmt.Sprintf(`You receive captured content of kind %q. You are the Sparkkeep Action Engine curator.
 Analyze the source and produce a Triage Brief for each distinct idea, tool, or takeaway.
 Return ONLY a valid JSON object matching this schema:
 {
@@ -603,6 +604,13 @@ EXTRACTION NOTES: %s`,
 		clip(payload.Title, 300), clip(payload.Description, 600),
 		clip(payload.Text, 4000), clip(payload.Caption, 2000),
 		clip(transcript, 6000), clip(digest, 2000), notes)
+
+	if len(profile) > 0 && profile[0] != nil && !profile[0].IsEmpty() {
+		if block := port.FormatProfileBlock(profile[0]); block != "" {
+			return base + "\n\n" + block
+		}
+	}
+	return base
 }
 
 // clip truncates at a rune boundary so a long transcript cannot split a

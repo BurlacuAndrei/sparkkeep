@@ -639,6 +639,12 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	userProfJSON, _ := a.store.GetSetting(ctx, "user_profile")
+	var userProfile port.UserProfile
+	if strings.TrimSpace(userProfJSON) != "" {
+		_ = json.Unmarshal([]byte(userProfJSON), &userProfile)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
@@ -650,6 +656,7 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 			"llm_roles":           llmRoles,
 			"llm_token_caps":      tokenCaps,
 			"default_playbook_id": defaultPlaybookID,
+			"user_profile":        userProfile,
 		},
 	})
 }
@@ -666,10 +673,27 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 		LLMRoles          *map[string]string `json:"llm_roles,omitempty"`
 		LLMTokenCaps      *map[string]int    `json:"llm_token_caps,omitempty"`
 		DefaultPlaybookID *int64             `json:"default_playbook_id,omitempty"`
+		UserProfile       *port.UserProfile  `json:"user_profile,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
 		return
+	}
+
+	if b.UserProfile != nil {
+		if b.UserProfile.TotalChars() > 1500 {
+			writeErr(w, http.StatusBadRequest, "user profile exceeds 1,500 characters limit")
+			return
+		}
+		data, err := json.Marshal(b.UserProfile)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid user profile: "+err.Error())
+			return
+		}
+		if err := a.store.SetSetting(ctx, "user_profile", string(data)); err != nil {
+			a.fail(w, err)
+			return
+		}
 	}
 
 	if b.DefaultPlaybookID != nil {

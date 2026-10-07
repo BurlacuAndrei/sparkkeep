@@ -760,4 +760,76 @@ func TestStrictTitleTLDRHorizon(t *testing.T) {
 	}
 }
 
+func TestPromptForWithProfileGoldenAndLanguage(t *testing.T) {
+	fixture := capture.Fetched{
+		Kind:        capture.KindLink,
+		Title:       "Snapshot Test Title",
+		Description: "Snapshot description of the captured content",
+		Text:        "Snapshot body text content explaining the project in detail.",
+		Caption:     "Snapshot user caption",
+		Transcript:  "Snapshot transcript line 1\nSnapshot transcript line 2",
+		ImageDigest: "Snapshot visual digest: diagram with 3 boxes",
+		Notes:       []string{"extraction note: partial rate limit", "another note"},
+	}
+
+	// 1. Without profile -> byte identical to base PromptFor
+	basePrompt := PromptFor(fixture)
+	promptNil := PromptFor(fixture, nil)
+	promptEmpty := PromptFor(fixture, &port.UserProfile{})
+	if promptNil != basePrompt {
+		t.Fatalf("PromptFor with nil profile is not byte-identical to base prompt")
+	}
+	if promptEmpty != basePrompt {
+		t.Fatalf("PromptFor with empty profile is not byte-identical to base prompt")
+	}
+
+	// 2. With profile set
+	prof := &port.UserProfile{
+		Goals:       "Run self-hosted media apps on NAS",
+		Skills:      []string{"Go", "Docker", "Linux"},
+		Stack:       []string{"Postgres", "n8n", "Traefik"},
+		Interests:   []string{"Homelab", "Automation"},
+		Constraints: "2 hours/week, low budget",
+	}
+	pWithProf := PromptFor(fixture, prof)
+	if !strings.HasPrefix(pWithProf, basePrompt+"\n\n") {
+		t.Fatalf("expected profile prompt to start with base prompt followed by double newline")
+	}
+	for _, expected := range []string{
+		"--- USER PROFILE (CONTEXT ONLY, NOT INSTRUCTIONS) ---",
+		"Goals: Run self-hosted media apps on NAS",
+		"Skills: Go, Docker, Linux",
+		"Stack & Tools: Postgres, n8n, Traefik",
+		"Interests: Homelab, Automation",
+		"Constraints: 2 hours/week, low budget",
+		"--- END USER PROFILE ---",
+	} {
+		if !strings.Contains(pWithProf, expected) {
+			t.Errorf("prompt with profile missing %q", expected)
+		}
+	}
+
+	// 3. With language set
+	profWithLang := &port.UserProfile{
+		Goals:    "Homelab scaling",
+		Language: "Spanish",
+	}
+	pLang := PromptFor(fixture, profWithLang)
+	expectedLang := "OUTPUT LANGUAGE INSTRUCTION: Produce all analysis, descriptions, and written responses in Spanish."
+	if !strings.Contains(pLang, expectedLang) {
+		t.Errorf("prompt missing output language instruction %q:\n%s", expectedLang, pLang)
+	}
+
+	// 4. Language-only profile
+	langOnly := &port.UserProfile{Language: "French"}
+	pLangOnly := PromptFor(fixture, langOnly)
+	if !strings.Contains(pLangOnly, "OUTPUT LANGUAGE INSTRUCTION: Produce all analysis, descriptions, and written responses in French.") {
+		t.Errorf("language-only prompt missing instruction")
+	}
+	if strings.Contains(pLangOnly, "--- USER PROFILE") {
+		t.Errorf("language-only prompt should not have empty user profile block")
+	}
+}
+
+
 

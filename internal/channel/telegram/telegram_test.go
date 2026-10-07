@@ -35,6 +35,10 @@ func newStubStore() *stubStore {
 	return &stubStore{cards: map[int64]port.Card{}, captures: map[int64]port.Capture{}, researches: map[int64]port.Research{}}
 }
 
+func (s *stubStore) GetSetting(_ context.Context, _ string) (string, error) {
+	return "", port.ErrNotFound
+}
+
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
 	s.nextCard++
 	c.ID = s.nextCard

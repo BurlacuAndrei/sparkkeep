@@ -20,6 +20,7 @@ import {
   Server,
   Network,
   BookOpen,
+  User,
 } from 'lucide-react';
 import * as api from '../api';
 import { LLMProfile, LLMProfileInput } from '../types';
@@ -65,7 +66,20 @@ export interface SettingsModalProps {
   showToast: (msg: string) => void;
 }
 
-type SettingsTab = 'appearance' | 'ai' | 'playbooks' | 'security';
+type SettingsTab = 'appearance' | 'profile' | 'ai' | 'playbooks' | 'security';
+
+const LANGUAGE_OPTIONS = [
+  'Same as source / English',
+  'English',
+  'Spanish',
+  'German',
+  'French',
+  'Italian',
+  'Portuguese',
+  'Japanese',
+  'Chinese',
+  'Romanian',
+];
 
 interface PresetTemplate {
   label: string;
@@ -176,6 +190,15 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // User profile ("About me") state
+  const [profileGoals, setProfileGoals] = useState('');
+  const [profileSkills, setProfileSkills] = useState('');
+  const [profileStack, setProfileStack] = useState('');
+  const [profileInterests, setProfileInterests] = useState('');
+  const [profileConstraints, setProfileConstraints] = useState('');
+  const [profileLanguage, setProfileLanguage] = useState('Same as source / English');
+  const [savingProfile, setSavingProfile] = useState(false);
+
   // Escape key handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -205,6 +228,15 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
         }
         if (res.settings.llm_roles) {
           setLlmRoles(res.settings.llm_roles);
+        }
+        if (res.settings.user_profile) {
+          const up = res.settings.user_profile;
+          if (up.goals) setProfileGoals(up.goals);
+          if (up.skills) setProfileSkills(up.skills.join(', '));
+          if (up.stack) setProfileStack(up.stack.join(', '));
+          if (up.interests) setProfileInterests(up.interests.join(', '));
+          if (up.constraints) setProfileConstraints(up.constraints);
+          if (up.language) setProfileLanguage(up.language);
         }
         setLoading(false);
       })
@@ -416,8 +448,52 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     }
   };
 
+  const parseTags = (str: string) => str.split(',').map((s) => s.trim()).filter(Boolean);
+  const profileCharCount =
+    profileGoals.length +
+    profileConstraints.length +
+    (profileLanguage && profileLanguage !== 'Same as source / English' ? profileLanguage.length : 0) +
+    parseTags(profileSkills).join('').length +
+    parseTags(profileStack).join('').length +
+    parseTags(profileInterests).join('').length;
+
+  const handleSaveProfile = async () => {
+    if (profileCharCount > 1500) {
+      setError('User profile exceeds 1,500 characters limit. Please shorten some fields.');
+      return;
+    }
+    setError(null);
+    setSavingProfile(true);
+    try {
+      const lang = profileLanguage.trim();
+      const finalLang = (lang === 'Same as source / English' || lang === 'Custom') ? '' : lang;
+      await api.patchSettings({
+        user_profile: {
+          goals: profileGoals.trim(),
+          skills: parseTags(profileSkills),
+          stack: parseTags(profileStack),
+          interests: parseTags(profileInterests),
+          constraints: profileConstraints.trim(),
+          language: finalLang,
+        },
+      });
+      showToast('About me profile saved successfully.');
+    } catch (err: unknown) {
+      setError(api.getErrorMessage(err));
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const handleSave = async () => {
     setError(null);
+
+    // Validation for user profile length
+    if (profileCharCount > 1500) {
+      setError('User profile exceeds 1,500 characters limit. Please shorten some fields.');
+      setActiveTab('profile');
+      return;
+    }
 
     // Validation for auth token update
     if (authToken.trim()) {
@@ -441,6 +517,20 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
         localStorage.setItem('sparkkeep_card_density', cardDensity);
         localStorage.setItem('sparkkeep_reduce_motion', reduceMotion);
       }
+
+      // Save user profile
+      const lang = profileLanguage.trim();
+      const finalLang = (lang === 'Same as source / English' || lang === 'Custom') ? '' : lang;
+      await api.patchSettings({
+        user_profile: {
+          goals: profileGoals.trim(),
+          skills: parseTags(profileSkills),
+          stack: parseTags(profileStack),
+          interests: parseTags(profileInterests),
+          constraints: profileConstraints.trim(),
+          language: finalLang,
+        },
+      });
 
       // Patch backend platform security if changed
       if (authToken.trim()) {
@@ -503,6 +593,16 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
           >
             <Palette size={15} />
             <span>Appearance & Preferences</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'profile'}
+            className={`settings-tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
+            onClick={() => setActiveTab('profile')}
+          >
+            <User size={15} />
+            <span>About me</span>
           </button>
           <button
             type="button"
@@ -627,6 +727,169 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                       <option value="default">Full Glassmorphism</option>
                       <option value="reduced">Reduced Blur & Motion</option>
                     </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: About Me (Personal Fit) */}
+            {activeTab === 'profile' && (
+              <div className="settings-panel" role="tabpanel">
+                <div className="settings-section">
+                  <div className="settings-section-header">
+                    <span className="settings-section-title">Personal Fit & About Me</span>
+                    <span className="settings-section-desc">
+                      Tailor Triage's value proposition and Research's personal-fit verdict specifically to your background, tech stack, and goals.
+                    </span>
+                  </div>
+
+                  {/* Privacy Note */}
+                  <div className="setup-info-box" style={{ marginBottom: '16px' }}>
+                    <Shield size={16} />
+                    <span>
+                      <strong>Privacy note:</strong> Your profile is stored locally in your database and sent only to your configured LLM providers during triage and research.
+                    </span>
+                  </div>
+
+                  {/* Character Counter Meter */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px 14px',
+                    background: 'var(--surface-sunken, #121217)',
+                    border: '1px solid var(--border-subtle, #272732)',
+                    borderRadius: 'var(--radius-md, 8px)',
+                    marginBottom: '16px',
+                    fontSize: '0.85rem',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Sparkles size={15} style={{ color: 'var(--accent, #6366f1)' }} />
+                      <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>Profile Character Budget</span>
+                    </div>
+                    <span style={{
+                      fontWeight: 600,
+                      color: profileCharCount > 1500 ? 'var(--color-error, #ef4444)' : profileCharCount > 1200 ? 'var(--color-warning, #f59e0b)' : 'var(--text-muted, #64748b)',
+                    }}>
+                      {profileCharCount} / 1,500 chars {profileCharCount > 1500 ? '(Exceeds 1,500 max limit)' : ''}
+                    </span>
+                  </div>
+
+                  {/* Goals */}
+                  <div className="setup-form-group">
+                    <label htmlFor="profile-goals">Primary Goals & Focus</label>
+                    <textarea
+                      id="profile-goals"
+                      className="setup-textarea"
+                      rows={3}
+                      value={profileGoals}
+                      onChange={(e) => setProfileGoals(e.target.value)}
+                      placeholder="e.g. Build lean tools, automate media servers on NAS, explore open-source agents, self-host all workflows..."
+                    />
+                    <span className="setup-hint">Free text: What you are trying to achieve or learn right now.</span>
+                  </div>
+
+                  {/* Skills */}
+                  <div className="setup-form-group">
+                    <label htmlFor="profile-skills">Skills & Languages (comma-separated tags)</label>
+                    <input
+                      id="profile-skills"
+                      type="text"
+                      className="setup-input"
+                      value={profileSkills}
+                      onChange={(e) => setProfileSkills(e.target.value)}
+                      placeholder="e.g. Go, Python, TypeScript, Docker, Linux, React"
+                    />
+                    <span className="setup-hint">Languages, frameworks, or technical domains you are comfortable with.</span>
+                  </div>
+
+                  {/* Stack / Tools */}
+                  <div className="setup-form-group">
+                    <label htmlFor="profile-stack">Current Stack & Tools (comma-separated tags)</label>
+                    <input
+                      id="profile-stack"
+                      type="text"
+                      className="setup-input"
+                      value={profileStack}
+                      onChange={(e) => setProfileStack(e.target.value)}
+                      placeholder="e.g. Postgres, SQLite, n8n, Traefik, Synology NAS, Ollama"
+                    />
+                    <span className="setup-hint">Your active infrastructure, self-hosted services, and preferred tools.</span>
+                  </div>
+
+                  {/* Interests */}
+                  <div className="setup-form-group">
+                    <label htmlFor="profile-interests">Interests & Topics (comma-separated tags)</label>
+                    <input
+                      id="profile-interests"
+                      type="text"
+                      className="setup-input"
+                      value={profileInterests}
+                      onChange={(e) => setProfileInterests(e.target.value)}
+                      placeholder="e.g. Homelab, Local AI, Privacy, Automation, MicroSaaS"
+                    />
+                    <span className="setup-hint">Topics that catch your eye during triage.</span>
+                  </div>
+
+                  {/* Constraints */}
+                  <div className="setup-form-group">
+                    <label htmlFor="profile-constraints">Time & Resource Constraints</label>
+                    <textarea
+                      id="profile-constraints"
+                      className="setup-textarea"
+                      rows={2}
+                      value={profileConstraints}
+                      onChange={(e) => setProfileConstraints(e.target.value)}
+                      placeholder="e.g. 2 hours/week, limited GPU VRAM, prefer zero-cost self-hosted software"
+                    />
+                    <span className="setup-hint">Free text: Any real-world boundaries on budget, hardware, or available time.</span>
+                  </div>
+
+                  {/* Output Language */}
+                  <div className="setup-form-group">
+                    <label htmlFor="profile-language-select">Output Language for Triage & Research</label>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <select
+                        id="profile-language-select"
+                        className="setup-select"
+                        value={LANGUAGE_OPTIONS.includes(profileLanguage) ? profileLanguage : 'Custom'}
+                        onChange={(e) => {
+                          if (e.target.value !== 'Custom') {
+                            setProfileLanguage(e.target.value);
+                          }
+                        }}
+                        style={{ minWidth: '220px' }}
+                      >
+                        {LANGUAGE_OPTIONS.map((lang) => (
+                          <option key={lang} value={lang}>{lang}</option>
+                        ))}
+                        <option value="Custom">Custom Language...</option>
+                      </select>
+                      {(!LANGUAGE_OPTIONS.includes(profileLanguage) || profileLanguage === 'Custom') && (
+                        <input
+                          id="profile-language"
+                          type="text"
+                          className="setup-input"
+                          value={profileLanguage === 'Custom' ? '' : profileLanguage}
+                          onChange={(e) => setProfileLanguage(e.target.value)}
+                          placeholder="Enter language (e.g. Spanish, German, Japanese)..."
+                          style={{ flex: 1, minWidth: '180px' }}
+                        />
+                      )}
+                    </div>
+                    <span className="setup-hint">Default: "Same as source / English". When set, briefings and research reports will be instructed to write in this language.</span>
+                  </div>
+
+                  <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="setup-btn-primary"
+                      onClick={handleSaveProfile}
+                      disabled={savingProfile || profileCharCount > 1500}
+                    >
+                      <Save size={15} />
+                      <span>{savingProfile ? 'Saving Profile...' : 'Save Profile'}</span>
+                    </button>
                   </div>
                 </div>
               </div>

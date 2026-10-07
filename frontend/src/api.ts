@@ -1,4 +1,4 @@
-import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate } from './types';
+import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile } from './types';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -182,6 +182,7 @@ export async function getSettings(): Promise<{
     llm_roles?: Record<string, string>;
     llm_token_caps?: Record<string, number>;
     default_playbook_id?: number | null;
+    user_profile?: UserProfile;
   };
 }> {
   return request('/api/v1/settings');
@@ -197,6 +198,7 @@ export async function patchSettings(payload: {
   llm_roles?: Record<string, string>;
   llm_token_caps?: Record<string, number>;
   default_playbook_id?: number;
+  user_profile?: UserProfile;
 }): Promise<{ ok: boolean }> {
   return request('/api/v1/settings', {
     method: 'PATCH',

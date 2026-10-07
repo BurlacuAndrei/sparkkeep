@@ -408,7 +408,16 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 	if llmClient == nil {
 		return nil, errors.New("core: no LLM client configured for triage")
 	}
-	res, err := llmClient.Analyze(ctx, fetched)
+	var prof *port.UserProfile
+	if s.Store != nil {
+		if val, err := s.Store.GetSetting(ctx, "user_profile"); err == nil && strings.TrimSpace(val) != "" {
+			var p port.UserProfile
+			if json.Unmarshal([]byte(val), &p) == nil && !p.IsEmpty() {
+				prof = &p
+			}
+		}
+	}
+	res, err := llmClient.Analyze(ctx, fetched, prof)
 	if err != nil {
 		s.Logf("core: analyze failed for %s: %v", share.URL, err)
 		return s.failCard(ctx, fetched, share.URL, capRow.ID)

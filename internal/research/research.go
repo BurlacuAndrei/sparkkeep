@@ -13,6 +13,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,8 +63,9 @@ type Runner struct {
 	MaxQuestions    int             // max questions in plan (default 5)
 	MaxFetches      int             // overall max fetches cap (default 12)
 	ClipChars       int             // total rune budget (default 40,000)
-	PerSourceBudget int             // per-source rune budget (default 6,000)
-	Timeout         time.Duration   // whole-run timeout
+	PerSourceBudget int               // per-source rune budget (default 6,000)
+	Timeout         time.Duration     // whole-run timeout
+	UserProfile     *port.UserProfile // optional user profile context for personal fit tailoring
 }
 
 func (r *Runner) planClient() *analyze.Client {
@@ -179,6 +182,16 @@ func (r *Runner) RunWithPlaybook(ctx context.Context, card port.Card, researchID
 	}
 
 	state := NewRunState(card, researchID, r.Store, perSource, total)
+	if r.UserProfile != nil {
+		state.Profile = r.UserProfile
+	} else if r.Store != nil {
+		if val, err := r.Store.GetSetting(ctx, "user_profile"); err == nil && strings.TrimSpace(val) != "" {
+			var p port.UserProfile
+			if json.Unmarshal([]byte(val), &p) == nil && !p.IsEmpty() {
+				state.Profile = &p
+			}
+		}
+	}
 
 	pipeline := r.buildPipelineFromPlaybook(pb)
 	for _, step := range pipeline {
@@ -446,13 +459,17 @@ func (r *Runner) stepCustom(ctx context.Context, state *RunState, cfg port.Custo
 	}
 
 	b.WriteString(fmt.Sprintf("\nInstruction:\n%s\n", cfg.Instruction))
+	if (cfg.UseProfile == nil || *cfg.UseProfile) && state.Profile != nil && !state.Profile.IsEmpty() {
+		if block := port.FormatProfileBlock(state.Profile); block != "" {
+			b.WriteString("\n" + block + "\n")
+		}
+	}
 	b.WriteString("\nWrite a clear, structured markdown section under heading '### " + cfg.OutputHeading + "' citing facts using source IDs like [S1], [S2] where applicable.")
 
 	out, err := client.Ask(ctx, b.String())
 	if err != nil {
 		return fmt.Errorf("custom step %q failed: %w", cfg.OutputHeading, err)
 	}
-
 
 	trimmed := strings.TrimSpace(out)
 	state.StepOutputs[stepID] = trimmed
@@ -462,6 +479,17 @@ func (r *Runner) stepCustom(ctx context.Context, state *RunState, cfg port.Custo
 		heading = "Analysis"
 	}
 
+	noteMsg := fmt.Sprintf("Completed %s", heading)
+	if stepID == "personal_fit" || strings.Contains(strings.ToLower(heading), "personal fit") {
+		scoreRe := regexp.MustCompile(`(?i)(?:personal\s+fit\s+score|fit\s+score)[\s*:]+([1-5])`)
+		if m := scoreRe.FindStringSubmatch(trimmed); len(m) > 1 {
+			if scoreVal, err := strconv.Atoi(m[1]); err == nil {
+				state.StepOutputs["personal_fit_score"] = scoreVal
+				noteMsg = fmt.Sprintf("Completed %s (Fit Score: %d/5)", heading, scoreVal)
+			}
+		}
+	}
+
 	var sections []CustomSection
 	if existing, ok := state.StepOutputs["custom_sections"].([]CustomSection); ok {
 		sections = existing
@@ -469,7 +497,7 @@ func (r *Runner) stepCustom(ctx context.Context, state *RunState, cfg port.Custo
 	sections = append(sections, CustomSection{Heading: heading, Content: trimmed})
 	state.StepOutputs["custom_sections"] = sections
 
-	state.SetNote(stepID, fmt.Sprintf("Completed %s", heading))
+	state.SetNote(stepID, noteMsg)
 	return nil
 }
 
@@ -976,6 +1004,11 @@ Title: ` + state.Card.Title + "\n")
 	}
 	b.WriteString("\nSources:\n")
 	b.WriteString(state.Sources.FormatForSynthesis())
+	if state.Profile != nil && !state.Profile.IsEmpty() {
+		if block := port.FormatProfileBlock(state.Profile); block != "" {
+			b.WriteString("\n\n" + block)
+		}
+	}
 	b.WriteString("\nReply with ONLY a strict JSON object with this exact structure:\n" + schemaVerdict + "\n")
 
 	var resp port.ResearchVerdict

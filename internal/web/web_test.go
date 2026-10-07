@@ -2464,3 +2464,80 @@ func TestPlaybookAPI(t *testing.T) {
 	}
 }
 
+func TestUserProfileSettings_RoundTripAndLengthValidation(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, &core.Service{Store: st, Logf: t.Logf})
+
+	// 1. Initial GET /api/v1/settings returns empty user_profile
+	rrGet := doJSON(t, h, http.MethodGet, "/api/v1/settings", "")
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings failed: %d", rrGet.Code)
+	}
+	var getResp struct {
+		Settings struct {
+			UserProfile port.UserProfile `json:"user_profile"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(rrGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("unmarshal GET settings: %v", err)
+	}
+	if !getResp.Settings.UserProfile.IsEmpty() {
+		t.Fatalf("expected empty user_profile initially, got: %+v", getResp.Settings.UserProfile)
+	}
+
+	// 2. PATCH /api/v1/settings with valid user_profile
+	patchBody := `{
+		"user_profile": {
+			"goals": "Run self-hosted media apps on NAS",
+			"skills": ["Go", "Docker", "Linux"],
+			"stack": ["Postgres", "n8n", "Traefik"],
+			"interests": ["Homelab", "Automation"],
+			"constraints": "2 hours/week, low budget",
+			"language": "Spanish"
+		}
+	}`
+	rrPatch := doJSON(t, h, http.MethodPatch, "/api/v1/settings", patchBody)
+	if rrPatch.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/v1/settings failed: %d: %s", rrPatch.Code, rrPatch.Body.String())
+	}
+
+	// 3. GET /api/v1/settings returns the saved profile
+	rrGet2 := doJSON(t, h, http.MethodGet, "/api/v1/settings", "")
+	if rrGet2.Code != http.StatusOK {
+		t.Fatalf("GET 2 /api/v1/settings failed: %d", rrGet2.Code)
+	}
+	var getResp2 struct {
+		Settings struct {
+			UserProfile port.UserProfile `json:"user_profile"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(rrGet2.Body.Bytes(), &getResp2); err != nil {
+		t.Fatalf("unmarshal GET 2 settings: %v", err)
+	}
+	p := getResp2.Settings.UserProfile
+	if p.Goals != "Run self-hosted media apps on NAS" {
+		t.Errorf("expected goals to match, got %q", p.Goals)
+	}
+	if len(p.Skills) != 3 || p.Skills[0] != "Go" {
+		t.Errorf("skills mismatch: %v", p.Skills)
+	}
+	if len(p.Stack) != 3 || p.Stack[1] != "n8n" {
+		t.Errorf("stack mismatch: %v", p.Stack)
+	}
+	if p.Language != "Spanish" {
+		t.Errorf("language mismatch: %q", p.Language)
+	}
+
+	// 4. PATCH /api/v1/settings with profile exceeding 1,500 chars -> HTTP 400 Bad Request
+	longGoals := strings.Repeat("A", 1600)
+	tooLongBody := fmt.Sprintf(`{"user_profile":{"goals":%q}}`, longGoals)
+	rrTooLong := doJSON(t, h, http.MethodPatch, "/api/v1/settings", tooLongBody)
+	if rrTooLong.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for oversized profile, got %d: %s", rrTooLong.Code, rrTooLong.Body.String())
+	}
+	if !strings.Contains(rrTooLong.Body.String(), "1,500 characters") {
+		t.Errorf("expected error message to mention '1,500 characters', got: %s", rrTooLong.Body.String())
+	}
+}
+
+

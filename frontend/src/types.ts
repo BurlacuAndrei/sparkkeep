@@ -222,6 +222,16 @@ export interface CustomStepConfig {
   tool_policy?: 'none' | 'search';
   role?: 'research_plan' | 'research_synthesis';
   max_queries?: number;
+  use_profile?: boolean;
+}
+
+export interface UserProfile {
+  goals?: string;
+  skills?: string[];
+  stack?: string[];
+  interests?: string[];
+  constraints?: string;
+  language?: string;
 }
 
 export interface PlaybookStep {

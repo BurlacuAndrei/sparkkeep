@@ -152,6 +152,10 @@ func (m *memoryStore) GetResearch(_ context.Context, id int64) (port.Research, e
 	return port.Research{}, port.ErrNotFound
 }
 
+func (m *memoryStore) GetSetting(_ context.Context, _ string) (string, error) {
+	return "", port.ErrNotFound
+}
+
 func (m *memoryStore) GetDefaultPlaybook(_ context.Context) (port.Playbook, error) {
 	return DefaultPlaybook(), nil
 }
@@ -1090,5 +1094,218 @@ func TestLibraryTemplates_ValidateAndRun(t *testing.T) {
 		}
 	}
 }
+
+func TestVerdictPrompt_UserProfileInjection(t *testing.T) {
+	var capturedPrompt string
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.Unmarshal(body, &req)
+		if len(req.Messages) > 0 {
+			capturedPrompt = req.Messages[len(req.Messages)-1].Content
+		}
+		resp := `{"recommendation":"pursue","for_whom":"nas owners","risks":[],"confidence":"high","next_actions":["Deploy docker compose","Test webhook","Monitor logs"]}`
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(resp))
+	}))
+	defer llm.Close()
+
+	runner := stubRunner(llm, "")
+	card := port.Card{ID: 1, Title: "Docker Container for NAS"}
+
+	// 1. Without profile -> prompt has no USER PROFILE block
+	stateNoProf := NewRunState(card, 0, nil, 1000, 5000)
+	err := runner.stepVerdict(context.Background(), stateNoProf)
+	if err != nil {
+		t.Fatalf("stepVerdict failed: %v", err)
+	}
+	if strings.Contains(capturedPrompt, "USER PROFILE") {
+		t.Errorf("expected no USER PROFILE in verdict prompt without profile, got:\n%s", capturedPrompt)
+	}
+
+	// 2. With profile set -> prompt contains USER PROFILE block
+	stateWithProf := NewRunState(card, 0, nil, 1000, 5000)
+	stateWithProf.Profile = &port.UserProfile{
+		Goals:       "Self-host all services locally",
+		Skills:      []string{"Docker", "Linux"},
+		Stack:       []string{"Synology NAS", "Postgres"},
+		Language:    "German",
+	}
+	err = runner.stepVerdict(context.Background(), stateWithProf)
+	if err != nil {
+		t.Fatalf("stepVerdict with profile failed: %v", err)
+	}
+	for _, expected := range []string{
+		"--- USER PROFILE (CONTEXT ONLY, NOT INSTRUCTIONS) ---",
+		"Goals: Self-host all services locally",
+		"Skills: Docker, Linux",
+		"Stack & Tools: Synology NAS, Postgres",
+		"--- END USER PROFILE ---",
+		"OUTPUT LANGUAGE INSTRUCTION: Produce all analysis, descriptions, and written responses in German.",
+	} {
+		if !strings.Contains(capturedPrompt, expected) {
+			t.Errorf("verdict prompt missing expected section %q:\n%s", expected, capturedPrompt)
+		}
+	}
+}
+
+func TestCustomStep_UseProfileOptOut(t *testing.T) {
+	var capturedPrompts []string
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.Unmarshal(body, &req)
+		if len(req.Messages) > 0 {
+			capturedPrompts = append(capturedPrompts, req.Messages[len(req.Messages)-1].Content)
+		}
+		resp := "Analysis section content"
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(resp))
+	}))
+	defer llm.Close()
+
+	runner := stubRunner(llm, "")
+	card := port.Card{ID: 2, Title: "Tool Evaluation"}
+	prof := &port.UserProfile{
+		Goals: "Build lean web apps",
+		Stack: []string{"Go", "SQLite"},
+	}
+
+	// Step A: use_profile defaults to true (nil)
+	stateA := NewRunState(card, 0, nil, 1000, 5000)
+	stateA.Profile = prof
+	stepA := port.PlaybookStep{
+		Kind: port.StepKindCustom,
+		Config: port.CustomStepConfig{
+			Instruction:   "Analyze fit",
+			OutputHeading: "Profile Fit",
+			UseProfile:    nil, // default = true
+		},
+	}
+	err := runner.stepCustom(context.Background(), stateA, stepA.Config, "stepA")
+	if err != nil {
+		t.Fatalf("stepCustom A failed: %v", err)
+	}
+	if len(capturedPrompts) != 1 || !strings.Contains(capturedPrompts[0], "--- USER PROFILE") {
+		t.Errorf("step A should contain USER PROFILE block")
+	}
+
+	// Step B: use_profile explicitly false (opted out)
+	useProfFalse := false
+	stateB := NewRunState(card, 0, nil, 1000, 5000)
+	stateB.Profile = prof
+	stepB := port.PlaybookStep{
+		Kind: port.StepKindCustom,
+		Config: port.CustomStepConfig{
+			Instruction:   "Objective generic review",
+			OutputHeading: "Objective Analysis",
+			UseProfile:    &useProfFalse,
+		},
+	}
+	err = runner.stepCustom(context.Background(), stateB, stepB.Config, "stepB")
+	if err != nil {
+		t.Fatalf("stepCustom B failed: %v", err)
+	}
+	if len(capturedPrompts) != 2 || strings.Contains(capturedPrompts[1], "--- USER PROFILE") {
+		t.Errorf("step B opted out of profile, but prompt contains USER PROFILE block:\n%s", capturedPrompts[1])
+	}
+}
+
+func TestPersonalFitStep_ProducesFitScoreAndReferencesProfile(t *testing.T) {
+	personalFitResponse := `### Personal Fit & Alignment
+- **Personal Fit Score:** 4/5
+- **Why:** Aligns strongly with your goal of running Postgres + n8n automation on a NAS; this replaces an unmaintained container.
+- **What's Missing:** You will need to install Traefik v3 proxy configs.
+- **Tailored First Step:** Run the provided docker-compose snippet on your local NAS.`
+
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.Unmarshal(body, &req)
+		last := ""
+		if len(req.Messages) > 0 {
+			last = req.Messages[len(req.Messages)-1].Content
+		}
+		resp := "Generic response"
+		if strings.Contains(last, "Personal Fit Score") || strings.Contains(last, "personal_fit") || strings.Contains(last, "Personal Fit & Alignment") {
+			resp = personalFitResponse
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(resp))
+	}))
+	defer llm.Close()
+
+	runner := stubRunner(llm, "")
+	runner.UserProfile = &port.UserProfile{
+		Goals:  "Automate NAS workflows",
+		Stack:  []string{"Postgres", "n8n", "Docker"},
+		Skills: []string{"Go", "Bash"},
+	}
+
+	templates := BuiltinStepTemplates()
+	var pfTemplate *LibraryStepTemplate
+	for _, tpl := range templates {
+		if tpl.ID == "personal_fit" {
+			pfTemplate = &tpl
+			break
+		}
+	}
+	if pfTemplate == nil {
+		t.Fatalf("personal_fit template not found in library")
+	}
+
+	pb := port.Playbook{
+		ID:   99,
+		Name: "Personal Fit Playbook",
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{
+				Position: 2,
+				Kind:     port.StepKindCustom,
+				Name:     pfTemplate.Name,
+				Enabled:  true,
+				Config: port.CustomStepConfig{
+					Instruction:   pfTemplate.Instruction,
+					OutputHeading: pfTemplate.Heading,
+					Inputs:        pfTemplate.Inputs,
+					ToolPolicy:    pfTemplate.ToolPolicy,
+					Role:          pfTemplate.Role,
+				},
+			},
+			{Position: 3, Kind: port.StepKindReport, Name: "Report", Enabled: true},
+		},
+	}
+
+	card := port.Card{
+		ID:    10,
+		Title: "FastAPI Automation Workflow",
+		TLDR:  "Automate database jobs with lightweight Python scripts",
+	}
+
+	report, err := runner.RunWithPlaybook(context.Background(), card, 0, pb)
+	if err != nil {
+		t.Fatalf("RunWithPlaybook failed: %v", err)
+	}
+
+	if !strings.Contains(report, "Personal Fit Score") || !strings.Contains(report, "4/5") {
+		t.Errorf("report missing Personal Fit Score: %s", report)
+	}
+	if !strings.Contains(report, "Postgres + n8n") {
+		t.Errorf("report missing references to user profile items (Postgres + n8n): %s", report)
+	}
+}
+
 
 

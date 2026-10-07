@@ -28,6 +28,7 @@ type RunState struct {
 	ResearchID  int64
 	Store       port.Store
 	Notes       map[string]string // stepID -> note
+	Profile     *port.UserProfile
 }
 
 func NewRunState(card port.Card, researchID int64, store port.Store, perSourceBudget, totalBudget int) *RunState {
