@@ -28,8 +28,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 6 {
-		t.Fatalf("version = %d, want 6", version)
+	if version != 7 {
+		t.Fatalf("version = %d, want 7", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -924,13 +924,13 @@ func TestMigrationBackfill(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	// Verify schema version is 6
+	// Verify schema version is 7
 	var version int
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 6 {
-		t.Fatalf("version = %d, want 6", version)
+	if version != 7 {
+		t.Fatalf("version = %d, want 7", version)
 	}
 
 	// Verify backfilled captures exist
@@ -986,6 +986,157 @@ func TestMigrationBackfill(t *testing.T) {
 	}
 	if splitCard.ID == 0 {
 		t.Fatal("splitCard zero ID")
+	}
+}
+
+func TestTriageBriefMigration(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "triage_brief_migration.db")
+
+	// 1. Manually apply migrations 1..6 on a fresh DB
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatalf("open seed db: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create schema_version: %v", err)
+	}
+
+	for v, file := range []string{
+		"migrations/0001_init.sql",
+		"migrations/0002_add_briefings.sql",
+		"migrations/0003_dedup_source_url.sql",
+		"migrations/0004_settings.sql",
+		"migrations/0005_captures.sql",
+		"migrations/0006_card_references.sql",
+	} {
+		sqlBytes, err := migrationFS.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		if _, err := db.Exec(string(sqlBytes)); err != nil {
+			t.Fatalf("apply %s: %v", file, err)
+		}
+		if _, err := db.Exec(`INSERT INTO schema_version (version, applied_at) VALUES (?, ?)`, v+1, "2026-01-01T00:00:00Z"); err != nil {
+			t.Fatalf("record %s: %v", file, err)
+		}
+	}
+
+	// 2. Seed a legacy card with executive_summary and value_proposition
+	ts := "2026-01-01T12:00:00Z"
+	if _, err := db.Exec(`INSERT INTO cards (title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at) VALUES
+		('Legacy Brief Card', 'Old Summary', 'short-term', 'inbox', 'https://example.com/legacy', 'Legacy note', 'Legacy exec summary', 'Legacy val prop', '["act 1"]', ?, ?)`,
+		ts, ts); err != nil {
+		t.Fatalf("seed legacy card: %v", err)
+	}
+	db.Close()
+
+	// 3. Open store with New() to trigger migration 0007_triage_brief.sql
+	s, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("store.New on seeded db: %v", err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	var version int
+	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
+		t.Fatalf("schema_version: %v", err)
+	}
+	if version != 7 {
+		t.Fatalf("version = %d, want 7", version)
+	}
+
+	// 4. Verify the seeded legacy card backfilled tldr and why_care
+	card, err := s.GetCardBySourceURL(ctx, "https://example.com/legacy")
+	if err != nil {
+		t.Fatalf("GetCardBySourceURL: %v", err)
+	}
+	if card.TLDR != "Legacy exec summary" {
+		t.Errorf("card.TLDR = %q, want %q", card.TLDR, "Legacy exec summary")
+	}
+	if card.WhyCare != "Legacy val prop" {
+		t.Errorf("card.WhyCare = %q, want %q", card.WhyCare, "Legacy val prop")
+	}
+	if card.Type != "idea" {
+		t.Errorf("card.Type = %q, want 'idea'", card.Type)
+	}
+
+	// 5. Create a new card with all triage brief fields
+	newCard, err := s.CreateCard(ctx, port.Card{
+		Title:         "New Triage Card",
+		Type:          port.CardTypeTool,
+		TLDR:          "Fast local embedding server.",
+		WhyCare:       "Reduces token costs to zero.",
+		Claims:        []string{"Zero latency", "Fits on CPU"},
+		OpenQuestions: []string{"Does it support multilingual?"},
+		Signals: port.Signals{
+			Extraction:    "full",
+			Promo:         false,
+			SourceQuality: "primary",
+			PublishedAt:   "2026-03-01",
+		},
+		Worthiness: port.Worthiness{
+			Level:  "high",
+			Reason: "Fits existing infra stack",
+		},
+		Horizon: port.HorizonShortTerm,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard new schema: %v", err)
+	}
+
+	// 6. Verify GetCard returns all triage brief fields
+	got, err := s.GetCard(ctx, newCard.ID)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if got.Type != port.CardTypeTool {
+		t.Errorf("got.Type = %q, want %q", got.Type, port.CardTypeTool)
+	}
+	if got.TLDR != "Fast local embedding server." {
+		t.Errorf("got.TLDR = %q", got.TLDR)
+	}
+	if got.WhyCare != "Reduces token costs to zero." {
+		t.Errorf("got.WhyCare = %q", got.WhyCare)
+	}
+	if len(got.Claims) != 2 || got.Claims[0] != "Zero latency" {
+		t.Errorf("got.Claims = %+v", got.Claims)
+	}
+	if len(got.OpenQuestions) != 1 || got.OpenQuestions[0] != "Does it support multilingual?" {
+		t.Errorf("got.OpenQuestions = %+v", got.OpenQuestions)
+	}
+	if got.Signals.Extraction != "full" || got.Signals.SourceQuality != "primary" || got.Signals.PublishedAt != "2026-03-01" {
+		t.Errorf("got.Signals = %+v", got.Signals)
+	}
+	if got.Worthiness.Level != "high" || got.Worthiness.Reason != "Fits existing infra stack" {
+		t.Errorf("got.Worthiness = %+v", got.Worthiness)
+	}
+	// Verify legacy mappings for old clients
+	if got.ExecutiveSummary != "Fast local embedding server." {
+		t.Errorf("got.ExecutiveSummary = %q", got.ExecutiveSummary)
+	}
+	if got.ValueProposition != "Reduces token costs to zero." {
+		t.Errorf("got.ValueProposition = %q", got.ValueProposition)
+	}
+
+	// 7. Test UpdateCard with patch
+	newTLDR := "Updated embedding server."
+	newLevel := "medium"
+	patched, err := s.UpdateCard(ctx, got.ID, port.CardPatch{
+		TLDR: &newTLDR,
+		Worthiness: &port.Worthiness{
+			Level:  newLevel,
+			Reason: "Decided to evaluate later",
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateCard: %v", err)
+	}
+	if patched.TLDR != newTLDR || patched.ExecutiveSummary != newTLDR {
+		t.Errorf("patched.TLDR = %q, execSummary = %q", patched.TLDR, patched.ExecutiveSummary)
+	}
+	if patched.Worthiness.Level != "medium" {
+		t.Errorf("patched.Worthiness = %+v", patched.Worthiness)
 	}
 }
 

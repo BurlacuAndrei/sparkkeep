@@ -523,28 +523,103 @@ func isUniqueConstraint(err error) bool {
 }
 
 func cardFromIdea(idea analyze.Idea, res analyze.AnalysisResult, url, note string) port.Card {
+	tldr := idea.TLDR
+	whyCare := idea.WhyCare
+
 	execSummary := idea.ExecutiveSummary
-	if execSummary == "" {
-		execSummary = res.ExecutiveSummary
-	}
 	valProp := idea.ValueProposition
-	if valProp == "" {
-		valProp = res.ValueProposition
+
+	if tldr != "" || whyCare != "" {
+		// New triage brief schema: strictly per-card, no post-level fallback
+		if execSummary == "" {
+			execSummary = tldr
+		}
+		if valProp == "" {
+			valProp = whyCare
+		}
+	} else {
+		// Legacy payload without tldr/why_care:
+		if execSummary == "" {
+			execSummary = res.ExecutiveSummary
+		}
+		if valProp == "" {
+			valProp = res.ValueProposition
+		}
+		if tldr == "" {
+			if execSummary != "" {
+				tldr = execSummary
+			} else {
+				tldr = idea.Summary
+			}
+		}
+		if whyCare == "" {
+			whyCare = valProp
+		}
 	}
+
 	actions := idea.ProposedActions
 	if len(actions) == 0 {
 		actions = res.ProposedActions
+	}
+	if actions == nil {
+		actions = []string{}
 	}
 	refs := idea.References
 	if refs == nil {
 		refs = []port.Reference{}
 	}
+	claims := idea.Claims
+	if claims == nil {
+		claims = []string{}
+	}
+	openQuestions := idea.OpenQuestions
+	if openQuestions == nil {
+		openQuestions = []string{}
+	}
+	signals := port.Signals{
+		Extraction:    "full",
+		SourceQuality: "unknown",
+	}
+	if idea.Signals != nil {
+		signals = *idea.Signals
+	}
+	if signals.Extraction == "" {
+		signals.Extraction = "full"
+	}
+	if signals.SourceQuality == "" {
+		signals.SourceQuality = "unknown"
+	}
+	worthiness := port.Worthiness{
+		Level: "medium",
+	}
+	if idea.Worthiness != nil {
+		worthiness = *idea.Worthiness
+	}
+	if worthiness.Level == "" {
+		worthiness.Level = "medium"
+	}
+	cardType := idea.Type
+	if cardType == "" {
+		cardType = port.CardTypeIdea
+	}
+	summary := idea.Summary
+	if summary == "" {
+		summary = tldr
+	}
+
 	return port.Card{
 		Title:            idea.Title,
-		Summary:          idea.Summary,
+		Summary:          summary,
 		Horizon:          idea.Horizon,
 		Tags:             idea.Tags,
 		References:       refs,
+		Type:             cardType,
+		TLDR:             tldr,
+		WhyCare:          whyCare,
+		Claims:           claims,
+		OpenQuestions:    openQuestions,
+		Signals:          signals,
+		Worthiness:       worthiness,
 		SourceURL:        url,
 		SourceNote:       note,
 		Status:           port.StatusInbox,

@@ -10,6 +10,7 @@ import (
 	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -412,5 +413,160 @@ func TestCoreFreshInstallWithOneProfile(t *testing.T) {
 	}
 	if atomic.LoadInt64(&triageHits) != 1 {
 		t.Fatalf("expected 1 triage hit on fresh install, got %d", atomic.LoadInt64(&triageHits))
+	}
+}
+
+// TestCaptureTriageBriefDistinctCards verifies that:
+// 1. Analysis requests go to the triage profile
+// 2. Sibling cards from one post have distinct tldr and why_care
+// 3. All triage brief fields are persisted on the created cards
+func TestCaptureTriageBriefDistinctCards(t *testing.T) {
+	var triageHits int64
+	var otherHits int64
+
+	triageServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&triageHits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		resp := `{
+			"cards": [
+				{
+					"title": "Card 1 Tool",
+					"type": "tool",
+					"tldr": "Distinct TLDR for first tool.",
+					"why_care": "Distinct reason why we care about tool 1.",
+					"horizon": "short-term",
+					"tags": ["tool1"],
+					"claims": ["Claim 1A", "Claim 1B"],
+					"open_questions": ["Question 1A"],
+					"signals": {
+						"extraction": "full",
+						"promo": false,
+						"source_quality": "primary",
+						"published_at": "2026-04-01"
+					},
+					"worthiness": {
+						"level": "high",
+						"reason": "Direct relevance"
+					}
+				},
+				{
+					"title": "Card 2 Idea",
+					"type": "idea",
+					"tldr": "Distinct TLDR for second idea.",
+					"why_care": "Distinct reason why we care about idea 2.",
+					"horizon": "long-term",
+					"tags": ["idea2"],
+					"claims": ["Claim 2A"],
+					"open_questions": ["Question 2A", "Question 2B"],
+					"signals": {
+						"extraction": "full",
+						"promo": true,
+						"source_quality": "social"
+					},
+					"worthiness": {
+						"level": "low",
+						"reason": "Speculative"
+					}
+				}
+			]
+		}`
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(resp))
+	}))
+	defer triageServer.Close()
+
+	otherServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&otherHits, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer otherServer.Close()
+
+	st := newStubStore()
+	ctx := context.Background()
+
+	svc := New(ctx, st, config.Config{}, t.Logf)
+	svc.Fetcher = stubTestFetcher{}
+	svc.Router = analyze.NewRouter(analyze.RouterConfig{
+		Profiles: []analyze.Profile{
+			{
+				ID:        "default-prof",
+				Name:      "Default",
+				BaseURL:   otherServer.URL,
+				Model:     "other-model",
+				IsDefault: true,
+			},
+			{
+				ID:      "triage-prof",
+				Name:    "Triage Fast",
+				BaseURL: triageServer.URL,
+				Model:   "triage-model",
+			},
+		},
+		Roles: map[string]string{
+			"triage": "triage-prof",
+		},
+		HTTPClient: triageServer.Client(),
+	})
+	svc.Analyze = svc.Router.For(analyze.RoleTriage)
+
+	ids, err := svc.Capture(ctx, "https://example.com/multi-post")
+	if err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("len(ids) = %d, want 2", len(ids))
+	}
+
+	// 1. Routing check: triageServer must receive the call, otherServer must not
+	if atomic.LoadInt64(&triageHits) != 1 {
+		t.Errorf("triageHits = %d, want 1", atomic.LoadInt64(&triageHits))
+	}
+	if atomic.LoadInt64(&otherHits) != 0 {
+		t.Errorf("otherHits = %d, want 0", atomic.LoadInt64(&otherHits))
+	}
+
+	card1, err := st.GetCard(ctx, ids[0])
+	if err != nil {
+		t.Fatalf("GetCard 1: %v", err)
+	}
+	card2, err := st.GetCard(ctx, ids[1])
+	if err != nil {
+		t.Fatalf("GetCard 2: %v", err)
+	}
+
+	// 2. Distinct tldr and why_care check (no shared post-level fallback!)
+	if card1.TLDR == card2.TLDR {
+		t.Errorf("expected distinct TLDRs, but both were %q", card1.TLDR)
+	}
+	if card1.WhyCare == card2.WhyCare {
+		t.Errorf("expected distinct WhyCare, but both were %q", card1.WhyCare)
+	}
+	if card1.TLDR != "Distinct TLDR for first tool." {
+		t.Errorf("card1.TLDR = %q", card1.TLDR)
+	}
+	if card2.TLDR != "Distinct TLDR for second idea." {
+		t.Errorf("card2.TLDR = %q", card2.TLDR)
+	}
+	if card1.WhyCare != "Distinct reason why we care about tool 1." {
+		t.Errorf("card1.WhyCare = %q", card1.WhyCare)
+	}
+	if card2.WhyCare != "Distinct reason why we care about idea 2." {
+		t.Errorf("card2.WhyCare = %q", card2.WhyCare)
+	}
+
+	// 3. New fields persisted
+	if card1.Type != "tool" || card2.Type != "idea" {
+		t.Errorf("types: %q, %q", card1.Type, card2.Type)
+	}
+	if len(card1.Claims) != 2 || card1.Claims[0] != "Claim 1A" {
+		t.Errorf("card1.Claims: %+v", card1.Claims)
+	}
+	if len(card2.OpenQuestions) != 2 || card2.OpenQuestions[0] != "Question 2A" {
+		t.Errorf("card2.OpenQuestions: %+v", card2.OpenQuestions)
+	}
+	if card1.Signals.Extraction != "full" || card1.Signals.PublishedAt != "2026-04-01" {
+		t.Errorf("card1.Signals: %+v", card1.Signals)
+	}
+	if card1.Worthiness.Level != "high" || card2.Worthiness.Level != "low" {
+		t.Errorf("worthiness: %+v, %+v", card1.Worthiness, card2.Worthiness)
 	}
 }

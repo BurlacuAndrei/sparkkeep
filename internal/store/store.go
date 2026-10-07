@@ -86,14 +86,62 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 			actionsJSON = string(b)
 		}
 	}
+	claimsJSON := "[]"
+	if len(c.Claims) > 0 {
+		if b, err := json.Marshal(c.Claims); err == nil {
+			claimsJSON = string(b)
+		}
+	}
+	oqJSON := "[]"
+	if len(c.OpenQuestions) > 0 {
+		if b, err := json.Marshal(c.OpenQuestions); err == nil {
+			oqJSON = string(b)
+		}
+	}
+	signalsJSON := "{}"
+	if b, err := json.Marshal(c.Signals); err == nil {
+		signalsJSON = string(b)
+	}
+	worthinessJSON := "{}"
+	if b, err := json.Marshal(c.Worthiness); err == nil {
+		worthinessJSON = string(b)
+	}
+	cardType := c.Type
+	if cardType == "" {
+		cardType = port.CardTypeIdea
+	}
+	tldr := c.TLDR
+	if tldr == "" {
+		tldr = c.ExecutiveSummary
+	}
+	if tldr == "" {
+		tldr = c.Summary
+	}
+	whyCare := c.WhyCare
+	if whyCare == "" {
+		whyCare = c.ValueProposition
+	}
+	execSummary := c.ExecutiveSummary
+	if execSummary == "" {
+		execSummary = tldr
+	}
+	valProp := c.ValueProposition
+	if valProp == "" {
+		valProp = whyCare
+	}
+	summary := c.Summary
+	if summary == "" {
+		summary = tldr
+	}
+
 	var captureID any
 	if c.CaptureID != nil {
 		captureID = *c.CaptureID
 	}
 	res, err := exec.ExecContext(ctx,
-		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		captureID, c.Title, c.Summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, c.ExecutiveSummary, c.ValueProposition, actionsJSON, ts, ts)
+		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, ts, ts)
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return port.Card{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
@@ -107,6 +155,18 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	c.ID = id
 	c.CreatedAt, _ = parseTime(ts)
 	c.UpdatedAt = c.CreatedAt
+	c.Type = cardType
+	c.TLDR = tldr
+	c.WhyCare = whyCare
+	c.Summary = summary
+	c.ExecutiveSummary = execSummary
+	c.ValueProposition = valProp
+	if c.Claims == nil {
+		c.Claims = []string{}
+	}
+	if c.OpenQuestions == nil {
+		c.OpenQuestions = []string{}
+	}
 	if c.ProposedActions == nil {
 		c.ProposedActions = []string{}
 	}
@@ -149,13 +209,13 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 
 func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at
+		`SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, created_at, updated_at
 		 FROM cards WHERE id = ?`, id)
 	var c port.Card
 	var captureID sql.NullInt64
 	var created, updated string
-	var actionsRaw string
-	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &created, &updated)
+	var actionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw string
+	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Card{}, port.ErrNotFound
 	}
@@ -167,11 +227,60 @@ func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	}
 	c.CreatedAt, _ = parseTime(created)
 	c.UpdatedAt, _ = parseTime(updated)
+	if c.Type == "" {
+		c.Type = port.CardTypeIdea
+	}
 	if actionsRaw != "" {
 		_ = json.Unmarshal([]byte(actionsRaw), &c.ProposedActions)
 	}
 	if c.ProposedActions == nil {
 		c.ProposedActions = []string{}
+	}
+	if claimsRaw != "" {
+		_ = json.Unmarshal([]byte(claimsRaw), &c.Claims)
+	}
+	if c.Claims == nil {
+		c.Claims = []string{}
+	}
+	if oqRaw != "" {
+		_ = json.Unmarshal([]byte(oqRaw), &c.OpenQuestions)
+	}
+	if c.OpenQuestions == nil {
+		c.OpenQuestions = []string{}
+	}
+	if signalsRaw != "" {
+		_ = json.Unmarshal([]byte(signalsRaw), &c.Signals)
+	}
+	if c.Signals.Extraction == "" {
+		c.Signals.Extraction = "full"
+	}
+	if c.Signals.SourceQuality == "" {
+		c.Signals.SourceQuality = "unknown"
+	}
+	if worthinessRaw != "" {
+		_ = json.Unmarshal([]byte(worthinessRaw), &c.Worthiness)
+	}
+	if c.Worthiness.Level == "" {
+		c.Worthiness.Level = "medium"
+	}
+	// Legacy mappings
+	if c.TLDR == "" && c.ExecutiveSummary != "" {
+		c.TLDR = c.ExecutiveSummary
+	}
+	if c.TLDR == "" && c.Summary != "" {
+		c.TLDR = c.Summary
+	}
+	if c.WhyCare == "" && c.ValueProposition != "" {
+		c.WhyCare = c.ValueProposition
+	}
+	if c.ExecutiveSummary == "" && c.TLDR != "" {
+		c.ExecutiveSummary = c.TLDR
+	}
+	if c.ValueProposition == "" && c.WhyCare != "" {
+		c.ValueProposition = c.WhyCare
+	}
+	if c.Summary == "" && c.TLDR != "" {
+		c.Summary = c.TLDR
 	}
 	tags, err := s.cardTags(ctx, id)
 	if err != nil {
@@ -262,8 +371,8 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	}
 	if f.Query != "" {
 		q := "%" + strings.ToLower(f.Query) + "%"
-		where = append(where, "(LOWER(title) LIKE ? OR LOWER(summary) LIKE ? OR LOWER(executive_summary) LIKE ?)")
-		args = append(args, q, q, q)
+		where = append(where, "(LOWER(title) LIKE ? OR LOWER(summary) LIKE ? OR LOWER(executive_summary) LIKE ? OR LOWER(tldr) LIKE ?)")
+		args = append(args, q, q, q, q)
 	}
 	if !f.Since.IsZero() {
 		where = append(where, "created_at >= ?")
@@ -277,7 +386,7 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	if limit <= 0 {
 		limit = defaultLimit
 	}
-	sqlq := `SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, created_at, updated_at FROM cards`
+	sqlq := `SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, created_at, updated_at FROM cards`
 	if len(where) > 0 {
 		sqlq += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -298,8 +407,8 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		var c port.Card
 		var captureID sql.NullInt64
 		var created, updated string
-		var actionsRaw string
-		if err := rows.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &created, &updated); err != nil {
+		var actionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw string
+		if err := rows.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &created, &updated); err != nil {
 			return nil, err
 		}
 		if captureID.Valid {
@@ -307,11 +416,60 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		}
 		c.CreatedAt, _ = parseTime(created)
 		c.UpdatedAt, _ = parseTime(updated)
+		if c.Type == "" {
+			c.Type = port.CardTypeIdea
+		}
 		if actionsRaw != "" {
 			_ = json.Unmarshal([]byte(actionsRaw), &c.ProposedActions)
 		}
 		if c.ProposedActions == nil {
 			c.ProposedActions = []string{}
+		}
+		if claimsRaw != "" {
+			_ = json.Unmarshal([]byte(claimsRaw), &c.Claims)
+		}
+		if c.Claims == nil {
+			c.Claims = []string{}
+		}
+		if oqRaw != "" {
+			_ = json.Unmarshal([]byte(oqRaw), &c.OpenQuestions)
+		}
+		if c.OpenQuestions == nil {
+			c.OpenQuestions = []string{}
+		}
+		if signalsRaw != "" {
+			_ = json.Unmarshal([]byte(signalsRaw), &c.Signals)
+		}
+		if c.Signals.Extraction == "" {
+			c.Signals.Extraction = "full"
+		}
+		if c.Signals.SourceQuality == "" {
+			c.Signals.SourceQuality = "unknown"
+		}
+		if worthinessRaw != "" {
+			_ = json.Unmarshal([]byte(worthinessRaw), &c.Worthiness)
+		}
+		if c.Worthiness.Level == "" {
+			c.Worthiness.Level = "medium"
+		}
+		// Legacy mappings
+		if c.TLDR == "" && c.ExecutiveSummary != "" {
+			c.TLDR = c.ExecutiveSummary
+		}
+		if c.TLDR == "" && c.Summary != "" {
+			c.TLDR = c.Summary
+		}
+		if c.WhyCare == "" && c.ValueProposition != "" {
+			c.WhyCare = c.ValueProposition
+		}
+		if c.ExecutiveSummary == "" && c.TLDR != "" {
+			c.ExecutiveSummary = c.TLDR
+		}
+		if c.ValueProposition == "" && c.WhyCare != "" {
+			c.ValueProposition = c.WhyCare
+		}
+		if c.Summary == "" && c.TLDR != "" {
+			c.Summary = c.TLDR
 		}
 		cards = append(cards, c)
 	}
@@ -450,6 +608,49 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 	}
 	if p.ValueProposition != nil {
 		b.set("value_proposition", *p.ValueProposition)
+	}
+	if p.Type != nil {
+		b.set("type", *p.Type)
+	}
+	if p.TLDR != nil {
+		b.set("tldr", *p.TLDR)
+		if p.ExecutiveSummary == nil {
+			b.set("executive_summary", *p.TLDR)
+		}
+	}
+	if p.WhyCare != nil {
+		b.set("why_care", *p.WhyCare)
+		if p.ValueProposition == nil {
+			b.set("value_proposition", *p.WhyCare)
+		}
+	}
+	if p.Claims != nil {
+		claimsJSON := "[]"
+		if data, err := json.Marshal(*p.Claims); err == nil {
+			claimsJSON = string(data)
+		}
+		b.set("claims", claimsJSON)
+	}
+	if p.OpenQuestions != nil {
+		oqJSON := "[]"
+		if data, err := json.Marshal(*p.OpenQuestions); err == nil {
+			oqJSON = string(data)
+		}
+		b.set("open_questions", oqJSON)
+	}
+	if p.Signals != nil {
+		sigJSON := "{}"
+		if data, err := json.Marshal(*p.Signals); err == nil {
+			sigJSON = string(data)
+		}
+		b.set("signals", sigJSON)
+	}
+	if p.Worthiness != nil {
+		wJSON := "{}"
+		if data, err := json.Marshal(*p.Worthiness); err == nil {
+			wJSON = string(data)
+		}
+		b.set("worthiness", wJSON)
 	}
 	if p.ProposedActions != nil {
 		actionsJSON := "[]"

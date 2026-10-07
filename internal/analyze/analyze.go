@@ -29,20 +29,27 @@ import (
 
 type Idea struct {
 	Title            string           `json:"title"`
-	Summary          string           `json:"summary"`
+	Summary          string           `json:"summary,omitempty"`
 	Horizon          string           `json:"horizon"` // "short-term" | "medium-term" | "long-term" | "lifetime"
 	Tags             []string         `json:"tags"`
 	Links            []string         `json:"links,omitempty"`
 	References       []port.Reference `json:"references,omitempty"`
+	Type             string           `json:"type,omitempty"`
+	TLDR             string           `json:"tldr,omitempty"`
+	WhyCare          string           `json:"why_care,omitempty"`
+	Claims           []string         `json:"claims,omitempty"`
+	OpenQuestions    []string         `json:"open_questions,omitempty"`
+	Signals          *port.Signals    `json:"signals,omitempty"`
+	Worthiness       *port.Worthiness `json:"worthiness,omitempty"`
 	ExecutiveSummary string           `json:"executive_summary,omitempty"`
 	ValueProposition string           `json:"value_proposition,omitempty"`
 	ProposedActions  []string         `json:"proposed_actions,omitempty"`
 }
 
 type AnalysisResult struct {
-	ExecutiveSummary string   `json:"executive_summary"`
-	ValueProposition string   `json:"value_proposition"`
-	ProposedActions  []string `json:"proposed_actions"`
+	ExecutiveSummary string   `json:"executive_summary,omitempty"`
+	ValueProposition string   `json:"value_proposition,omitempty"`
+	ProposedActions  []string `json:"proposed_actions,omitempty"`
 	Cards            []Idea   `json:"cards"`
 }
 
@@ -252,10 +259,32 @@ func (c *Client) Analyze(ctx context.Context, payload capture.Fetched) (Analysis
 		return AnalysisResult{}, err
 	}
 	deterministic := ExtractDeterministicReferences(payload)
+	isLoginWall := hasLoginWallOrThinNote(payload.Notes)
 	for i := range res.Cards {
 		res.Cards[i].References = MergeReferences(res.Cards[i].References, deterministic)
+		if isLoginWall {
+			if res.Cards[i].Signals == nil {
+				res.Cards[i].Signals = &port.Signals{Extraction: "thin", SourceQuality: "unknown"}
+			} else if res.Cards[i].Signals.Extraction == "full" || res.Cards[i].Signals.Extraction == "" {
+				if strings.TrimSpace(payload.Text) != "" {
+					res.Cards[i].Signals.Extraction = "partial"
+				} else {
+					res.Cards[i].Signals.Extraction = "thin"
+				}
+			}
+		}
 	}
 	return res, nil
+}
+
+func hasLoginWallOrThinNote(notes []string) bool {
+	for _, note := range notes {
+		nl := strings.ToLower(note)
+		if strings.Contains(nl, "login") || strings.Contains(nl, "wall") || strings.Contains(nl, "auth") || strings.Contains(nl, "blocked") || strings.Contains(nl, "not extract") || strings.Contains(nl, "unreadable") {
+			return true
+		}
+	}
+	return false
 }
 
 // Ask issues one chat completion for a free-text prompt and returns the raw
@@ -336,7 +365,13 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 			return AnalysisResult{}, err
 		}
 		if res.ExecutiveSummary == "" && len(res.Cards) > 0 {
-			res.ExecutiveSummary = res.Cards[0].Summary
+			res.ExecutiveSummary = res.Cards[0].TLDR
+			if res.ExecutiveSummary == "" {
+				res.ExecutiveSummary = res.Cards[0].Summary
+			}
+		}
+		if res.ValueProposition == "" && len(res.Cards) > 0 {
+			res.ValueProposition = res.Cards[0].WhyCare
 		}
 		return res, nil
 
@@ -349,12 +384,17 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 		if err := validateCards(cards); err != nil {
 			return AnalysisResult{}, err
 		}
-		var exec string
+		var exec, valProp string
 		if len(cards) > 0 {
-			exec = cards[0].Summary
+			exec = cards[0].TLDR
+			if exec == "" {
+				exec = cards[0].Summary
+			}
+			valProp = cards[0].WhyCare
 		}
 		return AnalysisResult{
 			ExecutiveSummary: exec,
+			ValueProposition: valProp,
 			ProposedActions:  []string{},
 			Cards:            cards,
 		}, nil
@@ -367,6 +407,38 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 func normalizeIdeaCards(cards []Idea) []Idea {
 	for i := range cards {
 		cards[i].Horizon = normalizeHorizon(cards[i].Horizon)
+		if cards[i].Summary == "" && cards[i].TLDR != "" {
+			cards[i].Summary = cards[i].TLDR
+		}
+		if cards[i].Type == "" {
+			cards[i].Type = port.CardTypeIdea
+		}
+		if cards[i].Claims == nil {
+			cards[i].Claims = []string{}
+		} else if len(cards[i].Claims) > 3 {
+			cards[i].Claims = cards[i].Claims[:3]
+		}
+		if cards[i].OpenQuestions == nil {
+			cards[i].OpenQuestions = []string{}
+		} else if len(cards[i].OpenQuestions) > 3 {
+			cards[i].OpenQuestions = cards[i].OpenQuestions[:3]
+		}
+		if cards[i].Signals == nil {
+			cards[i].Signals = &port.Signals{Extraction: "full", SourceQuality: "unknown"}
+		}
+		if cards[i].Signals.Extraction == "" {
+			cards[i].Signals.Extraction = "full"
+		}
+		if cards[i].Signals.SourceQuality == "" {
+			cards[i].Signals.SourceQuality = "unknown"
+		}
+		if cards[i].Worthiness == nil {
+			cards[i].Worthiness = &port.Worthiness{Level: "medium"}
+		}
+		if cards[i].Worthiness.Level == "" {
+			cards[i].Worthiness.Level = "medium"
+		}
+
 		var legacyRefs []port.Reference
 		for _, l := range cards[i].Links {
 			l = strings.TrimSpace(l)
@@ -426,7 +498,14 @@ func validateCards(cards []Idea) error {
 		return ErrInvalidResponse
 	}
 	for _, i := range cards {
-		if !port.ValidHorizon(i.Horizon) {
+		tldr := i.TLDR
+		if tldr == "" {
+			tldr = i.Summary
+		}
+		if tldr == "" {
+			tldr = i.ExecutiveSummary
+		}
+		if strings.TrimSpace(i.Title) == "" || strings.TrimSpace(tldr) == "" || !port.ValidHorizon(i.Horizon) {
 			return ErrInvalidResponse
 		}
 	}
@@ -446,9 +525,9 @@ func stripFences(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// PromptFor builds the curator prompt. Notes are labelled explicitly as
-// extraction warnings so the model qualifies the card instead of treating a
-// login wall or a missing transcript as content.
+// PromptFor builds the curator prompt for the Triage Brief. Notes are labelled
+// explicitly as extraction warnings so the model qualifies the card instead of
+// treating a login wall or a missing transcript as content.
 func PromptFor(payload capture.Fetched) string {
 	notes := "(none)"
 	if len(payload.Notes) > 0 {
@@ -463,21 +542,32 @@ func PromptFor(payload capture.Fetched) string {
 		digest = "(none)"
 	}
 	return fmt.Sprintf(`You receive captured content of kind %q. You are the Sparkkeep Action Engine curator.
-Give a concise "So What?" briefing and split the content into actionable idea cards.
+Analyze the source and produce a Triage Brief for each distinct idea, tool, or takeaway.
 Return ONLY a valid JSON object matching this schema:
 {
-  "executive_summary": "1-3 sentences answering 'What is this?'",
-  "value_proposition": "1-2 sentences answering 'Why is this useful or important?'",
-  "proposed_actions": ["2 to 3 concrete next steps or immediate action items"],
   "cards": [
     {
       "title": "short headline",
-      "summary": "2-3 lines summarizing this distinct takeaway, project, or tool",
-      "horizon": "short-term",
+      "type": "tool|repo|article|idea|claim|tutorial|product|other",
+      "tldr": "1 sentence summarizing what this is",
+      "why_care": "1-2 sentences on why it matters or is worth investigating",
+      "horizon": "short-term|medium-term|long-term|lifetime",
       "tags": ["lowercase tags, max 5"],
+      "claims": ["up to 3 concrete assertions or takeaways from the source"],
+      "open_questions": ["up to 3 questions deep-dive research should answer"],
+      "signals": {
+        "extraction": "full|partial|thin",
+        "promo": false,
+        "source_quality": "primary|secondary|social|unknown",
+        "published_at": "optional ISO date or string"
+      },
+      "worthiness": {
+        "level": "high|medium|low",
+        "reason": "why it is worth researching or reviewing"
+      },
       "references": [
         {
-          "kind": "tool",
+          "kind": "tool|repo|product|person|org|paper|url|other",
           "label": "name or label",
           "url": "optional url"
         }
@@ -487,12 +577,20 @@ Return ONLY a valid JSON object matching this schema:
 }
 
 Rules:
-- horizon must be "short-term" (actionable now/soon), "medium-term" (planned), "long-term" (vision), or "lifetime" (bucket item).
-- references: extract named entities (kind: tool, product, person, org, paper, repo, other) and any explicit links (kind: url or repo). url is optional for entities.
-- One card per distinct idea or tool; if one idea, exactly one card; never merge; never drop.
-- EXTRACTION NOTES are warnings about what could NOT be read. Never present a note's
-  subject as content you learned. If content is missing, say so plainly in the summary.
-- If the source is thin, produce one honest card rather than padding to look substantial.
+- Each card MUST have distinct, specific "tldr" and "why_care" reflecting that individual idea (no generic shared text).
+- "type" must be one of: tool, repo, article, idea, claim, tutorial, product, other.
+- "horizon" must be "short-term" (actionable now/soon), "medium-term" (planned), "long-term" (vision), or "lifetime" (bucket item).
+- "claims": up to 3 core claims or assertions made by the source.
+- "open_questions": up to 3 key questions research would need to answer.
+- "signals":
+  - "extraction": "full", "partial", or "thin".
+  - "promo": true if primarily promotional/sponsored/ad, false otherwise.
+  - "source_quality": "primary" (author/creator/paper), "secondary" (review/news/blog), "social" (tweet/comment/forum), or "unknown".
+  - "published_at": publication date if mentioned, else omit or empty.
+- "worthiness": "level" ("high", "medium", or "low") and a brief "reason".
+- "references": extract named entities and explicit links.
+- One card per distinct idea, tool, or topic. Never merge distinct ideas; never drop important ones.
+- EXTRACTION NOTES are warnings about what could NOT be read. Never treat notes as content learned. If extraction notes indicate a login wall, paywall, unreadable content, or missing text/transcript, "signals.extraction" MUST be "partial" or "thin", NEVER "full".
 
 TITLE: %s
 DESCRIPTION: %s

@@ -22,6 +22,14 @@ const (
 	RefKindOrg     = "org"
 	RefKindPaper   = "paper"
 	RefKindOther   = "other"
+	CardTypeTool     = "tool"
+	CardTypeRepo     = "repo"
+	CardTypeArticle  = "article"
+	CardTypeIdea     = "idea"
+	CardTypeClaim    = "claim"
+	CardTypeTutorial = "tutorial"
+	CardTypeProduct  = "product"
+	CardTypeOther    = "other"
 )
 
 func ValidHorizon(h string) bool {
@@ -47,6 +55,18 @@ type Reference struct {
 	URL   string `json:"url,omitempty"`
 }
 
+type Signals struct {
+	Extraction    string `json:"extraction"`
+	Promo         bool   `json:"promo"`
+	SourceQuality string `json:"source_quality"`
+	PublishedAt   string `json:"published_at,omitempty"`
+}
+
+type Worthiness struct {
+	Level  string `json:"level"`
+	Reason string `json:"reason"`
+}
+
 type Card struct {
 	ID               int64       `json:"id"`
 	CaptureID        *int64      `json:"capture_id,omitempty"`
@@ -58,6 +78,13 @@ type Card struct {
 	SourceNote       string      `json:"source_note"`
 	Tags             []string    `json:"tags"`
 	References       []Reference `json:"references"`
+	Type             string      `json:"type"`
+	TLDR             string      `json:"tldr"`
+	WhyCare          string      `json:"why_care"`
+	Claims           []string    `json:"claims"`
+	OpenQuestions    []string    `json:"open_questions"`
+	Signals          Signals     `json:"signals"`
+	Worthiness       Worthiness  `json:"worthiness"`
 	ExecutiveSummary string      `json:"executive_summary"`
 	ValueProposition string      `json:"value_proposition"`
 	ProposedActions  []string    `json:"proposed_actions"`
@@ -116,6 +143,13 @@ type CardPatch struct {
 	SourceURL        *string
 	CaptureID        *int64
 	References       *[]Reference
+	Type             *string
+	TLDR             *string
+	WhyCare          *string
+	Claims           *[]string
+	OpenQuestions    *[]string
+	Signals          *Signals
+	Worthiness       *Worthiness
 }
 
 type TagPair struct {

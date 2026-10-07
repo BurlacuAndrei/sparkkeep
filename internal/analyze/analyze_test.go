@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -167,8 +168,10 @@ func TestExtractJSONConversational(t *testing.T) {
 
 func TestPromptForContainsBriefing(t *testing.T) {
 	p := PromptFor(capture.Fetched{Title: "Test Title", Caption: "my caption text"})
-	if !strings.Contains(p, "executive_summary") || !strings.Contains(p, "value_proposition") || !strings.Contains(p, "proposed_actions") {
-		t.Fatalf("prompt missing briefing schema:\n%s", p)
+	for _, field := range []string{"tldr", "why_care", "claims", "open_questions", "signals", "worthiness"} {
+		if !strings.Contains(p, field) {
+			t.Fatalf("prompt missing triage brief field %q:\n%s", field, p)
+		}
 	}
 	if !strings.Contains(p, "CAPTION:") || !strings.Contains(p, "my caption text") {
 		t.Fatalf("prompt missing caption:\n%s", p)
@@ -599,6 +602,161 @@ func TestExtractJSONNewAndLegacyShapes(t *testing.T) {
 	}
 	if len(resArr.Cards[0].References) != 1 || resArr.Cards[0].References[0].Kind != port.RefKindURL || resArr.Cards[0].References[0].URL != "https://golang.org" {
 		t.Errorf("legacy array ref mismatch: %+v", resArr.Cards[0].References)
+	}
+}
+
+func TestPromptForGoldenSnapshot(t *testing.T) {
+	fixture := capture.Fetched{
+		Kind:        capture.KindLink,
+		Title:       "Snapshot Test Title",
+		Description: "Snapshot description of the captured content",
+		Text:        "Snapshot body text content explaining the project in detail.",
+		Caption:     "Snapshot user caption",
+		Transcript:  "Snapshot transcript line 1\nSnapshot transcript line 2",
+		ImageDigest: "Snapshot visual digest: diagram with 3 boxes",
+		Notes:       []string{"extraction note: partial rate limit", "another note"},
+	}
+	got := strings.TrimSpace(PromptFor(fixture))
+
+	goldenBytes, err := os.ReadFile("testdata/prompt_for_golden.txt")
+	if err != nil {
+		t.Fatalf("read prompt_for_golden.txt: %v", err)
+	}
+	want := strings.TrimSpace(string(goldenBytes))
+	if got != want {
+		t.Fatalf("PromptFor output does not match golden snapshot:\nGOT:\n%s\n\nWANT:\n%s", got, want)
+	}
+}
+
+func TestAnalyzeLoginWallExtractionSignal(t *testing.T) {
+	// Acceptance criterion: A capture with a "login wall" Note yields signals.extraction != "full".
+	jsonPayload := `{
+		"cards": [
+			{
+				"title": "Paywalled Paper",
+				"tldr": "Paywalled research on LLM routing.",
+				"why_care": "Relevant for our architecture.",
+				"horizon": "medium-term",
+				"signals": {
+					"extraction": "full",
+					"promo": false,
+					"source_quality": "primary"
+				}
+			}
+		]
+	}`
+	st := stubServer(http.StatusOK, jsonPayload)
+	defer st.Close()
+
+	client := newStubbed(st, "")
+	res, err := client.Analyze(context.Background(), capture.Fetched{
+		Title: "Paywalled Paper",
+		Notes: []string{"login wall encountered; body empty"},
+	})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if len(res.Cards) != 1 {
+		t.Fatalf("len(Cards) = %d, want 1", len(res.Cards))
+	}
+	if res.Cards[0].Signals.Extraction == "full" {
+		t.Errorf("expected signals.extraction != 'full' due to login wall, got %q", res.Cards[0].Signals.Extraction)
+	}
+}
+
+func TestExtractJSONTriageBriefFullAndPartial(t *testing.T) {
+	// Full triage brief schema
+	fullJSON := `{
+		"cards": [
+			{
+				"title": "Local LLM Router",
+				"type": "tool",
+				"tldr": "Dynamic role-based router for local model deployments.",
+				"why_care": "Saves 90% latency by using specialized smaller models.",
+				"horizon": "short-term",
+				"tags": ["llm", "routing"],
+				"claims": ["10x throughput", "0 memory leak"],
+				"open_questions": ["What is cold start latency?"],
+				"signals": {
+					"extraction": "full",
+					"promo": false,
+					"source_quality": "primary",
+					"published_at": "2026-02-15"
+				},
+				"worthiness": {
+					"level": "high",
+					"reason": "Direct drop-in for our pipeline"
+				},
+				"references": [
+					{"kind": "repo", "label": "router-go", "url": "https://github.com/example/router-go"}
+				]
+			}
+		]
+	}`
+	res, err := ExtractJSON(fullJSON)
+	if err != nil {
+		t.Fatalf("ExtractJSON full: %v", err)
+	}
+	if len(res.Cards) != 1 {
+		t.Fatalf("len = %d, want 1", len(res.Cards))
+	}
+	card := res.Cards[0]
+	if card.Type != "tool" || card.TLDR != "Dynamic role-based router for local model deployments." {
+		t.Errorf("mismatch card basic: %+v", card)
+	}
+	if card.WhyCare != "Saves 90% latency by using specialized smaller models." {
+		t.Errorf("mismatch why_care: %q", card.WhyCare)
+	}
+	if len(card.Claims) != 2 || card.Claims[0] != "10x throughput" {
+		t.Errorf("claims: %+v", card.Claims)
+	}
+	if len(card.OpenQuestions) != 1 || card.OpenQuestions[0] != "What is cold start latency?" {
+		t.Errorf("open_questions: %+v", card.OpenQuestions)
+	}
+	if card.Signals.Extraction != "full" || card.Signals.PublishedAt != "2026-02-15" {
+		t.Errorf("signals: %+v", card.Signals)
+	}
+	if card.Worthiness.Level != "high" || card.Worthiness.Reason != "Direct drop-in for our pipeline" {
+		t.Errorf("worthiness: %+v", card.Worthiness)
+	}
+
+	// Partial / tolerant schema (missing optional fields)
+	partialJSON := `{
+		"cards": [
+			{
+				"title": "Minimal Idea",
+				"tldr": "Minimal description sentence.",
+				"horizon": "long-term"
+			}
+		]
+	}`
+	pRes, err := ExtractJSON(partialJSON)
+	if err != nil {
+		t.Fatalf("ExtractJSON partial: %v", err)
+	}
+	pCard := pRes.Cards[0]
+	if pCard.Type != "idea" {
+		t.Errorf("expected default type 'idea', got %q", pCard.Type)
+	}
+	if pCard.Signals == nil || pCard.Signals.Extraction != "full" {
+		t.Errorf("expected default signals.extraction 'full', got %+v", pCard.Signals)
+	}
+	if pCard.Worthiness == nil || pCard.Worthiness.Level != "medium" {
+		t.Errorf("expected default worthiness 'medium', got %+v", pCard.Worthiness)
+	}
+	if len(pCard.Claims) != 0 || len(pCard.OpenQuestions) != 0 {
+		t.Errorf("claims/open_questions should default to empty slice: %+v %+v", pCard.Claims, pCard.OpenQuestions)
+	}
+}
+
+func TestStrictTitleTLDRHorizon(t *testing.T) {
+	// Missing title -> error
+	if _, err := ExtractJSON(`{"cards":[{"tldr":"ok","horizon":"short-term"}]}`); err == nil {
+		t.Fatal("expected error on missing title")
+	}
+	// Missing tldr & summary -> error
+	if _, err := ExtractJSON(`{"cards":[{"title":"ok","horizon":"short-term"}]}`); err == nil {
+		t.Fatal("expected error on missing tldr")
 	}
 }
 

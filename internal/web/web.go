@@ -837,12 +837,19 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Title            string   `json:"title"`
 		Summary          string   `json:"summary"`
-		Horizon          string   `json:"horizon"`
-		Status           string   `json:"status"`
-		SourceURL        string   `json:"source_url"`
-		SourceNote       string   `json:"source_note"`
+		Horizon          string           `json:"horizon"`
+		Status           string           `json:"status"`
+		SourceURL        string           `json:"source_url"`
+		SourceNote       string           `json:"source_note"`
 		Tags             []string         `json:"tags"`
 		References       []port.Reference `json:"references"`
+		Type             string           `json:"type"`
+		TLDR             string           `json:"tldr"`
+		WhyCare          string           `json:"why_care"`
+		Claims           []string         `json:"claims"`
+		OpenQuestions    []string         `json:"open_questions"`
+		Signals          port.Signals     `json:"signals"`
+		Worthiness       port.Worthiness  `json:"worthiness"`
 		ExecutiveSummary string           `json:"executive_summary"`
 		ValueProposition string           `json:"value_proposition"`
 		ProposedActions  []string         `json:"proposed_actions"`
@@ -909,6 +916,13 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 		SourceNote:       b.SourceNote,
 		Tags:             b.Tags,
 		References:       b.References,
+		Type:             b.Type,
+		TLDR:             b.TLDR,
+		WhyCare:          b.WhyCare,
+		Claims:           b.Claims,
+		OpenQuestions:    b.OpenQuestions,
+		Signals:          b.Signals,
+		Worthiness:       b.Worthiness,
 		ExecutiveSummary: b.ExecutiveSummary,
 		ValueProposition: b.ValueProposition,
 		ProposedActions:  b.ProposedActions,
@@ -952,6 +966,13 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		Note             *string           `json:"note"`
 		Tags             []string          `json:"tags"`
 		References       *[]port.Reference `json:"references"`
+		Type             *string           `json:"type"`
+		TLDR             *string           `json:"tldr"`
+		WhyCare          *string           `json:"why_care"`
+		Claims           *[]string         `json:"claims"`
+		OpenQuestions    *[]string         `json:"open_questions"`
+		Signals          *port.Signals     `json:"signals"`
+		Worthiness       *port.Worthiness  `json:"worthiness"`
 		ExecutiveSummary *string           `json:"executive_summary"`
 		ValueProposition *string           `json:"value_proposition"`
 		ProposedActions  *[]string         `json:"proposed_actions"`
@@ -1009,12 +1030,19 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		Status:           b.Status,
 		Horizon:          b.Horizon,
 		Note:             b.Note,
+		Type:             b.Type,
+		TLDR:             b.TLDR,
+		WhyCare:          b.WhyCare,
+		Claims:           b.Claims,
+		OpenQuestions:    b.OpenQuestions,
+		Signals:          b.Signals,
+		Worthiness:       b.Worthiness,
 		ExecutiveSummary: b.ExecutiveSummary,
 		ValueProposition: b.ValueProposition,
 		ProposedActions:  b.ProposedActions,
 		References:       b.References,
 	}
-	if patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil || patch.References != nil {
+	if patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.Type != nil || patch.TLDR != nil || patch.WhyCare != nil || patch.Claims != nil || patch.OpenQuestions != nil || patch.Signals != nil || patch.Worthiness != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil || patch.References != nil {
 		card, err = a.store.UpdateCard(r.Context(), id, patch)
 		if err != nil {
 			a.fail(w, err)

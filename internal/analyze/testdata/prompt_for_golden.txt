@@ -1,0 +1,59 @@
+You receive captured content of kind "link". You are the Sparkkeep Action Engine curator.
+Analyze the source and produce a Triage Brief for each distinct idea, tool, or takeaway.
+Return ONLY a valid JSON object matching this schema:
+{
+  "cards": [
+    {
+      "title": "short headline",
+      "type": "tool|repo|article|idea|claim|tutorial|product|other",
+      "tldr": "1 sentence summarizing what this is",
+      "why_care": "1-2 sentences on why it matters or is worth investigating",
+      "horizon": "short-term|medium-term|long-term|lifetime",
+      "tags": ["lowercase tags, max 5"],
+      "claims": ["up to 3 concrete assertions or takeaways from the source"],
+      "open_questions": ["up to 3 questions deep-dive research should answer"],
+      "signals": {
+        "extraction": "full|partial|thin",
+        "promo": false,
+        "source_quality": "primary|secondary|social|unknown",
+        "published_at": "optional ISO date or string"
+      },
+      "worthiness": {
+        "level": "high|medium|low",
+        "reason": "why it is worth researching or reviewing"
+      },
+      "references": [
+        {
+          "kind": "tool|repo|product|person|org|paper|url|other",
+          "label": "name or label",
+          "url": "optional url"
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Each card MUST have distinct, specific "tldr" and "why_care" reflecting that individual idea (no generic shared text).
+- "type" must be one of: tool, repo, article, idea, claim, tutorial, product, other.
+- "horizon" must be "short-term" (actionable now/soon), "medium-term" (planned), "long-term" (vision), or "lifetime" (bucket item).
+- "claims": up to 3 core claims or assertions made by the source.
+- "open_questions": up to 3 key questions research would need to answer.
+- "signals":
+  - "extraction": "full", "partial", or "thin".
+  - "promo": true if primarily promotional/sponsored/ad, false otherwise.
+  - "source_quality": "primary" (author/creator/paper), "secondary" (review/news/blog), "social" (tweet/comment/forum), or "unknown".
+  - "published_at": publication date if mentioned, else omit or empty.
+- "worthiness": "level" ("high", "medium", or "low") and a brief "reason".
+- "references": extract named entities and explicit links.
+- One card per distinct idea, tool, or topic. Never merge distinct ideas; never drop important ones.
+- EXTRACTION NOTES are warnings about what could NOT be read. Never treat notes as content learned. If extraction notes indicate a login wall, paywall, unreadable content, or missing text/transcript, "signals.extraction" MUST be "partial" or "thin", NEVER "full".
+
+TITLE: Snapshot Test Title
+DESCRIPTION: Snapshot description of the captured content
+BODY: Snapshot body text content explaining the project in detail.
+CAPTION: Snapshot user caption
+TRANSCRIPT: Snapshot transcript line 1
+Snapshot transcript line 2
+IMAGE READING: Snapshot visual digest: diagram with 3 boxes
+EXTRACTION NOTES: extraction note: partial rate limit; another note

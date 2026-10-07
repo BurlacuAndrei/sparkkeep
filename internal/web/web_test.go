@@ -213,6 +213,27 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if p.References != nil {
 		c.References = *p.References
 	}
+	if p.Type != nil {
+		c.Type = *p.Type
+	}
+	if p.TLDR != nil {
+		c.TLDR = *p.TLDR
+	}
+	if p.WhyCare != nil {
+		c.WhyCare = *p.WhyCare
+	}
+	if p.Claims != nil {
+		c.Claims = *p.Claims
+	}
+	if p.OpenQuestions != nil {
+		c.OpenQuestions = *p.OpenQuestions
+	}
+	if p.Signals != nil {
+		c.Signals = *p.Signals
+	}
+	if p.Worthiness != nil {
+		c.Worthiness = *p.Worthiness
+	}
 	c.UpdatedAt = time.Now().UTC()
 	s.cards[id] = c
 	return c, nil
@@ -1945,5 +1966,102 @@ func TestSettingsLLMRolesRoundTrip(t *testing.T) {
 	triageClient := svc.Router.For("triage")
 	if triageClient.BaseURL != "https://api.a.com/v1" || triageClient.Model != "model-a" {
 		t.Fatalf("triage client not routed to prof-a: base=%s model=%s", triageClient.BaseURL, triageClient.Model)
+	}
+}
+
+func TestTriageBriefAPIFields(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	// 1. Create a card with full triage brief payload
+	createPayload := `{
+		"title": "API Triage Card",
+		"type": "repo",
+		"tldr": "High speed embeddings in Go.",
+		"why_care": "Allows sub-millisecond similarity search.",
+		"claims": ["Zero alloc in hot path", "SIMD accelerated"],
+		"open_questions": ["What is max batch size?"],
+		"signals": {
+			"extraction": "full",
+			"promo": false,
+			"source_quality": "primary",
+			"published_at": "2026-03-10"
+		},
+		"worthiness": {
+			"level": "high",
+			"reason": "Solves our bottleneck"
+		},
+		"horizon": "short-term"
+	}`
+	rrPost := doJSON(t, h, http.MethodPost, "/api/v1/cards", createPayload)
+	if rrPost.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/cards failed: %d: %s", rrPost.Code, rrPost.Body.String())
+	}
+	var postResp struct {
+		Data port.Card `json:"data"`
+		OK   bool      `json:"ok"`
+	}
+	if err := json.Unmarshal(rrPost.Body.Bytes(), &postResp); err != nil {
+		t.Fatalf("unmarshal postResp: %v", err)
+	}
+	created := postResp.Data
+	if created.Type != "repo" || created.TLDR != "High speed embeddings in Go." {
+		t.Errorf("created mismatch: %+v", created)
+	}
+	if created.WhyCare != "Allows sub-millisecond similarity search." {
+		t.Errorf("created why_care: %q", created.WhyCare)
+	}
+	if len(created.Claims) != 2 || created.Claims[0] != "Zero alloc in hot path" {
+		t.Errorf("created claims: %+v", created.Claims)
+	}
+	if len(created.OpenQuestions) != 1 || created.OpenQuestions[0] != "What is max batch size?" {
+		t.Errorf("created open_questions: %+v", created.OpenQuestions)
+	}
+	if created.Signals.Extraction != "full" || created.Signals.PublishedAt != "2026-03-10" {
+		t.Errorf("created signals: %+v", created.Signals)
+	}
+	if created.Worthiness.Level != "high" || created.Worthiness.Reason != "Solves our bottleneck" {
+		t.Errorf("created worthiness: %+v", created.Worthiness)
+	}
+
+	// 2. GET /api/v1/cards/{id}
+	rrGet := doJSON(t, h, http.MethodGet, fmt.Sprintf("/api/v1/cards/%d", created.ID), "")
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("GET card: %d", rrGet.Code)
+	}
+	var getResp struct {
+		Data port.Card `json:"data"`
+		OK   bool      `json:"ok"`
+	}
+	if err := json.Unmarshal(rrGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("unmarshal getResp: %v", err)
+	}
+	got := getResp.Data
+	if got.TLDR != created.TLDR || got.WhyCare != created.WhyCare || got.Type != created.Type {
+		t.Errorf("GET mismatch: %+v", got)
+	}
+
+	// 3. PATCH /api/v1/cards/{id}
+	patchPayload := `{
+		"tldr": "Updated embeddings in Go.",
+		"worthiness": {
+			"level": "medium",
+			"reason": "Wait for benchmarks"
+		}
+	}`
+	rrPatch := doJSON(t, h, http.MethodPatch, fmt.Sprintf("/api/v1/cards/%d", created.ID), patchPayload)
+	if rrPatch.Code != http.StatusOK {
+		t.Fatalf("PATCH card: %d: %s", rrPatch.Code, rrPatch.Body.String())
+	}
+	var patchResp struct {
+		Data port.Card `json:"data"`
+		OK   bool      `json:"ok"`
+	}
+	if err := json.Unmarshal(rrPatch.Body.Bytes(), &patchResp); err != nil {
+		t.Fatalf("unmarshal patchResp: %v", err)
+	}
+	patched := patchResp.Data
+	if patched.TLDR != "Updated embeddings in Go." || patched.Worthiness.Level != "medium" {
+		t.Errorf("patched mismatch: %+v", patched)
 	}
 }
