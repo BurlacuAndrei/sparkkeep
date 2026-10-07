@@ -16,6 +16,7 @@ import (
 	"image/jpeg"
 	_ "image/png" // registers PNG decoding for Telegram screenshots
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -317,6 +318,9 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 		if len(res.Cards) == 0 {
 			return AnalysisResult{}, ErrInvalidResponse
 		}
+		for i := range res.Cards {
+			res.Cards[i].Horizon = normalizeHorizon(res.Cards[i].Horizon)
+		}
 		if err := validateCards(res.Cards); err != nil {
 			return AnalysisResult{}, err
 		}
@@ -329,6 +333,9 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 		var cards []Idea
 		if err := json.Unmarshal([]byte(s), &cards); err != nil {
 			return AnalysisResult{}, ErrInvalidResponse
+		}
+		for i := range cards {
+			cards[i].Horizon = normalizeHorizon(cards[i].Horizon)
 		}
 		if err := validateCards(cards); err != nil {
 			return AnalysisResult{}, err
@@ -348,12 +355,33 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 	}
 }
 
+func normalizeHorizon(raw string) string {
+	cleaned := strings.ToLower(strings.TrimSpace(raw))
+	cleaned = strings.ReplaceAll(cleaned, "_", " ")
+	cleaned = strings.ReplaceAll(cleaned, "-", " ")
+	cleaned = strings.Join(strings.Fields(cleaned), " ")
+
+	switch cleaned {
+	case "short term", "shortterm", "short", "now", "soon", "immediate":
+		return port.HorizonShortTerm
+	case "medium term", "mediumterm", "medium":
+		return port.HorizonMediumTerm
+	case "long term", "longterm", "long":
+		return port.HorizonLongTerm
+	case "lifetime", "life time", "bucket", "bucket list", "bucketlist", "someday":
+		return port.HorizonLifetime
+	default:
+		slog.Debug("analyze: unknown or empty horizon, defaulting to short-term", "horizon", raw)
+		return port.HorizonShortTerm
+	}
+}
+
 func validateCards(cards []Idea) error {
 	if len(cards) == 0 {
 		return ErrInvalidResponse
 	}
 	for _, i := range cards {
-		if i.Horizon != port.HorizonShortTerm && i.Horizon != port.HorizonLifetime {
+		if !port.ValidHorizon(i.Horizon) {
 			return ErrInvalidResponse
 		}
 	}

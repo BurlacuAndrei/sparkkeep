@@ -19,6 +19,7 @@ import (
 
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
+	"sparkkeep/internal/port"
 )
 
 // stubServer returns an httptest server answering /chat/completions with a
@@ -200,9 +201,148 @@ func TestAnalyzeServerError(t *testing.T) {
 }
 
 func TestHorizonConstraint(t *testing.T) {
-	_, err := ExtractJSON(`[{"title":"x","summary":"y","horizon":"bogus","tags":[],"links":[]}]`)
+	err := validateCards([]Idea{{Title: "x", Summary: "y", Horizon: "bogus", Tags: []string{}, Links: []string{}}})
 	if !errors.Is(err, ErrInvalidResponse) {
 		t.Fatalf("err = %v, want ErrInvalidResponse", err)
+	}
+}
+
+func TestNormalizeHorizon(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"exact short-term", "short-term", port.HorizonShortTerm},
+		{"exact medium-term", "medium-term", port.HorizonMediumTerm},
+		{"exact long-term", "long-term", port.HorizonLongTerm},
+		{"exact lifetime", "lifetime", port.HorizonLifetime},
+
+		{"case insensitive Short Term", "Short Term", port.HorizonShortTerm},
+		{"case insensitive SHORT-TERM", "SHORT-TERM", port.HorizonShortTerm},
+		{"case insensitive Medium-Term", "Medium-Term", port.HorizonMediumTerm},
+		{"case insensitive Long-Term", "Long-Term", port.HorizonLongTerm},
+		{"case insensitive Lifetime", "Lifetime", port.HorizonLifetime},
+
+		{"underscore short_term", "short_term", port.HorizonShortTerm},
+		{"underscore medium_term", "medium_term", port.HorizonMediumTerm},
+		{"underscore long_term", "long_term", port.HorizonLongTerm},
+		{"underscore life_time", "life_time", port.HorizonLifetime},
+		{"underscore bucket_list", "bucket_list", port.HorizonLifetime},
+
+		{"whitespace padding", "  short-term  ", port.HorizonShortTerm},
+		{"whitespace short term", "short term", port.HorizonShortTerm},
+		{"whitespace medium term", "medium term", port.HorizonMediumTerm},
+		{"whitespace long term", "long term", port.HorizonLongTerm},
+		{"whitespace life time", "life time", port.HorizonLifetime},
+
+		{"synonym medium", "medium", port.HorizonMediumTerm},
+		{"synonym Medium", "Medium", port.HorizonMediumTerm},
+		{"synonym long", "long", port.HorizonLongTerm},
+		{"synonym Long", "Long", port.HorizonLongTerm},
+		{"synonym now", "now", port.HorizonShortTerm},
+		{"synonym soon", "soon", port.HorizonShortTerm},
+		{"synonym immediate", "immediate", port.HorizonShortTerm},
+		{"synonym bucket", "bucket", port.HorizonLifetime},
+		{"synonym bucket list", "bucket list", port.HorizonLifetime},
+		{"synonym bucket-list", "bucket-list", port.HorizonLifetime},
+		{"synonym Bucket List", "Bucket List", port.HorizonLifetime},
+		{"synonym someday", "someday", port.HorizonLifetime},
+
+		{"no separator shortterm", "shortterm", port.HorizonShortTerm},
+		{"no separator mediumterm", "mediumterm", port.HorizonMediumTerm},
+		{"no separator longterm", "longterm", port.HorizonLongTerm},
+		{"no separator bucketlist", "bucketlist", port.HorizonLifetime},
+
+		{"empty string", "", port.HorizonShortTerm},
+		{"whitespace only", "   ", port.HorizonShortTerm},
+		{"unknown bogus", "bogus", port.HorizonShortTerm},
+		{"unknown unmapped", "random value", port.HorizonShortTerm},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeHorizon(tt.input)
+			if got != tt.want {
+				t.Errorf("normalizeHorizon(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractJSONHorizons(t *testing.T) {
+	tests := []struct {
+		name        string
+		payload     string
+		wantHorizon string
+		wantErr     bool
+	}{
+		{"short-term", `[{"title":"t","summary":"s","horizon":"short-term"}]`, port.HorizonShortTerm, false},
+		{"medium-term", `[{"title":"t","summary":"s","horizon":"medium-term"}]`, port.HorizonMediumTerm, false},
+		{"long-term", `[{"title":"t","summary":"s","horizon":"long-term"}]`, port.HorizonLongTerm, false},
+		{"lifetime", `[{"title":"t","summary":"s","horizon":"lifetime"}]`, port.HorizonLifetime, false},
+		{"Short Term mixed case", `[{"title":"t","summary":"s","horizon":"Short Term"}]`, port.HorizonShortTerm, false},
+		{"short_term underscore", `[{"title":"t","summary":"s","horizon":"short_term"}]`, port.HorizonShortTerm, false},
+		{"medium synonym", `[{"title":"t","summary":"s","horizon":"medium"}]`, port.HorizonMediumTerm, false},
+		{"long synonym", `[{"title":"t","summary":"s","horizon":"long"}]`, port.HorizonLongTerm, false},
+		{"now synonym", `[{"title":"t","summary":"s","horizon":"now"}]`, port.HorizonShortTerm, false},
+		{"soon synonym", `[{"title":"t","summary":"s","horizon":"soon"}]`, port.HorizonShortTerm, false},
+		{"immediate synonym", `[{"title":"t","summary":"s","horizon":"immediate"}]`, port.HorizonShortTerm, false},
+		{"bucket synonym", `[{"title":"t","summary":"s","horizon":"bucket"}]`, port.HorizonLifetime, false},
+		{"bucket list synonym", `[{"title":"t","summary":"s","horizon":"bucket list"}]`, port.HorizonLifetime, false},
+		{"bucket-list synonym", `[{"title":"t","summary":"s","horizon":"bucket-list"}]`, port.HorizonLifetime, false},
+		{"someday synonym", `[{"title":"t","summary":"s","horizon":"someday"}]`, port.HorizonLifetime, false},
+		{"empty horizon", `[{"title":"t","summary":"s","horizon":""}]`, port.HorizonShortTerm, false},
+		{"missing horizon field", `[{"title":"t","summary":"s"}]`, port.HorizonShortTerm, false},
+		{"unknown horizon bogus", `[{"title":"t","summary":"s","horizon":"bogus"}]`, port.HorizonShortTerm, false},
+		{"briefing object with medium-term", `{"executive_summary":"exec","cards":[{"title":"t","summary":"s","horizon":"medium-term"}]}`, port.HorizonMediumTerm, false},
+		{"briefing object with long-term", `{"executive_summary":"exec","cards":[{"title":"t","summary":"s","horizon":"long-term"}]}`, port.HorizonLongTerm, false},
+		{"briefing object with empty horizon", `{"cards":[{"title":"t","summary":"s"}]}`, port.HorizonShortTerm, false},
+		{"empty cards array", `[]`, "", true},
+		{"malformed JSON", `{invalid`, "", true},
+		{"no cards in object", `{"other":"val"}`, "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := ExtractJSON(tt.payload)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ExtractJSON() err = %v, wantErr = %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				if len(res.Cards) == 0 {
+					t.Fatalf("ExtractJSON() returned 0 cards")
+				}
+				if res.Cards[0].Horizon != tt.wantHorizon {
+					t.Errorf("ExtractJSON() card horizon = %q, want %q", res.Cards[0].Horizon, tt.wantHorizon)
+				}
+			}
+		})
+	}
+}
+
+func TestAnalyzeAcceptsMediumAndLongTerm(t *testing.T) {
+	jsonPayload := `{
+		"cards": [
+			{"title":"Medium term plan","summary":"Plan for next quarter","horizon":"medium-term","tags":[],"links":[]},
+			{"title":"Long term vision","summary":"Five year outlook","horizon":"long-term","tags":[],"links":[]}
+		]
+	}`
+	st := stubServer(http.StatusOK, jsonPayload)
+	defer st.Close()
+
+	res, err := newStubbed(st, "").Analyze(context.Background(), capture.Fetched{Title: "Roadmap"})
+	if err != nil {
+		t.Fatalf("Analyze err: %v", err)
+	}
+	if len(res.Cards) != 2 {
+		t.Fatalf("len(Cards) = %d, want 2", len(res.Cards))
+	}
+	if res.Cards[0].Horizon != port.HorizonMediumTerm {
+		t.Errorf("Cards[0].Horizon = %q, want %q", res.Cards[0].Horizon, port.HorizonMediumTerm)
+	}
+	if res.Cards[1].Horizon != port.HorizonLongTerm {
+		t.Errorf("Cards[1].Horizon = %q, want %q", res.Cards[1].Horizon, port.HorizonLongTerm)
 	}
 }
 
