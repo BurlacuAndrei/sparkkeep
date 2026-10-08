@@ -196,10 +196,10 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
   const [tgChatId, setTgChatId] = useState('');
 
   // Dashboard display preferences (persisted locally)
-  const [defaultView, setDefaultView] = useState<'kanban' | 'triage' | 'digest'>(() => {
+  const [defaultView, setDefaultView] = useState<'kanban' | 'digest'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sparkkeep_default_view');
-      if (saved === 'kanban' || saved === 'triage' || saved === 'digest') return saved;
+      if (saved === 'kanban' || saved === 'digest') return saved;
     }
     return 'kanban';
   });
@@ -750,12 +750,11 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
                     </div>
                     <select
                       value={defaultView}
-                      onChange={(e) => setDefaultView(e.target.value as 'kanban' | 'triage' | 'digest')}
+                      onChange={(e) => setDefaultView(e.target.value as 'kanban' | 'digest')}
                       className="pref-select"
                       aria-label="Default dashboard view"
                     >
-                      <option value="kanban">Kanban Board</option>
-                      <option value="triage">Triage Inbox</option>
+                      <option value="kanban">Kanban Board &amp; Pipeline</option>
                       <option value="digest">Weekly Digest</option>
                     </select>
                   </div>

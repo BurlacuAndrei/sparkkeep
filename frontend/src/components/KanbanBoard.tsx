@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card } from '../types';
 import { CardItem } from './CardItem';
 import { ResearchReportView } from './ResearchReportView';
+import { TriageView } from './TriageView';
 import {
   Inbox,
   Zap,
@@ -44,6 +45,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onRefresh,
 }) => {
   const [activeTab, setActiveTab] = useState<'triage' | 'execution'>('triage');
+  const [focusMode, setFocusMode] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batching, setBatching] = useState(false);
@@ -143,23 +145,45 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           <span style={{ fontSize: 12, fontWeight: 500, color: '#64748b' }}>({cards.length} cards total)</span>
         </h2>
 
-        <button
-          type="button"
-          className="btn-secondary"
-          style={{ fontSize: 12, padding: '5px 12px', height: 30 }}
-          onClick={() => {
-            if (selectMode) {
-              setSelectedIds(new Set());
-            }
-            setSelectMode(!selectMode);
-          }}
-        >
-          <CheckSquare size={14} style={{ marginRight: 6 }} />
-          {selectMode ? 'Cancel Selection' : 'Multi-Select'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {activeTab === 'triage' && (
+            <button
+              type="button"
+              className={`btn-secondary ${focusMode ? 'active' : ''}`}
+              style={{
+                fontSize: 12,
+                padding: '5px 12px',
+                height: 30,
+                borderColor: focusMode ? 'var(--accent-indigo)' : undefined,
+                color: focusMode ? '#818cf8' : undefined,
+                background: focusMode ? 'rgba(99, 102, 241, 0.15)' : undefined,
+              }}
+              onClick={() => setFocusMode((v) => !v)}
+              title={focusMode ? 'Switch back to 3-column Board view' : 'Start 1-by-1 Focus Run'}
+            >
+              <Zap size={14} color={focusMode ? '#818cf8' : '#38bdf8'} style={{ marginRight: 6 }} />
+              {focusMode ? 'Board View' : `Focus Run (${inboxCards.length})`}
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="btn-secondary"
+            style={{ fontSize: 12, padding: '5px 12px', height: 30 }}
+            onClick={() => {
+              if (selectMode) {
+                setSelectedIds(new Set());
+              }
+              setSelectMode(!selectMode);
+            }}
+          >
+            <CheckSquare size={14} style={{ marginRight: 6 }} />
+            {selectMode ? 'Cancel Selection' : 'Multi-Select'}
+          </button>
+        </div>
       </div>
 
-      {/* Primary Top-level Tab Navigation: Triage vs Execution */}
+      {/* Primary Top-level Tab Navigation: Pipeline vs Execution */}
       <div className="kanban-tab-container" role="tablist">
         <button
           id="tab-triage"
@@ -170,7 +194,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           onClick={() => setActiveTab('triage')}
         >
           <Layers size={15} color={activeTab === 'triage' ? '#818cf8' : '#94a3b8'} />
-          <span>Triage &amp; Review</span>
+          <span>Pipeline &amp; Review</span>
           <span className="kanban-tab-badge">{triageTotal}</span>
         </button>
 
@@ -180,7 +204,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           role="tab"
           aria-selected={activeTab === 'execution'}
           className={`kanban-tab-btn ${activeTab === 'execution' ? 'active' : ''}`}
-          onClick={() => setActiveTab('execution')}
+          onClick={() => {
+            setActiveTab('execution');
+            setFocusMode(false);
+          }}
         >
           <Play size={14} color={activeTab === 'execution' ? '#34d399' : '#94a3b8'} />
           <span>Project Execution</span>
@@ -263,18 +290,47 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       {/* Legacy/Main container id for test compatibility */}
       <div id="main-grid" style={{ display: 'none' }}></div>
 
-      {/* TAB 1: TRIAGE & REVIEW */}
+      {/* TAB 1: PIPELINE & REVIEW */}
       {activeTab === 'triage' && (
-        <div className="kanban-board" data-view="triage">
-          {/* Inbox Column */}
-          <div className="kanban-column">
-            <div className="column-header">
-              <div className="column-title">
-                <Inbox size={15} strokeWidth={1.5} color="#38bdf8" />
-                <span>Inbox</span>
+        focusMode ? (
+          <div className="focus-run-wrapper" style={{ padding: '4px 0 24px' }}>
+            <TriageView
+              cards={cards}
+              onStatusChange={onStatusChange}
+              onResearch={onResearch}
+              onRetry={onRetry}
+              onOpenCardDetail={onSelectCard}
+              onRefresh={onRefresh}
+              isPro={isPro}
+              onOpenLicenseModal={onOpenLicenseModal}
+              showToast={showToast}
+              onExitFocus={() => setFocusMode(false)}
+            />
+          </div>
+        ) : (
+          <div className="kanban-board" data-view="triage">
+            {/* Inbox Column */}
+            <div className="kanban-column">
+              <div className="column-header">
+                <div className="column-title">
+                  <Inbox size={15} strokeWidth={1.5} color="#38bdf8" />
+                  <span>Inbox</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {inboxCards.length > 0 && (
+                    <button
+                      type="button"
+                      className="inbox-focus-btn"
+                      onClick={() => setFocusMode(true)}
+                      title="Start 1-by-1 Focus Run for Inbox"
+                    >
+                      <Zap size={11} color="#38bdf8" />
+                      <span>Focus Run</span>
+                    </button>
+                  )}
+                  <span className="column-count">{inboxCards.length}</span>
+                </div>
               </div>
-              <span className="column-count">{inboxCards.length}</span>
-            </div>
             <div className="cards-container">
               {inboxCards.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
@@ -326,7 +382,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
           </div>
         </div>
-      )}
+      ))}
 
       {/* TAB 2: EXECUTION */}
       {activeTab === 'execution' && (

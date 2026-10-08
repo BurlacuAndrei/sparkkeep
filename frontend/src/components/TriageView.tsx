@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Playbook } from '../types';
 import * as api from '../api';
-import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw, AlertTriangle, HelpCircle, Link2, ChevronDown, BookOpen } from 'lucide-react';
+import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw, AlertTriangle, HelpCircle, Link2, ChevronDown, BookOpen, Layers } from 'lucide-react';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 
 
@@ -45,6 +45,7 @@ interface TriageViewProps {
   isPro?: boolean;
   onOpenLicenseModal?: () => void;
   showToast?: (msg: string) => void;
+  onExitFocus?: () => void;
 }
 
 export const TriageView: React.FC<TriageViewProps> = ({
@@ -57,6 +58,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
   isPro = false,
   onOpenLicenseModal,
   showToast,
+  onExitFocus,
 }) => {
   // Focus primarily on inbox cards first, or all cards
   const inboxCards = cards.filter((c) => c.status === 'inbox');
@@ -238,9 +240,22 @@ export const TriageView: React.FC<TriageViewProps> = ({
           <CheckCircle2 size={36} />
         </div>
         <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>All Caught Up!</h2>
-        <p style={{ color: '#94a3b8', fontSize: 14 }}>
+        <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 440, margin: '0 auto' }}>
           No cards left in your triage queue. Every spark has been converted into an action or archived.
         </p>
+        {onExitFocus && (
+          <div style={{ marginTop: 24 }}>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={onExitFocus}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: '0 auto', padding: '8px 18px', fontSize: 13 }}
+            >
+              <Layers size={14} />
+              <span>Return to Pipeline Board</span>
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -252,12 +267,24 @@ export const TriageView: React.FC<TriageViewProps> = ({
     <div className="triage-container">
       <div className="triage-progress">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, color: '#38bdf8' }}>Focus Triage</span>
+          <span style={{ fontWeight: 700, color: '#38bdf8' }}>Focus Run</span>
           <span style={{ color: '#64748b' }}>·</span>
           <span>Card {safeIndex + 1} of {triageCards.length}</span>
           {staleControls}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {onExitFocus && (
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ fontSize: 11.5, padding: '3px 9px', height: 26, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              onClick={onExitFocus}
+              title="Return to 3-column Board view"
+            >
+              <Layers size={13} color="#94a3b8" />
+              <span>Board View</span>
+            </button>
+          )}
           <button
             type="button"
             className="btn-secondary"

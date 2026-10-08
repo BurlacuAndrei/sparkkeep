@@ -4,8 +4,8 @@ import { Sparkles, Search, Plus, Calendar, Layers, Zap, Settings } from 'lucide-
 interface HeaderProps {
   query: string;
   onQueryChange: (q: string) => void;
-  viewMode: 'kanban' | 'triage' | 'digest';
-  onViewModeChange: (mode: 'kanban' | 'triage' | 'digest') => void;
+  viewMode: 'kanban' | 'digest';
+  onViewModeChange: (mode: 'kanban' | 'digest') => void;
   onOpenNewCard: () => void;
   onTriggerResearch: (cardId: number) => void;
   flashMessage: string;
@@ -62,18 +62,9 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="nav-tabs">
           <button
             type="button"
-            className={`nav-tab ${viewMode === 'triage' ? 'active' : ''}`}
-            onClick={() => onViewModeChange('triage')}
-            title="Focus Triage Mode (Action Engine)"
-          >
-            <Zap size={13} strokeWidth={1.5} />
-            <span>Triage</span>
-          </button>
-          <button
-            type="button"
             className={`nav-tab ${viewMode === 'kanban' ? 'active' : ''}`}
             onClick={() => onViewModeChange('kanban')}
-            title="Kanban Board View"
+            title="Boards & Pipeline View"
           >
             <Layers size={13} strokeWidth={1.5} />
             <span>Boards</span>

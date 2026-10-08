@@ -4,7 +4,6 @@ import * as api from './api';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { KanbanBoard } from './components/KanbanBoard';
-import { TriageView } from './components/TriageView';
 import { DigestView } from './components/DigestView';
 import { CardModal } from './components/CardModal';
 import { NewCardModal } from './components/NewCardModal';
@@ -21,10 +20,10 @@ function AppContent() {
   const [digest, setDigest] = useState<DigestData | null>(null);
 
   // Filters & Navigation
-  const [viewMode, setViewMode] = useState<'kanban' | 'triage' | 'digest'>(() => {
+  const [viewMode, setViewMode] = useState<'kanban' | 'digest'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sparkkeep_default_view');
-      if (saved === 'kanban' || saved === 'triage' || saved === 'digest') {
+      if (saved === 'kanban' || saved === 'digest') {
         return saved;
       }
     }
@@ -264,20 +263,6 @@ function AppContent() {
         />
 
         <main className="content-area">
-          {viewMode === 'triage' && (
-            <TriageView
-              cards={cards}
-              onStatusChange={handleStatusChange}
-              onResearch={handleResearch}
-              onRetry={handleRetry}
-              onOpenCardDetail={setSelectedCard}
-              onRefresh={reloadAll}
-              isPro={licenseStatus?.tier === 'pro'}
-              onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
-              showToast={showToast}
-            />
-          )}
-
           {viewMode === 'kanban' && (
             <KanbanBoard
               cards={cards}
