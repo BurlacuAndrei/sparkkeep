@@ -477,6 +477,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       {reviewDrawerCard && (
         <div
           id="review-slide-drawer"
+          data-testid="review-slide-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Review ${reviewDrawerCard.title}`}
           className="review-drawer-overlay"
           onClick={(e) => {
             if (e.target === e.currentTarget) setReviewDrawerCard(null);
@@ -533,6 +537,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 )}
                 <button
                   type="button"
+                  data-testid="btn-close-drawer"
+                  aria-label="Close drawer"
                   className="btn-secondary"
                   style={{ padding: '5px', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   onClick={() => setReviewDrawerCard(null)}
@@ -567,6 +573,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <button
                     id="btn-move-doing"
+                    data-testid="btn-move-doing"
+                    aria-label="Move to Doing"
                     type="button"
                     className="btn-primary"
                     style={{
@@ -579,6 +587,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 8,
+                      cursor: 'pointer',
                       boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
                     }}
                     onClick={() => handleDrawerAction('doing', 'Doing')}
@@ -589,6 +598,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
                   <button
                     id="btn-shelve"
+                    data-testid="btn-shelve"
+                    aria-label="Shelve card"
                     type="button"
                     className="btn-secondary"
                     style={{
@@ -599,6 +610,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 8,
+                      cursor: 'pointer',
                     }}
                     onClick={() => handleDrawerAction('shelved', 'Shelved')}
                   >
@@ -608,6 +620,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
                   <button
                     id="btn-mark-done"
+                    data-testid="btn-mark-done"
+                    aria-label="Mark as Completed"
                     type="button"
                     className="btn-secondary"
                     style={{
@@ -618,6 +632,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 8,
+                      cursor: 'pointer',
                       color: '#a5b4fc',
                       borderColor: 'rgba(165, 180, 252, 0.3)',
                     }}
