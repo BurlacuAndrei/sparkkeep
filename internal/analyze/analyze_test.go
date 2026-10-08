@@ -830,6 +830,3 @@ func TestPromptForWithProfileGoldenAndLanguage(t *testing.T) {
 		t.Errorf("language-only prompt should not have empty user profile block")
 	}
 }
-
-
-

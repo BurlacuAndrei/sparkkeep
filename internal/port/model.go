@@ -13,20 +13,22 @@ const (
 	HorizonLongTerm   = "long-term"
 	HorizonLifetime   = "lifetime"
 
-	StatusInbox     = "inbox"
-	StatusDoing     = "doing"
-	StatusDone      = "done"
-	StatusShelved   = "shelved"
-	StatusDismissed = "dismissed"
+	StatusInbox       = "inbox"
+	StatusResearching = "researching"
+	StatusReview      = "review"
+	StatusDoing       = "doing"
+	StatusDone        = "done"
+	StatusShelved     = "shelved"
+	StatusDismissed   = "dismissed"
 
-	RefKindURL     = "url"
-	RefKindRepo    = "repo"
-	RefKindTool    = "tool"
-	RefKindProduct = "product"
-	RefKindPerson  = "person"
-	RefKindOrg     = "org"
-	RefKindPaper   = "paper"
-	RefKindOther   = "other"
+	RefKindURL       = "url"
+	RefKindRepo      = "repo"
+	RefKindTool      = "tool"
+	RefKindProduct   = "product"
+	RefKindPerson    = "person"
+	RefKindOrg       = "org"
+	RefKindPaper     = "paper"
+	RefKindOther     = "other"
 	CardTypeTool     = "tool"
 	CardTypeRepo     = "repo"
 	CardTypeArticle  = "article"
@@ -42,7 +44,7 @@ func ValidHorizon(h string) bool {
 }
 
 func ValidStatus(s string) bool {
-	return s == StatusInbox || s == StatusDoing || s == StatusDone || s == StatusShelved || s == StatusDismissed
+	return s == StatusInbox || s == StatusResearching || s == StatusReview || s == StatusDoing || s == StatusDone || s == StatusShelved || s == StatusDismissed
 }
 
 func ValidReferenceKind(k string) bool {
@@ -73,25 +75,25 @@ type Worthiness struct {
 }
 
 type Card struct {
-	ID               int64       `json:"id"`
-	CaptureID        *int64      `json:"capture_id,omitempty"`
-	Title            string      `json:"title"`
-	Summary          string      `json:"summary"`
-	Horizon          string      `json:"horizon"`
-	Status           string      `json:"status"`
-	SourceURL        string      `json:"source_url"`
-	SourceNote       string      `json:"source_note"`
-	Tags             []string    `json:"tags"`
-	References       []Reference `json:"references"`
-	Type             string      `json:"type"`
-	TLDR             string      `json:"tldr"`
-	WhyCare          string      `json:"why_care"`
-	Claims           []string    `json:"claims"`
-	OpenQuestions    []string    `json:"open_questions"`
-	Signals          Signals     `json:"signals"`
-	Worthiness       Worthiness  `json:"worthiness"`
-	ExecutiveSummary string      `json:"executive_summary"`
-	ValueProposition string      `json:"value_proposition"`
+	ID                 int64       `json:"id"`
+	CaptureID          *int64      `json:"capture_id,omitempty"`
+	Title              string      `json:"title"`
+	Summary            string      `json:"summary"`
+	Horizon            string      `json:"horizon"`
+	Status             string      `json:"status"`
+	SourceURL          string      `json:"source_url"`
+	SourceNote         string      `json:"source_note"`
+	Tags               []string    `json:"tags"`
+	References         []Reference `json:"references"`
+	Type               string      `json:"type"`
+	TLDR               string      `json:"tldr"`
+	WhyCare            string      `json:"why_care"`
+	Claims             []string    `json:"claims"`
+	OpenQuestions      []string    `json:"open_questions"`
+	Signals            Signals     `json:"signals"`
+	Worthiness         Worthiness  `json:"worthiness"`
+	ExecutiveSummary   string      `json:"executive_summary"`
+	ValueProposition   string      `json:"value_proposition"`
 	ProposedActions    []string    `json:"proposed_actions"`
 	ActionsSource      string      `json:"actions_source"`
 	ResearchVerdict    string      `json:"research_verdict,omitempty"`
@@ -268,7 +270,6 @@ func FormatProfileBlock(p *UserProfile) string {
 	return b.String()
 }
 
-
 type PlaybookStep struct {
 	ID         int64            `json:"id,omitempty"`
 	PlaybookID int64            `json:"playbook_id,omitempty"`
@@ -361,8 +362,6 @@ type PipelineMetrics struct {
 	AvgTokensByRole        map[string]int  `json:"avg_tokens_by_role"`
 }
 
-
-
 type ClaimVerdict struct {
 	Claim     string   `json:"claim"`
 	Status    string   `json:"status"` // supported | disputed | unverified
@@ -412,20 +411,20 @@ type CardFilter struct {
 }
 
 type CardPatch struct {
-	Status           *string
-	Horizon          *string
-	Note             *string
-	ExecutiveSummary *string
-	ValueProposition *string
-	ProposedActions  *[]string
-	SourceURL        *string
-	CaptureID        *int64
-	References       *[]Reference
-	Type             *string
-	TLDR             *string
-	WhyCare          *string
-	Claims           *[]string
-	OpenQuestions    *[]string
+	Status             *string
+	Horizon            *string
+	Note               *string
+	ExecutiveSummary   *string
+	ValueProposition   *string
+	ProposedActions    *[]string
+	SourceURL          *string
+	CaptureID          *int64
+	References         *[]Reference
+	Type               *string
+	TLDR               *string
+	WhyCare            *string
+	Claims             *[]string
+	OpenQuestions      *[]string
 	Signals            *Signals
 	Worthiness         *Worthiness
 	ActionsSource      *string

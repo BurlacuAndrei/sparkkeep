@@ -52,17 +52,17 @@ var (
 // channel adapter attaches it (web/main wiring); a nil Channel is a no-op
 // in Notify.
 type Service struct {
-	Store            port.Store
-	Channel          port.Channel
-	Fetcher          capture.Fetcher // recognize+fetch (field named Fetcher: Capture collided with the method)
-	Analyze          *analyze.Client
-	Vision           Describer           // nil disables image digests
-	ASR              Transcriber         // nil disables transcription
-	Runner           *research.Runner    // field named Runner: Research collided with the method
-	Router           *analyze.Router     // per-role LLM routing
-	UploadDir        string              // "" disables upload retention
-	UploadMaxAgeDays int                 // 0 disables age-based cleanup
-	UploadMaxSizeMB  int                 // 0 disables size-based cleanup
+	Store             port.Store
+	Channel           port.Channel
+	Fetcher           capture.Fetcher // recognize+fetch (field named Fetcher: Capture collided with the method)
+	Analyze           *analyze.Client
+	Vision            Describer           // nil disables image digests
+	ASR               Transcriber         // nil disables transcription
+	Runner            *research.Runner    // field named Runner: Research collided with the method
+	Router            *analyze.Router     // per-role LLM routing
+	UploadDir         string              // "" disables upload retention
+	UploadMaxAgeDays  int                 // 0 disables age-based cleanup
+	UploadMaxSizeMB   int                 // 0 disables size-based cleanup
 	FFmpegBin         string              // "" disables video audio extraction
 	License           *license.Manager    // offline Tier/capability manager
 	Webhook           *webhook.Dispatcher // outbound webhook dispatcher
@@ -135,7 +135,6 @@ func (s *Service) GoResearch(ctx context.Context, cardID int64, playbookID ...*i
 	}()
 }
 
-
 // New constructs a Service with the default capture adapter, an analyze
 // client and research runner for cfg, and logf (default log.Printf).
 func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format string, args ...any)) *Service {
@@ -202,17 +201,17 @@ func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format
 			CookiesFile:     cfg.CookiesFile,
 			TranscriptLangs: cfg.TranscriptLangs,
 		},
-		Analyze:          triageClient,
-		Vision:           visionClient,
-		ASR:              asr.New(cfg),
-		Runner:           research.NewWithClients(cfg, planClient, synthClient),
-		Router:           router,
-		UploadDir:        cfg.UploadDir,
-		UploadMaxAgeDays: cfg.UploadMaxAgeDays,
-		UploadMaxSizeMB:  cfg.UploadMaxSizeMB,
-		FFmpegBin:        ffmpegBin(cfg),
-		License:          licMgr,
-		Webhook:          webhook.NewDispatcher(st, licMgr, logf),
+		Analyze:           triageClient,
+		Vision:            visionClient,
+		ASR:               asr.New(cfg),
+		Runner:            research.NewWithClients(cfg, planClient, synthClient),
+		Router:            router,
+		UploadDir:         cfg.UploadDir,
+		UploadMaxAgeDays:  cfg.UploadMaxAgeDays,
+		UploadMaxSizeMB:   cfg.UploadMaxSizeMB,
+		FFmpegBin:         ffmpegBin(cfg),
+		License:           licMgr,
+		Webhook:           webhook.NewDispatcher(st, licMgr, logf),
 		Logf:              logf,
 		QueueConcurrency:  1,
 		QueuePollInterval: 1 * time.Second,

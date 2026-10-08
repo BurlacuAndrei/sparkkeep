@@ -29,8 +29,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 14 {
-		t.Fatalf("version = %d, want 14", version)
+	if version != 15 {
+		t.Fatalf("version = %d, want 15", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -974,8 +974,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 14 {
-		t.Fatalf("version = %d, want 14", version)
+	if version != 15 {
+		t.Fatalf("version = %d, want 15", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1087,8 +1087,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 14 {
-		t.Fatalf("version = %d, want 14", version)
+	if version != 15 {
+		t.Fatalf("version = %d, want 15", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -1661,6 +1661,63 @@ func TestStore_ScheduledAndBatchResearch(t *testing.T) {
 	}
 }
 
+func TestStore_DefaultCuratedPlaybooks(t *testing.T) {
+	s, ctx := newTestStore(t)
+	playbooks, err := s.ListPlaybooks(ctx)
+	if err != nil {
+		t.Fatalf("ListPlaybooks: %v", err)
+	}
 
+	expectedNames := []string{
+		"Default",
+		"Claim check only",
+		"Tech Stack Evaluator",
+		"Competitor Comparison",
+		"Fact & Claim Checker",
+		"Quick Executive Briefing",
+	}
 
+	foundMap := make(map[string]port.Playbook)
+	for _, pb := range playbooks {
+		foundMap[pb.Name] = pb
+	}
 
+	for _, name := range expectedNames {
+		pb, ok := foundMap[name]
+		if !ok {
+			t.Errorf("expected playbook %q to be seeded, but was not found", name)
+			continue
+		}
+		if !pb.IsBuiltin {
+			t.Errorf("playbook %q: expected is_builtin=true", name)
+		}
+		if len(pb.Steps) == 0 {
+			t.Errorf("playbook %q: expected non-empty steps", name)
+		}
+		for i, st := range pb.Steps {
+			if st.Position != i+1 {
+				t.Errorf("playbook %q step %d position = %d, want %d", name, i, st.Position, i+1)
+			}
+			if st.Kind == "" || st.Name == "" {
+				t.Errorf("playbook %q step %d kind/name is empty: %+v", name, i, st)
+			}
+		}
+	}
+
+	// Verify specific configs in the 4 new playbooks
+	techPB := foundMap["Tech Stack Evaluator"]
+	if len(techPB.Steps) != 8 {
+		t.Errorf("Tech Stack Evaluator steps count = %d, want 8", len(techPB.Steps))
+	}
+	if techPB.Steps[2].Config.Instruction == "" {
+		t.Error("Tech Stack Evaluator plan step instruction should not be empty")
+	}
+
+	execPB := foundMap["Quick Executive Briefing"]
+	if len(execPB.Steps) != 6 {
+		t.Errorf("Quick Executive Briefing steps count = %d, want 6", len(execPB.Steps))
+	}
+	if execPB.Steps[4].Config.Role != "research_synthesis" {
+		t.Errorf("Quick Executive Briefing synthesis role = %q, want research_synthesis", execPB.Steps[4].Config.Role)
+	}
+}

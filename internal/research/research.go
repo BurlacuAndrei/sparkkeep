@@ -52,17 +52,17 @@ type searchResp struct {
 }
 
 type Runner struct {
-	SearchURL       string          // e.g. http://localhost:8080/search or empty in dev
-	Client          *http.Client    // HTTP search client
-	LLM             *analyze.Client // LLM fallback
-	PlanLLM         *analyze.Client // LLM for planning / query generation (RoleResearchPlan)
-	SynthesisLLM    *analyze.Client // LLM for synthesis (RoleResearchSynthesis)
-	Fetcher         capture.Fetcher // fetcher for scraping URLs
-	Store           port.Store      // store for progress updates and capture lookup
-	MaxResults      int             // max search URLs per question (default 6)
-	MaxQuestions    int             // max questions in plan (default 5)
-	MaxFetches      int             // overall max fetches cap (default 12)
-	ClipChars       int             // total rune budget (default 40,000)
+	SearchURL       string            // e.g. http://localhost:8080/search or empty in dev
+	Client          *http.Client      // HTTP search client
+	LLM             *analyze.Client   // LLM fallback
+	PlanLLM         *analyze.Client   // LLM for planning / query generation (RoleResearchPlan)
+	SynthesisLLM    *analyze.Client   // LLM for synthesis (RoleResearchSynthesis)
+	Fetcher         capture.Fetcher   // fetcher for scraping URLs
+	Store           port.Store        // store for progress updates and capture lookup
+	MaxResults      int               // max search URLs per question (default 6)
+	MaxQuestions    int               // max questions in plan (default 5)
+	MaxFetches      int               // overall max fetches cap (default 12)
+	ClipChars       int               // total rune budget (default 40,000)
 	PerSourceBudget int               // per-source rune budget (default 6,000)
 	Timeout         time.Duration     // whole-run timeout
 	UserProfile     *port.UserProfile // optional user profile context for personal fit tailoring
@@ -500,7 +500,6 @@ func (r *Runner) stepCustom(ctx context.Context, state *RunState, cfg port.Custo
 	state.SetNote(stepID, noteMsg)
 	return nil
 }
-
 
 // 1. ground — load capture; restate claims/references.
 func (r *Runner) stepGround(ctx context.Context, state *RunState) error {

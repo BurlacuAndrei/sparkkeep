@@ -351,8 +351,8 @@ func TestQueueWorker_QuietWindowEnforcement(t *testing.T) {
 
 	var executions int32
 	svc := &Service{
-		Store: st,
-		Logf:  t.Logf,
+		Store:  st,
+		Logf:   t.Logf,
 		Runner: nil, // we don't need real runner here if we check isRunAllowed
 	}
 

@@ -238,7 +238,6 @@ func (s *stubStore) ResolvePlaybook(_ context.Context, cardID int64, explicitPla
 	return s.GetDefaultPlaybook(context.Background())
 }
 
-
 func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {
 	for _, r := range s.researches {
 		if r.CardID == cardID && (r.Status == "queued" || r.Status == "running") {

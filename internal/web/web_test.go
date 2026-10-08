@@ -53,13 +53,13 @@ func newStubStore() *stubStore {
 		researches: map[int64]port.Research{},
 		playbooks:  map[int64]port.Playbook{},
 		settings:   map[string]string{},
-		nextPb:     2,
+		nextPb:     6,
 	}
-	st.playbooks[1] = research.DefaultPlaybook()
-	st.playbooks[2] = research.ClaimCheckPlaybook()
+	for _, pb := range research.BuiltinPlaybooks() {
+		st.playbooks[pb.ID] = pb
+	}
 	return st
 }
-
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
 	if c.SourceURL != "" {
@@ -459,7 +459,6 @@ func (s *stubStore) ResolvePlaybook(_ context.Context, cardID int64, explicitPla
 	}
 	return port.Playbook{ID: 1, Name: "Default", IsBuiltin: true}, nil
 }
-
 
 func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, error) {
 	s.mu.Lock()
@@ -1306,7 +1305,6 @@ func TestCardResearchHistoryEndpoint(t *testing.T) {
 		t.Fatalf("expected latest research")
 	}
 }
-
 
 func TestCreateCardDuplicateSourceURLConflict(t *testing.T) {
 	st := newStubStore()
@@ -2514,6 +2512,22 @@ func TestPlaybookAPI(t *testing.T) {
 	if len(listResp.Playbooks) == 0 {
 		t.Fatalf("expected at least default playbook, got 0")
 	}
+	requiredBuiltins := []string{"Tech Stack Evaluator", "Competitor Comparison", "Fact & Claim Checker", "Quick Executive Briefing"}
+	for _, reqName := range requiredBuiltins {
+		found := false
+		for _, pb := range listResp.Playbooks {
+			if pb.Name == reqName {
+				found = true
+				if len(pb.Steps) == 0 {
+					t.Errorf("playbook %q steps is empty", reqName)
+				}
+				break
+			}
+		}
+		if !found {
+			t.Errorf("GET /api/v1/playbooks did not return %q", reqName)
+		}
+	}
 
 	// 2. Reject invalid playbook creation (empty name or invalid steps)
 	rr = doJSON(t, h, http.MethodPost, "/api/v1/playbooks", `{"name": "", "steps": []}`)
@@ -3052,5 +3066,3 @@ func TestBatchAndScheduledResearchAPI(t *testing.T) {
 		t.Errorf("quiet window response mismatch: %+v", qwResp)
 	}
 }
-
-

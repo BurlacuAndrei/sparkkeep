@@ -42,9 +42,9 @@ func NewRunState(card port.Card, researchID int64, store port.Store, perSourceBu
 			Claims:    []port.ClaimVerdict{},
 			Landscape: []port.LandscapeItem{},
 		},
-		ResearchID:  researchID,
-		Store:       store,
-		Notes:       make(map[string]string),
+		ResearchID: researchID,
+		Store:      store,
+		Notes:      make(map[string]string),
 	}
 }
 

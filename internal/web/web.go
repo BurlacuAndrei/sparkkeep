@@ -1032,8 +1032,8 @@ func (a *api) listCards(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Title            string   `json:"title"`
-		Summary          string   `json:"summary"`
+		Title            string           `json:"title"`
+		Summary          string           `json:"summary"`
 		Horizon          string           `json:"horizon"`
 		Status           string           `json:"status"`
 		SourceURL        string           `json:"source_url"`
@@ -1158,20 +1158,20 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Status           *string           `json:"status"`
-		Horizon          *string           `json:"horizon"`
-		Note             *string           `json:"note"`
-		Tags             []string          `json:"tags"`
-		References       *[]port.Reference `json:"references"`
-		Type             *string           `json:"type"`
-		TLDR             *string           `json:"tldr"`
-		WhyCare          *string           `json:"why_care"`
-		Claims           *[]string         `json:"claims"`
-		OpenQuestions    *[]string         `json:"open_questions"`
-		Signals          *port.Signals     `json:"signals"`
-		Worthiness       *port.Worthiness  `json:"worthiness"`
-		ExecutiveSummary *string           `json:"executive_summary"`
-		ValueProposition *string           `json:"value_proposition"`
+		Status             *string           `json:"status"`
+		Horizon            *string           `json:"horizon"`
+		Note               *string           `json:"note"`
+		Tags               []string          `json:"tags"`
+		References         *[]port.Reference `json:"references"`
+		Type               *string           `json:"type"`
+		TLDR               *string           `json:"tldr"`
+		WhyCare            *string           `json:"why_care"`
+		Claims             *[]string         `json:"claims"`
+		OpenQuestions      *[]string         `json:"open_questions"`
+		Signals            *port.Signals     `json:"signals"`
+		Worthiness         *port.Worthiness  `json:"worthiness"`
+		ExecutiveSummary   *string           `json:"executive_summary"`
+		ValueProposition   *string           `json:"value_proposition"`
 		ProposedActions    *[]string         `json:"proposed_actions"`
 		ActionsSource      *string           `json:"actions_source"`
 		ResearchVerdict    *string           `json:"research_verdict"`
@@ -1229,18 +1229,18 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	patch := port.CardPatch{
-		Status:           b.Status,
-		Horizon:          b.Horizon,
-		Note:             b.Note,
-		Type:             b.Type,
-		TLDR:             b.TLDR,
-		WhyCare:          b.WhyCare,
-		Claims:           b.Claims,
-		OpenQuestions:    b.OpenQuestions,
-		Signals:          b.Signals,
-		Worthiness:       b.Worthiness,
-		ExecutiveSummary: b.ExecutiveSummary,
-		ValueProposition: b.ValueProposition,
+		Status:             b.Status,
+		Horizon:            b.Horizon,
+		Note:               b.Note,
+		Type:               b.Type,
+		TLDR:               b.TLDR,
+		WhyCare:            b.WhyCare,
+		Claims:             b.Claims,
+		OpenQuestions:      b.OpenQuestions,
+		Signals:            b.Signals,
+		Worthiness:         b.Worthiness,
+		ExecutiveSummary:   b.ExecutiveSummary,
+		ValueProposition:   b.ValueProposition,
 		ProposedActions:    b.ProposedActions,
 		ActionsSource:      b.ActionsSource,
 		ResearchVerdict:    b.ResearchVerdict,
@@ -1498,7 +1498,6 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-
 // getResearch serves the single-row report as HTML for the Telegram link.
 // A JSON client (Accept: application/json or ?format=json) gets the raw row
 // instead — the dashboard reads the findings to turn them into checklist items.
@@ -1748,7 +1747,6 @@ func (a *api) fail(w http.ResponseWriter, err error) {
 	}
 	writeErr(w, http.StatusInternalServerError, err.Error())
 }
-
 
 // writeJSON writes the {ok:..., ...} envelope as application/json.
 func writeJSON(w http.ResponseWriter, status int, v any) {

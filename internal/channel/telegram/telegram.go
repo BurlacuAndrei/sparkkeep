@@ -152,18 +152,56 @@ func (a *Adapter) Run(ctx context.Context) error {
 	}
 }
 
+type placeholderContextKey struct{}
+
+type placeholderState struct {
+	mu        sync.Mutex
+	chatID    int64
+	messageID int64
+	consumed  bool
+}
+
+func (p *placeholderState) claim() (int64, int64, bool) {
+	if p == nil {
+		return 0, 0, false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.consumed || p.messageID == 0 {
+		return 0, 0, false
+	}
+	p.consumed = true
+	return p.chatID, p.messageID, true
+}
+
 // Notify implements port.Channel: kind → message shape.
 func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
+	state, _ := ctx.Value(placeholderContextKey{}).(*placeholderState)
 	switch n.Kind {
 	case "created":
+		if state != nil {
+			if chatID, msgID, ok := state.claim(); ok {
+				return a.editMessageText(ctx, chatID, msgID, cardCaption(n.Card), n.Card.ID, cardButtons(n.Card.ID, false))
+			}
+		}
 		return a.sendCard(ctx, n.Card)
 	case "analysis_failed":
+		if state != nil {
+			if chatID, msgID, ok := state.claim(); ok {
+				return a.editMessageText(ctx, chatID, msgID, "Analysis failed", n.Card.ID, cardButtons(n.Card.ID, true))
+			}
+		}
 		return a.sendFailed(ctx, n.Card)
-	case "research_done", "research_failed":
-		return a.sendResearch(ctx, n)
 	case "duplicate":
+		if state != nil {
+			if chatID, msgID, ok := state.claim(); ok {
+				return a.editMessageText(ctx, chatID, msgID, n.Text, n.Card.ID, nil)
+			}
+		}
 		_, err := a.sendMessage(ctx, n.Text, 0, nil)
 		return err
+	case "research_done", "research_failed":
+		return a.sendResearch(ctx, n)
 	default: // done / retry / hello: plain card summary
 		_, err := a.sendMessage(ctx, fmt.Sprintf("%s\n%s", n.Card.Title, n.Card.Summary), 0, nil)
 		return err
@@ -213,16 +251,87 @@ func (a *Adapter) call(ctx context.Context, method string, body any) (json.RawMe
 	return out.Result, nil
 }
 
+func (a *Adapter) targetChatID(ctx context.Context) int64 {
+	chatID := a.OwnerID
+	if a.Store != nil {
+		if dbIDStr, err := a.Store.GetSetting(ctx, "tg_chat_id"); err == nil && dbIDStr != "" {
+			if parsed, err := strconv.ParseInt(dbIDStr, 10, 64); err == nil {
+				chatID = parsed
+			}
+		}
+	}
+	return chatID
+}
+
+func (a *Adapter) sendChatAction(ctx context.Context, chatID int64, action string) error {
+	if chatID == 0 {
+		chatID = a.targetChatID(ctx)
+	}
+	_, err := a.call(ctx, "sendChatAction", map[string]any{
+		"chat_id": chatID,
+		"action":  action,
+	})
+	return err
+}
+
+func (a *Adapter) editMessageText(ctx context.Context, chatID int64, messageID int64, text string, cardID int64, buttons [][]button) error {
+	if chatID == 0 {
+		chatID = a.targetChatID(ctx)
+	}
+	msg := map[string]any{
+		"chat_id":    chatID,
+		"message_id": messageID,
+		"text":       text,
+		"parse_mode": "Markdown",
+	}
+	if len(buttons) > 0 {
+		msg["reply_markup"] = map[string]any{"inline_keyboard": buttons}
+	}
+	if _, err := a.call(ctx, "editMessageText", msg); err != nil {
+		return err
+	}
+	if cardID > 0 {
+		a.trackMessage(messageID, cardID)
+	}
+	return nil
+}
+
+func escapeMarkdown(s string) string {
+	repl := strings.NewReplacer(
+		"_", `\_`,
+		"*", `\*`,
+		"[", `\[`,
+		"`", `\`+"`",
+	)
+	return repl.Replace(s)
+}
+
+func placeholderLabel(share capture.Share, m *message) string {
+	target := strings.TrimSpace(share.URL)
+	if target == "" && len(share.Files) > 0 {
+		target = strings.TrimSpace(share.Files[0].Name)
+	}
+	if target == "" {
+		target = strings.TrimSpace(share.Caption)
+	}
+	if target == "" && m != nil {
+		target = strings.TrimSpace(m.Text)
+	}
+	if idx := strings.IndexAny(target, "\r\n"); idx != -1 {
+		target = strings.TrimSpace(target[:idx])
+	}
+	r := []rune(target)
+	if len(r) > 60 {
+		target = string(r[:57]) + "..."
+	}
+	return target
+}
+
 // sendMessage posts a Markdown text message with an optional inline keyboard
 // and returns the bot message id. cardID>0 records message_id→card so the
 // "reaction on a card message" refinement can find the card.
 func (a *Adapter) sendMessage(ctx context.Context, text string, cardID int64, buttons [][]button) (int64, error) {
-	chatID := a.OwnerID
-	if dbIDStr, err := a.Store.GetSetting(ctx, "tg_chat_id"); err == nil && dbIDStr != "" {
-		if parsed, err := strconv.ParseInt(dbIDStr, 10, 64); err == nil {
-			chatID = parsed
-		}
-	}
+	chatID := a.targetChatID(ctx)
 
 	msg := map[string]any{
 		"chat_id":    chatID,
@@ -372,9 +481,9 @@ func cardButtons(id int64, retry bool) [][]button {
 	btns := [][]button{{
 		{Text: "🔬 Research", CallbackData: fmt.Sprintf("%d:research", id)},
 		{Text: "▾", CallbackData: fmt.Sprintf("%d:pb_menu", id)},
-		{Text: "→ Doing", CallbackData: fmt.Sprintf("%d:doing", id)},
-		{Text: "Shelve", CallbackData: fmt.Sprintf("%d:shelve", id)},
-		{Text: "✕ Dismiss", CallbackData: fmt.Sprintf("%d:dismiss", id)},
+		{Text: "⚡ Short", CallbackData: fmt.Sprintf("%d:horizon:short-term", id)},
+		{Text: "⭐ Life", CallbackData: fmt.Sprintf("%d:horizon:lifetime", id)},
+		{Text: "✕ Discard", CallbackData: fmt.Sprintf("%d:dismiss", id)},
 	}}
 	if retry {
 		btns[0] = append(btns[0], button{Text: "Retry", CallbackData: fmt.Sprintf("%d:retry", id)})
@@ -456,8 +565,6 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 	_, err := a.sendMessage(ctx, b.String(), cardID, buttons)
 	return err
 }
-
-
 
 // --- inbound ----------------------------------------------------------------
 
@@ -620,8 +727,37 @@ func (a *Adapter) handleMessage(m *message) {
 	if !ok {
 		return
 	}
-	if _, err := a.Service.CaptureShare(ctx, share); err != nil {
-		a.logf("telegram: capture: %v", err)
+
+	_ = a.sendChatAction(ctx, m.Chat.ID, "typing")
+	label := placeholderLabel(share, m)
+	var placeholderText string
+	if label != "" {
+		placeholderText = fmt.Sprintf("📥 Processing %s...", escapeMarkdown(label))
+	} else {
+		placeholderText = "📥 Processing..."
+	}
+	placeholderMsgID, err := a.sendMessage(ctx, placeholderText, 0, nil)
+	if err != nil {
+		a.logf("telegram: send placeholder: %v", err)
+	}
+
+	state := &placeholderState{
+		chatID:    m.Chat.ID,
+		messageID: placeholderMsgID,
+	}
+	ctx = context.WithValue(ctx, placeholderContextKey{}, state)
+
+	if a.Service != nil {
+		if _, err := a.Service.CaptureShare(ctx, share); err != nil {
+			a.logf("telegram: capture: %v", err)
+			if chatID, msgID, ok := state.claim(); ok {
+				_ = a.editMessageText(ctx, chatID, msgID, "❌ Failed to process: "+escapeMarkdown(err.Error()), 0, nil)
+			}
+		} else {
+			if chatID, msgID, ok := state.claim(); ok {
+				_ = a.editMessageText(ctx, chatID, msgID, "No actionable content found.", 0, nil)
+			}
+		}
 	}
 }
 
@@ -964,6 +1100,12 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 		a.setStatus(ctx, id, port.StatusShelved, cb)
 	case action == "dismiss":
 		a.setStatus(ctx, id, port.StatusDismissed, cb)
+	case strings.HasPrefix(action, "horizon:"):
+		horizon := strings.TrimPrefix(action, "horizon:")
+		if _, err := a.Store.UpdateCard(ctx, id, port.CardPatch{Horizon: &horizon}); err != nil {
+			a.logf("telegram: UpdateCard horizon (%d, %s): %v", id, horizon, err)
+		}
+		a.ackCallback(cb.ID, "Horizon updated to "+horizon)
 	case action == "retry":
 		a.ackCallback(cb.ID, "")
 		if _, err := a.Service.Retry(ctx, id); err != nil {
@@ -1043,7 +1185,7 @@ func (a *Adapter) handleResearchCallback(ctx context.Context, cardID int64, acti
 
 	a.ackCallback(cb.ID, "")
 	if cb.Message != nil && cb.Message.Chat != nil {
-		a.editReplyMarkup(ctx, cb.Message.Chat.ID, cb.Message.MessageID)
+		a.editReplyMarkupWithButtons(ctx, cb.Message.Chat.ID, cb.Message.MessageID, [][]button{{{Text: "⏳ Researching...", CallbackData: "ignore"}}})
 	}
 	a.Service.GoResearch(ctx, cardID, explicitPID)
 }

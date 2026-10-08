@@ -77,7 +77,7 @@ func TestCanonicalURL(t *testing.T) {
 
 func TestExtractDeterministicReferences(t *testing.T) {
 	payload := capture.Fetched{
-		Text: "Here is a cool repo: https://github.com/gin-gonic/gin?utm_source=reddit, and a doc link: https://pkg.go.dev/net/http.",
+		Text:    "Here is a cool repo: https://github.com/gin-gonic/gin?utm_source=reddit, and a doc link: https://pkg.go.dev/net/http.",
 		Caption: "Check also https://news.ycombinator.com/item?id=123&fbclid=abc and duplicate https://github.com/gin-gonic/gin?utm_medium=social",
 	}
 

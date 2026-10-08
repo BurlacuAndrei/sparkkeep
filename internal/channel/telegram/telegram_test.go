@@ -184,6 +184,10 @@ func stubTelegram(t *testing.T, build func() *Adapter, fn func(a *Adapter)) []st
 	t.Helper()
 	var sent []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/sendChatAction") {
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+			return
+		}
 		var msg struct {
 			Text string `json:"text"`
 		}
@@ -314,7 +318,9 @@ func TestOrganizeReplyUntrackedFallsThroughToCapture(t *testing.T) {
 	svc := stubService(t, st, llmStub(t, `[{"title":"New","summary":"s","horizon":"short-term","tags":[],"links":[]}]`))
 
 	sent := stubTelegram(t, func() *Adapter {
-		return &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		a := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		svc.Channel = a
+		return a
 	}, func(a *Adapter) {
 		a.handleMessage(&message{
 			MessageID:      502,
@@ -330,8 +336,10 @@ func TestOrganizeReplyUntrackedFallsThroughToCapture(t *testing.T) {
 	if got := st.cards[2].Title; got != "New" {
 		t.Errorf("captured title = %q, want New", got)
 	}
-	if len(sent) != 0 {
-		t.Errorf("sent = %v, want no organize confirmation", sent)
+	for _, s := range sent {
+		if strings.Contains(s, "Updated card") {
+			t.Errorf("sent = %v, want no organize confirmation", sent)
+		}
 	}
 }
 
@@ -533,8 +541,11 @@ func TestTelegramNotificationCounts(t *testing.T) {
 	if len(st.cards) != 3 {
 		t.Fatalf("stored cards = %d, want 3", len(st.cards))
 	}
-	if len(sent) != 3 {
-		t.Fatalf("sent notifications = %d, want 3", len(sent))
+	if len(sent) != 4 {
+		t.Fatalf("sent notifications = %d, want 4 (1 placeholder + 3 cards)", len(sent))
+	}
+	if !strings.HasPrefix(sent[0], "📥 Processing") {
+		t.Errorf("placeholder = %q, want starting with '📥 Processing'", sent[0])
 	}
 
 	// Capture the same URL again
@@ -551,11 +562,11 @@ func TestTelegramNotificationCounts(t *testing.T) {
 	if len(st.cards) != 3 {
 		t.Fatalf("stored cards after duplicate = %d, want 3 (no new cards)", len(st.cards))
 	}
-	if len(dupSent) != 1 {
-		t.Fatalf("sent notifications on duplicate = %d, want 1", len(dupSent))
+	if len(dupSent) != 2 {
+		t.Fatalf("sent notifications on duplicate = %d, want 2 (placeholder + edit)", len(dupSent))
 	}
-	if !strings.Contains(dupSent[0], "Already captured") {
-		t.Errorf("duplicate message text = %q, want 'Already captured...'", dupSent[0])
+	if !strings.Contains(dupSent[1], "Already captured") {
+		t.Errorf("duplicate message text = %q, want 'Already captured...'", dupSent[1])
 	}
 }
 
@@ -725,9 +736,9 @@ func TestCardButtons(t *testing.T) {
 	}{
 		{"🔬 Research", "42:research"},
 		{"▾", "42:pb_menu"},
-		{"→ Doing", "42:doing"},
-		{"Shelve", "42:shelve"},
-		{"✕ Dismiss", "42:dismiss"},
+		{"⚡ Short", "42:horizon:short-term"},
+		{"⭐ Life", "42:horizon:lifetime"},
+		{"✕ Discard", "42:dismiss"},
 	}
 	for i, exp := range expected {
 		if btns[0][i].Text != exp.text || btns[0][i].CallbackData != exp.data {
@@ -924,5 +935,157 @@ func TestSendResearchNotifications(t *testing.T) {
 	}
 }
 
+func TestShareIngestionAcknowledgmentAndSendAndEdit(t *testing.T) {
+	st := newStubStore()
+	llm := llmStub(t, `[{"title":"Ingested Article","summary":"Summary text","horizon":"short-term","tags":["tech"],"links":[]}]`)
+	svc := stubService(t, st, llm)
 
+	var (
+		chatActions   []string
+		sendMessages  []string
+		editMessages  []string
+		lastMessageID int64 = 42
+	)
 
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/sendChatAction"):
+			var body struct {
+				Action string `json:"action"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			chatActions = append(chatActions, body.Action)
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		case strings.HasSuffix(path, "/sendMessage"):
+			var body struct {
+				Text string `json:"text"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			sendMessages = append(sendMessages, body.Text)
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"ok":true,"result":{"message_id":%d}}`, lastMessageID)))
+		case strings.HasSuffix(path, "/editMessageText"):
+			var body struct {
+				Text      string `json:"text"`
+				MessageID int64  `json:"message_id"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			editMessages = append(editMessages, body.Text)
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":42}}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		}
+	}))
+	defer srv.Close()
+
+	adapter := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc, baseURL: srv.URL}
+	svc.Channel = adapter
+
+	adapter.handleMessage(&message{
+		MessageID: 1234,
+		Chat:      &chat{ID: 1},
+		Text:      "https://example.com/deep-dive-article",
+	})
+
+	// 1. Assert exactly one sendChatAction(typing)
+	if len(chatActions) != 1 || chatActions[0] != "typing" {
+		t.Fatalf("chatActions = %v, want exactly 1 typing action", chatActions)
+	}
+
+	// 2. Assert exactly one sendMessage (placeholder)
+	if len(sendMessages) != 1 {
+		t.Fatalf("sendMessages count = %d, want exactly 1 placeholder sendMessage", len(sendMessages))
+	}
+	if !strings.HasPrefix(sendMessages[0], "📥 Processing https://example.com/deep-dive-article...") {
+		t.Errorf("placeholder text = %q, want starting with '📥 Processing https://example.com/deep-dive-article...'", sendMessages[0])
+	}
+
+	// 3. Assert exactly one editMessageText (the final card)
+	if len(editMessages) != 1 {
+		t.Fatalf("editMessages count = %d, want exactly 1 editMessageText replacing placeholder", len(editMessages))
+	}
+	if !strings.Contains(editMessages[0], "Ingested Article") {
+		t.Errorf("edited message text = %q, want containing 'Ingested Article'", editMessages[0])
+	}
+
+	// 4. Assert placeholder message_id is tracked for the created card
+	if cardID := adapter.cardForMessage(lastMessageID); cardID != 1 {
+		t.Errorf("tracked cardID for message %d = %d, want 1", lastMessageID, cardID)
+	}
+}
+
+func TestShareIngestionAnalysisFailedEditsPlaceholder(t *testing.T) {
+	st := newStubStore()
+	// Return bad JSON to trigger analysis failure
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}))
+	defer llm.Close()
+	svc := stubService(t, st, llm)
+
+	var (
+		chatActions  []string
+		sendMessages []string
+		editMessages []string
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/sendChatAction"):
+			var body struct {
+				Action string `json:"action"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			chatActions = append(chatActions, body.Action)
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		case strings.HasSuffix(path, "/sendMessage"):
+			var body struct {
+				Text string `json:"text"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			sendMessages = append(sendMessages, body.Text)
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":99}}`))
+		case strings.HasSuffix(path, "/editMessageText"):
+			var body struct {
+				Text string `json:"text"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			editMessages = append(editMessages, body.Text)
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":99}}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		}
+	}))
+	defer srv.Close()
+
+	adapter := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc, baseURL: srv.URL}
+	svc.Channel = adapter
+
+	adapter.handleMessage(&message{
+		MessageID: 1235,
+		Chat:      &chat{ID: 1},
+		Text:      "https://example.com/broken-article",
+	})
+
+	// Exactly one typing action
+	if len(chatActions) != 1 || chatActions[0] != "typing" {
+		t.Fatalf("chatActions = %v, want 1 typing action", chatActions)
+	}
+
+	// Exactly one placeholder message sent
+	if len(sendMessages) != 1 {
+		t.Fatalf("sendMessages count = %d, want exactly 1 placeholder sendMessage", len(sendMessages))
+	}
+	if !strings.HasPrefix(sendMessages[0], "📥 Processing") {
+		t.Errorf("placeholder = %q, want starting with '📥 Processing'", sendMessages[0])
+	}
+
+	// Exactly one editMessageText replacing the placeholder with failure info
+	if len(editMessages) != 1 {
+		t.Fatalf("editMessages count = %d, want exactly 1 editMessageText replacing placeholder with failure card", len(editMessages))
+	}
+	if !strings.Contains(editMessages[0], "Analysis failed") {
+		t.Errorf("edited message text = %q, want containing 'Analysis failed'", editMessages[0])
+	}
+}

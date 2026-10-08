@@ -160,7 +160,6 @@ func (m *memoryStore) GetDefaultPlaybook(_ context.Context) (port.Playbook, erro
 	return DefaultPlaybook(), nil
 }
 
-
 func (m *memoryStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (port.Card, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -341,7 +340,7 @@ func (o orderTrackFetcher) FetchWithContext(ctx context.Context, share capture.S
 	return o.underlying.FetchWithContext(ctx, share)
 }
 func (o orderTrackFetcher) MediaMeta(share capture.Share) capture.Fetched { return o.Fetch(share) }
-func (o orderTrackFetcher) Subtitles(share capture.Share) string           { return "" }
+func (o orderTrackFetcher) Subtitles(share capture.Share) string          { return "" }
 
 func TestRun_MultiQuestionPlanning(t *testing.T) {
 	var searchQueries []string
@@ -382,8 +381,8 @@ func TestRun_MultiQuestionPlanning(t *testing.T) {
 	runner.Fetcher = tf
 
 	card := port.Card{
-		Title: "Multi-Question Card",
-		TLDR:  "Investigating distributed databases",
+		Title:  "Multi-Question Card",
+		TLDR:   "Investigating distributed databases",
 		Claims: []string{"Scales linearly", "Provides linearizability"},
 	}
 
@@ -1050,6 +1049,21 @@ func TestClaimCheckPlaybook(t *testing.T) {
 	}
 }
 
+func TestCuratedBuiltinPlaybooks(t *testing.T) {
+	playbooks := BuiltinPlaybooks()
+	if len(playbooks) != 6 {
+		t.Fatalf("BuiltinPlaybooks returned %d, want 6", len(playbooks))
+	}
+	for _, pb := range playbooks {
+		if err := ValidatePlaybook(pb); err != nil {
+			t.Errorf("playbook %q failed validation: %v", pb.Name, err)
+		}
+		if !pb.IsBuiltin {
+			t.Errorf("playbook %q: expected is_builtin=true", pb.Name)
+		}
+	}
+}
+
 func TestLibraryTemplates_ValidateAndRun(t *testing.T) {
 	templates := BuiltinStepTemplates()
 	if len(templates) != 3 {
@@ -1130,10 +1144,10 @@ func TestVerdictPrompt_UserProfileInjection(t *testing.T) {
 	// 2. With profile set -> prompt contains USER PROFILE block
 	stateWithProf := NewRunState(card, 0, nil, 1000, 5000)
 	stateWithProf.Profile = &port.UserProfile{
-		Goals:       "Self-host all services locally",
-		Skills:      []string{"Docker", "Linux"},
-		Stack:       []string{"Synology NAS", "Postgres"},
-		Language:    "German",
+		Goals:    "Self-host all services locally",
+		Skills:   []string{"Docker", "Linux"},
+		Stack:    []string{"Synology NAS", "Postgres"},
+		Language: "German",
 	}
 	err = runner.stepVerdict(context.Background(), stateWithProf)
 	if err != nil {
@@ -1306,6 +1320,3 @@ func TestGeneralAnalysisStep_ProducesAnalysisAndReferencesProfile(t *testing.T) 
 		t.Errorf("report missing references to user profile items (Postgres + n8n): %s", report)
 	}
 }
-
-
-

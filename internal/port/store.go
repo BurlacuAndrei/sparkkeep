@@ -77,4 +77,3 @@ type Store interface {
 	FindCardsForRule(ctx context.Context, filter ResearchRuleFilter, maxCards int, asOf time.Time) ([]Card, error)
 	ListCompletedResearchSince(ctx context.Context, since time.Time) ([]Research, error)
 }
-

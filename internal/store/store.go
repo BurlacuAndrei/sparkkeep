@@ -17,7 +17,6 @@ import (
 	"sparkkeep/internal/research"
 )
 
-
 var _ port.Store = (*Store)(nil)
 
 const (
@@ -1343,7 +1342,6 @@ func (s *Store) ResolvePlaybook(ctx context.Context, cardID int64, explicitPlayb
 	return pb, nil
 }
 
-
 func (s *Store) ListPlaybooks(ctx context.Context) ([]port.Playbook, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id FROM playbooks ORDER BY is_builtin DESC, id ASC`)
 	if err != nil {
@@ -1489,7 +1487,6 @@ func (s *Store) DuplicatePlaybook(ctx context.Context, id int64) (port.Playbook,
 	}
 	return s.CreatePlaybook(ctx, clone)
 }
-
 
 func (s *Store) GetResearchFindings(ctx context.Context, id int64) (string, error) {
 	var findings string
@@ -2036,4 +2033,3 @@ func (s *Store) ListCompletedResearchSince(ctx context.Context, since time.Time)
 	}
 	return list, rows.Err()
 }
-
