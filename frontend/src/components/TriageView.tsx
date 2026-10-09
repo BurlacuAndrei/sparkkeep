@@ -1,43 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Playbook } from '../types';
-import * as api from '../api';
-import { ArrowRight, Check, Archive, Sparkles, X, FileText, Lightbulb, CheckCircle2, ExternalLink, RefreshCw, AlertTriangle, HelpCircle, Link2, ChevronDown, BookOpen, Layers } from 'lucide-react';
+import React, { useState } from 'react';
+import { Card } from '../types';
+import { Inbox, Search, Eye, Sparkles, Archive, Layers } from 'lucide-react';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
-
-
-// A card is stale once nothing has touched it for a month.
-const STALE_DAYS = 30;
-
-function idleDays(card: Card): number {
-  const ts = Date.parse(card.updated_at || card.created_at || '');
-  if (Number.isNaN(ts)) return 0;
-  return Math.floor((Date.now() - ts) / 86_400_000);
-}
-
-// Swipe gestures mirror the arrow-key hotkeys exactly.
-const SWIPE_ACT = 100;
-const SWIPE_UP_ACT = 100;
-const SWIPE_UP_MAX_DX = 80;
-
-function swipeAction(dx: number, dy: number): string | null {
-  if (dx > SWIPE_ACT) return 'doing';
-  if (dx < -SWIPE_ACT) return 'shelved';
-  if (dy < -SWIPE_UP_ACT && Math.abs(dx) < SWIPE_UP_MAX_DX) return 'done';
-  return null;
-}
-
-function stampFor(dx: number, dy: number): 'doing' | 'shelve' | 'done' | null {
-  if (dx > 40) return 'doing';
-  if (dx < -40) return 'shelve';
-  if (dy < -50 && Math.abs(dx) < 40) return 'done';
-  return null;
-}
-
-const STAMP_LABEL = { doing: 'DOING', shelve: 'SHELVE', done: 'DONE' } as const;
 
 interface TriageViewProps {
   cards: Card[];
-  onStatusChange: (id: number, status: string) => void;
+  onUpdateCard: (id: number, patch: Partial<Card>) => void;
   onResearch: (id: number, playbookId?: number) => void;
   onRetry: (id: number) => void;
   onOpenCardDetail: (card: Card) => void;
@@ -48,616 +16,142 @@ interface TriageViewProps {
   onExitFocus?: () => void;
 }
 
+const TriageCard: React.FC<{ card: Card; onCommit: (id: number, horizon: string) => void; onDiscard: (id: number) => void; onResearch: (id: number) => void; onClick: () => void }> = ({ card, onCommit, onDiscard, onResearch, onClick }) => {
+  return (
+    <article className="card action-card" onClick={onClick} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }}>
+      <div className="card-top">
+        {card.type && <span className="card-type-badge">{card.type}</span>}
+        <span className="card-status status">{card.status}</span>
+      </div>
+      <h3 className="card-title">{card.title}</h3>
+      <p className="card-summary">{card.tldr || card.summary}</p>
+      
+      <ResearchProgressStrip cardId={card.id} compact={true} />
+
+      <div className="card-footer" style={{ marginTop: 'auto', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+        {card.status === 'inbox' && (
+          <button type="button" className="btn-secondary" onClick={() => onResearch(card.id)} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+            <Sparkles size={14} style={{ marginRight: 6 }} /> Deep Research
+          </button>
+        )}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="btn-primary" style={{ flex: 1, fontSize: 11, padding: '4px' }} onClick={() => onCommit(card.id, 'short-term')} title="Commit to Short Term">
+             Short
+          </button>
+          <button className="btn-primary" style={{ flex: 1, fontSize: 11, padding: '4px' }} onClick={() => onCommit(card.id, 'medium-term')} title="Commit to Medium Term">
+             Medium
+          </button>
+          <button className="btn-primary" style={{ flex: 1, fontSize: 11, padding: '4px' }} onClick={() => onCommit(card.id, 'long-term')} title="Commit to Long Term">
+             Long
+          </button>
+          <button className="btn-secondary" style={{ padding: '4px 8px' }} onClick={() => onDiscard(card.id)} title="Discard">
+            <Archive size={14} color="#f87171" />
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+};
+
 export const TriageView: React.FC<TriageViewProps> = ({
   cards,
-  onStatusChange,
+  onUpdateCard,
   onResearch,
-  onRetry,
   onOpenCardDetail,
-  onRefresh,
-  isPro = false,
-  onOpenLicenseModal,
-  showToast,
-  onExitFocus,
 }) => {
-  // Focus primarily on inbox cards first, or all cards
   const inboxCards = cards.filter((c) => c.status === 'inbox');
-  const baseCards = inboxCards.length > 0 ? inboxCards : cards;
-  const [staleOnly, setStaleOnly] = useState(false);
-  const [shelveMsg, setShelveMsg] = useState('');
-  const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
-  const [batching, setBatching] = useState(false);
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const researchingCards = cards.filter((c) => c.status === 'researching');
+  const reviewCards = cards.filter((c) => c.status === 'review');
 
-  useEffect(() => {
-    api.fetchPlaybooks().then(setPlaybooks).catch(() => {});
-  }, []);
-  const triageCards = staleOnly
-    ? baseCards.filter((c) => idleDays(c) >= STALE_DAYS)
-    : baseCards;
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const triageTotal = inboxCards.length + researchingCards.length + reviewCards.length;
 
-  // Keep index clamped within bounds without cascading render effect
-  const safeIndex = triageCards.length > 0 && currentIndex >= triageCards.length
-    ? triageCards.length - 1
-    : currentIndex;
-
-  const currentCard = triageCards[safeIndex];
-  const currentIdleDays = currentCard ? idleDays(currentCard) : 0;
-  const isStale = currentIdleDays >= STALE_DAYS;
-
-  const handleShelveStale = useCallback(async () => {
-    if (!window.confirm(`Shelve every inbox/doing card untouched for more than ${STALE_DAYS} days?`)) return;
-    try {
-      const res = await api.batchShelveStale(STALE_DAYS);
-      setShelveMsg(`Shelved ${res.shelved_count} stale card${res.shelved_count === 1 ? '' : 's'}.`);
-      setCurrentIndex(0);
-      onRefresh?.();
-    } catch (err: unknown) {
-      setShelveMsg(api.getErrorMessage(err));
-    }
-  }, [onRefresh]);
-
-  const handleQueueAll = useCallback(async () => {
-    if (triageCards.length === 0) return;
-    if (!isPro) {
-      onOpenLicenseModal?.();
-      return;
-    }
-    setBatching(true);
-    try {
-      const res = await api.batchQueueResearch(triageCards.map((c) => c.id));
-      showToast?.(`Queued ${res.queued.length} card(s) for deep research`);
-      onRefresh?.();
-    } catch (err) {
-      showToast?.(api.getErrorMessage(err));
-    } finally {
-      setBatching(false);
-    }
-  }, [triageCards, isPro, onOpenLicenseModal, showToast, onRefresh]);
-
-  const handleAction = useCallback((status: string) => {
-    if (!currentCard) return;
-    onStatusChange(currentCard.id, status);
-  }, [currentCard, onStatusChange]);
-
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-
-  const resetDrag = useCallback(() => {
-    setTouchStart(null);
-    setDragOffset({ x: 0, y: 0 });
-    setIsDragging(false);
-  }, []);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const t = e.touches[0];
-    if (t) setTouchStart({ x: t.clientX, y: t.clientY });
+  const handleCommit = (id: number, horizon: string) => {
+    onUpdateCard(id, { status: 'to-do' as any, horizon: horizon as any });
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    const t = e.touches[0];
-    if (!t || !touchStart) return;
-    const dx = t.clientX - touchStart.x;
-    const dy = t.clientY - touchStart.y;
-    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) setIsDragging(true);
-    setDragOffset({ x: dx, y: dy });
+  const handleDiscard = (id: number) => {
+    onUpdateCard(id, { status: 'dismissed' as any });
   };
 
-  const handleTouchEnd = () => {
-    const action = swipeAction(dragOffset.x, dragOffset.y);
-    resetDrag();
-    if (action) handleAction(action);
-  };
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger hotkeys if user is in an input field
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
-        return;
-      }
-      if (!currentCard) return;
-
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        handleAction('shelved');
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        handleAction('doing');
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        handleAction('done');
-      } else if (e.key === 'd' || e.key === 'D') {
-        e.preventDefault();
-        handleAction('dismissed');
-      } else if (e.key === 'r' || e.key === 'R') {
-        e.preventDefault();
-        if (e.shiftKey) {
-          setIsPickerOpen((v) => !v);
-        } else {
-          onResearch(currentCard.id);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentCard, handleAction, onResearch]);
-
-  const autoPlaybook = useMemo(() => {
-    if (!currentCard) return null;
-    const cardType = (currentCard.type || '').trim().toLowerCase();
-    if (cardType) {
-      const userMatch = playbooks.find(
-        (p) => !p.is_builtin && p.card_types?.some((ct) => ct.trim().toLowerCase() === cardType)
-      );
-      if (userMatch) return userMatch;
-      const builtinMatch = playbooks.find(
-        (p) => p.is_builtin && p.card_types?.some((ct) => ct.trim().toLowerCase() === cardType)
-      );
-      if (builtinMatch) return builtinMatch;
-    }
-    return playbooks.find((p) => p.is_builtin && p.id === 1) || playbooks[0] || null;
-  }, [currentCard, playbooks]);
-
-  const staleControls = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <button
-        type="button"
-        className="icon-btn"
-        onClick={() => {
-          setStaleOnly((v) => !v);
-          setCurrentIndex(0);
-        }}
-        title={`Only show cards untouched for more than ${STALE_DAYS} days`}
-        style={staleOnly ? { borderColor: '#fbbf24', color: '#fbbf24' } : undefined}
-      >
-        <AlertTriangle size={14} />
-        <span>Review Stale (&gt;{STALE_DAYS}d)</span>
-      </button>
-      <button
-        type="button"
-        className="icon-btn"
-        onClick={handleShelveStale}
-        title={`Shelve every inbox/doing card untouched for more than ${STALE_DAYS} days`}
-      >
-        <Archive size={14} />
-        <span>Shelve Stale Cards</span>
-      </button>
-      {shelveMsg && <span style={{ fontSize: 12, color: '#fbbf24' }}>{shelveMsg}</span>}
-    </div>
+  const renderCard = (card: Card) => (
+    <TriageCard
+      key={card.id}
+      card={card}
+      onCommit={handleCommit}
+      onDiscard={handleDiscard}
+      onResearch={onResearch}
+      onClick={() => onOpenCardDetail(card)}
+    />
   );
 
-  if (!currentCard) {
-    return (
-      <div className="triage-container" style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-          {staleControls}
-        </div>
-        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-          <CheckCircle2 size={36} />
-        </div>
-        <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>All Caught Up!</h2>
-        <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 440, margin: '0 auto' }}>
-          No cards left in your triage queue. Every spark has been converted into an action or archived.
-        </p>
-        {onExitFocus && (
-          <div style={{ marginTop: 24 }}>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={onExitFocus}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: '0 auto', padding: '8px 18px', fontSize: 13 }}
-            >
-              <Layers size={14} />
-              <span>Return to Pipeline Board</span>
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const isFailed = currentCard.title === 'Analysis failed';
-  const stamp = isDragging ? stampFor(dragOffset.x, dragOffset.y) : null;
-
   return (
-    <div className="triage-container">
-      <div className="triage-progress">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, color: '#38bdf8' }}>Focus Run</span>
-          <span style={{ color: '#64748b' }}>·</span>
-          <span>Card {safeIndex + 1} of {triageCards.length}</span>
-          {staleControls}
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {onExitFocus && (
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ fontSize: 11.5, padding: '3px 9px', height: 26, display: 'inline-flex', alignItems: 'center', gap: 5 }}
-              onClick={onExitFocus}
-              title="Return to 3-column Board view"
-            >
-              <Layers size={13} color="#94a3b8" />
-              <span>Board View</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn-secondary"
-            style={{ fontSize: 11.5, padding: '3px 8px', height: 26 }}
-            disabled={batching || triageCards.length === 0}
-            onClick={handleQueueAll}
-            title="Queue all remaining cards for research"
-          >
-            <Sparkles size={12} style={{ marginRight: 4 }} />
-            {batching ? 'Queueing...' : `Queue All (${triageCards.length})`}
-            {!isPro && (
-              <span
-                style={{
-                  marginLeft: 4,
-                  fontSize: 9.5,
-                  padding: '0 4px',
-                  borderRadius: 3,
-                  background: 'rgba(255, 255, 255, 0.15)',
-                }}
-              >
-                PRO
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            disabled={safeIndex === 0}
-            onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-            title="Previous card"
-          >
-            &larr;
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            disabled={safeIndex >= triageCards.length - 1}
-            onClick={() => setCurrentIndex((prev) => Math.min(triageCards.length - 1, prev + 1))}
-            title="Next card"
-          >
-            &rarr;
-          </button>
-        </div>
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h2 id="main-heading" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>Idea Funnel</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: '#64748b' }}>({triageTotal} cards triage)</span>
+        </h2>
       </div>
 
-      <div
-        className="triage-card"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={resetDrag}
-        style={{
-          transform: isDragging
-            ? `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0) rotate(${dragOffset.x * 0.05}deg)`
-            : undefined,
-          transition: isDragging ? 'none' : 'transform 0.25s ease-out',
-        }}
-      >
-        {stamp && <span className={`swipe-stamp ${stamp}`}>{STAMP_LABEL[stamp]}</span>}
-        <div className="triage-header">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {currentCard.type && (
-                <span className="card-type-badge">{currentCard.type}</span>
-              )}
-              <span className={`horizon-pill ${currentCard.horizon}`}>
-                {currentCard.horizon}
-              </span>
-              {currentCard.worthiness?.level && (
-                <span
-                  className={`worthiness-badge ${currentCard.worthiness.level.toLowerCase()}`}
-                  title={currentCard.worthiness.reason ? `Worthiness: ${currentCard.worthiness.level} — ${currentCard.worthiness.reason}` : `Worthiness: ${currentCard.worthiness.level}`}
-                  aria-label={`Worthiness: ${currentCard.worthiness.level}`}
-                >
-                  ★ {currentCard.worthiness.level.toUpperCase()}
-                </span>
-              )}
-              {currentCard.signals?.extraction && currentCard.signals.extraction !== 'full' && (
-                <span
-                  className="signal-chip extraction-warning"
-                  title={`Extraction completeness: ${currentCard.signals.extraction}`}
-                >
-                  ⚠️ {currentCard.signals.extraction}
-                </span>
-              )}
-              {currentCard.signals?.promo && (
-                <span
-                  className="signal-chip promo-warning"
-                  title="Flagged as promotional content"
-                >
-                  📣 Promo
-                </span>
-              )}
-              {currentCard.signals?.source_quality && (
-                <span
-                  className="signal-chip source-quality"
-                  title={`Source quality: ${currentCard.signals.source_quality}`}
-                >
-                  🎯 {currentCard.signals.source_quality}
-                </span>
-              )}
-              <span style={{ fontSize: 12, color: '#64748b' }}>ID #{currentCard.id}</span>
-              {isStale && (
-                <span
-                  className="horizon-pill"
-                  style={{
-                    background: 'rgba(245, 158, 11, 0.15)',
-                    color: '#fbbf24',
-                    border: '1px solid rgba(245, 158, 11, 0.3)',
-                  }}
-                  title={`No activity since ${currentCard.updated_at || currentCard.created_at}`}
-                >
-                  ⚠️ Stale ({currentIdleDays} days inactive)
-                </span>
-              )}
+      <div className="kanban-board" data-view="triage">
+        {/* Inbox Column */}
+        <div className="kanban-column">
+          <div className="column-header">
+            <div className="column-title">
+              <Inbox size={15} strokeWidth={1.5} color="#38bdf8" />
+              <span>Inbox</span>
             </div>
-            <h2 className="triage-title">{currentCard.title}</h2>
+            <span className="column-count">{inboxCards.length}</span>
           </div>
-
-          <div style={{ display: 'flex', gap: 6 }}>
-            {currentCard.source_url && (
-              <a
-                href={currentCard.source_url}
-                target="_blank"
-                rel="noreferrer"
-                className="icon-btn"
-                title="Open Source Link"
-              >
-                <ExternalLink size={15} />
-              </a>
+          <div className="cards-container">
+            {inboxCards.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                Inbox zero! Great job.
+              </div>
+            ) : (
+              inboxCards.map(renderCard)
             )}
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => onOpenCardDetail(currentCard)}
-              style={{ padding: '5px 10px', fontSize: 12 }}
-            >
-              Full Details
-            </button>
           </div>
         </div>
 
-        {/* Structured Triage Briefing */}
-        <div className="briefing-box">
-          {/* TL;DR (prominent) */}
-          <div className="briefing-section triage-tldr-box">
-            <div className="briefing-heading heading-summary">
-              <FileText size={13} />
-              <span>TL;DR</span>
+        {/* Researching Column */}
+        <div className="kanban-column">
+          <div className="column-header">
+            <div className="column-title">
+              <Search size={15} strokeWidth={1.5} color="#c084fc" />
+              <span>Researching</span>
             </div>
-            <p className="briefing-text triage-tldr-text">
-              {currentCard.tldr || currentCard.executive_summary || currentCard.summary || 'No summary generated.'}
-            </p>
+            <span className="column-count">{researchingCards.length}</span>
           </div>
-
-          {(currentCard.why_care || currentCard.value_proposition) && (
-            <div className="briefing-section">
-              <div className="briefing-heading heading-value">
-                <Lightbulb size={13} />
-                <span>Why You Might Care</span>
+          <div className="cards-container">
+            {researchingCards.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                No active research in progress.
               </div>
-              <p className="briefing-text">{currentCard.why_care || currentCard.value_proposition}</p>
-            </div>
-          )}
-
-          {currentCard.claims && currentCard.claims.length > 0 && (
-            <div className="briefing-section">
-              <div className="briefing-heading heading-claims">
-                <CheckCircle2 size={13} />
-                <span>Claims</span>
-              </div>
-              <div className="actions-list">
-                {currentCard.claims.slice(0, 3).map((claim, i) => (
-                  <div key={i} className="action-item claim-item">
-                    <span className="claim-bullet">•</span>
-                    <span>{claim}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {currentCard.open_questions && currentCard.open_questions.length > 0 && (
-            <div className="briefing-section">
-              <div className="briefing-heading heading-questions">
-                <HelpCircle size={13} />
-                <span>Open questions research would answer</span>
-              </div>
-              <div className="actions-list">
-                {currentCard.open_questions.slice(0, 3).map((q, i) => (
-                  <div key={i} className="action-item question-item">
-                    <span className="question-bullet">?</span>
-                    <span>{q}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* References: compact chips, clickable */}
-          {currentCard.references && currentCard.references.length > 0 && (
-            <div className="briefing-section">
-              <div className="briefing-heading heading-refs">
-                <Link2 size={13} />
-                <span>References</span>
-              </div>
-              <div className="references-chips">
-                {currentCard.references.map((ref, i) =>
-                  ref.url ? (
-                    <a
-                      key={i}
-                      href={ref.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="ref-chip clickable"
-                      title={`${ref.kind}: ${ref.label}\n${ref.url}`}
-                    >
-                      <span className="ref-chip-kind">{ref.kind}</span>
-                      <span className="ref-chip-label">{ref.label}</span>
-                      <ExternalLink size={10} />
-                    </a>
-                  ) : (
-                    <span key={i} className="ref-chip" title={`${ref.kind}: ${ref.label}`}>
-                      <span className="ref-chip-kind">{ref.kind}</span>
-                      <span className="ref-chip-label">{ref.label}</span>
-                    </span>
-                  )
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Researched chip if card was researched (placeholder until Prompt 10) */}
-          {(currentCard.status === 'done' || (currentCard.proposed_actions && currentCard.proposed_actions.length > 0)) && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <span className="researched-chip" title="Card has research findings">
-                Researched ✓ — verdict
-              </span>
-            </div>
-          )}
+            ) : (
+              researchingCards.map(renderCard)
+            )}
+          </div>
         </div>
 
-        {/* Tags */}
-        {currentCard.tags && currentCard.tags.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {currentCard.tags.map((t) => (
-              <span key={t} className="card-tag-pill" style={{ fontSize: 11, padding: '3px 8px' }}>
-                #{t}
-              </span>
-            ))}
+        {/* Review Column */}
+        <div className="kanban-column">
+          <div className="column-header">
+            <div className="column-title">
+              <Eye size={15} strokeWidth={1.5} color="#f472b6" />
+              <span>Review</span>
+            </div>
+            <span className="column-count">{reviewCards.length}</span>
           </div>
-        )}
-
-        {/* Action Controls */}
-        <div className="triage-controls">
-          <button
-            type="button"
-            className="triage-action-btn btn-shelve"
-            onClick={() => handleAction('shelved')}
-            title="Shelve for later review (Hotkey: Left Arrow)"
-          >
-            <Archive size={18} />
-            <span>Shelve</span>
-            <span className="hotkey-badge">&larr; Left</span>
-          </button>
-
-          <button
-            type="button"
-            className="triage-action-btn btn-doing"
-            onClick={() => handleAction('doing')}
-            title="Put in Doing queue (Hotkey: Right Arrow)"
-          >
-            <ArrowRight size={18} />
-            <span>Do Now</span>
-            <span className="hotkey-badge">&rarr; Right</span>
-          </button>
-
-          <button
-            type="button"
-            className="triage-action-btn btn-done"
-            onClick={() => handleAction('done')}
-            title="Mark Done (Hotkey: Up Arrow)"
-          >
-            <Check size={18} />
-            <span>Completed</span>
-            <span className="hotkey-badge">&uarr; Up</span>
-          </button>
-
-          <button
-            type="button"
-            className="triage-action-btn btn-dismiss"
-            onClick={() => handleAction('dismissed')}
-            title="Dismiss / Not Interested (Hotkey: D)"
-          >
-            <X size={18} />
-            <span>Dismiss</span>
-            <span className="hotkey-badge">D</span>
-          </button>
-        </div>
-
-        <ResearchProgressStrip cardId={currentCard.id} />
-
-        <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 12, marginTop: 4 }}>
-          {(() => {
-            const isHigh = currentCard.worthiness?.level?.toLowerCase() === 'high';
-            const btnLabel = autoPlaybook ? `Research: ${autoPlaybook.name} (R)` : 'Autonomous Deep Research (R)';
-            return (
-              <div className="pb-split-btn-wrapper">
-                <button
-                  type="button"
-                  className={isHigh ? 'triage-research-btn promoted pb-split-main' : 'btn-secondary pb-split-main'}
-                  onClick={() => onResearch(currentCard.id)}
-                  style={{ fontSize: 12, padding: isHigh ? '8px 14px' : '6px 12px' }}
-                  title="Run auto-selected playbook (R)"
-                >
-                  <Sparkles size={14} color={isHigh ? '#fff' : '#c084fc'} />
-                  <span>{btnLabel}</span>
-                </button>
-                <button
-                  type="button"
-                  className={isHigh ? 'triage-research-btn promoted pb-split-caret' : 'btn-secondary pb-split-caret'}
-                  onClick={() => setIsPickerOpen((v) => !v)}
-                  style={{ fontSize: 12, padding: isHigh ? '8px 10px' : '6px 8px' }}
-                  title="Choose research playbook (Shift+R)"
-                >
-                  <ChevronDown size={14} />
-                </button>
-
-                {isPickerOpen && (
-                  <div className="pb-picker-dropdown">
-                    <div className="pb-picker-header">
-                      <BookOpen size={13} />
-                      <span>Select Research Playbook</span>
-                    </div>
-                    <div className="pb-picker-list">
-                      {playbooks.map((pb) => {
-                        const isAuto = autoPlaybook?.id === pb.id;
-                        return (
-                          <button
-                            key={pb.id}
-                            type="button"
-                            className={`pb-picker-item ${isAuto ? 'auto-selected' : ''}`}
-                            onClick={() => {
-                              setIsPickerOpen(false);
-                              onResearch(currentCard.id, pb.id);
-                            }}
-                          >
-                            <div className="pb-picker-item-main">
-                              <span className="pb-picker-name">{pb.name}</span>
-                              {isAuto && <span className="pb-picker-badge">Auto</span>}
-                            </div>
-                            <span className="pb-picker-desc">{pb.description || `${pb.steps?.length || 0} steps`}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+          <div className="cards-container">
+            {reviewCards.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                No reports to review.
               </div>
-            );
-          })()}
-
-          {isFailed && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => onRetry(currentCard.id)}
-              style={{ fontSize: 12, padding: '6px 14px' }}
-            >
-              <RefreshCw size={14} color="#fbbf24" />
-              <span>Retry Extraction</span>
-            </button>
-          )}
+            ) : (
+              reviewCards.map(renderCard)
+            )}
+          </div>
         </div>
       </div>
     </div>

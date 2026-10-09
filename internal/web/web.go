@@ -206,6 +206,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/v1/cards", a.createCard)
 	mux.HandleFunc("GET /api/v1/cards/{id}", a.getCard)
 	mux.HandleFunc("PATCH /api/v1/cards/{id}", a.patchCard)
+	mux.HandleFunc("POST /api/v1/cards/{id}/comments", a.createCardComment)
 	mux.HandleFunc("POST /api/v1/cards/{id}/retry", a.retryCard)
 	mux.HandleFunc("POST /api/v1/cards/batch-shelve-stale", a.batchShelveStale)
 	mux.HandleFunc("GET /api/v1/cards/{id}/export.md", a.exportMarkdown)
@@ -1268,6 +1269,32 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": card})
+}
+
+func (a *api) createCardComment(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var b struct {
+		Content string `json:"content"`
+	}
+	if err := decodeJSON(w, r, &b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
+		return
+	}
+	b.Content = strings.TrimSpace(b.Content)
+	if b.Content == "" {
+		writeErr(w, http.StatusBadRequest, "comment content cannot be empty")
+		return
+	}
+	comment, err := a.store.AddCardComment(r.Context(), id, b.Content)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": comment})
 }
 
 func (a *api) retryCard(w http.ResponseWriter, r *http.Request) {

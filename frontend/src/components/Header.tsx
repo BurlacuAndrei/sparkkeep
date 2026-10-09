@@ -4,8 +4,8 @@ import { Sparkles, Search, Plus, Calendar, Layers, Zap, Settings } from 'lucide-
 interface HeaderProps {
   query: string;
   onQueryChange: (q: string) => void;
-  viewMode: 'kanban' | 'digest';
-  onViewModeChange: (mode: 'kanban' | 'digest') => void;
+  viewMode: 'triage' | 'boards' | 'digest';
+  onViewModeChange: (mode: 'triage' | 'boards' | 'digest') => void;
   onOpenNewCard: () => void;
   onTriggerResearch: (cardId: number) => void;
   flashMessage: string;
@@ -39,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="topbar">
-      <div className="brand" onClick={() => onViewModeChange('kanban')}>
+      <div className="brand" onClick={() => onViewModeChange('boards')}>
         <div className="brand-icon">
           <Sparkles size={16} strokeWidth={1.75} color="#fff" />
         </div>
@@ -62,9 +62,18 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="nav-tabs">
           <button
             type="button"
-            className={`nav-tab ${viewMode === 'kanban' ? 'active' : ''}`}
-            onClick={() => onViewModeChange('kanban')}
-            title="Boards & Pipeline View"
+            className={`nav-tab ${viewMode === 'triage' ? 'active' : ''}`}
+            onClick={() => onViewModeChange('triage')}
+            title="Idea Funnel"
+          >
+            <Zap size={13} strokeWidth={1.5} />
+            <span>Triage</span>
+          </button>
+          <button
+            type="button"
+            className={`nav-tab ${viewMode === 'boards' ? 'active' : ''}`}
+            onClick={() => onViewModeChange('boards')}
+            title="Execution Boards"
           >
             <Layers size={13} strokeWidth={1.5} />
             <span>Boards</span>
@@ -73,7 +82,7 @@ export const Header: React.FC<HeaderProps> = ({
             id="digest-btn"
             type="button"
             className={`nav-tab ${viewMode === 'digest' ? 'active on' : ''}`}
-            onClick={() => onViewModeChange(viewMode === 'digest' ? 'kanban' : 'digest')}
+            onClick={() => onViewModeChange(viewMode === 'digest' ? 'boards' : 'digest')}
             title="Weekly Digest Timeline"
           >
             <Calendar size={13} strokeWidth={1.5} />

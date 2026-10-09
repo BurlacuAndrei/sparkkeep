@@ -37,6 +37,8 @@ type Store interface {
 	SetCardTags(ctx context.Context, id int64, tags []string) error
 	SetCardReferences(ctx context.Context, id int64, refs []Reference) error
 	ListTags(ctx context.Context) ([]Tag, error)
+	AddCardComment(ctx context.Context, cardID int64, content string) (CardComment, error)
+	ListCardComments(ctx context.Context, cardID int64) ([]CardComment, error)
 	CreateResearch(ctx context.Context, cardID int64, query string, playbookID ...*int64) (Research, error)
 	HasActiveResearch(ctx context.Context, cardID int64) (bool, error)
 	SetResearch(ctx context.Context, id int64, status, findings, errMsg string) (Research, error)

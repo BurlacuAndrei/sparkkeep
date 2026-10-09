@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"sparkkeep/internal/core"
 	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
+	"sparkkeep/internal/research"
 	"sparkkeep/internal/store"
 	"sparkkeep/internal/web"
 )
@@ -39,6 +41,22 @@ type harness struct {
 	tgSent  []string
 }
 
+type e2eStubFetcher struct{}
+
+func (e2eStubFetcher) Recognize(raw string) capture.Share {
+	return capture.Share{Kind: "url", URL: raw}
+}
+func (e2eStubFetcher) Fetch(share capture.Share) capture.Fetched {
+	return capture.Fetched{Kind: share.Kind, URL: share.URL, Text: "Raft consensus protocol state machine replication safety and liveness proof."}
+}
+func (e e2eStubFetcher) FetchWithContext(_ context.Context, share capture.Share) capture.Fetched {
+	return e.Fetch(share)
+}
+func (e2eStubFetcher) MediaMeta(share capture.Share) capture.Fetched {
+	return capture.Fetched{Kind: share.Kind, URL: share.URL, Text: "Raft metadata"}
+}
+func (e2eStubFetcher) Subtitles(_ capture.Share) string { return "" }
+
 func newE2EHarness(t *testing.T, llmResponseJSON string) *harness {
 	t.Helper()
 
@@ -50,11 +68,26 @@ func newE2EHarness(t *testing.T, llmResponseJSON string) *harness {
 	}
 	t.Cleanup(func() { st.Close() })
 
-	// 2. Mock LLM server
-	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(llmResponseJSON))
+	// 2. Mock LLM server with triage, planning, and synthesis support
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+		content := llmResponseJSON
+		if strings.Contains(str, "research planning") {
+			content = `{"questions":[{"id":"Q1","question":"What is Raft consensus?","query":"raft consensus protocol"}]}`
+		} else if strings.Contains(str, "research synthesis") || strings.Contains(str, "fact-checking") || strings.Contains(str, "verdict") {
+			content = `{"recommendation":"pursue","confidence":"high","for_whom":"engineers","next_actions":["Read Raft paper","Prototype leader election"],"suggested_horizon":"short-term","suggested_tags":["distributed"]}`
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
 	}))
 	t.Cleanup(llmSrv.Close)
+
+	// Mock SearXNG server
+	searchSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"results":[{"url":"https://example.com/raft-paper"}]}`)
+	}))
+	t.Cleanup(searchSrv.Close)
 
 	// 3. Mock Telegram API server
 	h := &harness{t: t, dbPath: dbPath, store: st, llmSrv: llmSrv}
@@ -79,10 +112,22 @@ func newE2EHarness(t *testing.T, llmResponseJSON string) *harness {
 		PublicURL: "https://test.sparkkeep.local",
 	}
 	ac := analyze.New(cfg, llmSrv.Client())
+	fetcher := e2eStubFetcher{}
 	h.service = &core.Service{
 		Store:   st,
-		Fetcher: capture.Capture{},
+		Fetcher: fetcher,
 		Analyze: ac,
+		Runner: &research.Runner{
+			SearchURL:    searchSrv.URL,
+			Client:       searchSrv.Client(),
+			Fetcher:      fetcher,
+			ClipChars:    1000,
+			Store:        st,
+			SynthesisLLM: ac,
+			PlanLLM:      ac,
+			LLM:          ac,
+			Timeout:      5 * time.Second,
+		},
 		Logf:    t.Logf,
 		License: license.SetupProForTest(context.Background(), st),
 	}
@@ -94,6 +139,7 @@ func newE2EHarness(t *testing.T, llmResponseJSON string) *harness {
 		Store:   st,
 		Service: h.service,
 		Logf:    t.Logf,
+		BaseURL: h.tgSrv.URL,
 	}
 	h.service.Channel = tgAdapter
 
@@ -221,8 +267,8 @@ func TestE2E_ReviewDrawerStateTransitions(t *testing.T) {
 		t.Fatalf("create card: %v", err)
 	}
 
-	// User clicks "Move to Doing" in review drawer
-	newStatus := port.StatusDoing
+	// User clicks "Move to In Progress"
+	newStatus := port.StatusInProgress
 	patchBody := map[string]any{"status": newStatus}
 	res := h.doJSON(http.MethodPatch, fmt.Sprintf("/api/v1/cards/%d", c.ID), patchBody)
 	if res.Code != http.StatusOK {
@@ -234,12 +280,12 @@ func TestE2E_ReviewDrawerStateTransitions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get card: %v", err)
 	}
-	if updated.Status != port.StatusDoing {
-		t.Errorf("card status = %q, want %q", updated.Status, port.StatusDoing)
+	if updated.Status != port.StatusInProgress {
+		t.Errorf("card status = %q, want %q", updated.Status, port.StatusInProgress)
 	}
 }
 
-// E2E-004: Shelve and Re-activate Flow (Review -> Shelved -> Doing)
+// E2E-004: Shelve and Re-activate Flow (Review -> Shelved -> In Progress)
 func TestE2E_ShelveAndReactivateFlow(t *testing.T) {
 	h := newE2EHarness(t, `[]`)
 	ctx := context.Background()
@@ -269,8 +315,8 @@ func TestE2E_ShelveAndReactivateFlow(t *testing.T) {
 		t.Fatalf("card status = %q, want shelved", shelvedCard.Status)
 	}
 
-	// 3. User browses Execution Tab -> Shelved column and re-activates card to "doing"
-	reactivateBody := map[string]any{"status": port.StatusDoing}
+	// 3. User browses Execution Tab -> Shelved column and re-activates card to "in-progress"
+	reactivateBody := map[string]any{"status": port.StatusInProgress}
 	res2 := h.doJSON(http.MethodPatch, fmt.Sprintf("/api/v1/cards/%d", c.ID), reactivateBody)
 	if res2.Code != http.StatusOK {
 		t.Fatalf("reactivate status = %d, want 200: %s", res2.Code, res2.Body.String())
@@ -280,8 +326,8 @@ func TestE2E_ShelveAndReactivateFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get reactivated card: %v", err)
 	}
-	if doingCard.Status != port.StatusDoing {
-		t.Errorf("reactivated card status = %q, want doing", doingCard.Status)
+	if doingCard.Status != port.StatusInProgress {
+		t.Errorf("reactivated card status = %q, want in-progress", doingCard.Status)
 	}
 }
 

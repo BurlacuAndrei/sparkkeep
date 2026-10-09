@@ -10,7 +10,7 @@ func TestValidHorizon(t *testing.T) {
 		{HorizonShortTerm, true},
 		{HorizonMediumTerm, true},
 		{HorizonLongTerm, true},
-		{HorizonLifetime, true},
+		{"lifetime", false},
 		{"invalid", false},
 		{"", false},
 	}
@@ -28,10 +28,14 @@ func TestValidStatus(t *testing.T) {
 		want   bool
 	}{
 		{StatusInbox, true},
-		{StatusDoing, true},
+		{StatusResearching, true},
+		{StatusReview, true},
+		{StatusToDo, true},
+		{StatusInProgress, true},
 		{StatusDone, true},
 		{StatusShelved, true},
 		{StatusDismissed, true},
+		{"doing", false},
 		{"pending", false},
 		{"", false},
 		{"archived", false},

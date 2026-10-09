@@ -196,7 +196,7 @@ func (s *stubStore) ShelveStale(_ context.Context, days int) (int64, error) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -days)
 	var n int64
 	for id, c := range s.cards {
-		if (c.Status == port.StatusInbox || c.Status == port.StatusDoing) && c.UpdatedAt.Before(cutoff) {
+		if (c.Status == port.StatusInbox || c.Status == port.StatusToDo || c.Status == port.StatusInProgress) && c.UpdatedAt.Before(cutoff) {
 			c.Status, c.UpdatedAt = port.StatusShelved, time.Now().UTC()
 			s.cards[id] = c
 			n++
@@ -736,6 +736,14 @@ func (s *stubStore) ListCompletedResearchSince(_ context.Context, since time.Tim
 	return res, nil
 }
 
+func (s *stubStore) AddCardComment(_ context.Context, cardID int64, content string) (port.CardComment, error) {
+	return port.CardComment{ID: 1, CardID: cardID, Content: content, CreatedAt: time.Now().UTC()}, nil
+}
+
+func (s *stubStore) ListCardComments(_ context.Context, cardID int64) ([]port.CardComment, error) {
+	return nil, nil
+}
+
 func (s *stubStore) Close() error { return nil }
 
 func (s *stubStore) researchFor(cardID int64) bool {
@@ -800,7 +808,7 @@ func TestWeeklyDigest(t *testing.T) {
 	st.cards[1] = port.Card{ID: 1, Title: "old", Status: port.StatusInbox, CreatedAt: now.AddDate(0, 0, -20)}
 	st.cards[2] = port.Card{ID: 2, Title: "two days ago", Status: port.StatusDone, CreatedAt: now.AddDate(0, 0, -2)}
 	st.cards[3] = port.Card{ID: 3, Title: "today", Status: port.StatusInbox, CreatedAt: now}
-	st.cards[4] = port.Card{ID: 4, Title: "same day as 2", Status: port.StatusDoing, CreatedAt: now.AddDate(0, 0, -2).Add(time.Hour)}
+	st.cards[4] = port.Card{ID: 4, Title: "same day as 2", Status: port.StatusInProgress, CreatedAt: now.AddDate(0, 0, -2).Add(time.Hour)}
 	h := webHandler(st, &core.Service{Logf: t.Logf})
 
 	rr := doJSON(t, h, http.MethodGet, "/api/v1/digest", "")
@@ -825,8 +833,8 @@ func TestWeeklyDigest(t *testing.T) {
 	if body.WeekTotal != 3 {
 		t.Fatalf("week_total = %d, want 3 (old card excluded)", body.WeekTotal)
 	}
-	if body.ByStatus["inbox"] != 1 || body.ByStatus["done"] != 1 || body.ByStatus["doing"] != 1 {
-		t.Fatalf("by_status = %v, want inbox:1 done:1 doing:1", body.ByStatus)
+	if body.ByStatus["inbox"] != 1 || body.ByStatus["done"] != 1 || body.ByStatus["in-progress"] != 1 {
+		t.Fatalf("by_status = %v, want inbox:1 done:1 in-progress:1", body.ByStatus)
 	}
 	if len(body.Days) != 2 {
 		t.Fatalf("days = %d, want 2", len(body.Days))
@@ -855,7 +863,7 @@ func TestListCardsStaleDays(t *testing.T) {
 	st := newStubStore()
 	now := time.Now().UTC()
 	st.cards[1] = port.Card{ID: 1, Title: "ancient", Status: port.StatusInbox, UpdatedAt: now.AddDate(0, 0, -40)}
-	st.cards[2] = port.Card{ID: 2, Title: "borderline", Status: port.StatusDoing, UpdatedAt: now.AddDate(0, 0, -31)}
+	st.cards[2] = port.Card{ID: 2, Title: "borderline", Status: port.StatusInProgress, UpdatedAt: now.AddDate(0, 0, -31)}
 	st.cards[3] = port.Card{ID: 3, Title: "recent", Status: port.StatusInbox, UpdatedAt: now.AddDate(0, 0, -2)}
 	h := webHandler(st, &core.Service{Logf: t.Logf})
 
@@ -896,7 +904,7 @@ func TestBatchShelveStale(t *testing.T) {
 	st := newStubStore()
 	now := time.Now().UTC()
 	st.cards[1] = port.Card{ID: 1, Title: "stale inbox", Status: port.StatusInbox, UpdatedAt: now.AddDate(0, 0, -60)}
-	st.cards[2] = port.Card{ID: 2, Title: "stale doing", Status: port.StatusDoing, UpdatedAt: now.AddDate(0, 0, -35)}
+	st.cards[2] = port.Card{ID: 2, Title: "stale doing", Status: port.StatusInProgress, UpdatedAt: now.AddDate(0, 0, -35)}
 	st.cards[3] = port.Card{ID: 3, Title: "fresh inbox", Status: port.StatusInbox, UpdatedAt: now}
 	st.cards[4] = port.Card{ID: 4, Title: "stale done", Status: port.StatusDone, UpdatedAt: now.AddDate(0, 0, -90)}
 	h := webHandler(st, &core.Service{Logf: t.Logf})
@@ -1023,12 +1031,12 @@ func TestPatchCard(t *testing.T) {
 	st.cards[5] = port.Card{ID: 5, Title: "t", Status: port.StatusInbox}
 	h := webHandler(st, &core.Service{Logf: t.Logf})
 
-	rr := doJSON(t, h, http.MethodPatch, "/api/v1/cards/5", `{"status":"doing"}`)
+	rr := doJSON(t, h, http.MethodPatch, "/api/v1/cards/5", `{"status":"in-progress"}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
 	}
-	if st.lastPatch.Status == nil || *st.lastPatch.Status != "doing" {
-		t.Fatalf("patch = %+v, want status=doing", st.lastPatch)
+	if st.lastPatch.Status == nil || *st.lastPatch.Status != "in-progress" {
+		t.Fatalf("patch = %+v, want status=in-progress", st.lastPatch)
 	}
 	var out struct {
 		OK   bool `json:"ok"`
@@ -1040,8 +1048,8 @@ func TestPatchCard(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
 		t.Fatalf("json: %v", err)
 	}
-	if !out.OK || out.Data.Status != "doing" {
-		t.Fatalf("out = %+v, want status doing", out)
+	if !out.OK || out.Data.Status != "in-progress" {
+		t.Fatalf("out = %+v, want status in-progress", out)
 	}
 }
 
@@ -1802,7 +1810,7 @@ func TestPatchCardEdgeCases(t *testing.T) {
 	}
 
 	// Missing card (404)
-	rr = doJSON(t, h, http.MethodPatch, "/api/v1/cards/999", `{"status":"doing"}`)
+	rr = doJSON(t, h, http.MethodPatch, "/api/v1/cards/999", `{"status":"in-progress"}`)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 for missing card", rr.Code)
 	}

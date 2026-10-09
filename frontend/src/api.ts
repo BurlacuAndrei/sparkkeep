@@ -62,6 +62,15 @@ export async function updateCard(id: number, patch: Partial<Card>): Promise<Card
   return res.data;
 }
 
+export async function addCardComment(id: number, content: string): Promise<any> {
+  const res = await request<{ ok: boolean; data: any }>(`/api/v1/cards/${id}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  return res.data;
+}
+
 export async function retryCard(id: number): Promise<Card> {
   const res = await request<{ ok: boolean; data: Card }>(`/api/v1/cards/${id}/retry`, {
     method: 'POST',

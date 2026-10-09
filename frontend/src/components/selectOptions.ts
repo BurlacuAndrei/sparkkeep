@@ -14,7 +14,6 @@ export const HORIZON_FILTER_OPTIONS: SelectOption<string>[] = [
   { value: 'short-term', label: '⚡ Short-term (Actionable)' },
   { value: 'medium-term', label: '📅 Medium-term (Planned)' },
   { value: 'long-term', label: '🔭 Long-term (Vision)' },
-  { value: 'lifetime', label: '🌟 Lifetime (Bucket list)' },
 ];
 
 export const STATUS_FILTER_OPTIONS: SelectOption<string>[] = [
@@ -22,24 +21,25 @@ export const STATUS_FILTER_OPTIONS: SelectOption<string>[] = [
   { value: 'inbox', label: '📥 Inbox' },
   { value: 'researching', label: '🔍 Researching' },
   { value: 'review', label: '👀 Review' },
-  { value: 'doing', label: '⚡ Doing' },
+  { value: 'to-do', label: '📝 To Do' },
+  { value: 'in-progress', label: '⚡ In Progress' },
   { value: 'done', label: '✅ Done' },
   { value: 'shelved', label: '📦 Shelved' },
   { value: 'dismissed', label: '🚫 Dismissed' },
 ];
 
-export const CARD_HORIZON_OPTIONS: SelectOption<'short-term' | 'medium-term' | 'long-term' | 'lifetime'>[] = [
+export const CARD_HORIZON_OPTIONS: SelectOption<'short-term' | 'medium-term' | 'long-term'>[] = [
   { value: 'short-term', label: '⚡ Short-term (Immediate action)' },
   { value: 'medium-term', label: '📅 Medium-term (Planned)' },
   { value: 'long-term', label: '🔭 Long-term (Vision)' },
-  { value: 'lifetime', label: '🌟 Lifetime (Bucket list / vision)' },
 ];
 
-export const CARD_STATUS_OPTIONS: SelectOption<'inbox' | 'researching' | 'review' | 'doing' | 'done' | 'shelved' | 'dismissed'>[] = [
+export const CARD_STATUS_OPTIONS: SelectOption<'inbox' | 'researching' | 'review' | 'to-do' | 'in-progress' | 'done' | 'shelved' | 'dismissed'>[] = [
   { value: 'inbox', label: '📥 Inbox' },
   { value: 'researching', label: '🔍 Researching' },
   { value: 'review', label: '👀 Review' },
-  { value: 'doing', label: '⚡ Doing' },
+  { value: 'to-do', label: '📝 To Do' },
+  { value: 'in-progress', label: '⚡ In Progress' },
   { value: 'done', label: '✅ Done' },
   { value: 'shelved', label: '📦 Shelved' },
   { value: 'dismissed', label: '🚫 Dismissed' },

@@ -72,8 +72,8 @@ func TestAnalyzeParsesBriefing(t *testing.T) {
 	if res.Cards[0].Title != "Deploy Qdrant" || res.Cards[0].Horizon != "short-term" {
 		t.Errorf("Cards[0] = %+v", res.Cards[0])
 	}
-	if res.Cards[1].Horizon != "lifetime" {
-		t.Errorf("Cards[1].Horizon = %q", res.Cards[1].Horizon)
+	if res.Cards[1].Horizon != "long-term" {
+		t.Errorf("Cards[1].Horizon = %q, want long-term", res.Cards[1].Horizon)
 	}
 }
 
@@ -94,8 +94,8 @@ func TestAnalyzeParsesArray(t *testing.T) {
 	if len(res.Cards[0].Tags) != 1 || res.Cards[0].Tags[0] != "go" || res.Cards[0].Links[0] != "u1" {
 		t.Fatalf("cards[0] tags/links = %+v %+v", res.Cards[0].Tags, res.Cards[0].Links)
 	}
-	if res.Cards[1].Horizon != "lifetime" {
-		t.Fatalf("cards[1].Horizon = %q", res.Cards[1].Horizon)
+	if res.Cards[1].Horizon != "long-term" {
+		t.Fatalf("cards[1].Horizon = %q, want long-term", res.Cards[1].Horizon)
 	}
 	if res.ExecutiveSummary != "sum A" {
 		t.Errorf("ExecutiveSummary fallback = %q, want sum A", res.ExecutiveSummary)
@@ -219,25 +219,25 @@ func TestNormalizeHorizon(t *testing.T) {
 		{"exact short-term", "short-term", port.HorizonShortTerm},
 		{"exact medium-term", "medium-term", port.HorizonMediumTerm},
 		{"exact long-term", "long-term", port.HorizonLongTerm},
-		{"exact lifetime", "lifetime", port.HorizonLifetime},
+		{"exact lifetime", "lifetime", port.HorizonLongTerm},
 
 		{"case insensitive Short Term", "Short Term", port.HorizonShortTerm},
 		{"case insensitive SHORT-TERM", "SHORT-TERM", port.HorizonShortTerm},
 		{"case insensitive Medium-Term", "Medium-Term", port.HorizonMediumTerm},
 		{"case insensitive Long-Term", "Long-Term", port.HorizonLongTerm},
-		{"case insensitive Lifetime", "Lifetime", port.HorizonLifetime},
+		{"case insensitive Lifetime", "Lifetime", port.HorizonLongTerm},
 
 		{"underscore short_term", "short_term", port.HorizonShortTerm},
 		{"underscore medium_term", "medium_term", port.HorizonMediumTerm},
 		{"underscore long_term", "long_term", port.HorizonLongTerm},
-		{"underscore life_time", "life_time", port.HorizonLifetime},
-		{"underscore bucket_list", "bucket_list", port.HorizonLifetime},
+		{"underscore life_time", "life_time", port.HorizonLongTerm},
+		{"underscore bucket_list", "bucket_list", port.HorizonLongTerm},
 
 		{"whitespace padding", "  short-term  ", port.HorizonShortTerm},
 		{"whitespace short term", "short term", port.HorizonShortTerm},
 		{"whitespace medium term", "medium term", port.HorizonMediumTerm},
 		{"whitespace long term", "long term", port.HorizonLongTerm},
-		{"whitespace life time", "life time", port.HorizonLifetime},
+		{"whitespace life time", "life time", port.HorizonLongTerm},
 
 		{"synonym medium", "medium", port.HorizonMediumTerm},
 		{"synonym Medium", "Medium", port.HorizonMediumTerm},
@@ -246,16 +246,16 @@ func TestNormalizeHorizon(t *testing.T) {
 		{"synonym now", "now", port.HorizonShortTerm},
 		{"synonym soon", "soon", port.HorizonShortTerm},
 		{"synonym immediate", "immediate", port.HorizonShortTerm},
-		{"synonym bucket", "bucket", port.HorizonLifetime},
-		{"synonym bucket list", "bucket list", port.HorizonLifetime},
-		{"synonym bucket-list", "bucket-list", port.HorizonLifetime},
-		{"synonym Bucket List", "Bucket List", port.HorizonLifetime},
-		{"synonym someday", "someday", port.HorizonLifetime},
+		{"synonym bucket", "bucket", port.HorizonLongTerm},
+		{"synonym bucket list", "bucket list", port.HorizonLongTerm},
+		{"synonym bucket-list", "bucket-list", port.HorizonLongTerm},
+		{"synonym Bucket List", "Bucket List", port.HorizonLongTerm},
+		{"synonym someday", "someday", port.HorizonLongTerm},
 
 		{"no separator shortterm", "shortterm", port.HorizonShortTerm},
 		{"no separator mediumterm", "mediumterm", port.HorizonMediumTerm},
 		{"no separator longterm", "longterm", port.HorizonLongTerm},
-		{"no separator bucketlist", "bucketlist", port.HorizonLifetime},
+		{"no separator bucketlist", "bucketlist", port.HorizonLongTerm},
 
 		{"empty string", "", port.HorizonShortTerm},
 		{"whitespace only", "   ", port.HorizonShortTerm},
@@ -283,7 +283,7 @@ func TestExtractJSONHorizons(t *testing.T) {
 		{"short-term", `[{"title":"t","summary":"s","horizon":"short-term"}]`, port.HorizonShortTerm, false},
 		{"medium-term", `[{"title":"t","summary":"s","horizon":"medium-term"}]`, port.HorizonMediumTerm, false},
 		{"long-term", `[{"title":"t","summary":"s","horizon":"long-term"}]`, port.HorizonLongTerm, false},
-		{"lifetime", `[{"title":"t","summary":"s","horizon":"lifetime"}]`, port.HorizonLifetime, false},
+		{"lifetime", `[{"title":"t","summary":"s","horizon":"lifetime"}]`, port.HorizonLongTerm, false},
 		{"Short Term mixed case", `[{"title":"t","summary":"s","horizon":"Short Term"}]`, port.HorizonShortTerm, false},
 		{"short_term underscore", `[{"title":"t","summary":"s","horizon":"short_term"}]`, port.HorizonShortTerm, false},
 		{"medium synonym", `[{"title":"t","summary":"s","horizon":"medium"}]`, port.HorizonMediumTerm, false},
@@ -291,10 +291,10 @@ func TestExtractJSONHorizons(t *testing.T) {
 		{"now synonym", `[{"title":"t","summary":"s","horizon":"now"}]`, port.HorizonShortTerm, false},
 		{"soon synonym", `[{"title":"t","summary":"s","horizon":"soon"}]`, port.HorizonShortTerm, false},
 		{"immediate synonym", `[{"title":"t","summary":"s","horizon":"immediate"}]`, port.HorizonShortTerm, false},
-		{"bucket synonym", `[{"title":"t","summary":"s","horizon":"bucket"}]`, port.HorizonLifetime, false},
-		{"bucket list synonym", `[{"title":"t","summary":"s","horizon":"bucket list"}]`, port.HorizonLifetime, false},
-		{"bucket-list synonym", `[{"title":"t","summary":"s","horizon":"bucket-list"}]`, port.HorizonLifetime, false},
-		{"someday synonym", `[{"title":"t","summary":"s","horizon":"someday"}]`, port.HorizonLifetime, false},
+		{"bucket synonym", `[{"title":"t","summary":"s","horizon":"bucket"}]`, port.HorizonLongTerm, false},
+		{"bucket list synonym", `[{"title":"t","summary":"s","horizon":"bucket list"}]`, port.HorizonLongTerm, false},
+		{"bucket-list synonym", `[{"title":"t","summary":"s","horizon":"bucket-list"}]`, port.HorizonLongTerm, false},
+		{"someday synonym", `[{"title":"t","summary":"s","horizon":"someday"}]`, port.HorizonLongTerm, false},
 		{"empty horizon", `[{"title":"t","summary":"s","horizon":""}]`, port.HorizonShortTerm, false},
 		{"missing horizon field", `[{"title":"t","summary":"s"}]`, port.HorizonShortTerm, false},
 		{"unknown horizon bogus", `[{"title":"t","summary":"s","horizon":"bogus"}]`, port.HorizonShortTerm, false},

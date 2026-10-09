@@ -29,8 +29,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 15 {
-		t.Fatalf("version = %d, want 15", version)
+	if version != 16 {
+		t.Fatalf("version = %d, want 16", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -45,7 +45,7 @@ func TestCreateAndGetCard(t *testing.T) {
 	c, err := s.CreateCard(ctx, port.Card{
 		Title:   "Idea",
 		Summary: "Short",
-		Horizon: port.HorizonLifetime,
+		Horizon: port.HorizonLongTerm,
 		Tags:    []string{"trading", "ideas"},
 	})
 	if err != nil {
@@ -58,7 +58,7 @@ func TestCreateAndGetCard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCard: %v", err)
 	}
-	if got.Title != "Idea" || got.Horizon != port.HorizonLifetime {
+	if got.Title != "Idea" || got.Horizon != port.HorizonLongTerm {
 		t.Fatalf("got %+v", got)
 	}
 	if len(got.Tags) != 2 {
@@ -84,7 +84,7 @@ func TestListCardsFilter(t *testing.T) {
 	for _, title := range append(short, long...) {
 		h := port.HorizonShortTerm
 		if title == "gamma vision" {
-			h = port.HorizonLifetime
+			h = port.HorizonLongTerm
 		}
 		if _, err := s.CreateCard(ctx, port.Card{Title: title, Summary: "seed", Horizon: h}); err != nil {
 			t.Fatalf("CreateCard: %v", err)
@@ -212,7 +212,7 @@ func TestShelveStale(t *testing.T) {
 		return c
 	}
 	staleInbox := mk("stale inbox", port.StatusInbox, 40*24*time.Hour)
-	staleDoing := mk("stale doing", port.StatusDoing, 60*24*time.Hour)
+	staleDoing := mk("stale doing", port.StatusInProgress, 60*24*time.Hour)
 	freshInbox := mk("fresh inbox", port.StatusInbox, time.Hour)
 	staleDone := mk("already done", port.StatusDone, 90*24*time.Hour)
 
@@ -254,12 +254,12 @@ func TestUpdateCardPatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateCard: %v", err)
 	}
-	status := port.StatusDoing
+	status := port.StatusInProgress
 	got, err := s.UpdateCard(ctx, c.ID, port.CardPatch{Status: &status})
 	if err != nil {
 		t.Fatalf("UpdateCard: %v", err)
 	}
-	if got.Status != port.StatusDoing || got.Summary != "s" || got.Title != "Idea" || got.SourceNote != "note" {
+	if got.Status != port.StatusInProgress || got.Summary != "s" || got.Title != "Idea" || got.SourceNote != "note" {
 		t.Fatalf("patch touched too much: %+v", got)
 	}
 
@@ -974,8 +974,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 15 {
-		t.Fatalf("version = %d, want 15", version)
+	if version != 16 {
+		t.Fatalf("version = %d, want 16", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1087,8 +1087,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 15 {
-		t.Fatalf("version = %d, want 15", version)
+	if version != 16 {
+		t.Fatalf("version = %d, want 16", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care

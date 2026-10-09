@@ -76,9 +76,19 @@ export const CardItem: React.FC<CardItemProps> = ({
           {card.type && (
             <span className="card-type-badge">{card.type}</span>
           )}
-          <span className={`horizon ${card.horizon} horizon-pill ${card.horizon}`}>
-            {card.horizon}
-          </span>
+          <select
+            className={`horizon ${card.horizon} horizon-pill ${card.horizon}`}
+            value={card.horizon || 'short-term'}
+            onChange={(e) => {
+              e.stopPropagation();
+              actions.onUpdateCard?.(card.id, { horizon: e.target.value as any });
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <option value="short-term">Short Term</option>
+            <option value="medium-term">Medium Term</option>
+            <option value="long-term">Long Term</option>
+          </select>
           {card.worthiness?.level && (
             <span
               className={`worthiness-dot ${card.worthiness.level.toLowerCase()}`}
@@ -115,13 +125,13 @@ export const CardItem: React.FC<CardItemProps> = ({
         </div>
 
         <div className="acts card-quick-actions" onClick={(e) => e.stopPropagation()}>
-          {card.status !== 'doing' && (
+          {card.status !== 'in-progress' && card.status !== 'done' && (
             <button
               type="button"
               className="icon-btn"
-              data-act="doing"
-              title="Move to Doing"
-              onClick={() => onStatusChange(card.id, 'doing')}
+              data-act="in-progress"
+              title="Start Working"
+              onClick={() => onStatusChange(card.id, 'in-progress')}
             >
               <ArrowRight size={13} strokeWidth={1.5} color="#34d399" />
             </button>
@@ -139,13 +149,13 @@ export const CardItem: React.FC<CardItemProps> = ({
             </button>
           )}
 
-          {card.status !== 'shelved' && (
+          {card.status !== 'to-do' && card.status !== 'done' && (
             <button
               type="button"
               className="icon-btn"
-              data-act="shelve"
-              title="Shelve for later"
-              onClick={() => onStatusChange(card.id, 'shelved')}
+              data-act="to-do"
+              title="Move back to To Do"
+              onClick={() => onStatusChange(card.id, 'to-do')}
             >
               <Archive size={13} strokeWidth={1.5} color="#94a3b8" />
             </button>

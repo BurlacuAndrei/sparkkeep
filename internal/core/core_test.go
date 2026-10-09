@@ -457,6 +457,14 @@ func (s *stubStore) ListCompletedResearchSince(_ context.Context, since time.Tim
 	return res, nil
 }
 
+func (s *stubStore) AddCardComment(_ context.Context, cardID int64, content string) (port.CardComment, error) {
+	return port.CardComment{ID: 1, CardID: cardID, Content: content, CreatedAt: time.Now().UTC()}, nil
+}
+
+func (s *stubStore) ListCardComments(_ context.Context, cardID int64) ([]port.CardComment, error) {
+	return nil, nil
+}
+
 func (s *stubStore) Close() error { return nil }
 
 // stubChannel records notifications; when err is set Notify returns it.
@@ -648,7 +656,7 @@ func TestCaptureTextSingleIdea(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCard: %v", err)
 	}
-	if c.Title != "Do X" || c.Horizon != port.HorizonLifetime {
+	if c.Title != "Do X" || c.Horizon != port.HorizonLongTerm {
 		t.Fatalf("card = %+v", c)
 	}
 	if len(c.Tags) != 2 || c.Tags[0] != "go" || c.Tags[1] != "x" {

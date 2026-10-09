@@ -4,6 +4,7 @@ import * as api from './api';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { KanbanBoard } from './components/KanbanBoard';
+import { TriageView } from './components/TriageView';
 import { DigestView } from './components/DigestView';
 import { CardModal } from './components/CardModal';
 import { NewCardModal } from './components/NewCardModal';
@@ -20,14 +21,14 @@ function AppContent() {
   const [digest, setDigest] = useState<DigestData | null>(null);
 
   // Filters & Navigation
-  const [viewMode, setViewMode] = useState<'kanban' | 'digest'>(() => {
+  const [viewMode, setViewMode] = useState<'triage' | 'boards' | 'digest'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sparkkeep_default_view');
-      if (saved === 'kanban' || saved === 'digest') {
+      if (saved === 'triage' || saved === 'boards' || saved === 'digest') {
         return saved;
       }
     }
-    return 'kanban';
+    return 'boards';
   });
   const [horizon, setHorizon] = useState('short-term');
   const [status, setStatus] = useState('');
@@ -66,8 +67,8 @@ function AppContent() {
   const loadCards = useCallback(async () => {
     try {
       const data = await api.fetchCards({
-        horizon,
-        status,
+        horizon: viewMode === 'triage' ? undefined : horizon,
+        status: viewMode === 'triage' ? undefined : status,
         tag: selectedTag,
         q: query,
       });
@@ -75,7 +76,7 @@ function AppContent() {
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
-  }, [horizon, status, selectedTag, query, showToast]);
+  }, [horizon, status, selectedTag, query, showToast, viewMode]);
 
   const loadTags = useCallback(async () => {
     try {
@@ -263,11 +264,25 @@ function AppContent() {
         />
 
         <main className="content-area">
-          {viewMode === 'kanban' && (
+          {viewMode === 'triage' && (
+            <TriageView
+              cards={cards}
+              onUpdateCard={handleUpdateCard}
+              onResearch={handleResearch}
+              onRetry={handleRetry}
+              onOpenCardDetail={setSelectedCard}
+              onRefresh={reloadAll}
+              isPro={licenseStatus?.tier === 'pro'}
+              onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
+              showToast={showToast}
+            />
+          )}
+
+          {viewMode === 'boards' && (
             <KanbanBoard
               cards={cards}
               onSelectCard={setSelectedCard}
-              onStatusChange={handleStatusChange}
+              onUpdateCard={handleUpdateCard}
               onResearch={handleResearch}
               onRetry={handleRetry}
               isPro={licenseStatus?.tier === 'pro'}

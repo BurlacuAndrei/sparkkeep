@@ -982,7 +982,7 @@ func (r *Runner) stepVerdict(ctx context.Context, state *RunState) error {
 Recommendation must be exactly "pursue", "watch", or "skip".
 Confidence must be "high", "medium", or "low".
 Next actions must contain 3 to 5 concrete, actionable steps.
-Suggested horizon must be one of: "short-term", "medium-term", "long-term", "lifetime" (or omit if unsure).
+Suggested horizon must be one of: "short-term", "medium-term", "long-term" (or omit if unsure).
 
 Topic Context:
 Title: ` + state.Card.Title + "\n")

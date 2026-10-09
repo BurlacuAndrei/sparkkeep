@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Card, ResearchItem, Reference, ReferenceKind } from '../types';
-import { fetchCardResearch, getErrorMessage } from '../api';
+import { Card, ResearchItem, Reference, ReferenceKind, CardComment } from '../types';
+import { fetchCard, fetchCardResearch, addCardComment, getErrorMessage } from '../api';
 import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus, Link2, HelpCircle } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
 import { CARD_HORIZON_OPTIONS, CARD_STATUS_OPTIONS } from './selectOptions';
@@ -62,6 +62,8 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [completedActions, setCompletedActions] = useState<Record<number, boolean>>({});
   const [newAction, setNewAction] = useState('');
   const [research, setResearch] = useState<ResearchItem | null>(null);
+  const [comments, setComments] = useState<CardComment[]>(card?.comments || []);
+  const [newComment, setNewComment] = useState('');
 
   const cardId = card?.id;
   useEffect(() => {
@@ -72,10 +74,25 @@ export const CardModal: React.FC<CardModalProps> = ({
         if (alive) setResearch(r);
       })
       .catch((err: Error) => showToast?.(err.message));
+
+    fetchCard(cardId)
+      .then((c) => {
+        if (alive && c.comments) {
+          setComments(c.comments);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       alive = false;
     };
   }, [cardId, showToast]);
+
+  useEffect(() => {
+    if (card?.comments) {
+      setComments(card.comments);
+    }
+  }, [card?.comments]);
 
   if (!card) return null;
 
@@ -183,7 +200,7 @@ export const CardModal: React.FC<CardModalProps> = ({
       open_questions: openQuestions,
       executive_summary: executiveSummary || tldr,
       value_proposition: valueProposition || whyCare,
-      horizon: horizon as 'short-term' | 'medium-term' | 'long-term' | 'lifetime',
+      horizon: horizon as 'short-term' | 'medium-term' | 'long-term',
       status: status as any,
       source_note: note,
       tags: tagsInput.split(',').map((t) => t.trim()).filter(Boolean),
@@ -697,6 +714,46 @@ export const CardModal: React.FC<CardModalProps> = ({
               onChange={(e) => setNote(e.target.value)}
               placeholder="Captured context or raw note..."
             />
+          </div>
+
+          <div className="form-group">
+            <label>Comments</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              {comments.map((c) => (
+                <div key={c.id} style={{ background: 'var(--bg-surface-sunken)', padding: 10, borderRadius: 6, fontSize: 13 }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>
+                    {new Date(c.created_at).toLocaleString()}
+                  </div>
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{c.content}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <textarea
+                className="form-textarea"
+                rows={2}
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={async () => {
+                  if (!newComment.trim()) return;
+                  try {
+                    const c = await addCardComment(card.id, newComment);
+                    setComments((prev) => [...prev, c]);
+                    setNewComment('');
+                  } catch (err: unknown) {
+                    showToast?.(getErrorMessage(err));
+                  }
+                }}
+              >
+                Post
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>

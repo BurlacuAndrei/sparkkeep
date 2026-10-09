@@ -118,6 +118,12 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if !ok {
 		return port.Card{}, port.ErrNotFound
 	}
+	if p.Status != nil {
+		c.Status = *p.Status
+	}
+	if p.Horizon != nil {
+		c.Horizon = *p.Horizon
+	}
 	if p.Note != nil {
 		c.SourceNote = *p.Note
 	}
@@ -261,14 +267,14 @@ func TestSendCardNoProposedActions(t *testing.T) {
 			ID:              7,
 			Title:           "Watch the talk",
 			Summary:         "Plain summary.",
-			Horizon:         port.HorizonLifetime,
+			Horizon:         port.HorizonLongTerm,
 			ProposedActions: []string{"", "  "},
 		})
 		if err != nil {
 			t.Errorf("sendCard: %v", err)
 		}
 	})
-	want := "*Watch the talk*\n\nPlain summary.\n\n[lifetime]"
+	want := "*Watch the talk*\n\nPlain summary.\n\n[long-term]"
 	if sent != want {
 		t.Errorf("caption =\n%q\nwant\n%q", sent, want)
 	}
@@ -351,8 +357,8 @@ func TestDigestCommandSendsCountsWithoutCapturing(t *testing.T) {
 	st.cards = map[int64]port.Card{
 		1: {ID: 1, Title: "Inbox one", Status: port.StatusInbox, Horizon: port.HorizonShortTerm, CreatedAt: now.Add(-6 * 24 * time.Hour)},
 		2: {ID: 2, Title: "Inbox two", Status: port.StatusInbox, Horizon: port.HorizonShortTerm, CreatedAt: now.Add(-3 * 24 * time.Hour)},
-		3: {ID: 3, Title: "WIP talk", Status: port.StatusDoing, Horizon: port.HorizonShortTerm, CreatedAt: now.Add(-2 * 24 * time.Hour)},
-		4: {ID: 4, Title: "Finished book", Status: port.StatusDone, Horizon: port.HorizonLifetime, CreatedAt: now.Add(-time.Hour)},
+		3: {ID: 3, Title: "WIP talk", Status: port.StatusInProgress, Horizon: port.HorizonShortTerm, CreatedAt: now.Add(-2 * 24 * time.Hour)},
+		4: {ID: 4, Title: "Finished book", Status: port.StatusDone, Horizon: port.HorizonLongTerm, CreatedAt: now.Add(-time.Hour)},
 		5: {ID: 5, Title: "Old shelved", Status: port.StatusShelved, Horizon: port.HorizonShortTerm, CreatedAt: now.Add(-30 * 24 * time.Hour)},
 	}
 	st.nextCard = 5
@@ -373,7 +379,7 @@ func TestDigestCommandSendsCountsWithoutCapturing(t *testing.T) {
 	want := "📊 *Sparkkeep Weekly Digest*\nLast 7 days: 4 cards captured\n\n" +
 		"• 📥 Inbox: 2\n• ⚡ Doing: 1\n• ✅ Done: 1\n• 📦 Shelved: 0\n\n" +
 		"*Recent Sparks:*\n" +
-		"1. Finished book [lifetime]\n2. WIP talk [short-term]\n3. Inbox two [short-term]\n4. Inbox one [short-term]\n\n" +
+		"1. Finished book [long-term]\n2. WIP talk [short-term]\n3. Inbox two [short-term]\n4. Inbox one [short-term]\n\n" +
 		"Open dashboard: https://spark.example"
 	if sent[0] != want {
 		t.Errorf("digest =\n%q\nwant\n%q", sent[0], want)
@@ -724,34 +730,40 @@ func TestCardCaption_SafeTruncateLong(t *testing.T) {
 
 func TestCardButtons(t *testing.T) {
 	btns := cardButtons(42, false)
-	if len(btns) != 1 {
-		t.Fatalf("expected 1 row of buttons, got %d", len(btns))
+	if len(btns) != 3 {
+		t.Fatalf("expected 3 rows of buttons, got %d", len(btns))
 	}
-	if len(btns[0]) != 5 {
-		t.Fatalf("expected 5 buttons in row, got %d", len(btns[0]))
+	if len(btns[0]) != 2 || len(btns[1]) != 3 || len(btns[2]) != 2 {
+		t.Fatalf("unexpected button layout: %v", btns)
 	}
-	expected := []struct {
-		text string
-		data string
-	}{
-		{"🔬 Research", "42:research"},
-		{"▾", "42:pb_menu"},
-		{"⚡ Short", "42:horizon:short-term"},
-		{"⭐ Life", "42:horizon:lifetime"},
-		{"✕ Discard", "42:dismiss"},
+	if btns[0][0].Text != "🔬 Deep Research" || btns[0][0].CallbackData != "42:research" {
+		t.Errorf("button 0,0 mismatch: %+v", btns[0][0])
 	}
-	for i, exp := range expected {
-		if btns[0][i].Text != exp.text || btns[0][i].CallbackData != exp.data {
-			t.Errorf("button %d: got (%q, %q), want (%q, %q)", i, btns[0][i].Text, btns[0][i].CallbackData, exp.text, exp.data)
-		}
+	if btns[0][1].Text != "▾" || btns[0][1].CallbackData != "42:pb_menu" {
+		t.Errorf("button 0,1 mismatch: %+v", btns[0][1])
+	}
+	if btns[1][0].Text != "Inbox" || btns[1][0].CallbackData != "42:status:inbox" {
+		t.Errorf("button 1,0 mismatch: %+v", btns[1][0])
+	}
+	if btns[1][1].Text != "Short" || btns[1][1].CallbackData != "42:commit:short-term" {
+		t.Errorf("button 1,1 mismatch: %+v", btns[1][1])
+	}
+	if btns[1][2].Text != "Medium" || btns[1][2].CallbackData != "42:commit:medium-term" {
+		t.Errorf("button 1,2 mismatch: %+v", btns[1][2])
+	}
+	if btns[2][0].Text != "Long" || btns[2][0].CallbackData != "42:commit:long-term" {
+		t.Errorf("button 2,0 mismatch: %+v", btns[2][0])
+	}
+	if btns[2][1].Text != "✕ Discard" || btns[2][1].CallbackData != "42:dismiss" {
+		t.Errorf("button 2,1 mismatch: %+v", btns[2][1])
 	}
 
 	retryBtns := cardButtons(42, true)
-	if len(retryBtns[0]) != 6 {
-		t.Fatalf("expected 6 buttons with retry, got %d", len(retryBtns[0]))
+	if len(retryBtns[2]) != 3 {
+		t.Fatalf("expected 3 buttons in row 2 with retry, got %d", len(retryBtns[2]))
 	}
-	if retryBtns[0][5].Text != "Retry" || retryBtns[0][5].CallbackData != "42:retry" {
-		t.Errorf("unexpected retry button: %+v", retryBtns[0][5])
+	if retryBtns[2][2].Text != "Retry" || retryBtns[2][2].CallbackData != "42:retry" {
+		t.Errorf("unexpected retry button: %+v", retryBtns[2][2])
 	}
 }
 
@@ -854,8 +866,8 @@ func TestTelegramPlaybookPicker(t *testing.T) {
 		},
 	}
 	adapter.handleCallback(cbBack)
-	if len(editedKeyboard) != 1 || len(editedKeyboard[0]) != 5 {
-		t.Fatalf("expected restored card buttons with 5 buttons, got %v", editedKeyboard)
+	if len(editedKeyboard) != 3 {
+		t.Fatalf("expected restored card buttons with 3 rows, got %v", editedKeyboard)
 	}
 }
 
@@ -1087,5 +1099,110 @@ func TestShareIngestionAnalysisFailedEditsPlaceholder(t *testing.T) {
 	}
 	if !strings.Contains(editMessages[0], "Analysis failed") {
 		t.Errorf("edited message text = %q, want containing 'Analysis failed'", editMessages[0])
+	}
+}
+
+func TestHandleCallback_CommitAndTriageFunnel(t *testing.T) {
+	st := newStubStore()
+	c1, _ := st.CreateCard(context.Background(), port.Card{
+		Title:   "Remote Triage Spark",
+		Summary: "Testing remote telegram funnel commit",
+		Status:  port.StatusInbox,
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true,"result":true}`)
+	}))
+	defer srv.Close()
+
+	svc := stubService(t, st, llmStub(t, `[]`))
+	adapter := &Adapter{
+		Token:   "tok",
+		OwnerID: 100,
+		Store:   st,
+		Service: svc,
+		baseURL: srv.URL,
+	}
+
+	// 1. Commit to Short-Term -> status: to-do, horizon: short-term
+	adapter.handleCallback(&callbackQuery{
+		ID:   "cb_commit_short",
+		From: &user{ID: 100},
+		Data: fmt.Sprintf("%d:commit:short-term", c1.ID),
+		Message: &message{
+			MessageID: 55,
+			Chat:      &chat{ID: 100},
+			Text:      "Card message",
+		},
+	})
+
+	cAfterShort, _ := st.GetCard(context.Background(), c1.ID)
+	if cAfterShort.Status != port.StatusToDo || cAfterShort.Horizon != port.HorizonShortTerm {
+		t.Errorf("after commit short: status=%q, horizon=%q; want to-do and short-term", cAfterShort.Status, cAfterShort.Horizon)
+	}
+
+	// 2. Commit to Medium-Term -> status: to-do, horizon: medium-term
+	adapter.handleCallback(&callbackQuery{
+		ID:   "cb_commit_med",
+		From: &user{ID: 100},
+		Data: fmt.Sprintf("%d:commit:medium-term", c1.ID),
+		Message: &message{
+			MessageID: 55,
+			Chat:      &chat{ID: 100},
+			Text:      "Card message",
+		},
+	})
+	cAfterMed, _ := st.GetCard(context.Background(), c1.ID)
+	if cAfterMed.Status != port.StatusToDo || cAfterMed.Horizon != port.HorizonMediumTerm {
+		t.Errorf("after commit medium: status=%q, horizon=%q; want to-do and medium-term", cAfterMed.Status, cAfterMed.Horizon)
+	}
+
+	// 3. Commit to Long-Term -> status: to-do, horizon: long-term
+	adapter.handleCallback(&callbackQuery{
+		ID:   "cb_commit_long",
+		From: &user{ID: 100},
+		Data: fmt.Sprintf("%d:commit:long-term", c1.ID),
+		Message: &message{
+			MessageID: 55,
+			Chat:      &chat{ID: 100},
+			Text:      "Card message",
+		},
+	})
+	cAfterLong, _ := st.GetCard(context.Background(), c1.ID)
+	if cAfterLong.Status != port.StatusToDo || cAfterLong.Horizon != port.HorizonLongTerm {
+		t.Errorf("after commit long: status=%q, horizon=%q; want to-do and long-term", cAfterLong.Status, cAfterLong.Horizon)
+	}
+
+	// 4. Status back to Inbox -> status: inbox
+	adapter.handleCallback(&callbackQuery{
+		ID:   "cb_status_inbox",
+		From: &user{ID: 100},
+		Data: fmt.Sprintf("%d:status:inbox", c1.ID),
+		Message: &message{
+			MessageID: 55,
+			Chat:      &chat{ID: 100},
+			Text:      "Card message",
+		},
+	})
+	cAfterInbox, _ := st.GetCard(context.Background(), c1.ID)
+	if cAfterInbox.Status != port.StatusInbox {
+		t.Errorf("after status inbox: status=%q, want inbox", cAfterInbox.Status)
+	}
+
+	// 5. Dismiss -> status: dismissed
+	adapter.handleCallback(&callbackQuery{
+		ID:   "cb_dismiss",
+		From: &user{ID: 100},
+		Data: fmt.Sprintf("%d:dismiss", c1.ID),
+		Message: &message{
+			MessageID: 55,
+			Chat:      &chat{ID: 100},
+			Text:      "Card message",
+		},
+	})
+	cAfterDismiss, _ := st.GetCard(context.Background(), c1.ID)
+	if cAfterDismiss.Status != port.StatusDismissed {
+		t.Errorf("after dismiss: status=%q, want dismissed", cAfterDismiss.Status)
 	}
 }

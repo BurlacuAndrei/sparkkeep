@@ -318,6 +318,11 @@ func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 		return port.Card{}, err
 	}
 	c.References = refs
+	comments, err := s.ListCardComments(ctx, id)
+	if err != nil {
+		return port.Card{}, err
+	}
+	c.Comments = comments
 	return c, nil
 }
 
@@ -584,6 +589,43 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		refRows.Close()
 	}
 
+	commentsByCard := make(map[int64][]port.CardComment, len(cards))
+	for i := 0; i < len(cards); i += tagBatchSize {
+		end := i + tagBatchSize
+		if end > len(cards) {
+			end = len(cards)
+		}
+		chunk := cards[i:end]
+		cardIDs := make([]any, len(chunk))
+		placeholders := make([]string, len(chunk))
+		for j, c := range chunk {
+			cardIDs[j] = c.ID
+			placeholders[j] = "?"
+		}
+		comQuery := fmt.Sprintf(`SELECT id, card_id, content, created_at FROM card_comments WHERE card_id IN (%s) ORDER BY created_at ASC`, strings.Join(placeholders, ","))
+		comRows, err := s.db.QueryContext(ctx, comQuery, cardIDs...)
+		if err != nil {
+			return nil, err
+		}
+		for comRows.Next() {
+			var cid int64
+			var cc port.CardComment
+			var created string
+			if err := comRows.Scan(&cc.ID, &cid, &cc.Content, &created); err != nil {
+				comRows.Close()
+				return nil, err
+			}
+			cc.CardID = cid
+			cc.CreatedAt, _ = parseTime(created)
+			commentsByCard[cid] = append(commentsByCard[cid], cc)
+		}
+		if err := comRows.Err(); err != nil {
+			comRows.Close()
+			return nil, err
+		}
+		comRows.Close()
+	}
+
 	for i := range cards {
 		cards[i].Tags = tagsByCard[cards[i].ID]
 		refs := refsByCard[cards[i].ID]
@@ -591,6 +633,11 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 			refs = []port.Reference{}
 		}
 		cards[i].References = refs
+		comments := commentsByCard[cards[i].ID]
+		if comments == nil {
+			comments = []port.CardComment{}
+		}
+		cards[i].Comments = comments
 	}
 	return cards, nil
 }
@@ -741,12 +788,12 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 	return s.GetCard(ctx, id)
 }
 
-// ShelveStale shelves every inbox/doing card untouched for more than days in
+// ShelveStale shelves every inbox/to-do/in-progress card untouched for more than days in
 // one statement and returns the number of rows changed.
 func (s *Store) ShelveStale(ctx context.Context, days int) (int64, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE cards SET status = ?, updated_at = ? WHERE status IN (?, ?) AND updated_at < ?`,
-		port.StatusShelved, now(), port.StatusInbox, port.StatusDoing, staleCutoff(days))
+		`UPDATE cards SET status = ?, updated_at = ? WHERE status IN (?, ?, ?) AND updated_at < ?`,
+		port.StatusShelved, now(), port.StatusInbox, port.StatusToDo, port.StatusInProgress, staleCutoff(days))
 	if err != nil {
 		return 0, err
 	}
@@ -809,6 +856,49 @@ func (s *Store) ListTags(ctx context.Context) ([]port.Tag, error) {
 		tags = append(tags, t)
 	}
 	return tags, rows.Err()
+}
+
+func (s *Store) AddCardComment(ctx context.Context, cardID int64, content string) (port.CardComment, error) {
+	ts := now()
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO card_comments (card_id, content, created_at) VALUES (?, ?, ?)`,
+		cardID, content, ts)
+	if err != nil {
+		return port.CardComment{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return port.CardComment{}, err
+	}
+	c := port.CardComment{
+		ID:      id,
+		CardID:  cardID,
+		Content: content,
+	}
+	c.CreatedAt, _ = parseTime(ts)
+	return c, nil
+}
+
+func (s *Store) ListCardComments(ctx context.Context, cardID int64) ([]port.CardComment, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, content, created_at FROM card_comments WHERE card_id = ? ORDER BY created_at ASC`,
+		cardID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var comments []port.CardComment
+	for rows.Next() {
+		var c port.CardComment
+		var created string
+		if err := rows.Scan(&c.ID, &c.Content, &created); err != nil {
+			return nil, err
+		}
+		c.CardID = cardID
+		c.CreatedAt, _ = parseTime(created)
+		comments = append(comments, c)
+	}
+	return comments, rows.Err()
 }
 
 func (s *Store) CreateResearch(ctx context.Context, cardID int64, query string, playbookID ...*int64) (port.Research, error) {

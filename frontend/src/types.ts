@@ -36,13 +36,20 @@ export interface CardWorthiness {
   reason?: string;
 }
 
+export interface CardComment {
+  id: number;
+  card_id: number;
+  content: string;
+  created_at: string;
+}
+
 export interface Card {
   id: number;
   capture_id?: number | null;
   title: string;
   summary: string;
-  horizon: 'short-term' | 'medium-term' | 'long-term' | 'lifetime';
-  status: 'inbox' | 'researching' | 'review' | 'doing' | 'done' | 'shelved' | 'dismissed';
+  horizon: 'short-term' | 'medium-term' | 'long-term';
+  status: 'inbox' | 'researching' | 'review' | 'to-do' | 'in-progress' | 'done' | 'shelved' | 'dismissed';
   source_url: string;
   source_note: string;
   tags: string[];
@@ -64,6 +71,7 @@ export interface Card {
   suggested_tags?: string[];
   created_at: string;
   updated_at: string;
+  comments?: CardComment[];
 }
 
 export interface ClaimVerdict {

@@ -11,12 +11,12 @@ const (
 	HorizonShortTerm  = "short-term"
 	HorizonMediumTerm = "medium-term"
 	HorizonLongTerm   = "long-term"
-	HorizonLifetime   = "lifetime"
 
 	StatusInbox       = "inbox"
 	StatusResearching = "researching"
 	StatusReview      = "review"
-	StatusDoing       = "doing"
+	StatusToDo        = "to-do"
+	StatusInProgress  = "in-progress"
 	StatusDone        = "done"
 	StatusShelved     = "shelved"
 	StatusDismissed   = "dismissed"
@@ -40,11 +40,11 @@ const (
 )
 
 func ValidHorizon(h string) bool {
-	return h == HorizonShortTerm || h == HorizonMediumTerm || h == HorizonLongTerm || h == HorizonLifetime
+	return h == HorizonShortTerm || h == HorizonMediumTerm || h == HorizonLongTerm
 }
 
 func ValidStatus(s string) bool {
-	return s == StatusInbox || s == StatusResearching || s == StatusReview || s == StatusDoing || s == StatusDone || s == StatusShelved || s == StatusDismissed
+	return s == StatusInbox || s == StatusResearching || s == StatusReview || s == StatusToDo || s == StatusInProgress || s == StatusDone || s == StatusShelved || s == StatusDismissed
 }
 
 func ValidReferenceKind(k string) bool {
@@ -75,33 +75,41 @@ type Worthiness struct {
 }
 
 type Card struct {
-	ID                 int64       `json:"id"`
-	CaptureID          *int64      `json:"capture_id,omitempty"`
-	Title              string      `json:"title"`
-	Summary            string      `json:"summary"`
-	Horizon            string      `json:"horizon"`
-	Status             string      `json:"status"`
-	SourceURL          string      `json:"source_url"`
-	SourceNote         string      `json:"source_note"`
-	Tags               []string    `json:"tags"`
-	References         []Reference `json:"references"`
-	Type               string      `json:"type"`
-	TLDR               string      `json:"tldr"`
-	WhyCare            string      `json:"why_care"`
-	Claims             []string    `json:"claims"`
-	OpenQuestions      []string    `json:"open_questions"`
-	Signals            Signals     `json:"signals"`
-	Worthiness         Worthiness  `json:"worthiness"`
-	ExecutiveSummary   string      `json:"executive_summary"`
-	ValueProposition   string      `json:"value_proposition"`
-	ProposedActions    []string    `json:"proposed_actions"`
-	ActionsSource      string      `json:"actions_source"`
-	ResearchVerdict    string      `json:"research_verdict,omitempty"`
-	ResearchConfidence string      `json:"research_confidence,omitempty"`
-	SuggestedHorizon   string      `json:"suggested_horizon,omitempty"`
-	SuggestedTags      []string    `json:"suggested_tags,omitempty"`
-	CreatedAt          time.Time   `json:"created_at"`
-	UpdatedAt          time.Time   `json:"updated_at"`
+	ID                 int64         `json:"id"`
+	CaptureID          *int64        `json:"capture_id,omitempty"`
+	Title              string        `json:"title"`
+	Summary            string        `json:"summary"`
+	Horizon            string        `json:"horizon"`
+	Status             string        `json:"status"`
+	SourceURL          string        `json:"source_url"`
+	SourceNote         string        `json:"source_note"`
+	Tags               []string      `json:"tags"`
+	References         []Reference   `json:"references"`
+	Type               string        `json:"type"`
+	TLDR               string        `json:"tldr"`
+	WhyCare            string        `json:"why_care"`
+	Claims             []string      `json:"claims"`
+	OpenQuestions      []string      `json:"open_questions"`
+	Signals            Signals       `json:"signals"`
+	Worthiness         Worthiness    `json:"worthiness"`
+	ExecutiveSummary   string        `json:"executive_summary"`
+	ValueProposition   string        `json:"value_proposition"`
+	ProposedActions    []string      `json:"proposed_actions"`
+	ActionsSource      string        `json:"actions_source"`
+	ResearchVerdict    string        `json:"research_verdict,omitempty"`
+	ResearchConfidence string        `json:"research_confidence,omitempty"`
+	SuggestedHorizon   string        `json:"suggested_horizon,omitempty"`
+	SuggestedTags      []string      `json:"suggested_tags,omitempty"`
+	CreatedAt          time.Time     `json:"created_at"`
+	UpdatedAt          time.Time     `json:"updated_at"`
+	Comments           []CardComment `json:"comments,omitempty"`
+}
+
+type CardComment struct {
+	ID        int64     `json:"id"`
+	CardID    int64     `json:"card_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Capture struct {

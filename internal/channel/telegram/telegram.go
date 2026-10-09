@@ -50,6 +50,7 @@ type Adapter struct {
 	DigestPushEnabled bool
 	DigestPushDay     time.Weekday
 	DigestPushHour    int
+	BaseURL           string // optional: httptest server in tests or custom proxy, else apiBase
 
 	baseURL string          // unexported: httptest server in tests, else apiBase
 	httpc   *http.Client    // unexported: default client unless tests override
@@ -487,17 +488,21 @@ func (a *Adapter) sendFailed(ctx context.Context, c port.Card) error {
 func cardButtons(id int64, retry bool) [][]button {
 	btns := [][]button{
 		{
-			{Text: "🔬 Research", CallbackData: fmt.Sprintf("%d:research", id)},
+			{Text: "🔬 Deep Research", CallbackData: fmt.Sprintf("%d:research", id)},
 			{Text: "▾", CallbackData: fmt.Sprintf("%d:pb_menu", id)},
 		},
 		{
-			{Text: "⚡ Short", CallbackData: fmt.Sprintf("%d:horizon:short-term", id)},
-			{Text: "⭐ Life", CallbackData: fmt.Sprintf("%d:horizon:lifetime", id)},
+			{Text: "Inbox", CallbackData: fmt.Sprintf("%d:status:inbox", id)},
+			{Text: "Short", CallbackData: fmt.Sprintf("%d:commit:short-term", id)},
+			{Text: "Medium", CallbackData: fmt.Sprintf("%d:commit:medium-term", id)},
+		},
+		{
+			{Text: "Long", CallbackData: fmt.Sprintf("%d:commit:long-term", id)},
 			{Text: "✕ Discard", CallbackData: fmt.Sprintf("%d:dismiss", id)},
 		},
 	}
 	if retry {
-		btns[1] = append(btns[1], button{Text: "Retry", CallbackData: fmt.Sprintf("%d:retry", id)})
+		btns[2] = append(btns[2], button{Text: "Retry", CallbackData: fmt.Sprintf("%d:retry", id)})
 	}
 	return btns
 }
@@ -520,12 +525,24 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 		buttons = cardButtons(cardID, false)
 	}
 
+	card := n.Card
+	if card.ID == 0 && cardID != 0 && a.Store != nil {
+		if c, err := a.Store.GetCard(ctx, cardID); err == nil {
+			card = c
+		}
+	}
+
 	var b strings.Builder
 	if n.Kind == "research_done" {
 		if n.Res != nil && n.Res.Result != nil && n.Res.Result.Verdict != nil && n.Res.Result.Verdict.Recommendation != "" {
 			verd := n.Res.Result.Verdict
 			rec := strings.ToUpper(verd.Recommendation[:1]) + strings.ToLower(verd.Recommendation[1:])
 			fmt.Fprintf(&b, "🔬 *Research Complete*\n*Verdict:* %s · *Confidence:* %s", rec, verd.Confidence)
+			if card.ExecutiveSummary != "" {
+				b.WriteString("\n\n" + card.ExecutiveSummary)
+			} else if card.TLDR != "" {
+				b.WriteString("\n\n" + card.TLDR)
+			}
 			if len(verd.NextActions) > 0 {
 				b.WriteString("\n\n*Next actions:*")
 				limit := 3
@@ -821,7 +838,7 @@ func (a *Adapter) sendDigest(ctx context.Context) {
 		}
 		recent = append(recent, c)
 		switch c.Status {
-		case port.StatusDoing:
+		case port.StatusInProgress, port.StatusToDo:
 			doing++
 		case port.StatusDone:
 			done++
@@ -1103,20 +1120,22 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	switch {
-	case action == "doing":
-		a.setStatus(ctx, id, port.StatusDoing, cb)
-	case action == "done":
-		a.setStatus(ctx, id, port.StatusDone, cb)
-	case action == "shelve":
-		a.setStatus(ctx, id, port.StatusShelved, cb)
 	case action == "dismiss":
 		a.setStatus(ctx, id, port.StatusDismissed, cb)
-	case strings.HasPrefix(action, "horizon:"):
-		horizon := strings.TrimPrefix(action, "horizon:")
-		if _, err := a.Store.UpdateCard(ctx, id, port.CardPatch{Horizon: &horizon}); err != nil {
-			a.logf("telegram: UpdateCard horizon (%d, %s): %v", id, horizon, err)
+	case strings.HasPrefix(action, "status:"):
+		status := strings.TrimPrefix(action, "status:")
+		a.setStatus(ctx, id, status, cb)
+	case strings.HasPrefix(action, "commit:"):
+		horizon := strings.TrimPrefix(action, "commit:")
+		status := port.StatusToDo
+		if _, err := a.Store.UpdateCard(ctx, id, port.CardPatch{Status: &status, Horizon: &horizon}); err != nil {
+			a.logf("telegram: UpdateCard commit (%d, %s): %v", id, horizon, err)
 		}
-		a.ackCallback(cb.ID, "Horizon updated to "+horizon)
+		a.ackCallback(cb.ID, "Committed to "+horizon)
+		// Optionally edit the message to remove buttons or show updated status
+		if cb.Message != nil {
+			_ = a.editMessageText(ctx, cb.Message.Chat.ID, cb.Message.MessageID, cb.Message.Text, id, nil)
+		}
 	case action == "retry":
 		a.ackCallback(cb.ID, "")
 		if _, err := a.Service.Retry(ctx, id); err != nil {
@@ -1221,10 +1240,10 @@ func (a *Adapter) setStatus(ctx context.Context, id int64, status string, cb *ca
 		a.logf("telegram: UpdateCard(%d, %s): %v", id, status, err)
 	}
 	a.ackCallback(cb.ID, "")
-	if (status == port.StatusDoing || status == port.StatusDone || status == port.StatusDismissed) && cb.Message != nil && cb.Message.MessageID != 0 && cb.Message.Chat != nil {
+	if (status == port.StatusInProgress || status == port.StatusDone || status == port.StatusDismissed) && cb.Message != nil && cb.Message.MessageID != 0 && cb.Message.Chat != nil {
 		a.editReplyMarkup(ctx, cb.Message.Chat.ID, cb.Message.MessageID)
 	}
-	if status == port.StatusDoing || status == port.StatusDone {
+	if status == port.StatusDone {
 		if card, gerr := a.Store.GetCard(ctx, id); gerr == nil {
 			if nerr := a.Notify(ctx, port.Notification{Kind: "done", Card: card}); nerr != nil {
 				a.logf("telegram: notify done: %v", nerr)
@@ -1278,7 +1297,7 @@ func (a *Adapter) handleReaction(r *messageReaction) {
 	for _, re := range r.NewReaction {
 		switch re.Emoji {
 		case "⭐":
-			horizon = port.HorizonLifetime
+			horizon = port.HorizonLongTerm
 		case "⚡":
 			horizon = port.HorizonShortTerm
 		}
@@ -1373,6 +1392,9 @@ func (a *Adapter) writeOffset(offset int64) {
 // --- plumbing ----------------------------------------------------------------
 
 func (a *Adapter) apiBase() string {
+	if a.BaseURL != "" {
+		return a.BaseURL
+	}
 	if a.baseURL != "" {
 		return a.baseURL
 	}

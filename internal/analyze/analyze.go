@@ -486,7 +486,7 @@ func normalizeHorizon(raw string) string {
 	case "long term", "longterm", "long":
 		return port.HorizonLongTerm
 	case "lifetime", "life time", "bucket", "bucket list", "bucketlist", "someday":
-		return port.HorizonLifetime
+		return port.HorizonLongTerm
 	default:
 		slog.Debug("analyze: unknown or empty horizon, defaulting to short-term", "horizon", raw)
 		return port.HorizonShortTerm
@@ -552,7 +552,7 @@ Return ONLY a valid JSON object matching this schema:
       "type": "tool|repo|article|idea|claim|tutorial|product|other",
       "tldr": "1 sentence summarizing what this is",
       "why_care": "1-2 sentences on why it matters or is worth investigating",
-      "horizon": "short-term|medium-term|long-term|lifetime",
+      "horizon": "short-term|medium-term|long-term",
       "tags": ["lowercase tags, max 5"],
       "claims": ["up to 3 concrete assertions or takeaways from the source"],
       "open_questions": ["up to 3 questions deep-dive research should answer"],
@@ -580,7 +580,7 @@ Return ONLY a valid JSON object matching this schema:
 Rules:
 - Each card MUST have distinct, specific "tldr" and "why_care" reflecting that individual idea (no generic shared text).
 - "type" must be one of: tool, repo, article, idea, claim, tutorial, product, other.
-- "horizon" must be "short-term" (actionable now/soon), "medium-term" (planned), "long-term" (vision), or "lifetime" (bucket item).
+- "horizon" must be "short-term" (actionable now/soon), "medium-term" (planned), or "long-term" (vision).
 - "claims": up to 3 core claims or assertions made by the source.
 - "open_questions": up to 3 key questions research would need to answer.
 - "signals":
