@@ -331,12 +331,19 @@ func placeholderLabel(share capture.Share, m *message) string {
 // and returns the bot message id. cardID>0 records message_id→card so the
 // "reaction on a card message" refinement can find the card.
 func (a *Adapter) sendMessage(ctx context.Context, text string, cardID int64, buttons [][]button) (int64, error) {
+	return a.sendMessageReply(ctx, text, 0, cardID, buttons)
+}
+
+func (a *Adapter) sendMessageReply(ctx context.Context, text string, replyTo int64, cardID int64, buttons [][]button) (int64, error) {
 	chatID := a.targetChatID(ctx)
 
 	msg := map[string]any{
 		"chat_id":    chatID,
 		"text":       text,
 		"parse_mode": "Markdown",
+	}
+	if replyTo > 0 {
+		msg["reply_to_message_id"] = replyTo
 	}
 	if len(buttons) > 0 {
 		msg["reply_markup"] = map[string]any{"inline_keyboard": buttons}
@@ -478,15 +485,19 @@ func (a *Adapter) sendFailed(ctx context.Context, c port.Card) error {
 }
 
 func cardButtons(id int64, retry bool) [][]button {
-	btns := [][]button{{
-		{Text: "🔬 Research", CallbackData: fmt.Sprintf("%d:research", id)},
-		{Text: "▾", CallbackData: fmt.Sprintf("%d:pb_menu", id)},
-		{Text: "⚡ Short", CallbackData: fmt.Sprintf("%d:horizon:short-term", id)},
-		{Text: "⭐ Life", CallbackData: fmt.Sprintf("%d:horizon:lifetime", id)},
-		{Text: "✕ Discard", CallbackData: fmt.Sprintf("%d:dismiss", id)},
-	}}
+	btns := [][]button{
+		{
+			{Text: "🔬 Research", CallbackData: fmt.Sprintf("%d:research", id)},
+			{Text: "▾", CallbackData: fmt.Sprintf("%d:pb_menu", id)},
+		},
+		{
+			{Text: "⚡ Short", CallbackData: fmt.Sprintf("%d:horizon:short-term", id)},
+			{Text: "⭐ Life", CallbackData: fmt.Sprintf("%d:horizon:lifetime", id)},
+			{Text: "✕ Discard", CallbackData: fmt.Sprintf("%d:dismiss", id)},
+		},
+	}
 	if retry {
-		btns[0] = append(btns[0], button{Text: "Retry", CallbackData: fmt.Sprintf("%d:retry", id)})
+		btns[1] = append(btns[1], button{Text: "Retry", CallbackData: fmt.Sprintf("%d:retry", id)})
 	}
 	return btns
 }
@@ -736,7 +747,7 @@ func (a *Adapter) handleMessage(m *message) {
 	} else {
 		placeholderText = "📥 Processing..."
 	}
-	placeholderMsgID, err := a.sendMessage(ctx, placeholderText, 0, nil)
+	placeholderMsgID, err := a.sendMessageReply(ctx, placeholderText, m.MessageID, 0, nil)
 	if err != nil {
 		a.logf("telegram: send placeholder: %v", err)
 	}
