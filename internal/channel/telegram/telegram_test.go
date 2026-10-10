@@ -184,6 +184,10 @@ func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, er
 	return false, nil
 }
 
+func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string, playbookID ...*int64) (port.Research, error) {
+	return port.Research{ID: 1, CardID: cardID, Status: "queued"}, nil
+}
+
 // stubTelegram points the adapter built by build at a stub Telegram API
 // server, runs fn against it and returns the text of every message it posted.
 func stubTelegram(t *testing.T, build func() *Adapter, fn func(a *Adapter)) []string {
@@ -1204,5 +1208,58 @@ func TestHandleCallback_CommitAndTriageFunnel(t *testing.T) {
 	cAfterDismiss, _ := st.GetCard(context.Background(), c1.ID)
 	if cAfterDismiss.Status != port.StatusDismissed {
 		t.Errorf("after dismiss: status=%q, want dismissed", cAfterDismiss.Status)
+	}
+}
+
+func TestTelegramResearchCallbackTracksAndCleansMessage(t *testing.T) {
+	st := newStubStore()
+	c, _ := st.CreateCard(context.Background(), port.Card{Title: "Card for research test", Status: port.StatusInbox})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true,"result":{"message_id":999}}`)
+	}))
+	defer ts.Close()
+
+	svc := stubService(t, st, llmStub(t, `[]`))
+
+	a := &Adapter{
+		Token:   "dummy",
+		OwnerID: 100,
+		baseURL: ts.URL,
+		Service: svc,
+		Store:   st,
+		Logf:    t.Logf,
+	}
+
+	// 1. Simulate user clicking Deep Research
+	a.handleCallback(&callbackQuery{
+		ID:   "cb1",
+		From: &user{ID: 100},
+		Data: fmt.Sprintf("%d:research", c.ID),
+		Message: &message{
+			MessageID: 555,
+			Chat:      &chat{ID: 100},
+			Text:      "Card message",
+		},
+	})
+
+	// Check that research message was tracked
+	if ref, ok := a.popResearchMessage(c.ID); !ok || ref.chatID != 100 || ref.msgID != 555 {
+		t.Errorf("expected research message to be tracked for card %d, got ok=%v, ref=%+v", c.ID, ok, ref)
+	}
+
+	// Re-track for notify test
+	a.trackResearchMessage(c.ID, 100, 555)
+
+	// 2. Notify research_done
+	_ = a.Notify(context.Background(), port.Notification{
+		Kind: "research_done",
+		Res:  &port.Research{ID: 1, CardID: c.ID, Status: "done"},
+		Card: c,
+	})
+
+	// Verify the original message was popped
+	if _, ok := a.popResearchMessage(c.ID); ok {
+		t.Errorf("expected research message to be popped after notify")
 	}
 }

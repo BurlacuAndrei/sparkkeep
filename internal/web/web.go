@@ -206,6 +206,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/v1/cards", a.createCard)
 	mux.HandleFunc("GET /api/v1/cards/{id}", a.getCard)
 	mux.HandleFunc("PATCH /api/v1/cards/{id}", a.patchCard)
+	mux.HandleFunc("DELETE /api/v1/cards/{id}", a.deleteCard)
 	mux.HandleFunc("POST /api/v1/cards/{id}/comments", a.createCardComment)
 	mux.HandleFunc("POST /api/v1/cards/{id}/retry", a.retryCard)
 	mux.HandleFunc("POST /api/v1/cards/batch-shelve-stale", a.batchShelveStale)
@@ -1271,6 +1272,19 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": card})
 }
 
+func (a *api) deleteCard(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	if err := a.store.DeleteCard(r.Context(), id); err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (a *api) createCardComment(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -1517,7 +1531,7 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 			pb = research.DefaultLitePlaybook()
 		}
 	}
-	a.svc.GoResearch(r.Context(), b.CardID, &pb.ID)
+	a.svc.GoResearch(context.WithoutCancel(r.Context()), b.CardID, &pb.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":       true,
 		"accepted": true,

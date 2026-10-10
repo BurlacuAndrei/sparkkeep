@@ -131,6 +131,14 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	return c, nil
 }
 
+func (s *stubStore) DeleteCard(_ context.Context, id int64) error {
+	if _, ok := s.cards[id]; !ok {
+		return port.ErrNotFound
+	}
+	delete(s.cards, id)
+	return nil
+}
+
 func (s *stubStore) CreateCapture(_ context.Context, c port.Capture) (port.Capture, error) {
 	if c.SourceURL != "" {
 		for _, existing := range s.captures {
@@ -1856,6 +1864,42 @@ func TestGoResearch(t *testing.T) {
 	resRow := st.researches[1]
 	if resRow.Status != "done" {
 		t.Fatalf("status = %q, want done", resRow.Status)
+	}
+}
+
+func TestGoResearchDetachesTransientContext(t *testing.T) {
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "source text here")
+	}))
+	defer src.Close()
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"results":[{"url":%q}]}`, src.URL)
+	}))
+	defer search.Close()
+	llm := researchLLM()
+	defer llm.Close()
+
+	st := newStubStore()
+	c, _ := st.CreateCard(context.Background(), port.Card{Title: "Card for GoResearch with transient cancel"})
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	r := research.New(config.Config{SearchURL: search.URL}, analyzeClient(llm))
+	r.Timeout = 5 * time.Second
+	s.Runner = r
+
+	// Simulate a transient request context that is cancelled immediately upon returning
+	ctx, cancel := context.WithCancel(context.Background())
+	s.GoResearch(ctx, c.ID)
+	cancel() // Cancelled immediately!
+
+	s.WG.Wait()
+
+	if len(st.researches) != 1 {
+		t.Fatalf("expected 1 research row, got %d", len(st.researches))
+	}
+	resRow := st.researches[1]
+	if resRow.Status != "done" {
+		t.Fatalf("status = %q, want done, got %q (err: %s)", resRow.Status, resRow.Status, resRow.Error)
 	}
 }
 

@@ -82,10 +82,13 @@ function AppContent() {
     try {
       const data = await api.fetchTags();
       setTags(data);
+      if (selectedTag && !data.some((t) => t.name === selectedTag)) {
+        setSelectedTag('');
+      }
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
-  }, [showToast]);
+  }, [showToast, selectedTag]);
 
   const loadDigest = useCallback(async () => {
     try {
@@ -137,6 +140,17 @@ function AppContent() {
       loadCards();
     }
   }, [viewMode, loadCards, loadDigest]);
+
+  // Periodic poll to keep UI in sync with Telegram actions and background research
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (viewMode === 'triage' || viewMode === 'boards') {
+        loadCards();
+      }
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [viewMode, loadCards]);
 
   // The share-sheet POST redirects back to here with ?captured=true: confirm
   // the capture and refresh so the new card is on screen. The query is scrubbed
@@ -205,6 +219,18 @@ function AppContent() {
     }
   };
 
+  // Delete Card
+  const handleDeleteCard = async (id: number) => {
+    try {
+      await api.deleteCard(id);
+      showToast(`Deleted card #${id}`);
+      setSelectedCard(null);
+      reloadAll();
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
+    }
+  };
+
   // Unlock: exchange the typed token for the server's cookie, then reload.
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,6 +261,7 @@ function AppContent() {
         onResearch: handleResearch,
         onRetry: handleRetry,
         onUpdateCard: handleUpdateCard,
+        onDeleteCard: handleDeleteCard,
         showToast,
       }}
     >
@@ -311,6 +338,7 @@ function AppContent() {
           card={selectedCard}
           onClose={() => setSelectedCard(null)}
           onUpdate={handleUpdateCard}
+          onDelete={handleDeleteCard}
           onResearch={handleResearch}
           onRetry={handleRetry}
           showToast={showToast}

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, ResearchItem, Reference, ReferenceKind, CardComment } from '../types';
 import { fetchCard, fetchCardResearch, addCardComment, getErrorMessage } from '../api';
-import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, ListPlus, Link2, HelpCircle } from 'lucide-react';
+import { X, Sparkles, ExternalLink, RefreshCw, Save, FileText, Lightbulb, CheckCircle2, ClipboardCopy, CheckSquare, Trash2, Plus, FileSearch, Link2, HelpCircle } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
 import { CARD_HORIZON_OPTIONS, CARD_STATUS_OPTIONS } from './selectOptions';
 import { ResearchReportView } from './ResearchReportView';
@@ -10,6 +10,7 @@ interface CardModalProps {
   card: Card | null;
   onClose: () => void;
   onUpdate: (id: number, patch: Partial<Card>) => void;
+  onDelete?: (id: number) => void;
   onResearch: (id: number) => void;
   onRetry: (id: number) => void;
   showToast?: (msg: string) => void;
@@ -36,6 +37,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   card,
   onClose,
   onUpdate,
+  onDelete,
   onResearch,
   onRetry,
   showToast,
@@ -787,6 +789,23 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <CheckSquare size={13} strokeWidth={1.5} color="#e879f9" />
                 <span>Add to Todoist</span>
               </button>
+
+              {onDelete && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ color: '#f87171', borderColor: 'rgba(248, 113, 113, 0.3)' }}
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete card #${card.id} ("${card.title || 'Untitled'}")? This action cannot be undone.`)) {
+                      onDelete(card.id);
+                    }
+                  }}
+                  title="Delete card permanently"
+                >
+                  <Trash2 size={13} strokeWidth={1.5} color="#f87171" />
+                  <span>Delete Card</span>
+                </button>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>

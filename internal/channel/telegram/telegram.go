@@ -54,10 +54,11 @@ type Adapter struct {
 
 	baseURL string          // unexported: httptest server in tests, else apiBase
 	httpc   *http.Client    // unexported: default client unless tests override
-	msgCard map[int64]int64 // bot message_id → card_id, for reactions
-	msgMu   sync.Mutex
-	offsetP string        // unexported: offset file override for tests
-	sem     chan struct{} // concurrency limiter
+	msgCard      map[int64]int64  // bot message_id → card_id, for reactions
+	researchMsgs map[int64]msgRef // card_id → original message, for restoring buttons
+	msgMu        sync.Mutex
+	offsetP      string        // unexported: offset file override for tests
+	sem          chan struct{} // concurrency limiter
 
 	lastDigestSent string     // "2006-01-02" of the last scheduled digest
 	digestMu       sync.Mutex // guards lastDigestSent
@@ -214,6 +215,30 @@ func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
 type button struct {
 	Text         string `json:"text"`
 	CallbackData string `json:"callback_data,omitempty"`
+}
+
+type msgRef struct {
+	chatID int64
+	msgID  int64
+}
+
+func (a *Adapter) trackResearchMessage(cardID, chatID, msgID int64) {
+	a.msgMu.Lock()
+	defer a.msgMu.Unlock()
+	if a.researchMsgs == nil {
+		a.researchMsgs = make(map[int64]msgRef)
+	}
+	a.researchMsgs[cardID] = msgRef{chatID: chatID, msgID: msgID}
+}
+
+func (a *Adapter) popResearchMessage(cardID int64) (msgRef, bool) {
+	a.msgMu.Lock()
+	defer a.msgMu.Unlock()
+	ref, ok := a.researchMsgs[cardID]
+	if ok {
+		delete(a.researchMsgs, cardID)
+	}
+	return ref, ok
 }
 
 // call POSTs a JSON body to a bot method and returns the result payload; a
@@ -591,6 +616,14 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 
 	b.WriteString("\n\n" + link)
 	_, err := a.sendMessage(ctx, b.String(), cardID, buttons)
+	if orig, ok := a.popResearchMessage(cardID); ok {
+		if n.Kind == "research_failed" {
+			isFailed := card.Title == "Analysis failed" || strings.Contains(card.Title, "failed")
+			a.editReplyMarkupWithButtons(ctx, orig.chatID, orig.msgID, cardButtons(cardID, isFailed))
+		} else {
+			a.editReplyMarkup(ctx, orig.chatID, orig.msgID)
+		}
+	}
 	return err
 }
 
@@ -1216,8 +1249,9 @@ func (a *Adapter) handleResearchCallback(ctx context.Context, cardID int64, acti
 	a.ackCallback(cb.ID, "")
 	if cb.Message != nil && cb.Message.Chat != nil {
 		a.editReplyMarkupWithButtons(ctx, cb.Message.Chat.ID, cb.Message.MessageID, [][]button{{{Text: "⏳ Researching...", CallbackData: "ignore"}}})
+		a.trackResearchMessage(cardID, cb.Message.Chat.ID, cb.Message.MessageID)
 	}
-	a.Service.GoResearch(ctx, cardID, explicitPID)
+	a.Service.GoResearch(context.WithoutCancel(ctx), cardID, explicitPID)
 }
 
 func parseCallback(data string) (id int64, action string, ok bool) {

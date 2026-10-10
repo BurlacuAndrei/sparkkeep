@@ -24,12 +24,14 @@ var AllRoles = []string{
 }
 
 // DefaultTokenCaps defines default per-call token limits for each role.
-// Triage: 1024, Vision: 512, Plan: 1024, Synthesis: 4096.
+// Triage: 4096, Vision: 1024, Plan: 4096, Synthesis: 8192.
+// These caps provide adequate headroom for reasoning models whose thinking tokens
+// count towards total max_tokens before producing JSON output.
 var DefaultTokenCaps = map[string]int{
-	RoleTriage:            1024,
-	RoleVision:            512,
-	RoleResearchPlan:      1024,
-	RoleResearchSynthesis: 4096,
+	RoleTriage:            4096,
+	RoleVision:            1024,
+	RoleResearchPlan:      4096,
+	RoleResearchSynthesis: 8192,
 }
 
 // Profile represents a configured LLM endpoint and model.

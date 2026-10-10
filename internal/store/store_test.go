@@ -329,6 +329,106 @@ func TestListTagsCounts(t *testing.T) {
 	}
 }
 
+func TestListTagsExcludesDismissedCards(t *testing.T) {
+	s, ctx := newTestStore(t)
+	c1, err := s.CreateCard(ctx, port.Card{Title: "Card 1"})
+	if err != nil {
+		t.Fatalf("CreateCard 1: %v", err)
+	}
+	c2, err := s.CreateCard(ctx, port.Card{Title: "Card 2"})
+	if err != nil {
+		t.Fatalf("CreateCard 2: %v", err)
+	}
+	if err := s.SetCardTags(ctx, c1.ID, []string{"ai", "tech"}); err != nil {
+		t.Fatalf("SetCardTags c1: %v", err)
+	}
+	if err := s.SetCardTags(ctx, c2.ID, []string{"ai"}); err != nil {
+		t.Fatalf("SetCardTags c2: %v", err)
+	}
+
+	tags, err := s.ListTags(ctx)
+	if err != nil {
+		t.Fatalf("ListTags: %v", err)
+	}
+	if len(tags) != 2 || tags[0].Name != "ai" || tags[0].Count != 2 || tags[1].Name != "tech" || tags[1].Count != 1 {
+		t.Fatalf("unexpected tags: %+v", tags)
+	}
+
+	// Discard card 1 (status = dismissed)
+	dismissed := port.StatusDismissed
+	if _, err := s.UpdateCard(ctx, c1.ID, port.CardPatch{Status: &dismissed}); err != nil {
+		t.Fatalf("dismiss c1: %v", err)
+	}
+
+	// Now "ai" has 1 remaining card (c2), and "tech" has 0 remaining cards so it should not appear
+	tags, err = s.ListTags(ctx)
+	if err != nil {
+		t.Fatalf("ListTags after dismissing c1: %v", err)
+	}
+	if len(tags) != 1 || tags[0].Name != "ai" || tags[0].Count != 1 {
+		t.Fatalf("expected only ai (1), got: %+v", tags)
+	}
+
+	// Discard card 2
+	if _, err := s.UpdateCard(ctx, c2.ID, port.CardPatch{Status: &dismissed}); err != nil {
+		t.Fatalf("dismiss c2: %v", err)
+	}
+
+	// All cards discarded -> 0 active tags
+	tags, err = s.ListTags(ctx)
+	if err != nil {
+		t.Fatalf("ListTags after dismissing all: %v", err)
+	}
+	if len(tags) != 0 {
+		t.Fatalf("expected 0 tags after dismissing all, got %+v", tags)
+	}
+}
+
+func TestDeleteCard(t *testing.T) {
+	s, ctx := newTestStore(t)
+	c, err := s.CreateCard(ctx, port.Card{Title: "To Delete"})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+	if err := s.SetCardTags(ctx, c.ID, []string{"delete-me"}); err != nil {
+		t.Fatalf("SetCardTags: %v", err)
+	}
+	if _, err := s.AddCardComment(ctx, c.ID, "A comment"); err != nil {
+		t.Fatalf("AddCardComment: %v", err)
+	}
+
+	tags, err := s.ListTags(ctx)
+	if err != nil || len(tags) != 1 || tags[0].Name != "delete-me" || tags[0].Count != 1 {
+		t.Fatalf("unexpected tags before delete: %+v", tags)
+	}
+
+	if err := s.DeleteCard(ctx, c.ID); err != nil {
+		t.Fatalf("DeleteCard: %v", err)
+	}
+
+	// Card should no longer exist
+	if _, err := s.GetCard(ctx, c.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for deleted card, got %v", err)
+	}
+
+	// Comments should be deleted
+	comments, err := s.ListCardComments(ctx, c.ID)
+	if err != nil || len(comments) != 0 {
+		t.Fatalf("expected no comments for deleted card, got %v, err=%v", comments, err)
+	}
+
+	// Tags should be pruned
+	tags, err = s.ListTags(ctx)
+	if err != nil || len(tags) != 0 {
+		t.Fatalf("expected 0 tags after delete, got %+v", tags)
+	}
+
+	// Deleting again should return ErrNotFound
+	if err := s.DeleteCard(ctx, c.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on second delete, got %v", err)
+	}
+}
+
 func TestResearchCRUD(t *testing.T) {
 	s, ctx := newTestStore(t)
 	c, err := s.CreateCard(ctx, port.Card{Title: "Idea"})

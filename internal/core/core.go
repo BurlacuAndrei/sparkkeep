@@ -118,13 +118,26 @@ func (s *Service) describerForVision() Describer {
 }
 
 // GoResearch runs Research in a background goroutine tracked by s.WG.
+// It executes detached from any transient caller request cancellations (e.g., HTTP
+// request timeouts or Telegram callback handlers), while still canceling cleanly
+// if the service itself is shutting down (via s.ctx).
 func (s *Service) GoResearch(ctx context.Context, cardID int64, playbookID ...*int64) {
-	bgCtx := ctx
-	if bgCtx == nil {
-		bgCtx = s.ctx
-	}
-	if bgCtx == nil {
-		bgCtx = context.Background()
+	var bgCtx context.Context
+	if s.ctx != nil {
+		if ctx != nil {
+			detached := context.WithoutCancel(ctx)
+			var cancel context.CancelFunc
+			bgCtx, cancel = context.WithCancel(detached)
+			context.AfterFunc(s.ctx, cancel)
+		} else {
+			bgCtx = s.ctx
+		}
+	} else {
+		if ctx != nil {
+			bgCtx = context.WithoutCancel(ctx)
+		} else {
+			bgCtx = context.Background()
+		}
 	}
 	s.WG.Add(1)
 	go func() {

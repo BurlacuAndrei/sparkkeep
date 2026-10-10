@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card } from '../types';
 import { CardItem } from './CardItem';
-import { Zap, CheckCircle2, ListTodo } from 'lucide-react';
+import { Zap, CheckCircle2, ListTodo, Archive } from 'lucide-react';
 import * as api from '../api';
 
 interface KanbanBoardProps {
@@ -32,6 +32,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const todoCards = cards.filter((c) => c.status === 'to-do');
   const inProgressCards = cards.filter((c) => c.status === 'in-progress');
   const doneCards = cards.filter((c) => c.status === 'done');
+  const shelvedCards = cards.filter((c) => c.status === 'shelved');
+  const dismissedCards = cards.filter((c) => c.status === 'dismissed');
 
   const isOlderThan7Days = (card: Card) => {
     const timeStr = card.updated_at || card.created_at;
@@ -169,6 +171,38 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Shelved Column (displayed when filtered or present) */}
+        {shelvedCards.length > 0 && (
+          <div className="kanban-column">
+            <div className="column-header">
+              <div className="column-title">
+                <Archive size={15} strokeWidth={1.5} color="#94a3b8" />
+                <span>Shelved</span>
+              </div>
+              <span className="column-count">{shelvedCards.length}</span>
+            </div>
+            <div className="cards-container">
+              {shelvedCards.map(renderCardItem)}
+            </div>
+          </div>
+        )}
+
+        {/* Dismissed Column (displayed when dismissed status filter is active) */}
+        {dismissedCards.length > 0 && (
+          <div className="kanban-column">
+            <div className="column-header">
+              <div className="column-title">
+                <Archive size={15} strokeWidth={1.5} color="#f87171" />
+                <span>Dismissed</span>
+              </div>
+              <span className="column-count">{dismissedCards.length}</span>
+            </div>
+            <div className="cards-container">
+              {dismissedCards.map(renderCardItem)}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

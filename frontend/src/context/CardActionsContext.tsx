@@ -7,6 +7,7 @@ export interface CardActions {
   onResearch: (id: number) => Promise<void> | void;
   onRetry: (id: number) => Promise<void> | void;
   onUpdateCard?: (id: number, patch: Partial<Card>) => Promise<void> | void;
+  onDeleteCard?: (id: number) => Promise<void> | void;
   showToast: (msg: string) => void;
 }
 

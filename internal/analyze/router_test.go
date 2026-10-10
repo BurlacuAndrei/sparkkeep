@@ -35,38 +35,38 @@ func TestRouterFallbackAndMapping(t *testing.T) {
 		t.Fatalf("triage client mismatch: got base=%s model=%s, want %s / %s",
 			triageClient.BaseURL, triageClient.Model, profA.BaseURL, profA.Model)
 	}
-	if triageClient.MaxTokens != 1024 {
-		t.Fatalf("triage max tokens = %d, want 1024", triageClient.MaxTokens)
+	if triageClient.MaxTokens != 4096 {
+		t.Fatalf("triage max tokens = %d, want 4096", triageClient.MaxTokens)
 	}
 
-	// Vision should fall back to default profile A with 512 cap
+	// Vision should fall back to default profile A with 1024 cap
 	visionClient := router.For(RoleVision)
 	if visionClient.BaseURL != profA.BaseURL || visionClient.Model != profA.Model {
 		t.Fatalf("vision client mismatch: got base=%s model=%s, want %s / %s",
 			visionClient.BaseURL, visionClient.Model, profA.BaseURL, profA.Model)
 	}
-	if visionClient.MaxTokens != 512 {
-		t.Fatalf("vision max tokens = %d, want 512", visionClient.MaxTokens)
+	if visionClient.MaxTokens != 1024 {
+		t.Fatalf("vision max tokens = %d, want 1024", visionClient.MaxTokens)
 	}
 
-	// Research plan should fall back to default profile A with 1024 cap
+	// Research plan should fall back to default profile A with 4096 cap
 	planClient := router.For(RoleResearchPlan)
 	if planClient.BaseURL != profA.BaseURL || planClient.Model != profA.Model {
 		t.Fatalf("plan client mismatch: got base=%s model=%s, want %s / %s",
 			planClient.BaseURL, planClient.Model, profA.BaseURL, profA.Model)
 	}
-	if planClient.MaxTokens != 1024 {
-		t.Fatalf("plan max tokens = %d, want 1024", planClient.MaxTokens)
+	if planClient.MaxTokens != 4096 {
+		t.Fatalf("plan max tokens = %d, want 4096", planClient.MaxTokens)
 	}
 
-	// Research synthesis should map to profile B with 4096 cap
+	// Research synthesis should map to profile B with 8192 cap
 	synthClient := router.For(RoleResearchSynthesis)
 	if synthClient.BaseURL != profB.BaseURL || synthClient.Model != profB.Model {
 		t.Fatalf("synth client mismatch: got base=%s model=%s, want %s / %s",
 			synthClient.BaseURL, synthClient.Model, profB.BaseURL, profB.Model)
 	}
-	if synthClient.MaxTokens != 4096 {
-		t.Fatalf("synth max tokens = %d, want 4096", synthClient.MaxTokens)
+	if synthClient.MaxTokens != 8192 {
+		t.Fatalf("synth max tokens = %d, want 8192", synthClient.MaxTokens)
 	}
 }
 
@@ -96,8 +96,8 @@ func TestRouterProfileDeletionFallback(t *testing.T) {
 	if synthClient.BaseURL != profA.BaseURL || synthClient.Model != profA.Model {
 		t.Fatalf("expected fallback to prof-a: got base=%s model=%s", synthClient.BaseURL, synthClient.Model)
 	}
-	if synthClient.MaxTokens != 4096 {
-		t.Fatalf("synth max tokens = %d, want 4096", synthClient.MaxTokens)
+	if synthClient.MaxTokens != 8192 {
+		t.Fatalf("synth max tokens = %d, want 8192", synthClient.MaxTokens)
 	}
 }
 
@@ -125,8 +125,8 @@ func TestRouterCustomTokenCaps(t *testing.T) {
 		t.Fatalf("synth cap = %d, want 8192", router.For(RoleResearchSynthesis).MaxTokens)
 	}
 	// Untouched roles keep defaults
-	if router.For(RoleVision).MaxTokens != 512 {
-		t.Fatalf("vision cap = %d, want default 512", router.For(RoleVision).MaxTokens)
+	if router.For(RoleVision).MaxTokens != 1024 {
+		t.Fatalf("vision cap = %d, want default 1024", router.For(RoleVision).MaxTokens)
 	}
 }
 

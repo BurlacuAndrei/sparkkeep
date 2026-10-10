@@ -78,6 +78,7 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
       }
     };
 
+    poll();
     const interval = setInterval(() => {
       poll();
     }, 2500);

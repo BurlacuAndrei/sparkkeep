@@ -30,7 +30,7 @@ type Store struct {
 }
 
 func New(path string) (*Store, error) {
-	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
@@ -788,6 +788,45 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 	return s.GetCard(ctx, id)
 }
 
+func (s *Store) DeleteCard(ctx context.Context, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM cards_tags WHERE card_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM card_references WHERE card_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM card_comments WHERE card_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM research WHERE card_id = ?`, id); err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM cards WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return port.ErrNotFound
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM cards_tags)`); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 // ShelveStale shelves every inbox/to-do/in-progress card untouched for more than days in
 // one statement and returns the number of rows changed.
 func (s *Store) ShelveStale(ctx context.Context, days int) (int64, error) {
@@ -818,6 +857,9 @@ func (s *Store) SetCardTags(ctx context.Context, id int64, tags []string) error 
 			return err
 		}
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM cards_tags)`); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -842,7 +884,14 @@ func (s *Store) SetCardReferences(ctx context.Context, id int64, refs []port.Ref
 
 func (s *Store) ListTags(ctx context.Context) ([]port.Tag, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT t.name, COUNT(ct.card_id) FROM tags t LEFT JOIN cards_tags ct ON t.id = ct.tag_id GROUP BY t.id ORDER BY t.name`)
+		`SELECT t.name, COUNT(c.id)
+		 FROM tags t
+		 JOIN cards_tags ct ON t.id = ct.tag_id
+		 JOIN cards c ON c.id = ct.card_id
+		 WHERE c.status != 'dismissed'
+		 GROUP BY t.id
+		 HAVING COUNT(c.id) > 0
+		 ORDER BY t.name`)
 	if err != nil {
 		return nil, err
 	}

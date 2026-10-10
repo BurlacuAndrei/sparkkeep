@@ -590,14 +590,46 @@ Reply with ONLY a strict JSON object with this exact structure:
   ]
 }
 
-Topic Context:
-Title: ` + state.Card.Title + "\n")
+`)
+	topicTitle := state.Card.Title
+	if (topicTitle == "" || topicTitle == "Analysis failed") && state.Capture != nil {
+		if state.Capture.Title != "" && state.Capture.Title != "Analysis failed" && state.Capture.Title != "Instagram" {
+			topicTitle = state.Capture.Title
+		} else if state.Capture.Description != "" {
+			desc := state.Capture.Description
+			if len(desc) > 80 {
+				desc = desc[:80] + "..."
+			}
+			topicTitle = desc
+		} else if state.Card.SourceURL != "" {
+			topicTitle = state.Card.SourceURL
+		}
+	}
+	b.WriteString("Topic Context:\nTitle: " + topicTitle + "\n")
 	tldr := state.Card.TLDR
 	if tldr == "" {
 		tldr = state.Card.Summary
 	}
+	if (tldr == "" || tldr == "Analysis failed, see source.") && state.Capture != nil {
+		if state.Capture.Description != "" {
+			tldr = state.Capture.Description
+		} else if state.Capture.Text != "" {
+			snippet := state.Capture.Text
+			if len(snippet) > 400 {
+				snippet = snippet[:400] + "..."
+			}
+			tldr = snippet
+		}
+	}
 	if tldr != "" {
 		b.WriteString("TL;DR / Summary: " + tldr + "\n")
+	}
+	if len(state.Card.Claims) == 0 && state.Capture != nil && state.Capture.Text != "" {
+		snippet := state.Capture.Text
+		if len(snippet) > 800 {
+			snippet = snippet[:800] + "..."
+		}
+		b.WriteString("Capture excerpt:\n" + snippet + "\n")
 	}
 	if len(state.Card.Claims) > 0 {
 		b.WriteString("Claims:\n")

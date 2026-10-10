@@ -273,6 +273,14 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	return c, nil
 }
 
+func (s *stubStore) DeleteCard(_ context.Context, id int64) error {
+	if _, ok := s.cards[id]; !ok {
+		return port.ErrNotFound
+	}
+	delete(s.cards, id)
+	return nil
+}
+
 func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) error {
 	c, ok := s.cards[id]
 	if !ok {
@@ -841,6 +849,28 @@ func TestWeeklyDigest(t *testing.T) {
 	}
 	if body.Days[0].Date != now.Format("2006-01-02") {
 		t.Fatalf("days[0].date = %q, want today", body.Days[0].Date)
+	}
+}
+
+func TestDeleteCardEndpoint(t *testing.T) {
+	st := newStubStore()
+	c, _ := st.CreateCard(context.Background(), port.Card{Title: "To Be Deleted"})
+	h := webHandler(st, nil)
+
+	rr := doJSON(t, h, http.MethodDelete, fmt.Sprintf("/api/v1/cards/%d", c.ID), "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+
+	// Should be deleted
+	if _, ok := st.cards[c.ID]; ok {
+		t.Fatalf("card still in stub store")
+	}
+
+	// Deleting again should be 404
+	rr404 := doJSON(t, h, http.MethodDelete, fmt.Sprintf("/api/v1/cards/%d", c.ID), "")
+	if rr404.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rr404.Code)
 	}
 }
 

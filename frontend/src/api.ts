@@ -62,6 +62,12 @@ export async function updateCard(id: number, patch: Partial<Card>): Promise<Card
   return res.data;
 }
 
+export async function deleteCard(id: number): Promise<void> {
+  await request<{ ok: boolean }>(`/api/v1/cards/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function addCardComment(id: number, content: string): Promise<any> {
   const res = await request<{ ok: boolean; data: any }>(`/api/v1/cards/${id}/comments`, {
     method: 'POST',

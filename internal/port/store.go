@@ -31,6 +31,7 @@ type Store interface {
 	GetCardBySourceURL(ctx context.Context, url string) (Card, error)
 	ListCards(ctx context.Context, f CardFilter) ([]Card, error)
 	UpdateCard(ctx context.Context, id int64, p CardPatch) (Card, error)
+	DeleteCard(ctx context.Context, id int64) error
 	// ShelveStale moves every inbox/doing card untouched for more than days
 	// into shelved and returns how many rows it changed.
 	ShelveStale(ctx context.Context, days int) (int64, error)
