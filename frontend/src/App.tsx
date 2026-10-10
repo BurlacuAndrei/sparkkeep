@@ -31,7 +31,6 @@ function AppContent() {
     return 'boards';
   });
   const [horizon, setHorizon] = useState('short-term');
-  const [status, setStatus] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [query, setQuery] = useState('');
 
@@ -67,7 +66,6 @@ function AppContent() {
   const loadCards = useCallback(async () => {
     try {
       const data = await api.fetchCards({
-        status: viewMode === 'triage' ? undefined : status,
         tag: selectedTag,
         q: query,
       });
@@ -75,7 +73,7 @@ function AppContent() {
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
-  }, [status, selectedTag, query, showToast, viewMode]);
+  }, [selectedTag, query, showToast]);
 
   const loadTags = useCallback(async () => {
     try {
@@ -278,14 +276,14 @@ function AppContent() {
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
       />
 
-      <div className="main-layout">
-        <Sidebar
-          status={status}
-          onStatusChange={setStatus}
-          selectedTag={selectedTag}
-          onTagSelect={setSelectedTag}
-          tags={tags}
-        />
+      <div className={`main-layout ${viewMode === 'digest' ? 'no-sidebar' : ''}`}>
+        {viewMode !== 'digest' && (
+          <Sidebar
+            selectedTag={selectedTag}
+            onTagSelect={setSelectedTag}
+            tags={tags}
+          />
+        )}
 
         <main className="content-area">
           {viewMode === 'triage' && (

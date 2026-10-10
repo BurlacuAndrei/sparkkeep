@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card } from '../types';
 import { CardItem } from './CardItem';
-import { Zap, CheckCircle2, ListTodo, Archive } from 'lucide-react';
+import { Zap, CheckCircle2, ListTodo } from 'lucide-react';
 import * as api from '../api';
 
 interface KanbanBoardProps {
@@ -32,7 +32,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 }) => {
   const [showArchivedDone, setShowArchivedDone] = useState(false);
 
-  const boardCards = cards.filter((c) => c.status !== 'dismissed');
+  const boardCards = cards.filter((c) => c.status !== 'dismissed' && c.status !== 'shelved');
 
   const shortCount = boardCards.filter((c) => (c.horizon || 'short-term') === 'short-term').length;
   const mediumCount = boardCards.filter((c) => c.horizon === 'medium-term').length;
@@ -55,7 +55,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const todoCards = displayedCards.filter((c) => c.status === 'to-do');
   const inProgressCards = displayedCards.filter((c) => c.status === 'in-progress');
   const doneCards = displayedCards.filter((c) => c.status === 'done');
-  const shelvedCards = displayedCards.filter((c) => c.status === 'shelved');
 
   const isOlderThan7Days = (card: Card) => {
     const timeStr = card.updated_at || card.created_at;
@@ -217,23 +216,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
           </div>
         </div>
-
-        {/* Shelved Column (displayed when filtered or present) */}
-        {shelvedCards.length > 0 && (
-          <div className="kanban-column">
-            <div className="column-header">
-              <div className="column-title">
-                <Archive size={15} strokeWidth={1.5} color="#94a3b8" />
-                <span>Shelved</span>
-              </div>
-              <span className="column-count">{shelvedCards.length}</span>
-            </div>
-            <div className="cards-container">
-              {shelvedCards.map(renderCardItem)}
-            </div>
-          </div>
-        )}
-
 
       </div>
     </div>

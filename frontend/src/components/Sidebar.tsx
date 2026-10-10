@@ -1,41 +1,20 @@
 import React from 'react';
 import { Tag } from '../types';
-import { Filter, Tag as TagIcon } from 'lucide-react';
-import { CustomSelect } from './CustomSelect';
-import { STATUS_FILTER_OPTIONS } from './selectOptions';
+import { Tag as TagIcon } from 'lucide-react';
 
 interface SidebarProps {
-  status: string;
-  onStatusChange: (s: string) => void;
   selectedTag: string;
   onTagSelect: (t: string) => void;
   tags: Tag[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  status,
-  onStatusChange,
   selectedTag,
   onTagSelect,
   tags,
 }) => {
   return (
     <aside className="sidebar">
-
-      <div className="filter-group">
-        <span className="filter-title">
-          <Filter size={13} strokeWidth={1.5} style={{ display: 'inline', marginRight: 5 }} />
-          Status
-        </span>
-        <CustomSelect
-          id="status"
-          value={status || 'all'}
-          onChange={(val) => onStatusChange(val === 'all' ? '' : val)}
-          options={STATUS_FILTER_OPTIONS}
-          size="sm"
-          ariaLabel="Filter by status"
-        />
-      </div>
 
       <div className="filter-group">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

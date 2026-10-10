@@ -381,6 +381,10 @@ body {
   min-height: calc(100vh - 56px);
 }
 
+.main-layout.no-sidebar {
+  grid-template-columns: 1fr;
+}
+
 /* Sidebar */
 .sidebar {
   padding: 20px 16px;
