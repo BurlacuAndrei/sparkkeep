@@ -32,10 +32,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 }) => {
   const [showArchivedDone, setShowArchivedDone] = useState(false);
 
-  const shortCount = cards.filter((c) => (c.horizon || 'short-term') === 'short-term').length;
-  const mediumCount = cards.filter((c) => c.horizon === 'medium-term').length;
-  const longCount = cards.filter((c) => c.horizon === 'long-term').length;
-  const allCount = cards.length;
+  const boardCards = cards.filter((c) => c.status !== 'dismissed');
+
+  const shortCount = boardCards.filter((c) => (c.horizon || 'short-term') === 'short-term').length;
+  const mediumCount = boardCards.filter((c) => c.horizon === 'medium-term').length;
+  const longCount = boardCards.filter((c) => c.horizon === 'long-term').length;
+  const allCount = boardCards.length;
 
   const horizonTabs = [
     { id: 'short-term', label: 'Short-Term', count: shortCount, colorClass: 'short-term' },
@@ -47,14 +49,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const activeHorizon = horizon || 'all';
 
   const displayedCards = activeHorizon !== 'all'
-    ? cards.filter((c) => (c.horizon || 'short-term') === activeHorizon)
-    : cards;
+    ? boardCards.filter((c) => (c.horizon || 'short-term') === activeHorizon)
+    : boardCards;
 
   const todoCards = displayedCards.filter((c) => c.status === 'to-do');
   const inProgressCards = displayedCards.filter((c) => c.status === 'in-progress');
   const doneCards = displayedCards.filter((c) => c.status === 'done');
   const shelvedCards = displayedCards.filter((c) => c.status === 'shelved');
-  const dismissedCards = displayedCards.filter((c) => c.status === 'dismissed');
 
   const isOlderThan7Days = (card: Card) => {
     const timeStr = card.updated_at || card.created_at;
@@ -90,7 +91,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           <h2 id="main-heading" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>Execution Boards</span>
             <span style={{ fontSize: 12, fontWeight: 500, color: '#64748b' }}>
-              ({displayedCards.length}{activeHorizon !== 'all' ? ` of ${cards.length}` : ''} cards)
+              ({displayedCards.length}{activeHorizon !== 'all' ? ` of ${boardCards.length}` : ''} cards)
             </span>
           </h2>
         </div>
@@ -233,21 +234,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </div>
         )}
 
-        {/* Dismissed Column (displayed when dismissed status filter is active) */}
-        {dismissedCards.length > 0 && (
-          <div className="kanban-column">
-            <div className="column-header">
-              <div className="column-title">
-                <Archive size={15} strokeWidth={1.5} color="#f87171" />
-                <span>Dismissed</span>
-              </div>
-              <span className="column-count">{dismissedCards.length}</span>
-            </div>
-            <div className="cards-container">
-              {dismissedCards.map(renderCardItem)}
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   );

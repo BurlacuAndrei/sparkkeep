@@ -25,7 +25,6 @@ export const STATUS_FILTER_OPTIONS: SelectOption<string>[] = [
   { value: 'in-progress', label: '⚡ In Progress' },
   { value: 'done', label: '✅ Done' },
   { value: 'shelved', label: '📦 Shelved' },
-  { value: 'dismissed', label: '🚫 Dismissed' },
 ];
 
 export const CARD_HORIZON_OPTIONS: SelectOption<'short-term' | 'medium-term' | 'long-term'>[] = [

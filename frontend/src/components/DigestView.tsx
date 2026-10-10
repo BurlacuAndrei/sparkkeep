@@ -68,10 +68,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
               <span className="digest-stat-label">Inbox</span>
             </div>
           )}
-          {byStatus.doing !== undefined && (
+          {(byStatus['in-progress'] !== undefined || byStatus.doing !== undefined) && (
             <div className="digest-stat-card">
-              <span className="digest-stat-value" style={{ color: '#34d399' }}>{byStatus.doing}</span>
-              <span className="digest-stat-label">Doing</span>
+              <span className="digest-stat-value" style={{ color: '#34d399' }}>{byStatus['in-progress'] ?? byStatus.doing}</span>
+              <span className="digest-stat-label">In Progress</span>
             </div>
           )}
           {byStatus.done !== undefined && (
@@ -84,6 +84,12 @@ export const DigestView: React.FC<DigestViewProps> = ({
             <div className="digest-stat-card">
               <span className="digest-stat-value">{byStatus.shelved}</span>
               <span className="digest-stat-label">Shelved</span>
+            </div>
+          )}
+          {byStatus.dismissed !== undefined && (
+            <div className="digest-stat-card">
+              <span className="digest-stat-value" style={{ color: '#f87171' }}>{byStatus.dismissed}</span>
+              <span className="digest-stat-label">Dismissed</span>
             </div>
           )}
         </div>
