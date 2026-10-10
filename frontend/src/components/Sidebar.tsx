@@ -1,12 +1,10 @@
 import React from 'react';
 import { Tag } from '../types';
-import { Compass, Filter, Tag as TagIcon } from 'lucide-react';
+import { Filter, Tag as TagIcon } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
-import { HORIZON_FILTER_OPTIONS, STATUS_FILTER_OPTIONS } from './selectOptions';
+import { STATUS_FILTER_OPTIONS } from './selectOptions';
 
 interface SidebarProps {
-  horizon: string;
-  onHorizonChange: (h: string) => void;
   status: string;
   onStatusChange: (s: string) => void;
   selectedTag: string;
@@ -15,8 +13,6 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  horizon,
-  onHorizonChange,
   status,
   onStatusChange,
   selectedTag,
@@ -25,20 +21,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   return (
     <aside className="sidebar">
-      <div className="filter-group">
-        <span className="filter-title">
-          <Compass size={13} strokeWidth={1.5} style={{ display: 'inline', marginRight: 5 }} />
-          Horizon
-        </span>
-        <CustomSelect
-          id="horizon"
-          value={horizon || 'all'}
-          onChange={(val) => onHorizonChange(val === 'all' ? '' : val)}
-          options={HORIZON_FILTER_OPTIONS}
-          size="sm"
-          ariaLabel="Filter by horizon"
-        />
-      </div>
 
       <div className="filter-group">
         <span className="filter-title">

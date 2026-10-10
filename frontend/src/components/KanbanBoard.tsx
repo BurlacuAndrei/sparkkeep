@@ -6,6 +6,8 @@ import * as api from '../api';
 
 interface KanbanBoardProps {
   cards: Card[];
+  horizon: string;
+  onHorizonChange: (h: string) => void;
   onSelectCard: (card: Card) => void;
   onUpdateCard: (id: number, patch: Partial<Card>) => void;
   onResearch: (id: number) => void;
@@ -20,20 +22,39 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   cards,
+  horizon,
+  onHorizonChange,
   onSelectCard,
   onUpdateCard,
   onResearch,
   onRetry,
   showToast,
-
 }) => {
   const [showArchivedDone, setShowArchivedDone] = useState(false);
 
-  const todoCards = cards.filter((c) => c.status === 'to-do');
-  const inProgressCards = cards.filter((c) => c.status === 'in-progress');
-  const doneCards = cards.filter((c) => c.status === 'done');
-  const shelvedCards = cards.filter((c) => c.status === 'shelved');
-  const dismissedCards = cards.filter((c) => c.status === 'dismissed');
+  const shortCount = cards.filter((c) => (c.horizon || 'short-term') === 'short-term').length;
+  const mediumCount = cards.filter((c) => c.horizon === 'medium-term').length;
+  const longCount = cards.filter((c) => c.horizon === 'long-term').length;
+  const allCount = cards.length;
+
+  const horizonTabs = [
+    { id: 'short-term', label: 'Short-Term', count: shortCount, colorClass: 'short-term' },
+    { id: 'medium-term', label: 'Medium-Term', count: mediumCount, colorClass: 'medium-term' },
+    { id: 'long-term', label: 'Long-Term', count: longCount, colorClass: 'long-term' },
+    { id: 'all', label: 'All Horizons', count: allCount, colorClass: 'all' },
+  ];
+
+  const activeHorizon = horizon || 'all';
+
+  const displayedCards = activeHorizon !== 'all'
+    ? cards.filter((c) => (c.horizon || 'short-term') === activeHorizon)
+    : cards;
+
+  const todoCards = displayedCards.filter((c) => c.status === 'to-do');
+  const inProgressCards = displayedCards.filter((c) => c.status === 'in-progress');
+  const doneCards = displayedCards.filter((c) => c.status === 'done');
+  const shelvedCards = displayedCards.filter((c) => c.status === 'shelved');
+  const dismissedCards = displayedCards.filter((c) => c.status === 'dismissed');
 
   const isOlderThan7Days = (card: Card) => {
     const timeStr = card.updated_at || card.created_at;
@@ -64,11 +85,35 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h2 id="main-heading" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>Execution Boards</span>
-          <span style={{ fontSize: 12, fontWeight: 500, color: '#64748b' }}>({cards.length} cards total)</span>
-        </h2>
+      <div className="board-header-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h2 id="main-heading" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>Execution Boards</span>
+            <span style={{ fontSize: 12, fontWeight: 500, color: '#64748b' }}>
+              ({displayedCards.length}{activeHorizon !== 'all' ? ` of ${cards.length}` : ''} cards)
+            </span>
+          </h2>
+        </div>
+
+        <div className="horizon-segmented-control" role="tablist" aria-label="Filter execution board by horizon">
+          {horizonTabs.map((tab) => {
+            const isActive = activeHorizon === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`horizon-tab-${tab.id}`}
+                aria-selected={isActive}
+                className={`horizon-segment-btn ${tab.colorClass} ${isActive ? 'active' : ''}`}
+                onClick={() => onHorizonChange(tab.id === 'all' ? '' : tab.id)}
+              >
+                <span className="horizon-segment-label">{tab.label}</span>
+                <span className="horizon-segment-count">{tab.count}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="kanban-board" data-view="execution">

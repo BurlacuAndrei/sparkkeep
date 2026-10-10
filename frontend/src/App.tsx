@@ -67,7 +67,6 @@ function AppContent() {
   const loadCards = useCallback(async () => {
     try {
       const data = await api.fetchCards({
-        horizon: viewMode === 'triage' ? undefined : horizon,
         status: viewMode === 'triage' ? undefined : status,
         tag: selectedTag,
         q: query,
@@ -76,7 +75,7 @@ function AppContent() {
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
-  }, [horizon, status, selectedTag, query, showToast, viewMode]);
+  }, [status, selectedTag, query, showToast, viewMode]);
 
   const loadTags = useCallback(async () => {
     try {
@@ -281,8 +280,6 @@ function AppContent() {
 
       <div className="main-layout">
         <Sidebar
-          horizon={horizon}
-          onHorizonChange={setHorizon}
           status={status}
           onStatusChange={setStatus}
           selectedTag={selectedTag}
@@ -308,6 +305,8 @@ function AppContent() {
           {viewMode === 'boards' && (
             <KanbanBoard
               cards={cards}
+              horizon={horizon}
+              onHorizonChange={setHorizon}
               onSelectCard={setSelectedCard}
               onUpdateCard={handleUpdateCard}
               onResearch={handleResearch}
