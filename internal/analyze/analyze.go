@@ -579,7 +579,7 @@ Return ONLY a valid JSON object matching this schema:
 
 Rules:
 - Each card MUST have distinct, specific "tldr" and "why_care" reflecting that individual idea (no generic shared text).
-- "type" must be one of: tool, repo, article, idea, claim, tutorial, product, other.
+- "type" must be one of: tool, repo, article, idea, claim, tutorial, product, collection, other.
 - "horizon" must be "short-term" (actionable now/soon), "medium-term" (planned), or "long-term" (vision).
 - "claims": up to 3 core claims or assertions made by the source.
 - "open_questions": up to 3 key questions research would need to answer.
@@ -591,6 +591,7 @@ Rules:
 - "worthiness": "level" ("high", "medium", or "low") and a brief "reason".
 - "references": extract named entities and explicit links.
 - One card per distinct idea, tool, or topic. Never merge distinct ideas; never drop important ones.
+- If the content is a broad directory, roundup, or listicle of many items (>6 items), create a "collection" card containing the curated list, rather than fragmenting into dozens of individual cards.
 - EXTRACTION NOTES are warnings about what could NOT be read. Never treat notes as content learned. If extraction notes indicate a login wall, paywall, unreadable content, or missing text/transcript, "signals.extraction" MUST be "partial" or "thin", NEVER "full".
 
 TITLE: %s

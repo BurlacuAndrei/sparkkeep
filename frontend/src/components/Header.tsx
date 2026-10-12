@@ -12,6 +12,7 @@ interface HeaderProps {
   isPro?: boolean;
   onOpenLicenseModal: () => void;
   onOpenSettingsModal: () => void;
+  triageCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   isPro,
   onOpenLicenseModal,
   onOpenSettingsModal,
+  triageCount,
 }) => {
   const [researchId, setResearchId] = React.useState('');
 
@@ -68,6 +70,24 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Zap size={13} strokeWidth={1.5} />
             <span>Triage</span>
+            {typeof triageCount === 'number' && triageCount > 0 && (
+              <span
+                style={{
+                  background: 'rgba(99, 102, 241, 0.25)',
+                  color: '#a5b4fc',
+                  border: '1px solid rgba(99, 102, 241, 0.4)',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  borderRadius: 10,
+                  padding: '0 5px',
+                  minWidth: 16,
+                  textAlign: 'center',
+                  lineHeight: '14px',
+                }}
+              >
+                {triageCount}
+              </span>
+            )}
           </button>
           <button
             type="button"

@@ -55,7 +55,7 @@ func TestFunnel_TriagePipelineLifecycle(t *testing.T) {
 		t.Fatalf("expected direct card committed to to-do/short-term, got status=%q horizon=%q", updatedDirect.Status, updatedDirect.Horizon)
 	}
 
-	// 3. Start Research from Inbox -> Status becomes "researching", then "review"
+	// 3. Start Research from Inbox -> ResearchState becomes "done", Status becomes "review"
 	h.service.GoResearch(ctx, c.ID)
 	h.service.WG.Wait()
 	reviewedCard, err := h.store.GetCard(ctx, c.ID)
@@ -64,6 +64,9 @@ func TestFunnel_TriagePipelineLifecycle(t *testing.T) {
 	}
 	if reviewedCard.Status != port.StatusReview {
 		t.Fatalf("card status after research = %q, want %q", reviewedCard.Status, port.StatusReview)
+	}
+	if reviewedCard.ResearchState != port.ResearchStateDone {
+		t.Fatalf("card research_state after research = %q, want %q", reviewedCard.ResearchState, port.ResearchStateDone)
 	}
 
 	// 5. Add a comment during Review phase (POST /api/v1/cards/{id}/comments)

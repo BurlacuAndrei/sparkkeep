@@ -89,6 +89,16 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 			actionsJSON = string(b)
 		}
 	}
+	completedActionsJSON := "[]"
+	if len(c.CompletedActions) > 0 {
+		if b, err := json.Marshal(c.CompletedActions); err == nil {
+			completedActionsJSON = string(b)
+		}
+	}
+	analysisFailedInt := 0
+	if c.AnalysisFailed {
+		analysisFailedInt = 1
+	}
 	claimsJSON := "[]"
 	if len(c.Claims) > 0 {
 		if b, err := json.Marshal(c.Claims); err == nil {
@@ -151,10 +161,14 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 			suggestedTagsJSON = string(data)
 		}
 	}
+	researchState := c.ResearchState
+	if researchState == "" {
+		researchState = "none"
+	}
 	res, err := exec.ExecContext(ctx,
-		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, research_verdict, research_confidence, suggested_horizon, suggested_tags, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, actionsSource, c.ResearchVerdict, c.ResearchConfidence, c.SuggestedHorizon, suggestedTagsJSON, ts, ts)
+		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, completedActionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, actionsSource, analysisFailedInt, c.ResearchVerdict, c.ResearchConfidence, c.SuggestedHorizon, suggestedTagsJSON, researchState, ts, ts)
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return port.Card{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
@@ -168,6 +182,7 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	c.ID = id
 	c.CreatedAt, _ = parseTime(ts)
 	c.UpdatedAt = c.CreatedAt
+	c.ResearchState = researchState
 	c.Type = cardType
 	c.TLDR = tldr
 	c.WhyCare = whyCare
@@ -182,6 +197,9 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	}
 	if c.ProposedActions == nil {
 		c.ProposedActions = []string{}
+	}
+	if c.CompletedActions == nil {
+		c.CompletedActions = []string{}
 	}
 	c.ActionsSource = actionsSource
 	if c.SuggestedTags == nil {
@@ -226,13 +244,14 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 
 func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, research_verdict, research_confidence, suggested_horizon, suggested_tags, created_at, updated_at
+		`SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, created_at, updated_at
 		 FROM cards WHERE id = ?`, id)
 	var c port.Card
 	var captureID sql.NullInt64
 	var created, updated string
-	var actionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw, suggestedTagsRaw string
-	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &created, &updated)
+	var actionsRaw, completedActionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw, suggestedTagsRaw string
+	var analysisFailedInt int
+	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &completedActionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &analysisFailedInt, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &c.ResearchState, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Card{}, port.ErrNotFound
 	}
@@ -242,8 +261,12 @@ func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	if captureID.Valid {
 		c.CaptureID = &captureID.Int64
 	}
+	if c.ResearchState == "" {
+		c.ResearchState = "none"
+	}
 	c.CreatedAt, _ = parseTime(created)
 	c.UpdatedAt, _ = parseTime(updated)
+	c.AnalysisFailed = analysisFailedInt != 0
 	if c.Type == "" {
 		c.Type = port.CardTypeIdea
 	}
@@ -252,6 +275,12 @@ func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	}
 	if c.ProposedActions == nil {
 		c.ProposedActions = []string{}
+	}
+	if completedActionsRaw != "" {
+		_ = json.Unmarshal([]byte(completedActionsRaw), &c.CompletedActions)
+	}
+	if c.CompletedActions == nil {
+		c.CompletedActions = []string{}
 	}
 	if claimsRaw != "" {
 		_ = json.Unmarshal([]byte(claimsRaw), &c.Claims)
@@ -417,7 +446,7 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	if limit <= 0 {
 		limit = defaultLimit
 	}
-	sqlq := `SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, research_verdict, research_confidence, suggested_horizon, suggested_tags, created_at, updated_at FROM cards`
+	sqlq := `SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, created_at, updated_at FROM cards`
 	if len(where) > 0 {
 		sqlq += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -438,15 +467,20 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		var c port.Card
 		var captureID sql.NullInt64
 		var created, updated string
-		var actionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw, suggestedTagsRaw string
-		if err := rows.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &created, &updated); err != nil {
+		var actionsRaw, completedActionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw, suggestedTagsRaw string
+		var analysisFailedInt int
+		if err := rows.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &completedActionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &analysisFailedInt, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &c.ResearchState, &created, &updated); err != nil {
 			return nil, err
 		}
 		if captureID.Valid {
 			c.CaptureID = &captureID.Int64
 		}
+		if c.ResearchState == "" {
+			c.ResearchState = "none"
+		}
 		c.CreatedAt, _ = parseTime(created)
 		c.UpdatedAt, _ = parseTime(updated)
+		c.AnalysisFailed = analysisFailedInt != 0
 		if c.Type == "" {
 			c.Type = port.CardTypeIdea
 		}
@@ -455,6 +489,12 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		}
 		if c.ProposedActions == nil {
 			c.ProposedActions = []string{}
+		}
+		if completedActionsRaw != "" {
+			_ = json.Unmarshal([]byte(completedActionsRaw), &c.CompletedActions)
+		}
+		if c.CompletedActions == nil {
+			c.CompletedActions = []string{}
 		}
 		if claimsRaw != "" {
 			_ = json.Unmarshal([]byte(claimsRaw), &c.Claims)
@@ -673,6 +713,9 @@ func (b *updateBuilder) build() (string, []any) {
 
 func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (port.Card, error) {
 	b := newUpdateBuilder("cards", "id", id)
+	if p.Title != nil {
+		b.set("title", *p.Title)
+	}
 	if p.Status != nil {
 		b.set("status", *p.Status)
 	}
@@ -744,6 +787,20 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 			b.set("actions_source", "user")
 		}
 	}
+	if p.CompletedActions != nil {
+		compJSON := "[]"
+		if data, err := json.Marshal(*p.CompletedActions); err == nil {
+			compJSON = string(data)
+		}
+		b.set("completed_actions", compJSON)
+	}
+	if p.AnalysisFailed != nil {
+		failedInt := 0
+		if *p.AnalysisFailed {
+			failedInt = 1
+		}
+		b.set("analysis_failed", failedInt)
+	}
 	if p.ActionsSource != nil {
 		b.set("actions_source", *p.ActionsSource)
 	}
@@ -762,6 +819,9 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 			stJSON = string(data)
 		}
 		b.set("suggested_tags", stJSON)
+	}
+	if p.ResearchState != nil {
+		b.set("research_state", *p.ResearchState)
 	}
 	if p.CaptureID != nil {
 		b.set("capture_id", *p.CaptureID)
@@ -827,12 +887,13 @@ func (s *Store) DeleteCard(ctx context.Context, id int64) error {
 	return tx.Commit()
 }
 
-// ShelveStale shelves every inbox/to-do/in-progress card untouched for more than days in
-// one statement and returns the number of rows changed.
+// ShelveStale shelves every inbox/to-do card untouched for more than days in
+// one statement and returns the number of rows changed. In-progress cards
+// represent active user commitments and are deliberately excluded from auto-shelve.
 func (s *Store) ShelveStale(ctx context.Context, days int) (int64, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE cards SET status = ?, updated_at = ? WHERE status IN (?, ?, ?) AND updated_at < ?`,
-		port.StatusShelved, now(), port.StatusInbox, port.StatusToDo, port.StatusInProgress, staleCutoff(days))
+		`UPDATE cards SET status = ?, updated_at = ? WHERE status IN (?, ?) AND updated_at < ?`,
+		port.StatusShelved, now(), port.StatusInbox, port.StatusToDo, staleCutoff(days))
 	if err != nil {
 		return 0, err
 	}
@@ -979,6 +1040,7 @@ func (s *Store) CreateResearch(ctx context.Context, cardID int64, query string, 
 	if err != nil {
 		return port.Research{}, err
 	}
+	_, _ = s.db.ExecContext(ctx, `UPDATE cards SET research_state = 'queued' WHERE id = ?`, cardID)
 	return s.GetResearch(ctx, id)
 }
 
@@ -998,6 +1060,7 @@ func (s *Store) SetResearch(ctx context.Context, id int64, status, findings, err
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
 		return port.Research{}, port.ErrNotFound
 	}
+	_, _ = s.db.ExecContext(ctx, `UPDATE cards SET research_state = ? WHERE id = (SELECT card_id FROM research WHERE id = ?)`, status, id)
 	return s.GetResearch(ctx, id)
 }
 
@@ -1045,6 +1108,7 @@ func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, qu
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
 		return port.ErrNotFound
 	}
+	_, _ = s.db.ExecContext(ctx, `UPDATE cards SET research_state = ? WHERE id = (SELECT card_id FROM research WHERE id = ?)`, status, id)
 	return nil
 }
 
@@ -2038,6 +2102,7 @@ func (s *Store) BatchQueueResearch(ctx context.Context, cardIDs []int64, playboo
 			return nil, err
 		}
 		if n, err := res.RowsAffected(); err == nil && n > 0 {
+			_, _ = s.db.ExecContext(ctx, `UPDATE cards SET research_state = 'queued' WHERE id = ?`, cardID)
 			if id, err := res.LastInsertId(); err == nil {
 				if r, err := s.GetResearch(ctx, id); err == nil {
 					queued = append(queued, r)

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Card } from '../types';
-import { Inbox, Search, Eye, Sparkles, Archive, Layers } from 'lucide-react';
-import { ResearchProgressStrip } from './ResearchProgressStrip';
+import { Inbox, Search, Eye, Layers, ArrowRight, X } from 'lucide-react';
+import { CardItem } from './CardItem';
 
 interface TriageViewProps {
   cards: Card[];
@@ -12,77 +12,101 @@ interface TriageViewProps {
   onRefresh?: () => void;
   isPro?: boolean;
   onOpenLicenseModal?: () => void;
-  showToast?: (msg: string) => void;
+  showToast?: (msg: string, onUndo?: () => Promise<void> | void) => void;
   onExitFocus?: () => void;
 }
-
-const TriageCard: React.FC<{ card: Card; onCommit: (id: number, horizon: string) => void; onDiscard: (id: number) => void; onResearch: (id: number) => void; onClick: () => void }> = ({ card, onCommit, onDiscard, onResearch, onClick }) => {
-  return (
-    <article className="card action-card" onClick={onClick} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }}>
-      <div className="card-top">
-        {card.type && <span className="card-type-badge">{card.type}</span>}
-        <span className="card-status status">{card.status}</span>
-      </div>
-      <h3 className="card-title">{card.title}</h3>
-      <p className="card-summary">{card.tldr || card.summary}</p>
-      
-      <ResearchProgressStrip cardId={card.id} compact={true} />
-
-      <div className="card-footer" style={{ marginTop: 'auto', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }} onClick={(e) => e.stopPropagation()}>
-        {card.status === 'inbox' && (
-          <button type="button" className="btn-secondary" onClick={() => onResearch(card.id)} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-            <Sparkles size={14} style={{ marginRight: 6 }} /> Deep Research
-          </button>
-        )}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button className="btn-primary" style={{ flex: 1, fontSize: 11, padding: '4px' }} onClick={() => onCommit(card.id, 'short-term')} title="Commit to Short Term">
-             Short
-          </button>
-          <button className="btn-primary" style={{ flex: 1, fontSize: 11, padding: '4px' }} onClick={() => onCommit(card.id, 'medium-term')} title="Commit to Medium Term">
-             Medium
-          </button>
-          <button className="btn-primary" style={{ flex: 1, fontSize: 11, padding: '4px' }} onClick={() => onCommit(card.id, 'long-term')} title="Commit to Long Term">
-             Long
-          </button>
-          <button className="btn-secondary" style={{ padding: '4px 8px' }} onClick={() => onDiscard(card.id)} title="Discard">
-            <Archive size={14} color="#f87171" />
-          </button>
-        </div>
-      </div>
-    </article>
-  );
-};
 
 export const TriageView: React.FC<TriageViewProps> = ({
   cards,
   onUpdateCard,
   onResearch,
+  onRetry,
   onOpenCardDetail,
+  showToast,
 }) => {
-  const inboxCards = cards.filter((c) => c.status === 'inbox');
-  const researchingCards = cards.filter((c) => c.status === 'researching');
+  const isResearchRunning = (c: Card) =>
+    c.status === 'researching' ||
+    ((c.status === 'inbox' || !c.status) && (c.research_state === 'queued' || c.research_state === 'running'));
+
+  const researchingCards = cards.filter(isResearchRunning);
+  const inboxCards = cards.filter((c) => (c.status === 'inbox' || !c.status) && !isResearchRunning(c));
   const reviewCards = cards.filter((c) => c.status === 'review');
 
   const triageTotal = inboxCards.length + researchingCards.length + reviewCards.length;
 
-  const handleCommit = (id: number, horizon: string) => {
-    onUpdateCard(id, { status: 'to-do' as any, horizon: horizon as any });
+  // Calculate siblings by capture_id across all cards
+  const captureCounts = cards.reduce<Record<number, number>>((acc, c) => {
+    if (c.capture_id) {
+      acc[c.capture_id] = (acc[c.capture_id] || 0) + 1;
+    }
+    return acc;
+  }, {});
+
+  // Group Inbox cards into Multi-Card Stacks vs Single Cards
+  const stackMap = new Map<number, Card[]>();
+  const standaloneInboxCards: Card[] = [];
+
+  inboxCards.forEach((c) => {
+    if (c.capture_id) {
+      const arr = stackMap.get(c.capture_id) || [];
+      arr.push(c);
+      stackMap.set(c.capture_id, arr);
+    } else {
+      standaloneInboxCards.push(c);
+    }
+  });
+
+  const multiStacks: { captureId: number; cards: Card[] }[] = [];
+  stackMap.forEach((stackCards, captureId) => {
+    if (stackCards.length > 1) {
+      multiStacks.push({ captureId, cards: stackCards });
+    } else {
+      standaloneInboxCards.push(stackCards[0]);
+    }
+  });
+
+  const handleStatusChange = (id: number, status: string) => {
+    onUpdateCard(id, { status: status as any });
   };
 
-  const handleDiscard = (id: number) => {
-    onUpdateCard(id, { status: 'dismissed' as any });
+  const renderSingleCard = (card: Card) => {
+    const sibCount = card.capture_id ? captureCounts[card.capture_id] : undefined;
+    return (
+      <CardItem
+        key={card.id}
+        card={card}
+        siblingCount={sibCount}
+        onSelect={onOpenCardDetail}
+        onStatusChange={handleStatusChange}
+        onResearch={onResearch}
+        onRetry={onRetry}
+      />
+    );
   };
 
-  const renderCard = (card: Card) => (
-    <TriageCard
-      key={card.id}
-      card={card}
-      onCommit={handleCommit}
-      onDiscard={handleDiscard}
-      onResearch={onResearch}
-      onClick={() => onOpenCardDetail(card)}
-    />
-  );
+  const handleCommitAllInStack = (stackCards: Card[]) => {
+    stackCards.forEach((c) => {
+      onUpdateCard(c.id, { status: 'to-do' as any, horizon: (c.suggested_horizon || c.horizon || 'short-term') as any });
+    });
+    showToast?.(`Committed ${stackCards.length} cards from stack to To Do`, async () => {
+      stackCards.forEach((c) => {
+        onUpdateCard(c.id, { status: 'inbox' as any });
+      });
+      showToast?.(`Reverted ${stackCards.length} cards back to Inbox`);
+    });
+  };
+
+  const handleDismissAllInStack = (stackCards: Card[]) => {
+    stackCards.forEach((c) => {
+      onUpdateCard(c.id, { status: 'dismissed' as any });
+    });
+    showToast?.(`Dismissed ${stackCards.length} cards from stack`, async () => {
+      stackCards.forEach((c) => {
+        onUpdateCard(c.id, { status: 'inbox' as any });
+      });
+      showToast?.(`Reverted ${stackCards.length} cards back to Inbox`);
+    });
+  };
 
   return (
     <div>
@@ -109,7 +133,56 @@ export const TriageView: React.FC<TriageViewProps> = ({
                 Inbox zero! Great job.
               </div>
             ) : (
-              inboxCards.map(renderCard)
+              <>
+                {/* 1. Multi-Card Capture Stacks */}
+                {multiStacks.map((stack) => (
+                  <div key={stack.captureId} className="triage-stack-card">
+                    <div className="triage-stack-header">
+                      <div className="triage-stack-meta">
+                        <Layers size={13} color="#818cf8" />
+                        <span>{stack.cards.length} ideas from Capture #{stack.captureId}</span>
+                      </div>
+                      <div className="triage-stack-actions">
+                        <button
+                          type="button"
+                          className="card-primary-action-btn commit"
+                          onClick={() => handleCommitAllInStack(stack.cards)}
+                          title="Commit all cards from this capture stack"
+                        >
+                          <ArrowRight size={11} />
+                          <span>Commit All</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="card-primary-action-btn skip"
+                          onClick={() => handleDismissAllInStack(stack.cards)}
+                          title="Dismiss rest from this capture stack"
+                        >
+                          <X size={11} />
+                          <span>Dismiss Rest</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {stack.cards.map((c, i) => (
+                        <CardItem
+                          key={c.id}
+                          card={c}
+                          siblingCount={stack.cards.length}
+                          siblingIndex={i + 1}
+                          onSelect={onOpenCardDetail}
+                          onStatusChange={handleStatusChange}
+                          onResearch={onResearch}
+                          onRetry={onRetry}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* 2. Standalone Cards */}
+                {standaloneInboxCards.map(renderSingleCard)}
+              </>
             )}
           </div>
         </div>
@@ -129,7 +202,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
                 No active research in progress.
               </div>
             ) : (
-              researchingCards.map(renderCard)
+              researchingCards.map(renderSingleCard)
             )}
           </div>
         </div>
@@ -149,7 +222,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
                 No reports to review.
               </div>
             ) : (
-              reviewCards.map(renderCard)
+              reviewCards.map(renderSingleCard)
             )}
           </div>
         </div>

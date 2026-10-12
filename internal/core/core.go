@@ -715,9 +715,9 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 	if err != nil {
 		return err
 	}
-	rsStatus := port.StatusResearching
-	if _, cerr := s.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &rsStatus}); cerr != nil {
-		s.Logf("core: failed to set card %d to researching: %v", cardID, cerr)
+	rsRunning := port.ResearchStateRunning
+	if _, cerr := s.Store.UpdateCard(ctx, cardID, port.CardPatch{ResearchState: &rsRunning}); cerr != nil {
+		s.Logf("core: failed to set card %d research_state to running: %v", cardID, cerr)
 	}
 	return s.executeResearch(ctx, row, card)
 }
@@ -753,9 +753,9 @@ func (s *Service) executeResearch(ctx context.Context, row port.Research, card p
 		if rerr != nil {
 			return rerr
 		}
-		inboxStatus := port.StatusInbox
-		if _, cerr := s.Store.UpdateCard(ctx, card.ID, port.CardPatch{Status: &inboxStatus}); cerr != nil {
-			s.Logf("core: failed to set card %d back to inbox: %v", card.ID, cerr)
+		rsFailed := port.ResearchStateFailed
+		if _, cerr := s.Store.UpdateCard(ctx, card.ID, port.CardPatch{ResearchState: &rsFailed}); cerr != nil {
+			s.Logf("core: failed to set card %d research_state to failed: %v", card.ID, cerr)
 		}
 		if nerr := s.notify(ctx, port.Notification{Kind: "research_failed", Res: &row, Text: err.Error()}); nerr != nil {
 			s.Logf("core: notify research_failed: %v", nerr)
@@ -766,8 +766,13 @@ func (s *Service) executeResearch(ctx context.Context, row port.Research, card p
 	if err != nil {
 		return err
 	}
-	reviewStatus := port.StatusReview
-	if _, cerr := s.Store.UpdateCard(ctx, card.ID, port.CardPatch{Status: &reviewStatus}); cerr != nil {
+	rsDone := port.ResearchStateDone
+	patch := port.CardPatch{ResearchState: &rsDone}
+	if card.Status == port.StatusInbox || card.Status == port.StatusReview || card.Status == "" {
+		reviewStatus := port.StatusReview
+		patch.Status = &reviewStatus
+	}
+	if _, cerr := s.Store.UpdateCard(ctx, card.ID, patch); cerr != nil {
 		s.Logf("core: failed to set card %d to review: %v", card.ID, cerr)
 	}
 	latestCard, gerr := s.Store.GetCard(ctx, card.ID)
@@ -1208,12 +1213,13 @@ func (s *Service) failCard(ctx context.Context, fetched capture.Fetched, raw str
 		}
 	}
 	card := port.Card{
-		CaptureID:  capID,
-		Title:      "Analysis failed",
-		Summary:    "Analysis failed, see source.",
-		Status:     port.StatusInbox,
-		SourceURL:  fetched.URL,
-		SourceNote: raw,
+		CaptureID:      capID,
+		Title:          "Analysis failed",
+		Summary:        "Analysis failed, see source.",
+		Status:         port.StatusInbox,
+		SourceURL:      fetched.URL,
+		SourceNote:     raw,
+		AnalysisFailed: true,
 	}
 	created, err := s.Store.CreateCard(ctx, card)
 	if err != nil {

@@ -22,6 +22,7 @@ export type CardType =
   | 'claim'
   | 'tutorial'
   | 'product'
+  | 'collection'
   | 'other';
 
 export interface CardSignals {
@@ -41,6 +42,20 @@ export interface CardComment {
   card_id: number;
   content: string;
   created_at: string;
+}
+
+export interface Capture {
+  id: number;
+  kind?: string;
+  source_url?: string;
+  title?: string;
+  description?: string;
+  text?: string;
+  caption?: string;
+  transcript?: string;
+  image_digest?: string;
+  notes?: string[];
+  created_at?: string;
 }
 
 export interface Card {
@@ -64,11 +79,14 @@ export interface Card {
   executive_summary?: string;
   value_proposition?: string;
   proposed_actions?: string[];
+  completed_actions?: string[];
   actions_source?: 'triage' | 'research' | 'user' | string;
+  analysis_failed?: boolean;
   research_verdict?: 'pursue' | 'watch' | 'skip' | string;
   research_confidence?: 'high' | 'medium' | 'low' | string;
   suggested_horizon?: string;
   suggested_tags?: string[];
+  research_state?: 'none' | 'queued' | 'running' | 'done' | 'failed' | string;
   created_at: string;
   updated_at: string;
   comments?: CardComment[];

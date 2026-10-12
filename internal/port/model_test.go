@@ -28,7 +28,7 @@ func TestValidStatus(t *testing.T) {
 		want   bool
 	}{
 		{StatusInbox, true},
-		{StatusResearching, true},
+		{StatusResearching, false},
 		{StatusReview, true},
 		{StatusToDo, true},
 		{StatusInProgress, true},
@@ -44,6 +44,27 @@ func TestValidStatus(t *testing.T) {
 	for _, tt := range tests {
 		if got := ValidStatus(tt.status); got != tt.want {
 			t.Errorf("ValidStatus(%q) = %v, want %v", tt.status, got, tt.want)
+		}
+	}
+}
+
+func TestValidResearchState(t *testing.T) {
+	tests := []struct {
+		state string
+		want  bool
+	}{
+		{ResearchStateNone, true},
+		{ResearchStateQueued, true},
+		{ResearchStateRunning, true},
+		{ResearchStateDone, true},
+		{ResearchStateFailed, true},
+		{"unknown", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		if got := ValidResearchState(tt.state); got != tt.want {
+			t.Errorf("ValidResearchState(%q) = %v, want %v", tt.state, got, tt.want)
 		}
 	}
 }

@@ -8,7 +8,7 @@ export interface CardActions {
   onRetry: (id: number) => Promise<void> | void;
   onUpdateCard?: (id: number, patch: Partial<Card>) => Promise<void> | void;
   onDeleteCard?: (id: number) => Promise<void> | void;
-  showToast: (msg: string) => void;
+  showToast: (msg: string, onUndo?: () => Promise<void> | void) => void;
 }
 
 const CardActionsContext = createContext<CardActions | null>(null);

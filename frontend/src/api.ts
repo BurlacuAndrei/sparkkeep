@@ -1,4 +1,4 @@
-import { Card, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig } from './types';
+import { Card, Capture, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig } from './types';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -81,6 +81,11 @@ export async function retryCard(id: number): Promise<Card> {
   const res = await request<{ ok: boolean; data: Card }>(`/api/v1/cards/${id}/retry`, {
     method: 'POST',
   });
+  return res.data;
+}
+
+export async function fetchCapture(id: number): Promise<Capture> {
+  const res = await request<{ ok: boolean; data: Capture }>(`/api/v1/captures/${id}`);
   return res.data;
 }
 

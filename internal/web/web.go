@@ -236,6 +236,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("PUT /api/v1/research/quiet-window", a.setQuietWindow)
 
 	mux.HandleFunc("POST /api/v1/capture", a.capture)
+	mux.HandleFunc("GET /api/v1/captures/{id}", a.getCapture)
 	mux.HandleFunc("GET /api/v1/media/{name}", a.media)
 	mux.HandleFunc("POST /api/v1/auth/verify", a.verifyToken)
 	mux.HandleFunc("GET /api/v1/setup/status", a.setupStatus)
@@ -1153,6 +1154,20 @@ func (a *api) getCard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": card})
 }
 
+func (a *api) getCapture(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	cap, err := a.store.GetCapture(r.Context(), id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": cap})
+}
+
 func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -1160,6 +1175,7 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
+		Title              *string           `json:"title"`
 		Status             *string           `json:"status"`
 		Horizon            *string           `json:"horizon"`
 		Note               *string           `json:"note"`
@@ -1175,18 +1191,31 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		ExecutiveSummary   *string           `json:"executive_summary"`
 		ValueProposition   *string           `json:"value_proposition"`
 		ProposedActions    *[]string         `json:"proposed_actions"`
+		CompletedActions   *[]string         `json:"completed_actions"`
 		ActionsSource      *string           `json:"actions_source"`
+		AnalysisFailed     *bool             `json:"analysis_failed"`
 		ResearchVerdict    *string           `json:"research_verdict"`
 		ResearchConfidence *string           `json:"research_confidence"`
 		SuggestedHorizon   *string           `json:"suggested_horizon"`
 		SuggestedTags      *[]string         `json:"suggested_tags"`
+		ResearchState      *string           `json:"research_state"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
 		return
 	}
+	if b.Status != nil && *b.Status == "researching" {
+		inbox := port.StatusInbox
+		b.Status = &inbox
+		rs := port.ResearchStateRunning
+		b.ResearchState = &rs
+	}
 	if b.Status != nil && !port.ValidStatus(*b.Status) {
 		writeErr(w, http.StatusBadRequest, "invalid status: "+*b.Status)
+		return
+	}
+	if b.ResearchState != nil && !port.ValidResearchState(*b.ResearchState) {
+		writeErr(w, http.StatusBadRequest, "invalid research_state: "+*b.ResearchState)
 		return
 	}
 	if b.Horizon != nil && !port.ValidHorizon(*b.Horizon) {
@@ -1231,6 +1260,7 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	patch := port.CardPatch{
+		Title:              b.Title,
 		Status:             b.Status,
 		Horizon:            b.Horizon,
 		Note:               b.Note,
@@ -1244,14 +1274,17 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		ExecutiveSummary:   b.ExecutiveSummary,
 		ValueProposition:   b.ValueProposition,
 		ProposedActions:    b.ProposedActions,
+		CompletedActions:   b.CompletedActions,
 		ActionsSource:      b.ActionsSource,
+		AnalysisFailed:     b.AnalysisFailed,
 		ResearchVerdict:    b.ResearchVerdict,
 		ResearchConfidence: b.ResearchConfidence,
 		SuggestedHorizon:   b.SuggestedHorizon,
 		SuggestedTags:      b.SuggestedTags,
+		ResearchState:      b.ResearchState,
 		References:         b.References,
 	}
-	if patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.Type != nil || patch.TLDR != nil || patch.WhyCare != nil || patch.Claims != nil || patch.OpenQuestions != nil || patch.Signals != nil || patch.Worthiness != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil || patch.ActionsSource != nil || patch.ResearchVerdict != nil || patch.ResearchConfidence != nil || patch.SuggestedHorizon != nil || patch.SuggestedTags != nil || patch.References != nil {
+	if patch.Title != nil || patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.Type != nil || patch.TLDR != nil || patch.WhyCare != nil || patch.Claims != nil || patch.OpenQuestions != nil || patch.Signals != nil || patch.Worthiness != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil || patch.CompletedActions != nil || patch.ActionsSource != nil || patch.AnalysisFailed != nil || patch.ResearchVerdict != nil || patch.ResearchConfidence != nil || patch.SuggestedHorizon != nil || patch.SuggestedTags != nil || patch.ResearchState != nil || patch.References != nil {
 		card, err = a.store.UpdateCard(r.Context(), id, patch)
 		if err != nil {
 			a.fail(w, err)

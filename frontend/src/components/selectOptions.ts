@@ -23,13 +23,24 @@ export const CARD_HORIZON_OPTIONS: SelectOption<'short-term' | 'medium-term' | '
   { value: 'long-term', label: '🔭 Long-term (Vision)' },
 ];
 
-export const CARD_STATUS_OPTIONS: SelectOption<'inbox' | 'researching' | 'review' | 'to-do' | 'in-progress' | 'done' | 'shelved' | 'dismissed'>[] = [
+export const CARD_STATUS_OPTIONS: SelectOption<'inbox' | 'review' | 'to-do' | 'in-progress' | 'done' | 'shelved' | 'dismissed'>[] = [
   { value: 'inbox', label: '📥 Inbox' },
-  { value: 'researching', label: '🔍 Researching' },
   { value: 'review', label: '👀 Review' },
   { value: 'to-do', label: '📝 To Do' },
   { value: 'in-progress', label: '⚡ In Progress' },
   { value: 'done', label: '✅ Done' },
   { value: 'shelved', label: '📦 Shelved' },
   { value: 'dismissed', label: '🚫 Dismissed' },
+];
+
+export const CARD_TYPE_OPTIONS: SelectOption<import('../types').CardType>[] = [
+  { value: 'tool', label: '🛠️ Tool' },
+  { value: 'repo', label: '📦 Repository' },
+  { value: 'article', label: '📄 Article' },
+  { value: 'idea', label: '💡 Idea' },
+  { value: 'claim', label: '🎯 Claim' },
+  { value: 'tutorial', label: '📚 Tutorial' },
+  { value: 'product', label: '🚀 Product' },
+  { value: 'collection', label: '📚 Collection' },
+  { value: 'other', label: '📌 Other' },
 ];

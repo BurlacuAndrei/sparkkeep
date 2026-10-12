@@ -29,8 +29,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 16 {
-		t.Fatalf("version = %d, want 16", version)
+	if version != 17 {
+		t.Fatalf("version = %d, want 17", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -212,7 +212,8 @@ func TestShelveStale(t *testing.T) {
 		return c
 	}
 	staleInbox := mk("stale inbox", port.StatusInbox, 40*24*time.Hour)
-	staleDoing := mk("stale doing", port.StatusInProgress, 60*24*time.Hour)
+	staleTodo := mk("stale todo", port.StatusToDo, 50*24*time.Hour)
+	doingCommitted := mk("doing committed", port.StatusInProgress, 60*24*time.Hour)
 	freshInbox := mk("fresh inbox", port.StatusInbox, time.Hour)
 	staleDone := mk("already done", port.StatusDone, 90*24*time.Hour)
 
@@ -223,7 +224,7 @@ func TestShelveStale(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("shelved %d cards, want 2", n)
 	}
-	for _, id := range []int64{staleInbox.ID, staleDoing.ID} {
+	for _, id := range []int64{staleInbox.ID, staleTodo.ID} {
 		got, err := s.GetCard(ctx, id)
 		if err != nil {
 			t.Fatalf("GetCard: %v", err)
@@ -232,7 +233,7 @@ func TestShelveStale(t *testing.T) {
 			t.Fatalf("card %d status = %q, want shelved", id, got.Status)
 		}
 	}
-	for _, c := range []port.Card{freshInbox, staleDone} {
+	for _, c := range []port.Card{doingCommitted, freshInbox, staleDone} {
 		got, err := s.GetCard(ctx, c.ID)
 		if err != nil {
 			t.Fatalf("GetCard: %v", err)
@@ -1074,8 +1075,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 16 {
-		t.Fatalf("version = %d, want 16", version)
+	if version != 17 {
+		t.Fatalf("version = %d, want 17", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1187,8 +1188,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 16 {
-		t.Fatalf("version = %d, want 16", version)
+	if version != 17 {
+		t.Fatalf("version = %d, want 17", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -1819,5 +1820,75 @@ func TestStore_DefaultCuratedPlaybooks(t *testing.T) {
 	}
 	if execPB.Steps[4].Config.Role != "research_synthesis" {
 		t.Errorf("Quick Executive Briefing synthesis role = %q, want research_synthesis", execPB.Steps[4].Config.Role)
+	}
+}
+
+func TestCardTrustFixesP0(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	// Create card with completed actions and analysis_failed
+	c, err := s.CreateCard(ctx, port.Card{
+		Title:            "Card Trust Fixes",
+		Status:           port.StatusInProgress,
+		ProposedActions:  []string{"Step 1", "Step 2", "Step 3"},
+		CompletedActions: []string{"Step 1"},
+		AnalysisFailed:   false,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard failed: %v", err)
+	}
+
+	got, err := s.GetCard(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("GetCard failed: %v", err)
+	}
+	if len(got.CompletedActions) != 1 || got.CompletedActions[0] != "Step 1" {
+		t.Fatalf("expected completed_actions [Step 1], got %+v", got.CompletedActions)
+	}
+	if got.AnalysisFailed {
+		t.Fatalf("expected AnalysisFailed false, got true")
+	}
+
+	// Update Title, CompletedActions, and AnalysisFailed via Patch
+	newTitle := "Updated Card Title"
+	newCompleted := []string{"Step 1", "Step 3"}
+	analysisFailedTrue := true
+	updated, err := s.UpdateCard(ctx, c.ID, port.CardPatch{
+		Title:            &newTitle,
+		CompletedActions: &newCompleted,
+		AnalysisFailed:   &analysisFailedTrue,
+	})
+	if err != nil {
+		t.Fatalf("UpdateCard failed: %v", err)
+	}
+	if updated.Title != newTitle {
+		t.Errorf("updated Title = %q, want %q", updated.Title, newTitle)
+	}
+	if len(updated.CompletedActions) != 2 || updated.CompletedActions[1] != "Step 3" {
+		t.Errorf("updated CompletedActions = %+v, want [Step 1, Step 3]", updated.CompletedActions)
+	}
+	if !updated.AnalysisFailed {
+		t.Errorf("updated AnalysisFailed = false, want true")
+	}
+
+	// Verify ListCards reflects it too
+	list, err := s.ListCards(ctx, port.CardFilter{})
+	if err != nil {
+		t.Fatalf("ListCards failed: %v", err)
+	}
+	if len(list) == 0 {
+		t.Fatalf("ListCards returned 0 cards")
+	}
+	var found bool
+	for _, item := range list {
+		if item.ID == c.ID {
+			found = true
+			if item.Title != newTitle || len(item.CompletedActions) != 2 || !item.AnalysisFailed {
+				t.Fatalf("ListCards card mismatch: %+v", item)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("card %d not found in ListCards", c.ID)
 	}
 }

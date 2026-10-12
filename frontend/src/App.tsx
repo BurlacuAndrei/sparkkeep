@@ -37,7 +37,7 @@ function AppContent() {
   // Modals & Feedback
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; onUndo?: () => void } | null>(null);
 
   // Auth (SPARKKEEP_AUTH_TOKEN): a 401 anywhere raises the unlock modal.
   const [isAuthRequired, setIsAuthRequired] = useState(false);
@@ -49,18 +49,19 @@ function AppContent() {
   const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  const showToast = useCallback((msg: string) => {
+  const showToast = useCallback((msg: string, onUndo?: () => Promise<void> | void) => {
     if (msg === 'unauthorized' || msg === 'HTTP 401') {
       setIsAuthRequired(true);
       return;
     }
-    setToastMessage(msg);
+    const undoWrapper = onUndo ? () => { void onUndo(); } : undefined;
+    setToast({ message: msg, onUndo: undoWrapper });
     const flashEl = document.getElementById('flash');
     if (flashEl) flashEl.textContent = msg;
     setTimeout(() => {
-      setToastMessage((cur) => (cur === msg ? null : cur));
+      setToast((cur) => (cur?.message === msg ? null : cur));
       if (flashEl && flashEl.textContent === msg) flashEl.textContent = '';
-    }, 3500);
+    }, onUndo ? 5000 : 3500);
   }, []);
 
   const loadCards = useCallback(async () => {
@@ -160,12 +161,26 @@ function AppContent() {
     reloadAll();
   }, [showToast, reloadAll]);
 
-  // Card status change
+  // Card status change with 5-second undo support
   const handleStatusChange = async (id: number, newStatus: string) => {
+    const prevCard = cards.find((c) => c.id === id);
+    const prevStatus = prevCard?.status;
     try {
       await api.updateCard(id, { status: newStatus as any });
-      showToast(`Updated card #${id} → ${newStatus}`);
       reloadAll();
+      if (prevStatus && prevStatus !== newStatus) {
+        showToast(`Moved card #${id} → ${newStatus}`, async () => {
+          try {
+            await api.updateCard(id, { status: prevStatus as any });
+            reloadAll();
+            showToast(`Reverted card #${id} back to ${prevStatus}`);
+          } catch (err: unknown) {
+            showToast(api.getErrorMessage(err));
+          }
+        });
+      } else {
+        showToast(`Updated card #${id} → ${newStatus}`);
+      }
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
@@ -250,6 +265,10 @@ function AppContent() {
     }
   };
 
+  const triageCount = cards.filter(
+    (c) => c.status === 'inbox' || c.status === 'researching' || c.status === 'review'
+  ).length;
+
   return (
     <CardActionsProvider
       value={{
@@ -270,10 +289,11 @@ function AppContent() {
         onViewModeChange={setViewMode}
         onOpenNewCard={() => setIsNewModalOpen(true)}
         onTriggerResearch={handleResearch}
-        flashMessage={toastMessage || ''}
+        flashMessage={toast?.message || ''}
         isPro={licenseStatus?.tier === 'pro'}
         onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+        triageCount={triageCount}
       />
 
       <div className={`main-layout ${viewMode === 'digest' ? 'no-sidebar' : ''}`}>
@@ -313,6 +333,7 @@ function AppContent() {
               onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
               showToast={showToast}
               onRefresh={reloadAll}
+              onSwitchToTriage={() => setViewMode('triage')}
             />
           )}
 
@@ -333,6 +354,8 @@ function AppContent() {
         <CardModal
           key={selectedCard.id}
           card={selectedCard}
+          allCards={cards}
+          onSelectCard={setSelectedCard}
           onClose={() => setSelectedCard(null)}
           onUpdate={handleUpdateCard}
           onDelete={handleDeleteCard}
@@ -424,11 +447,34 @@ function AppContent() {
         />
       )}
 
-      {/* Floating Toast Notification */}
-      {toastMessage && (
-        <div className="toast">
+      {/* Floating Toast Notification with Undo */}
+      {toast && (
+        <div className="toast" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Bell size={14} strokeWidth={1.5} color="#818cf8" />
-          <span>{toastMessage}</span>
+          <span style={{ flex: 1 }}>{toast.message}</span>
+          {toast.onUndo && (
+            <button
+              type="button"
+              className="toast-undo-btn"
+              onClick={() => {
+                const undoFn = toast.onUndo;
+                setToast(null);
+                undoFn?.();
+              }}
+              style={{
+                background: 'rgba(99, 102, 241, 0.25)',
+                border: '1px solid rgba(99, 102, 241, 0.5)',
+                color: '#e0e7ff',
+                borderRadius: 4,
+                padding: '3px 8px',
+                fontSize: 11.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Undo
+            </button>
+          )}
         </div>
       )}
       </div>

@@ -39,12 +39,24 @@ const (
 	CardTypeOther    = "other"
 )
 
+const (
+	ResearchStateNone    = "none"
+	ResearchStateQueued  = "queued"
+	ResearchStateRunning = "running"
+	ResearchStateDone    = "done"
+	ResearchStateFailed  = "failed"
+)
+
 func ValidHorizon(h string) bool {
 	return h == HorizonShortTerm || h == HorizonMediumTerm || h == HorizonLongTerm
 }
 
 func ValidStatus(s string) bool {
-	return s == StatusInbox || s == StatusResearching || s == StatusReview || s == StatusToDo || s == StatusInProgress || s == StatusDone || s == StatusShelved || s == StatusDismissed
+	return s == StatusInbox || s == StatusReview || s == StatusToDo || s == StatusInProgress || s == StatusDone || s == StatusShelved || s == StatusDismissed
+}
+
+func ValidResearchState(s string) bool {
+	return s == ResearchStateNone || s == ResearchStateQueued || s == ResearchStateRunning || s == ResearchStateDone || s == ResearchStateFailed
 }
 
 func ValidReferenceKind(k string) bool {
@@ -95,11 +107,14 @@ type Card struct {
 	ExecutiveSummary   string        `json:"executive_summary"`
 	ValueProposition   string        `json:"value_proposition"`
 	ProposedActions    []string      `json:"proposed_actions"`
+	CompletedActions   []string      `json:"completed_actions"` // texts of ProposedActions checked off by the user
 	ActionsSource      string        `json:"actions_source"`
+	AnalysisFailed     bool          `json:"analysis_failed"`
 	ResearchVerdict    string        `json:"research_verdict,omitempty"`
 	ResearchConfidence string        `json:"research_confidence,omitempty"`
 	SuggestedHorizon   string        `json:"suggested_horizon,omitempty"`
 	SuggestedTags      []string      `json:"suggested_tags,omitempty"`
+	ResearchState      string        `json:"research_state,omitempty"`
 	CreatedAt          time.Time     `json:"created_at"`
 	UpdatedAt          time.Time     `json:"updated_at"`
 	Comments           []CardComment `json:"comments,omitempty"`
@@ -419,12 +434,15 @@ type CardFilter struct {
 }
 
 type CardPatch struct {
+	Title              *string
 	Status             *string
 	Horizon            *string
 	Note               *string
 	ExecutiveSummary   *string
 	ValueProposition   *string
 	ProposedActions    *[]string
+	CompletedActions   *[]string
+	AnalysisFailed     *bool
 	SourceURL          *string
 	CaptureID          *int64
 	References         *[]Reference
@@ -440,6 +458,7 @@ type CardPatch struct {
 	ResearchConfidence *string
 	SuggestedHorizon   *string
 	SuggestedTags      *[]string
+	ResearchState      *string
 }
 
 type TagPair struct {

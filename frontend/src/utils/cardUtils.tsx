@@ -1,0 +1,50 @@
+import React from 'react';
+import {
+  Video,
+  Camera,
+  Share2,
+  Code2,
+  AtSign,
+  Send,
+  Globe,
+} from 'lucide-react';
+
+export function getPlatformInfo(url?: string): { name: string; icon: React.ReactNode; color: string } {
+  if (!url) return { name: 'Web', icon: <Globe size={11} />, color: '#94a3b8' };
+  const lower = url.toLowerCase();
+  if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
+    return { name: 'YouTube', icon: <Video size={11} />, color: '#ef4444' };
+  }
+  if (lower.includes('instagram.com')) {
+    return { name: 'Instagram', icon: <Camera size={11} />, color: '#ec4899' };
+  }
+  if (lower.includes('facebook.com') || lower.includes('fb.watch')) {
+    return { name: 'Facebook', icon: <Share2 size={11} />, color: '#3b82f6' };
+  }
+  if (lower.includes('github.com')) {
+    return { name: 'GitHub', icon: <Code2 size={11} />, color: '#cbd5e1' };
+  }
+  if (lower.includes('twitter.com') || lower.includes('x.com')) {
+    return { name: 'X', icon: <AtSign size={11} />, color: '#38bdf8' };
+  }
+  if (lower.includes('t.me') || lower.includes('telegram.me')) {
+    return { name: 'Telegram', icon: <Send size={11} />, color: '#0ea5e9' };
+  }
+  return { name: 'Web', icon: <Globe size={11} />, color: '#94a3b8' };
+}
+
+export function formatRelativeAge(dateStr?: string): string {
+  if (!dateStr) return '';
+  const time = new Date(dateStr).getTime();
+  if (isNaN(time)) return '';
+  const diffSec = Math.floor((Date.now() - time) / 1000);
+  if (diffSec < 60) return 'now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) return `${diffDays}d`;
+  const diffMonths = Math.floor(diffDays / 30);
+  return `${diffMonths}mo`;
+}
