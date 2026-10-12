@@ -80,8 +80,40 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const archivedDoneCards = doneCards.filter((c) => isOlderThan7Days(c));
   const displayedDoneCards = showArchivedDone ? doneCards : activeDoneCards;
 
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+
   const handleStatusChange = (id: number, status: string) => {
     onUpdateCard(id, { status: status as any });
+  };
+
+  const handleDragOver = (e: React.DragEvent, colStatus: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverCol !== colStatus) {
+      setDragOverCol(colStatus);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, colStatus: string) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    if (dragOverCol === colStatus) {
+      setDragOverCol(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, colStatus: string) => {
+    e.preventDefault();
+    setDragOverCol(null);
+    const cardIdStr = e.dataTransfer.getData('text/plain');
+    const cardId = parseInt(cardIdStr, 10);
+    if (!isNaN(cardId) && cardId > 0) {
+      const targetCard = cards.find((c) => c.id === cardId);
+      if (targetCard && targetCard.status !== colStatus) {
+        onUpdateCard(cardId, { status: colStatus as any });
+        const label = colStatus === 'to-do' ? 'To Do' : colStatus === 'in-progress' ? 'In Progress' : 'Completed';
+        showToast?.(`Moved card #${cardId} → ${label}`);
+      }
+    }
   };
 
   const renderCardItem = (card: Card) => (
@@ -236,7 +268,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       {boardMode === 'active' && (
         <div className="kanban-board" data-view="execution">
           {/* To Do Column */}
-          <div className="kanban-column">
+          <div
+            className={`kanban-column ${dragOverCol === 'to-do' ? 'drag-over' : ''}`}
+            onDragOver={(e) => handleDragOver(e, 'to-do')}
+            onDragLeave={(e) => handleDragLeave(e, 'to-do')}
+            onDrop={(e) => handleDrop(e, 'to-do')}
+          >
             <div className="column-header">
               <div className="column-title">
                 <ListTodo size={15} strokeWidth={1.5} color="#cbd5e1" />
@@ -247,7 +284,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <div className="cards-container">
               {todoCards.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
-                  Ready for work.
+                  Ready for work. (Drop cards here)
                 </div>
               ) : (
                 todoCards.map(renderCardItem)
@@ -256,7 +293,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </div>
 
           {/* In Progress Column */}
-          <div className="kanban-column">
+          <div
+            className={`kanban-column ${dragOverCol === 'in-progress' ? 'drag-over' : ''}`}
+            onDragOver={(e) => handleDragOver(e, 'in-progress')}
+            onDragLeave={(e) => handleDragLeave(e, 'in-progress')}
+            onDrop={(e) => handleDrop(e, 'in-progress')}
+          >
             <div className="column-header">
               <div className="column-title">
                 <Zap size={15} strokeWidth={1.5} color="#34d399" />
@@ -267,7 +309,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <div className="cards-container">
               {inProgressCards.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
-                  No active actions.
+                  No active actions. (Drop cards here)
                 </div>
               ) : (
                 inProgressCards.map(renderCardItem)
@@ -276,7 +318,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </div>
 
           {/* Done Column */}
-          <div className="kanban-column">
+          <div
+            className={`kanban-column ${dragOverCol === 'done' ? 'drag-over' : ''}`}
+            onDragOver={(e) => handleDragOver(e, 'done')}
+            onDragLeave={(e) => handleDragLeave(e, 'done')}
+            onDrop={(e) => handleDrop(e, 'done')}
+          >
             <div className="column-header">
               <div className="column-title">
                 <CheckCircle2 size={15} strokeWidth={1.5} color="#a5b4fc" />

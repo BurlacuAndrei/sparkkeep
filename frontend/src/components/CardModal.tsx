@@ -33,6 +33,7 @@ import {
 import { CustomSelect } from './CustomSelect';
 import { CARD_HORIZON_OPTIONS, CARD_TYPE_OPTIONS } from './selectOptions';
 import { ResearchReportView } from './ResearchReportView';
+import { ResearchProgressStrip } from './ResearchProgressStrip';
 import { getPlatformInfo, formatRelativeAge } from '../utils/cardUtils';
 
 export interface CardModalProps {
@@ -119,15 +120,25 @@ export const CardModal: React.FC<CardModalProps> = ({
 
   const cardId = card.id;
 
-  // Load research, capture, and comments
+  // Load research, capture, and comments with reactive polling for background research
   useEffect(() => {
     if (!cardId) return;
     let alive = true;
-    fetchCardResearch(cardId)
-      .then((r) => {
-        if (alive) setResearch(r);
-      })
-      .catch((err: Error) => showToast?.(err.message));
+
+    const loadResearch = () => {
+      fetchCardResearch(cardId)
+        .then((r) => {
+          if (alive && r) setResearch(r);
+        })
+        .catch(() => {});
+    };
+
+    loadResearch();
+
+    let pollInterval: any = null;
+    if (card.research_state === 'running' || card.research_state === 'queued') {
+      pollInterval = setInterval(loadResearch, 3000);
+    }
 
     fetchCard(cardId)
       .then((c) => {
@@ -145,8 +156,9 @@ export const CardModal: React.FC<CardModalProps> = ({
 
     return () => {
       alive = false;
+      if (pollInterval) clearInterval(pollInterval);
     };
-  }, [cardId, card.capture_id, showToast]);
+  }, [cardId, card.capture_id, card.research_state, showToast]);
 
   // Outside click for menu
   useEffect(() => {
@@ -767,6 +779,12 @@ export const CardModal: React.FC<CardModalProps> = ({
         <div className="drawer-body-layout">
           {/* Main Column (Stage-Ordered Content) */}
           <div className="drawer-main-col">
+            {/* Active Research Progress Indicator */}
+            {(card.research_state === 'running' || card.research_state === 'queued') && (
+              <div style={{ marginBottom: 12 }}>
+                <ResearchProgressStrip cardId={card.id} />
+              </div>
+            )}
             {/* Collection Callout Banner */}
             {cardType === 'collection' && (
               <div
@@ -1158,6 +1176,64 @@ export const CardModal: React.FC<CardModalProps> = ({
             {/* STAGE: TO DO / IN PROGRESS */}
             {(status === 'to-do' || status === 'in-progress') && (
               <>
+                {/* Deep Research Findings Callout Banner (Prominent in To Do) */}
+                {research && (
+                  <div
+                    style={{
+                      background: 'rgba(99, 102, 241, 0.08)',
+                      border: '1px solid rgba(99, 102, 241, 0.3)',
+                      borderRadius: 8,
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 6,
+                          background: 'rgba(192, 132, 252, 0.15)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Sparkles size={16} color="#c084fc" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>Deep Research Findings Ready</span>
+                          {research.result?.verdict?.recommendation && (
+                            <span className={`card-verdict-pill ${research.result.verdict.recommendation}`} style={{ fontSize: 10, padding: '1px 6px' }}>
+                              {research.result.verdict.recommendation.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                          {research.result?.claims?.length
+                            ? `${research.result.claims.length} claims verified & synthesized`
+                            : 'Autonomous analysis and findings synthesized'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setIsReportOpen(!isReportOpen)}
+                      style={{ fontSize: 12, padding: '5px 12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}
+                    >
+                      <FileSearch size={13} color="#38bdf8" />
+                      <span>{isReportOpen ? 'Hide Report' : 'View Report'}</span>
+                      {isReportOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    </button>
+                  </div>
+                )}
+
                 {/* 1. Proposed Actions Checklist at Top */}
                 <div className="briefing-section">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>

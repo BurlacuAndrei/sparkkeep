@@ -349,6 +349,35 @@ body {
   background: var(--bg-input-focus);
 }
 
+@media (max-width: 1024px) {
+  .topbar {
+    padding: 10px 16px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .search-wrapper {
+    max-width: 260px;
+  }
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .brand-title {
+    display: none;
+  }
+  .quick-research {
+    display: none;
+  }
+  .search-wrapper {
+    max-width: 100%;
+    order: 3;
+    width: 100%;
+  }
+}
+
 /* Toast */
 .toast {
   position: fixed;
@@ -762,7 +791,18 @@ body {
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: var(--shadow-card);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.action-card.menu-active {
+  z-index: 50;
+}
+
+.action-card.is-dragging {
+  opacity: 0.45;
+  transform: scale(0.98);
+  box-shadow: 0 0 0 2px var(--accent-indigo);
+  cursor: grabbing !important;
 }
 
 .action-card:hover {
@@ -1260,9 +1300,33 @@ body {
   border-radius: 8px;
   box-shadow: var(--shadow-popover);
   padding: 4px;
-  z-index: 50;
+  z-index: 60;
   display: flex;
   flex-direction: column;
+}
+
+.card-context-menu.drop-down {
+  bottom: auto;
+  top: calc(100% + 4px);
+}
+
+.kanban-column.drag-over {
+  border-color: rgba(99, 102, 241, 0.7) !important;
+  background: rgba(99, 102, 241, 0.08) !important;
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.4), 0 4px 20px rgba(99, 102, 241, 0.15) !important;
+}
+
+.card-research-ready-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1.5px 6px;
+  border-radius: 999px;
+  background: rgba(192, 132, 252, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(192, 132, 252, 0.35);
 }
 
 .card-context-item {
@@ -1957,13 +2021,7 @@ body {
   flex: 1;
   display: flex;
   overflow: hidden;
-}
-
-@media (max-width: 768px) {
-  .drawer-body-layout {
-    flex-direction: column;
-    overflow-y: auto;
-  }
+  min-height: 0;
 }
 
 .drawer-main-col {
@@ -1973,6 +2031,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 0;
+  overscroll-behavior: contain;
 }
 
 .drawer-right-rail {
@@ -1985,13 +2045,33 @@ body {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 0;
+  overscroll-behavior: contain;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 860px) {
+  .drawer-body-layout {
+    flex-direction: column;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .drawer-main-col {
+    overflow-y: visible !important;
+    flex: none !important;
+    height: auto !important;
+    padding: 16px;
+  }
+
   .drawer-right-rail {
-    width: 100%;
-    border-left: none;
-    border-top: 1px solid var(--border-subtle);
+    width: 100% !important;
+    min-width: 0 !important;
+    border-left: none !important;
+    border-top: 1px solid var(--border-subtle) !important;
+    overflow-y: visible !important;
+    flex: none !important;
+    height: auto !important;
+    padding: 16px;
   }
 }
 

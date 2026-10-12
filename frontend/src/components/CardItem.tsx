@@ -52,6 +52,8 @@ export const CardItem: React.FC<CardItemProps> = ({
   const onRetry = propOnRetry || actions.onRetry;
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openDownwards, setOpenDownwards] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,6 +66,30 @@ export const CardItem: React.FC<CardItemProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [menuOpen]);
+
+  const handleMenuToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!menuOpen && menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      setOpenDownwards(rect.top < 280);
+    }
+    setMenuOpen(!menuOpen);
+  };
+
+  const handleDragStart = (e: React.DragEvent<HTMLElement>) => {
+    if (menuOpen) {
+      e.preventDefault();
+      return;
+    }
+    setIsDragging(true);
+    e.dataTransfer.setData('text/plain', String(card.id));
+    e.dataTransfer.setData('application/json', JSON.stringify({ id: card.id, status: card.status }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
 
   const isFailed = Boolean(card.analysis_failed || card.title === 'Analysis failed');
   const platform = getPlatformInfo(card.source_url);
@@ -134,12 +160,16 @@ export const CardItem: React.FC<CardItemProps> = ({
 
   return (
     <article
-      className={`card action-card ${selected ? 'is-selected' : ''}`}
+      className={`card action-card ${selected ? 'is-selected' : ''} ${menuOpen ? 'menu-active' : ''} ${isDragging ? 'is-dragging' : ''}`}
       data-id={card.id}
       onClick={handleClick}
+      draggable={!menuOpen}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       style={{
         border: selected ? '1px solid var(--accent-indigo)' : undefined,
         background: selected ? 'rgba(99, 102, 241, 0.08)' : undefined,
+        cursor: isDragging ? 'grabbing' : 'grab',
       }}
     >
       {/* ① Meta Row */}
@@ -243,7 +273,7 @@ export const CardItem: React.FC<CardItemProps> = ({
             <AlertTriangle size={12} color="#fb7185" />
             <span>Couldn't read source</span>
           </div>
-        ) : card.status === 'researching' || (card.status === 'inbox' && (card.research_state === 'queued' || card.research_state === 'running')) ? (
+        ) : card.status === 'researching' || card.research_state === 'queued' || card.research_state === 'running' ? (
           <div style={{ width: '100%' }}>
             <ResearchProgressStrip cardId={card.id} compact={true} />
           </div>
@@ -284,6 +314,12 @@ export const CardItem: React.FC<CardItemProps> = ({
               <CheckCircle2 size={11.5} color={completedCount > 0 ? '#34d399' : '#94a3b8'} />
               <span>{totalActions > 0 ? `${completedCount}/${totalActions} actions` : 'Ready to plan'}</span>
             </span>
+            {card.research_state === 'done' && (
+              <span className="card-research-ready-badge" title="Deep Research complete — click card to view findings">
+                <Sparkles size={10} color="#c084fc" />
+                <span>Research Ready</span>
+              </span>
+            )}
           </div>
         ) : card.status === 'in-progress' ? (
           <div className="card-stage-inprogress">
@@ -293,6 +329,12 @@ export const CardItem: React.FC<CardItemProps> = ({
                 <span>In Progress</span>
               </span>
               <span>{totalActions > 0 ? `${completedCount}/${totalActions} done` : ''}</span>
+              {card.research_state === 'done' && (
+                <span className="card-research-ready-badge" title="Deep Research complete — click card to view findings">
+                  <Sparkles size={10} color="#c084fc" />
+                  <span>Research Ready</span>
+                </span>
+              )}
             </div>
             {totalActions > 0 && (
               <div className="card-progress-bar-track">
@@ -435,17 +477,14 @@ export const CardItem: React.FC<CardItemProps> = ({
               type="button"
               className={`icon-btn card-more-btn ${menuOpen ? 'active' : ''}`}
               title="More actions"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen(!menuOpen);
-              }}
+              onClick={handleMenuToggle}
             >
               <MoreHorizontal size={13} strokeWidth={2} />
             </button>
 
             {menuOpen && (
               <div
-                className="card-context-menu"
+                className={`card-context-menu ${openDownwards ? 'drop-down' : ''}`}
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Autonomous Research */}
