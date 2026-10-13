@@ -1,70 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
   Save,
   AlertCircle,
-  EyeOff,
-  Eye,
   Palette,
   Cpu,
   Shield,
   Sliders,
-  CheckCircle2,
-  Lock,
-  Sparkles,
-  Plus,
-  Trash2,
-  Pencil,
-  Star,
-  Server,
-  Network,
   BookOpen,
   User,
   Clock,
   Plug,
   MessageSquare,
-  Terminal,
 } from 'lucide-react';
 import * as api from '../api';
-import { LLMProfile, LLMProfileInput } from '../types';
+import { LLMProfile } from '../types';
 import { ThemeSelector } from './ThemeSelector';
 import { PlaybookManager } from './PlaybookManager';
 import { ResearchScheduler } from './ResearchScheduler';
-
-interface RoleDefinition {
-  key: string;
-  label: string;
-  description: string;
-  hint: string;
-}
-
-const ROLE_DEFINITIONS: RoleDefinition[] = [
-  {
-    key: 'triage',
-    label: 'Triage & Extraction',
-    description: 'Processes incoming links and notes into structured idea cards.',
-    hint: 'fast & cheap recommended',
-  },
-  {
-    key: 'vision',
-    label: 'Vision & Image Analysis',
-    description: 'Transcribes text and digests screenshot / photo uploads.',
-    hint: 'fast & cheap recommended',
-  },
-  {
-    key: 'research_plan',
-    label: 'Research Planning',
-    description: 'Generates targeted web search queries and reading plans.',
-    hint: 'fast & cheap recommended',
-  },
-  {
-    key: 'research_synthesis',
-    label: 'Research Synthesis',
-    description: 'Synthesizes deep-dive findings into a comprehensive markdown report.',
-    hint: 'strongest model recommended',
-  },
-];
+import {
+  AIProfileTab,
+  UserProfileTab,
+  ChannelsTab,
+  SecurityTab,
+  IntegrationsTab,
+  DEFAULT_TOKEN_CAPS,
+} from './settings';
 
 export interface SettingsModalProps {
   onClose: () => void;
@@ -72,130 +34,51 @@ export interface SettingsModalProps {
   onOpenLicenseModal?: () => void;
 }
 
-type SettingsTab = 'appearance' | 'profile' | 'ai' | 'playbooks' | 'schedule' | 'integrations' | 'security';
+export type SettingsTab =
+  | 'appearance'
+  | 'profile'
+  | 'ai'
+  | 'playbooks'
+  | 'schedule'
+  | 'channels'
+  | 'integrations'
+  | 'security';
 
-const LANGUAGE_OPTIONS = [
-  'Same as source / English',
-  'English',
-  'Spanish',
-  'German',
-  'French',
-  'Italian',
-  'Portuguese',
-  'Japanese',
-  'Chinese',
-  'Romanian',
-];
-
-interface PresetTemplate {
-  label: string;
-  name: string;
-  base: string;
-  model: string;
-  requiresKey: boolean;
-  desc: string;
+interface SettingsBaseline {
+  defaultView: 'kanban' | 'digest';
+  cardDensity: 'comfortable' | 'compact';
+  reduceMotion: 'default' | 'reduced';
+  profileGoals: string;
+  profileSkills: string;
+  profileStack: string;
+  profileInterests: string;
+  profileConstraints: string;
+  profileLanguage: string;
+  openclawUrl: string;
+  openclawChannel: string;
+  openclawTarget: string;
+  openclawEnabled: boolean;
+  discordChannelId: string;
 }
-
-const PRESET_TEMPLATES: PresetTemplate[] = [
-  {
-    label: 'OpenAI',
-    name: 'OpenAI GPT-4o',
-    base: 'https://api.openai.com/v1',
-    model: 'gpt-4o',
-    requiresKey: true,
-    desc: 'Cloud OpenAI inference',
-  },
-  {
-    label: 'Claude',
-    name: 'Anthropic Claude 3.5 Sonnet',
-    base: 'https://api.anthropic.com/v1',
-    model: 'claude-3-5-sonnet-20241022',
-    requiresKey: true,
-    desc: 'Cloud Anthropic inference',
-  },
-  {
-    label: 'Gemini',
-    name: 'Google Gemini 1.5 Pro',
-    base: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-1.5-pro-latest',
-    requiresKey: true,
-    desc: 'Cloud Gemini inference via OpenAI compat',
-  },
-  {
-    label: 'Groq',
-    name: 'Groq Llama 3.3',
-    base: 'https://api.groq.com/openai/v1',
-    model: 'llama-3.3-70b-versatile',
-    requiresKey: true,
-    desc: 'Ultra-fast LPU inference',
-  },
-  {
-    label: 'OpenRouter',
-    name: 'OpenRouter Auto',
-    base: 'https://openrouter.ai/api/v1',
-    model: 'anthropic/claude-3-haiku',
-    requiresKey: true,
-    desc: 'OpenRouter inference',
-  },
-  {
-    label: 'Ollama',
-    name: 'Ollama Local',
-    base: 'http://localhost:11434/v1',
-    model: 'llama3.2',
-    requiresKey: false,
-    desc: 'Self-hosted local models',
-  },
-  {
-    label: 'LM Studio',
-    name: 'LM Studio',
-    base: 'http://localhost:1234/v1',
-    model: 'local-model',
-    requiresKey: false,
-    desc: 'Local developer inference server',
-  },
-  {
-    label: 'Custom',
-    name: 'Custom Provider',
-    base: '',
-    model: '',
-    requiresKey: false,
-    desc: 'Custom OpenAI-compatible endpoint',
-  },
-];
 
 export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
 
-  // Backend AI settings & multi-LLM profiles
+  // AI & Profiles state
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
+  const [llmRoles, setLlmRoles] = useState<Record<string, string>>({});
+  const [tokenCaps, setTokenCaps] = useState<Record<string, number>>(DEFAULT_TOKEN_CAPS);
 
-  // Multi-LLM form state
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
-  const [formName, setFormName] = useState('');
-  const [formBase, setFormBase] = useState('');
-  const [formModel, setFormModel] = useState('');
-  const [formKey, setFormKey] = useState('');
-  const [formHasKey, setFormHasKey] = useState(false);
-  const [formIsDefault, setFormIsDefault] = useState(false);
-  const [formShowKey, setFormShowKey] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState<string>('OpenAI');
-  const [formError, setFormError] = useState<string | null>(null);
-  const [savingForm, setSavingForm] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  // Backend Security settings
+  // Security state
   const [authToken, setAuthToken] = useState('');
   const [confirmAuthToken, setConfirmAuthToken] = useState('');
   const [hasAuthToken, setHasAuthToken] = useState(false);
-  const [showAuthToken, setShowAuthToken] = useState(false);
 
-  // Integrations settings
+  // Channels state
   const [tgToken, setTgToken] = useState('');
   const [hasTgToken, setHasTgToken] = useState(false);
   const [tgChatId, setTgChatId] = useState('');
 
-  // Multi-Channel Integrations state
   const [openclawUrl, setOpenclawUrl] = useState('http://localhost:18789');
   const [openclawToken, setOpenclawToken] = useState('');
   const [hasOpenclawToken, setHasOpenclawToken] = useState(false);
@@ -210,11 +93,7 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
   const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
   const [hasSlackWebhook, setHasSlackWebhook] = useState(false);
 
-  const [channelTesting, setChannelTesting] = useState<string | null>(null);
-  const [digestPushing, setDigestPushing] = useState(false);
-  const [selectedDigestChannel, setSelectedDigestChannel] = useState('all');
-
-  // Dashboard display preferences (persisted locally)
+  // Appearance preferences state
   const [defaultView, setDefaultView] = useState<'kanban' | 'digest'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sparkkeep_default_view');
@@ -239,19 +118,21 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
     return 'default';
   });
 
-  const [llmRoles, setLlmRoles] = useState<Record<string, string>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  // User profile ("About me") state
+  // User profile state
   const [profileGoals, setProfileGoals] = useState('');
   const [profileSkills, setProfileSkills] = useState('');
   const [profileStack, setProfileStack] = useState('');
   const [profileInterests, setProfileInterests] = useState('');
   const [profileConstraints, setProfileConstraints] = useState('');
   const [profileLanguage, setProfileLanguage] = useState('Same as source / English');
-  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Baseline snapshot for dirty tracking
+  const [baseline, setBaseline] = useState<SettingsBaseline | null>(null);
+
+  // Common modal state
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Escape key handler
   useEffect(() => {
@@ -271,41 +152,99 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
         if (profs.length > 0) {
           setProfiles(profs);
         } else if (res.settings.llm_model) {
-          setProfiles([{
-            id: 'default',
-            name: 'Default',
-            base_url: res.settings.llm_base || '',
-            model: res.settings.llm_model || '',
-            has_key: Boolean(res.settings.has_llm_key),
-            is_default: true,
-          }]);
+          setProfiles([
+            {
+              id: 'default',
+              name: 'Default',
+              base_url: res.settings.llm_base || '',
+              model: res.settings.llm_model || '',
+              has_key: Boolean(res.settings.has_llm_key),
+              is_default: true,
+            },
+          ]);
         }
         if (res.settings.llm_roles) {
           setLlmRoles(res.settings.llm_roles);
         }
+        if (res.settings.llm_token_caps) {
+          setTokenCaps(res.settings.llm_token_caps);
+        }
+
+        let loadedGoals = '';
+        let loadedSkills = '';
+        let loadedStack = '';
+        let loadedInterests = '';
+        let loadedConstraints = '';
+        let loadedLang = 'Same as source / English';
+
         if (res.settings.user_profile) {
           const up = res.settings.user_profile;
-          if (up.goals) setProfileGoals(up.goals);
-          if (up.skills) setProfileSkills(up.skills.join(', '));
-          if (up.stack) setProfileStack(up.stack.join(', '));
-          if (up.interests) setProfileInterests(up.interests.join(', '));
-          if (up.constraints) setProfileConstraints(up.constraints);
-          if (up.language) setProfileLanguage(up.language);
+          if (up.goals) loadedGoals = up.goals;
+          if (up.skills) loadedSkills = up.skills.join(', ');
+          if (up.stack) loadedStack = up.stack.join(', ');
+          if (up.interests) loadedInterests = up.interests.join(', ');
+          if (up.constraints) loadedConstraints = up.constraints;
+          if (up.language) loadedLang = up.language;
         }
+
+        setProfileGoals(loadedGoals);
+        setProfileSkills(loadedSkills);
+        setProfileStack(loadedStack);
+        setProfileInterests(loadedInterests);
+        setProfileConstraints(loadedConstraints);
+        setProfileLanguage(loadedLang);
+
         setHasTgToken(Boolean(res.settings.has_tg_token));
-        if (res.settings.tg_chat_id) {
-          setTgChatId(res.settings.tg_chat_id);
-        }
-        if (res.settings.openclaw_url) setOpenclawUrl(res.settings.openclaw_url);
-        if (res.settings.openclaw_channel) setOpenclawChannel(res.settings.openclaw_channel);
-        if (res.settings.openclaw_target) setOpenclawTarget(res.settings.openclaw_target);
+        if (res.settings.tg_chat_id) setTgChatId(res.settings.tg_chat_id);
+
+        const loadedOpenclawUrl = res.settings.openclaw_url || 'http://localhost:18789';
+        const loadedOpenclawChannel = res.settings.openclaw_channel || 'whatsapp';
+        const loadedOpenclawTarget = res.settings.openclaw_target || '';
+        const loadedOpenclawEnabled = Boolean(res.settings.openclaw_enabled);
+
+        setOpenclawUrl(loadedOpenclawUrl);
+        setOpenclawChannel(loadedOpenclawChannel);
+        setOpenclawTarget(loadedOpenclawTarget);
         setHasOpenclawToken(Boolean(res.settings.has_openclaw_token));
-        setOpenclawEnabled(Boolean(res.settings.openclaw_enabled));
+        setOpenclawEnabled(loadedOpenclawEnabled);
 
         setHasDiscordToken(Boolean(res.settings.has_discord_token));
-        if (res.settings.discord_channel_id) setDiscordChannelId(res.settings.discord_channel_id);
+        const loadedDiscordChannelId = res.settings.discord_channel_id || '';
+        setDiscordChannelId(loadedDiscordChannelId);
 
         setHasSlackWebhook(Boolean(res.settings.has_slack_webhook));
+
+        // Establish clean baseline for dirty tracking
+        const savedView =
+          typeof window !== 'undefined'
+            ? ((localStorage.getItem('sparkkeep_default_view') as 'kanban' | 'digest') || 'kanban')
+            : 'kanban';
+        const savedDensity =
+          typeof window !== 'undefined'
+            ? ((localStorage.getItem('sparkkeep_card_density') as 'comfortable' | 'compact') || 'comfortable')
+            : 'comfortable';
+        const savedMotion =
+          typeof window !== 'undefined'
+            ? ((localStorage.getItem('sparkkeep_reduce_motion') as 'default' | 'reduced') || 'default')
+            : 'default';
+
+        setBaseline({
+          defaultView: savedView,
+          cardDensity: savedDensity,
+          reduceMotion: savedMotion,
+          profileGoals: loadedGoals,
+          profileSkills: loadedSkills,
+          profileStack: loadedStack,
+          profileInterests: loadedInterests,
+          profileConstraints: loadedConstraints,
+          profileLanguage: loadedLang,
+          openclawUrl: loadedOpenclawUrl,
+          openclawChannel: loadedOpenclawChannel,
+          openclawTarget: loadedOpenclawTarget,
+          openclawEnabled: loadedOpenclawEnabled,
+          discordChannelId: loadedDiscordChannelId,
+        });
+
         setLoading(false);
       })
       .catch((err) => {
@@ -314,209 +253,59 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
       });
   }, []);
 
-  const defaultProfile = profiles.find((p) => p.is_default) || profiles[0];
+  // Dirty tracking computation
+  const isDirty = useMemo(() => {
+    if (!baseline) return false;
+    if (authToken.trim().length > 0 || confirmAuthToken.trim().length > 0) return true;
+    if (tgToken.trim().length > 0) return true;
+    if (openclawToken.trim().length > 0) return true;
+    if (discordToken.trim().length > 0) return true;
+    if (slackWebhookUrl.trim().length > 0) return true;
+    if (defaultView !== baseline.defaultView) return true;
+    if (cardDensity !== baseline.cardDensity) return true;
+    if (reduceMotion !== baseline.reduceMotion) return true;
+    if (profileGoals !== baseline.profileGoals) return true;
+    if (profileSkills !== baseline.profileSkills) return true;
+    if (profileStack !== baseline.profileStack) return true;
+    if (profileInterests !== baseline.profileInterests) return true;
+    if (profileConstraints !== baseline.profileConstraints) return true;
+    if (profileLanguage !== baseline.profileLanguage) return true;
+    if (openclawUrl !== baseline.openclawUrl) return true;
+    if (openclawChannel !== baseline.openclawChannel) return true;
+    if (openclawTarget !== baseline.openclawTarget) return true;
+    if (openclawEnabled !== baseline.openclawEnabled) return true;
+    if (discordChannelId !== baseline.discordChannelId) return true;
+    return false;
+  }, [
+    baseline,
+    authToken,
+    confirmAuthToken,
+    tgToken,
+    openclawToken,
+    discordToken,
+    slackWebhookUrl,
+    defaultView,
+    cardDensity,
+    reduceMotion,
+    profileGoals,
+    profileSkills,
+    profileStack,
+    profileInterests,
+    profileConstraints,
+    profileLanguage,
+    openclawUrl,
+    openclawChannel,
+    openclawTarget,
+    openclawEnabled,
+    discordChannelId,
+  ]);
 
-  const handleOpenAddForm = () => {
-    setIsFormOpen(true);
-    setEditingProfileId(null);
-    setFormName('OpenAI GPT-4o');
-    setFormBase('https://api.openai.com/v1');
-    setFormModel('gpt-4o');
-    setFormKey('');
-    setFormHasKey(false);
-    setFormIsDefault(profiles.length === 0);
-    setFormShowKey(false);
-    setSelectedPreset('OpenAI');
-    setFormError(null);
-  };
+  const parseTags = (str: string) =>
+    str
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
 
-  const handleEditProfile = (profile: LLMProfile) => {
-    setIsFormOpen(true);
-    setEditingProfileId(profile.id);
-    setFormName(profile.name);
-    setFormBase(profile.base_url);
-    setFormModel(profile.model);
-    setFormKey('');
-    setFormHasKey(profile.has_key);
-    setFormIsDefault(profile.is_default);
-    setFormShowKey(false);
-    setFormError(null);
-    const matched = PRESET_TEMPLATES.find(
-      (pr) => pr.base === profile.base_url && pr.model === profile.model
-    );
-    setSelectedPreset(matched ? matched.label : 'Custom');
-  };
-
-  const handleSelectPreset = (preset: PresetTemplate) => {
-    setSelectedPreset(preset.label);
-    if (preset.label !== 'Custom') {
-      setFormName(preset.name);
-      setFormBase(preset.base);
-      setFormModel(preset.model);
-    }
-  };
-
-  const handleSetDefault = async (profile: LLMProfile) => {
-    if (profile.is_default) return;
-    setError(null);
-    setActionLoading(profile.id);
-    try {
-      await api.patchSettings({ default_profile_id: profile.id });
-      setProfiles((prev) =>
-        prev.map((p) => ({
-          ...p,
-          is_default: p.id === profile.id,
-        }))
-      );
-      showToast(`Switched active default model to "${profile.name || profile.model}".`);
-    } catch (err: unknown) {
-      setError(api.getErrorMessage(err));
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleDeleteProfile = async (profile: LLMProfile) => {
-    if (profile.is_default) {
-      setError('Cannot delete the active default model. Set another model as default first.');
-      return;
-    }
-    setError(null);
-    setActionLoading(profile.id);
-    try {
-      const remaining = profiles.filter((p) => p.id !== profile.id);
-      const newRoles = { ...llmRoles };
-      let rolesCleaned = false;
-      for (const [r, pid] of Object.entries(newRoles)) {
-        if (pid === profile.id) {
-          delete newRoles[r];
-          rolesCleaned = true;
-        }
-      }
-      if (rolesCleaned) {
-        setLlmRoles(newRoles);
-      }
-      await api.patchSettings({
-        llm_profiles: remaining.map((p) => ({
-          id: p.id,
-          name: p.name,
-          base_url: p.base_url,
-          model: p.model,
-          is_default: p.is_default,
-        })),
-        llm_roles: newRoles,
-      });
-      setProfiles(remaining);
-      showToast(`Removed model "${profile.name || profile.model}".`);
-    } catch (err: unknown) {
-      setError(api.getErrorMessage(err));
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleRoleChange = async (roleKey: string, profileId: string) => {
-    setError(null);
-    const newRoles = { ...llmRoles };
-    if (!profileId) {
-      delete newRoles[roleKey];
-    } else {
-      newRoles[roleKey] = profileId;
-    }
-    setLlmRoles(newRoles);
-    try {
-      await api.patchSettings({ llm_roles: newRoles });
-      const roleDef = ROLE_DEFINITIONS.find((r) => r.key === roleKey);
-      showToast(`Assigned model for ${roleDef ? roleDef.label : roleKey}.`);
-    } catch (err: unknown) {
-      setError(api.getErrorMessage(err));
-    }
-  };
-
-  const handleSaveProfileForm = async () => {
-    setFormError(null);
-    const trimmedBase = formBase.trim();
-    const trimmedModel = formModel.trim();
-    const trimmedName = formName.trim() || trimmedModel || 'Custom Model';
-    const trimmedKey = formKey.trim();
-
-    if (!trimmedBase) {
-      setFormError('API Base URL is required.');
-      return;
-    }
-    if (!trimmedModel) {
-      setFormError('Model name is required.');
-      return;
-    }
-
-    setSavingForm(true);
-    try {
-      let payloadProfiles: LLMProfileInput[] = [];
-
-      if (editingProfileId) {
-        payloadProfiles = profiles.map((p) => {
-          if (p.id === editingProfileId) {
-            const entry: LLMProfileInput = {
-              id: p.id,
-              name: trimmedName,
-              base_url: trimmedBase,
-              model: trimmedModel,
-              is_default: formIsDefault,
-            };
-            if (trimmedKey) {
-              entry.api_key = trimmedKey;
-            }
-            return entry;
-          }
-          return {
-            id: p.id,
-            name: p.name,
-            base_url: p.base_url,
-            model: p.model,
-            is_default: formIsDefault ? false : p.is_default,
-          };
-        });
-      } else {
-        const newId = `prof-${Date.now()}`;
-        const existingInputs: LLMProfileInput[] = profiles.map((p) => ({
-          id: p.id,
-          name: p.name,
-          base_url: p.base_url,
-          model: p.model,
-          is_default: formIsDefault ? false : p.is_default,
-        }));
-        const newEntry: LLMProfileInput = {
-          id: newId,
-          name: trimmedName,
-          base_url: trimmedBase,
-          model: trimmedModel,
-          is_default: formIsDefault || profiles.length === 0,
-        };
-        if (trimmedKey) {
-          newEntry.api_key = trimmedKey;
-        }
-        payloadProfiles = [...existingInputs, newEntry];
-      }
-
-      await api.patchSettings({ llm_profiles: payloadProfiles });
-
-      // Refresh to ensure full synchronization with server
-      const fresh = await api.getSettings();
-      if (fresh.settings.llm_profiles) {
-        setProfiles(fresh.settings.llm_profiles);
-      }
-
-      setIsFormOpen(false);
-      setEditingProfileId(null);
-      showToast(editingProfileId ? `Updated model "${trimmedName}".` : `Added model "${trimmedName}".`);
-    } catch (err: unknown) {
-      setFormError(api.getErrorMessage(err));
-    } finally {
-      setSavingForm(false);
-    }
-  };
-
-  const parseTags = (str: string) => str.split(',').map((s) => s.trim()).filter(Boolean);
   const profileCharCount =
     profileGoals.length +
     profileConstraints.length +
@@ -524,34 +313,6 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
     parseTags(profileSkills).join('').length +
     parseTags(profileStack).join('').length +
     parseTags(profileInterests).join('').length;
-
-  const handleSaveProfile = async () => {
-    if (profileCharCount > 1500) {
-      setError('User profile exceeds 1,500 characters limit. Please shorten some fields.');
-      return;
-    }
-    setError(null);
-    setSavingProfile(true);
-    try {
-      const lang = profileLanguage.trim();
-      const finalLang = (lang === 'Same as source / English' || lang === 'Custom') ? '' : lang;
-      await api.patchSettings({
-        user_profile: {
-          goals: profileGoals.trim(),
-          skills: parseTags(profileSkills),
-          stack: parseTags(profileStack),
-          interests: parseTags(profileInterests),
-          constraints: profileConstraints.trim(),
-          language: finalLang,
-        },
-      });
-      showToast('About me profile saved successfully.');
-    } catch (err: unknown) {
-      setError(api.getErrorMessage(err));
-    } finally {
-      setSavingProfile(false);
-    }
-  };
 
   const handleSave = async () => {
     setError(null);
@@ -588,7 +349,7 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
 
       // Save user profile
       const lang = profileLanguage.trim();
-      const finalLang = (lang === 'Same as source / English' || lang === 'Custom') ? '' : lang;
+      const finalLang = lang === 'Same as source / English' || lang === 'Custom' ? '' : lang;
       await api.patchSettings({
         user_profile: {
           goals: profileGoals.trim(),
@@ -605,6 +366,7 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
         await api.patchSettings({ auth_token: authToken.trim() });
       }
 
+      // Patch channels
       await api.patchSettings({
         ...(tgToken.trim() ? { tg_token: tgToken.trim() } : {}),
         openclaw_url: openclawUrl.trim(),
@@ -617,35 +379,29 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
         ...(slackWebhookUrl.trim() ? { slack_webhook_url: slackWebhookUrl.trim() } : {}),
       });
 
+      // Reset dirty tracking baseline to current values
+      setBaseline({
+        defaultView,
+        cardDensity,
+        reduceMotion,
+        profileGoals,
+        profileSkills,
+        profileStack,
+        profileInterests,
+        profileConstraints,
+        profileLanguage,
+        openclawUrl,
+        openclawChannel,
+        openclawTarget,
+        openclawEnabled,
+        discordChannelId,
+      });
+
       showToast('Platform preferences saved successfully.');
       onClose();
     } catch (err: unknown) {
       setError(api.getErrorMessage(err));
       setSubmitting(false);
-    }
-  };
-
-  const handleTestChannel = async (channelId: string) => {
-    setChannelTesting(channelId);
-    try {
-      const res = await api.testChannel(channelId);
-      showToast(res.message || `Test notification sent to ${channelId}!`);
-    } catch (err: unknown) {
-      showToast(api.getErrorMessage(err));
-    } finally {
-      setChannelTesting(null);
-    }
-  };
-
-  const handlePushDigest = async () => {
-    setDigestPushing(true);
-    try {
-      const res = await api.pushDigestToChannel(selectedDigestChannel);
-      showToast(res.message || 'Digest pushed successfully!');
-    } catch (err: unknown) {
-      showToast(api.getErrorMessage(err));
-    } finally {
-      setDigestPushing(false);
     }
   };
 
@@ -672,7 +428,7 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
                 Platform Preferences
               </h2>
               <span className="settings-subtitle">
-                Customize workspace appearance, AI models, and access security
+                Customize workspace appearance, AI models, channels, and access security
               </span>
             </div>
           </div>
@@ -688,7 +444,7 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
 
         {/* Modal Layout Wrapper */}
         <div className="settings-modal-layout">
-          {/* Sidebar Navigation */}
+          {/* Sidebar Navigation Rail */}
           <div className="settings-sidebar" role="tablist" aria-label="Settings categories">
             <button
               type="button"
@@ -743,6 +499,16 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
             <button
               type="button"
               role="tab"
+              aria-selected={activeTab === 'channels'}
+              className={`settings-tab-btn ${activeTab === 'channels' ? 'active' : ''}`}
+              onClick={() => setActiveTab('channels')}
+            >
+              <MessageSquare size={15} />
+              <span>Channels & Alerts</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={activeTab === 'integrations'}
               className={`settings-tab-btn ${activeTab === 'integrations' ? 'active' : ''}`}
               onClick={() => setActiveTab('integrations')}
@@ -779,989 +545,224 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
               </div>
             ) : (
               <div className="settings-modal-body">
-            {/* TAB 1: Appearance & Preferences */}
-            {activeTab === 'appearance' && (
-              <div className="settings-panel" role="tabpanel">
-                {/* Theme Selector Section */}
-                <div className="settings-section">
-                  <div className="settings-section-header">
-                    <span className="settings-section-title">Color Palette & Contrast</span>
-                    <span className="settings-section-desc">
-                      Select an accent palette and dark/light mode for your workspace
-                    </span>
-                  </div>
-                  <ThemeSelector />
-                </div>
-
-                {/* Layout & Density Preferences */}
-                <div className="settings-section">
-                  <div className="settings-section-header">
-                    <span className="settings-section-title">Layout & Usability</span>
-                    <span className="settings-section-desc">
-                      Configure default workspace view and item spacing
-                    </span>
-                  </div>
-
-                  <div className="pref-item-card" style={{ marginBottom: '10px' }}>
-                    <div className="pref-item-text">
-                      <span className="pref-item-title">Default Dashboard View</span>
-                      <span className="pref-item-desc">
-                        Initial view shown when opening the dashboard
-                      </span>
-                    </div>
-                    <select
-                      value={defaultView}
-                      onChange={(e) => setDefaultView(e.target.value as 'kanban' | 'digest')}
-                      className="pref-select"
-                      aria-label="Default dashboard view"
-                    >
-                      <option value="kanban">Kanban Board &amp; Pipeline</option>
-                      <option value="digest">Weekly Digest</option>
-                    </select>
-                  </div>
-
-                  <div className="pref-item-card" style={{ marginBottom: '10px' }}>
-                    <div className="pref-item-text">
-                      <span className="pref-item-title">Card Density</span>
-                      <span className="pref-item-desc">
-                        Comfortable spacing vs compact overview
-                      </span>
-                    </div>
-                    <select
-                      value={cardDensity}
-                      onChange={(e) => setCardDensity(e.target.value as 'comfortable' | 'compact')}
-                      className="pref-select"
-                      aria-label="Card density"
-                    >
-                      <option value="comfortable">Comfortable</option>
-                      <option value="compact">Compact</option>
-                    </select>
-                  </div>
-
-                  <div className="pref-item-card">
-                    <div className="pref-item-text">
-                      <span className="pref-item-title">Visual Effects</span>
-                      <span className="pref-item-desc">
-                        Glassmorphism blurs and transitions
-                      </span>
-                    </div>
-                    <select
-                      value={reduceMotion}
-                      onChange={(e) => setReduceMotion(e.target.value as 'default' | 'reduced')}
-                      className="pref-select"
-                      aria-label="Visual effects"
-                    >
-                      <option value="default">Full Glassmorphism</option>
-                      <option value="reduced">Reduced Blur & Motion</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: About Me (Personal Fit) */}
-            {activeTab === 'profile' && (
-              <div className="settings-panel" role="tabpanel">
-                <div className="settings-section">
-                  <div className="settings-section-header">
-                    <span className="settings-section-title">Personal Fit & About Me</span>
-                    <span className="settings-section-desc">
-                      Tailor Triage's value proposition and Research's personal-fit verdict specifically to your background, tech stack, and goals.
-                    </span>
-                  </div>
-
-                  {/* Privacy Note */}
-                  <div className="setup-info-box" style={{ marginBottom: '16px' }}>
-                    <Shield size={16} />
-                    <span>
-                      <strong>Privacy note:</strong> Your profile is stored locally in your database and sent only to your configured LLM providers during triage and research.
-                    </span>
-                  </div>
-
-                  {/* Character Counter Meter */}
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 14px',
-                    background: 'var(--surface-sunken, #121217)',
-                    border: '1px solid var(--border-subtle, #272732)',
-                    borderRadius: 'var(--radius-md, 8px)',
-                    marginBottom: '16px',
-                    fontSize: '0.85rem',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Sparkles size={15} style={{ color: 'var(--accent, #6366f1)' }} />
-                      <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>Profile Character Budget</span>
-                    </div>
-                    <span style={{
-                      fontWeight: 600,
-                      color: profileCharCount > 1500 ? 'var(--color-error, #ef4444)' : profileCharCount > 1200 ? 'var(--color-warning, #f59e0b)' : 'var(--text-muted, #64748b)',
-                    }}>
-                      {profileCharCount} / 1,500 chars {profileCharCount > 1500 ? '(Exceeds 1,500 max limit)' : ''}
-                    </span>
-                  </div>
-
-                  {/* Goals */}
-                  <div className="setup-form-group">
-                    <label htmlFor="profile-goals">Tell me about yourself</label>
-                    <textarea
-                      id="profile-goals"
-                      className="setup-textarea"
-                      rows={6}
-                      value={profileGoals}
-                      onChange={(e) => setProfileGoals(e.target.value)}
-                      placeholder="e.g. I am a student trying to learn about software engineering, or I am a hobbyist building homelabs..."
-                    />
-                    <span className="setup-hint">Free text: Give the AI context on who you are, what your goals are, and what you're interested in.</span>
-                  </div>
-
-                  {/* Output Language */}
-                  <div className="setup-form-group">
-                    <label htmlFor="profile-language-select">Output Language for Triage & Research</label>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      <select
-                        id="profile-language-select"
-                        className="setup-select"
-                        value={LANGUAGE_OPTIONS.includes(profileLanguage) ? profileLanguage : 'Custom'}
-                        onChange={(e) => {
-                          if (e.target.value !== 'Custom') {
-                            setProfileLanguage(e.target.value);
-                          }
-                        }}
-                        style={{ minWidth: '220px' }}
-                      >
-                        {LANGUAGE_OPTIONS.map((lang) => (
-                          <option key={lang} value={lang}>{lang}</option>
-                        ))}
-                        <option value="Custom">Custom Language...</option>
-                      </select>
-                      {(!LANGUAGE_OPTIONS.includes(profileLanguage) || profileLanguage === 'Custom') && (
-                        <input
-                          id="profile-language"
-                          type="text"
-                          className="setup-input"
-                          value={profileLanguage === 'Custom' ? '' : profileLanguage}
-                          onChange={(e) => setProfileLanguage(e.target.value)}
-                          placeholder="Enter language (e.g. Spanish, German, Japanese)..."
-                          style={{ flex: 1, minWidth: '180px' }}
-                        />
-                      )}
-                    </div>
-                    <span className="setup-hint">Default: "Same as source / English". When set, briefings and research reports will be instructed to write in this language.</span>
-                  </div>
-
-                  <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-                    <button
-                      type="button"
-                      className="setup-btn-primary"
-                      onClick={handleSaveProfile}
-                      disabled={savingProfile || profileCharCount > 1500}
-                    >
-                      <Save size={15} />
-                      <span>{savingProfile ? 'Saving Profile...' : 'Save Profile'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 2: AI Engine Multi-Model Manager */}
-            {activeTab === 'ai' && (
-              <div className="settings-panel" role="tabpanel">
-                <div className="llm-manager-section">
-                  {/* Active AI Status Banner */}
-                  <div className="settings-status-card">
-                    <div className="settings-status-info">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className="settings-status-title">Active AI Provider</span>
-                        {defaultProfile && (
-                          <span className="llm-badge-default">
-                            <Sparkles size={11} /> DEFAULT
-                          </span>
-                        )}
-                      </div>
-                      <span className="settings-status-sub">
-                        {defaultProfile ? (
-                          <>
-                            <strong>{defaultProfile.name || defaultProfile.model}</strong> &bull;{' '}
-                            <span style={{ fontFamily: 'var(--font-mono)' }}>{defaultProfile.model}</span>
-                          </>
-                        ) : (
-                          'No default model configured'
-                        )}
-                      </span>
-                    </div>
-                    <span className={`settings-badge ${defaultProfile?.has_key ? 'success' : 'neutral'}`}>
-                      {defaultProfile?.has_key ? (
-                        <>
-                          <CheckCircle2 size={12} /> Key Configured
-                        </>
-                      ) : (
-                        'No Key / Local'
-                      )}
-                    </span>
-                  </div>
-
-                  {/* Header Row with Add Model Button */}
-                  <div className="llm-header-row">
-                    <div className="llm-header-title">
-                      <Server size={16} />
-                      <span>Configured Models</span>
-                      <span className="llm-count-badge">{profiles.length}</span>
-                    </div>
-                    {!isFormOpen && (
-                      <button
-                        type="button"
-                        className="btn-add-model"
-                        onClick={handleOpenAddForm}
-                      >
-                        <Plus size={14} />
-                        <span>Add Model</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Add / Edit Form Card */}
-                  {isFormOpen && (
-                    <div className="llm-form-card">
-                      <div className="llm-form-header">
-                        <span className="llm-form-title">
-                          {editingProfileId ? 'Edit Model Profile' : 'Add Model Profile'}
+                {/* TAB 1: Appearance & Preferences */}
+                {activeTab === 'appearance' && (
+                  <div className="settings-panel" role="tabpanel">
+                    <div className="settings-section">
+                      <div className="settings-section-header">
+                        <span className="settings-section-title">Color Palette & Contrast</span>
+                        <span className="settings-section-desc">
+                          Select an accent palette and dark/light mode for your workspace
                         </span>
-                        <button
-                          type="button"
-                          className="modal-close-btn"
-                          onClick={() => {
-                            setIsFormOpen(false);
-                            setEditingProfileId(null);
-                            setFormError(null);
-                          }}
-                          aria-label="Cancel"
-                        >
-                          <X size={16} />
-                        </button>
+                      </div>
+                      <ThemeSelector />
+                    </div>
+
+                    <div className="settings-section">
+                      <div className="settings-section-header">
+                        <span className="settings-section-title">Layout & Usability</span>
+                        <span className="settings-section-desc">
+                          Configure default workspace view and item spacing
+                        </span>
                       </div>
 
-                      {formError && (
-                        <div className="setup-error-box" style={{ margin: 0 }}>
-                          <AlertCircle size={16} />
-                          <span>{formError}</span>
+                      <div className="pref-item-card" style={{ marginBottom: '10px' }}>
+                        <div className="pref-item-text">
+                          <span className="pref-item-title">Default Dashboard View</span>
+                          <span className="pref-item-desc">
+                            Initial view shown when opening the dashboard
+                          </span>
                         </div>
-                      )}
-
-                      {/* Preset Templates */}
-                      <div className="setup-form-group">
-                        <label htmlFor="ai-preset-select">Provider Preset Template</label>
                         <select
-                          id="ai-preset-select"
-                          className="setup-select"
-                          value={selectedPreset}
-                          onChange={(e) => {
-                            const preset = PRESET_TEMPLATES.find((p) => p.label === e.target.value);
-                            if (preset) handleSelectPreset(preset);
-                          }}
+                          value={defaultView}
+                          onChange={(e) => setDefaultView(e.target.value as 'kanban' | 'digest')}
+                          className="pref-select"
+                          aria-label="Default dashboard view"
                         >
-                          {PRESET_TEMPLATES.map((preset) => (
-                            <option key={preset.label} value={preset.label}>
-                              {preset.label}
-                            </option>
-                          ))}
+                          <option value="kanban">Kanban Board &amp; Pipeline</option>
+                          <option value="digest">Weekly Digest</option>
                         </select>
                       </div>
 
-                      <div className="setup-form-group">
-                        <label htmlFor="llm-form-name">Profile Display Name</label>
-                        <input
-                          id="llm-form-name"
-                          type="text"
-                          value={formName}
-                          onChange={(e) => setFormName(e.target.value)}
-                          className="setup-input"
-                          placeholder="e.g. OpenAI GPT-4o, Ollama Local"
-                        />
-                      </div>
-
-                      <div className="setup-form-group">
-                        <label htmlFor="llm-form-base">API Base URL</label>
-                        <input
-                          id="llm-form-base"
-                          type="text"
-                          value={formBase}
-                          onChange={(e) => setFormBase(e.target.value)}
-                          className="setup-input"
-                          placeholder="https://api.openai.com/v1"
-                          required
-                        />
-                      </div>
-
-                      <div className="setup-form-group">
-                        <label htmlFor="llm-form-model">Model Name</label>
-                        <input
-                          id="llm-form-model"
-                          type="text"
-                          value={formModel}
-                          onChange={(e) => setFormModel(e.target.value)}
-                          className="setup-input"
-                          placeholder="e.g. gpt-4o or llama-3.3-70b-versatile"
-                          required
-                        />
-                      </div>
-
-                      <div className="setup-form-group">
-                        <label htmlFor="llm-form-key">
-                          API Key {formHasKey ? '(Leave blank to retain active key)' : '(Optional for local endpoints)'}
-                        </label>
-                        <div className="setup-input-wrapper">
-                          <input
-                            id="llm-form-key"
-                            type={formShowKey ? 'text' : 'password'}
-                            value={formKey}
-                            onChange={(e) => setFormKey(e.target.value)}
-                            className="setup-input"
-                            placeholder={formHasKey ? '•••••••••••••••• (Encrypted in SQLite)' : 'sk-...'}
-                          />
-                          <button
-                            type="button"
-                            className="setup-eye-btn"
-                            onClick={() => setFormShowKey(!formShowKey)}
-                            aria-label={formShowKey ? 'Hide API key' : 'Show API key'}
-                            tabIndex={-1}
-                          >
-                            {formShowKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                          </button>
+                      <div className="pref-item-card" style={{ marginBottom: '10px' }}>
+                        <div className="pref-item-text">
+                          <span className="pref-item-title">Card Density</span>
+                          <span className="pref-item-desc">
+                            Comfortable spacing vs compact overview
+                          </span>
                         </div>
+                        <select
+                          value={cardDensity}
+                          onChange={(e) => setCardDensity(e.target.value as 'comfortable' | 'compact')}
+                          className="pref-select"
+                          aria-label="Card density"
+                        >
+                          <option value="comfortable">Comfortable</option>
+                          <option value="compact">Compact</option>
+                        </select>
                       </div>
 
-                      <label className="llm-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={formIsDefault}
-                          onChange={(e) => setFormIsDefault(e.target.checked)}
-                          disabled={editingProfileId ? profiles.find(p => p.id === editingProfileId)?.is_default : false}
-                        />
-                        <span>Make this the active default model</span>
-                      </label>
-
-                      <div className="llm-form-actions">
-                        <button
-                          type="button"
-                          className="setup-btn-secondary"
-                          onClick={() => {
-                            setIsFormOpen(false);
-                            setEditingProfileId(null);
-                            setFormError(null);
-                          }}
-                          disabled={savingForm}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="setup-btn-primary"
-                          onClick={handleSaveProfileForm}
-                          disabled={savingForm}
-                        >
-                          <Save size={14} />
-                          <span>{savingForm ? 'Saving...' : editingProfileId ? 'Update Model' : 'Save Model'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* List of Configured Profiles */}
-                  <div className="llm-profiles-list">
-                    {profiles.length === 0 ? (
-                      <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)', border: '1px dashed var(--border-subtle)', borderRadius: '10px' }}>
-                        No LLM profiles configured yet. Click "Add Model" above to get started.
-                      </div>
-                    ) : (
-                      profiles.map((profile) => (
-                        <div
-                          key={profile.id}
-                          className={`llm-profile-card ${profile.is_default ? 'is-default' : ''}`}
-                        >
-                          <div className="llm-profile-main">
-                            <div className="llm-profile-top">
-                              <span className="llm-profile-name">{profile.name || profile.model}</span>
-                              {profile.is_default && (
-                                <span className="llm-badge-default">
-                                  <Sparkles size={11} /> DEFAULT
-                                </span>
-                              )}
-                              <span className={`llm-badge-key ${profile.has_key ? 'has-key' : ''}`}>
-                                <Lock size={10} /> {profile.has_key ? 'Key Configured' : 'No Key / Local'}
-                              </span>
-                            </div>
-                            <div className="llm-profile-meta">
-                              <span className="llm-model-pill">{profile.model}</span>
-                              <span className="llm-profile-url" title={profile.base_url}>
-                                {profile.base_url}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="llm-profile-actions">
-                            {!profile.is_default && (
-                              <button
-                                type="button"
-                                className="btn-set-default"
-                                onClick={() => handleSetDefault(profile)}
-                                disabled={actionLoading !== null}
-                                title="Set as active default model"
-                              >
-                                <Star size={13} />
-                                <span>Set as Default</span>
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              className="btn-icon-action"
-                              onClick={() => handleEditProfile(profile)}
-                              title="Edit profile"
-                              disabled={actionLoading !== null}
-                              aria-label={`Edit ${profile.name}`}
-                            >
-                              <Pencil size={14} />
-                            </button>
-
-                            {!profile.is_default ? (
-                              <button
-                                type="button"
-                                className="btn-icon-action delete"
-                                onClick={() => handleDeleteProfile(profile)}
-                                title="Delete profile"
-                                disabled={actionLoading !== null}
-                                aria-label={`Delete ${profile.name}`}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn-icon-action"
-                                disabled
-                                title="Active default model cannot be deleted"
-                                aria-label="Active default model cannot be deleted"
-                              >
-                                <Trash2 size={14} style={{ opacity: 0.3 }} />
-                              </button>
-                            )}
-                          </div>
+                      <div className="pref-item-card">
+                        <div className="pref-item-text">
+                          <span className="pref-item-title">Visual Effects</span>
+                          <span className="pref-item-desc">
+                            Glassmorphism blurs and transitions
+                          </span>
                         </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Model Routing ("Use for") Section */}
-                  <div className="llm-roles-section" style={{ marginTop: '20px' }}>
-                    <div className="llm-header-row" style={{ marginBottom: '8px' }}>
-                      <div className="llm-header-title">
-                        <Network size={16} />
-                        <span>Use for (Role Routing)</span>
+                        <select
+                          value={reduceMotion}
+                          onChange={(e) => setReduceMotion(e.target.value as 'default' | 'reduced')}
+                          className="pref-select"
+                          aria-label="Visual effects"
+                        >
+                          <option value="default">Full Glassmorphism</option>
+                          <option value="reduced">Reduced Blur & Motion</option>
+                        </select>
                       </div>
                     </div>
-                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '0 0 12px 0', lineHeight: 1.5 }}>
-                      Assign different LLM models to each pipeline role. Unassigned roles fall back to the default model.
-                    </p>
-
-                    <div className="llm-roles-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {ROLE_DEFINITIONS.map((role) => {
-                        const currentProfileId = llmRoles[role.key] || '';
-                        return (
-                          <div key={role.key} className="pref-item-card">
-                            <div className="pref-item-text" style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <span className="pref-item-title">{role.label}</span>
-                                <span
-                                  style={{
-                                    fontSize: '11px',
-                                    fontWeight: 600,
-                                    padding: '1px 6px',
-                                    borderRadius: '4px',
-                                    backgroundColor: role.hint.includes('strongest')
-                                      ? 'rgba(234, 179, 8, 0.15)'
-                                      : 'rgba(16, 185, 129, 0.15)',
-                                    color: role.hint.includes('strongest')
-                                      ? 'var(--accent-amber, #eab308)'
-                                      : 'var(--accent-emerald, #10b981)',
-                                    border: role.hint.includes('strongest')
-                                      ? '1px solid rgba(234, 179, 8, 0.3)'
-                                      : '1px solid rgba(16, 185, 129, 0.3)',
-                                  }}
-                                >
-                                  {role.hint}
-                                </span>
-                              </div>
-                              <span className="pref-item-desc" style={{ marginTop: '3px' }}>
-                                {role.description}
-                              </span>
-                            </div>
-
-                            <select
-                              value={currentProfileId}
-                              onChange={(e) => handleRoleChange(role.key, e.target.value)}
-                              className="pref-select"
-                              style={{ minWidth: '180px', maxWidth: '240px' }}
-                              aria-label={`Select model for ${role.label}`}
-                              disabled={actionLoading !== null}
-                            >
-                              <option value="">
-                                Default ({defaultProfile?.name || defaultProfile?.model || 'Active Default'})
-                              </option>
-                              {profiles.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name || p.model}{p.is_default ? ' (Default)' : ''}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="setup-info-box">
-                    <Lock size={16} />
-                    <span>
-                      Keys, endpoints, and models are securely stored in your local SQLite database. Default model switches apply immediately to background triage and research.
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 3: Research Playbooks */}
-            {activeTab === 'playbooks' && (
-              <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
-                <PlaybookManager showToast={showToast} onOpenLicenseModal={onOpenLicenseModal} />
-              </div>
-            )}
-
-            {/* TAB 4: Scheduled Research & Overnight Queue */}
-            {activeTab === 'schedule' && (
-              <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
-                <ResearchScheduler showToast={showToast} onOpenLicenseModal={onOpenLicenseModal} />
-              </div>
-            )}
-
-            {/* TAB 5: Integrations */}
-            {/* TAB 5: Channels & Integrations */}
-            {activeTab === 'integrations' && (
-              <div className="settings-panel" role="tabpanel">
-                {/* 1. Telegram Bot */}
-                <div className="settings-section">
-                  <div className="settings-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <span className="settings-section-title">Telegram Bot</span>
-                      <span className="settings-section-desc">
-                        Forward messages, links, and audio notes directly into Sparkkeep with inline interactive buttons
-                      </span>
-                    </div>
-                    {hasTgToken && (
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        style={{ fontSize: '12px', padding: '4px 10px' }}
-                        disabled={channelTesting === 'telegram'}
-                        onClick={() => handleTestChannel('telegram')}
-                      >
-                        {channelTesting === 'telegram' ? 'Testing...' : 'Send Test Notification'}
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="setup-form-group">
-                    <label>Telegram Bot Token {hasTgToken ? '(Configured)' : ''}</label>
-                    <input
-                      type="password"
-                      value={tgToken}
-                      onChange={(e) => setTgToken(e.target.value)}
-                      className="setup-input"
-                      placeholder={hasTgToken ? '••••••••••••••••' : 'Enter BotFather Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)'}
-                    />
-                    <span className="setup-hint">
-                      Get this by creating a new bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{color: 'var(--accent)'}}>@BotFather</a> on Telegram.
-                    </span>
-                  </div>
-
-                  {hasTgToken && (
-                    <div className="setup-info-box" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                      <MessageSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
-                      <div>
-                        <strong style={{ color: 'var(--accent-emerald)' }}>Bot is Active! Connect your account:</strong>
-                        <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-dim)' }}>
-                          Send this exact command to your Telegram bot to pair your device:
-                        </div>
-                        <code style={{
-                          display: 'inline-block',
-                          marginTop: '8px',
-                          padding: '6px 10px',
-                          background: '#090a0f',
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: '4px',
-                          color: 'var(--accent)',
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '14px',
-                          userSelect: 'all'
-                        }}>
-                          /start YOUR_MASTER_PASSPHRASE
-                        </code>
-                        {tgChatId && (
-                          <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                            ✓ Currently linked to chat ID: {tgChatId}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. OpenClaw Gateway Bridge */}
-                <div className="settings-section" style={{ marginTop: '24px' }}>
-                  <div className="settings-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className="settings-section-title">OpenClaw Bridge</span>
-                        <span className={`settings-badge ${openclawEnabled || hasOpenclawToken ? 'success' : 'neutral'}`} style={{ fontSize: '11px', padding: '2px 8px' }}>
-                          {openclawEnabled || hasOpenclawToken ? 'Active' : 'Optional'}
-                        </span>
-                      </div>
-                      <span className="settings-section-desc">
-                        Connect to OpenClaw's Gateway daemon to capture and notify via WhatsApp, Signal, iMessage, and Matrix
-                      </span>
-                    </div>
-                    {(openclawEnabled || hasOpenclawToken) && (
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        style={{ fontSize: '12px', padding: '4px 10px' }}
-                        disabled={channelTesting === 'openclaw'}
-                        onClick={() => handleTestChannel('openclaw')}
-                      >
-                        {channelTesting === 'openclaw' ? 'Testing...' : 'Test Bridge Notification'}
-                      </button>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                    <input
-                      type="checkbox"
-                      id="openclaw-enabled-toggle"
-                      checked={openclawEnabled}
-                      onChange={(e) => setOpenclawEnabled(e.target.checked)}
-                      style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                    />
-                    <label htmlFor="openclaw-enabled-toggle" style={{ cursor: 'pointer', fontSize: '13px', color: 'var(--text-main)', fontWeight: 500 }}>
-                      Enable OpenClaw Bridge Channel
-                    </label>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                    <div className="setup-form-group">
-                      <label>OpenClaw Gateway URL</label>
-                      <input
-                        type="text"
-                        value={openclawUrl}
-                        onChange={(e) => setOpenclawUrl(e.target.value)}
-                        className="setup-input"
-                        placeholder="http://localhost:18789"
-                      />
-                    </div>
-
-                    <div className="setup-form-group">
-                      <label>Gateway Hook Token {hasOpenclawToken ? '(Configured)' : ''}</label>
-                      <input
-                        type="password"
-                        value={openclawToken}
-                        onChange={(e) => setOpenclawToken(e.target.value)}
-                        className="setup-input"
-                        placeholder={hasOpenclawToken ? '••••••••••••••••' : 'Secret hook token'}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '10px' }}>
-                    <div className="setup-form-group">
-                      <label>Default Outbound Channel</label>
-                      <select
-                        value={openclawChannel}
-                        onChange={(e) => setOpenclawChannel(e.target.value)}
-                        className="setup-input"
-                        style={{ background: 'var(--bg-input)', color: 'var(--text-main)' }}
-                      >
-                        <option value="whatsapp">WhatsApp</option>
-                        <option value="signal">Signal</option>
-                        <option value="imessage">iMessage</option>
-                        <option value="discord">Discord</option>
-                        <option value="slack">Slack</option>
-                        <option value="matrix">Matrix</option>
-                      </select>
-                    </div>
-
-                    <div className="setup-form-group">
-                      <label>Default Recipient Target</label>
-                      <input
-                        type="text"
-                        value={openclawTarget}
-                        onChange={(e) => setOpenclawTarget(e.target.value)}
-                        className="setup-input"
-                        placeholder="+15550199 or Chat ID"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="setup-info-box" style={{ marginTop: '12px' }}>
-                    <Terminal size={14} />
-                    <span style={{ fontSize: '12px' }}>
-                      Inbound webhook for OpenClaw skill / forwarder: <code>{window.location.origin}/api/v1/channels/openclaw/webhook</code>
-                    </span>
-                  </div>
-                </div>
-
-                {/* 3. Discord Bot */}
-                <div className="settings-section" style={{ marginTop: '24px' }}>
-                  <div className="settings-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <span className="settings-section-title">Discord Bot</span>
-                      <span className="settings-section-desc">
-                        Deliver Rich Embeds with action buttons into your private Discord server
-                      </span>
-                    </div>
-                    {hasDiscordToken && (
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        style={{ fontSize: '12px', padding: '4px 10px' }}
-                        disabled={channelTesting === 'discord'}
-                        onClick={() => handleTestChannel('discord')}
-                      >
-                        {channelTesting === 'discord' ? 'Testing...' : 'Send Test Embed'}
-                      </button>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                    <div className="setup-form-group">
-                      <label>Discord Bot Token {hasDiscordToken ? '(Configured)' : ''}</label>
-                      <input
-                        type="password"
-                        value={discordToken}
-                        onChange={(e) => setDiscordToken(e.target.value)}
-                        className="setup-input"
-                        placeholder={hasDiscordToken ? '••••••••••••••••' : 'Discord Bot Token'}
-                      />
-                    </div>
-                    <div className="setup-form-group">
-                      <label>Discord Channel ID</label>
-                      <input
-                        type="text"
-                        value={discordChannelId}
-                        onChange={(e) => setDiscordChannelId(e.target.value)}
-                        className="setup-input"
-                        placeholder="e.g. 112233445566778899"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 4. Slack */}
-                <div className="settings-section" style={{ marginTop: '24px' }}>
-                  <div className="settings-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <span className="settings-section-title">Slack Webhook</span>
-                      <span className="settings-section-desc">
-                        Post Block Kit interactive cards into your Slack workplace
-                      </span>
-                    </div>
-                    {hasSlackWebhook && (
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        style={{ fontSize: '12px', padding: '4px 10px' }}
-                        disabled={channelTesting === 'slack'}
-                        onClick={() => handleTestChannel('slack')}
-                      >
-                        {channelTesting === 'slack' ? 'Testing...' : 'Send Test Message'}
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="setup-form-group">
-                    <label>Slack Incoming Webhook URL {hasSlackWebhook ? '(Configured)' : ''}</label>
-                    <input
-                      type="password"
-                      value={slackWebhookUrl}
-                      onChange={(e) => setSlackWebhookUrl(e.target.value)}
-                      className="setup-input"
-                      placeholder={hasSlackWebhook ? '••••••••••••••••' : 'https://hooks.slack.com/services/...'}
-                    />
-                  </div>
-                </div>
-
-                {/* 5. Intelligence Digest Push */}
-                <div className="settings-section" style={{ marginTop: '24px' }}>
-                  <div className="settings-section-header">
-                    <span className="settings-section-title">Manual Digest Dispatch</span>
-                    <span className="settings-section-desc">
-                      Push your weekly sparks summary to any active channel on demand
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px' }}>
-                    <select
-                      value={selectedDigestChannel}
-                      onChange={(e) => setSelectedDigestChannel(e.target.value)}
-                      className="setup-input"
-                      style={{ maxWidth: '240px', background: 'var(--bg-input)', color: 'var(--text-main)' }}
-                    >
-                      <option value="all">All Configured Channels</option>
-                      <option value="telegram">Telegram</option>
-                      <option value="openclaw">OpenClaw Bridge</option>
-                      <option value="discord">Discord</option>
-                      <option value="slack">Slack</option>
-                    </select>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      disabled={digestPushing}
-                      onClick={handlePushDigest}
-                    >
-                      {digestPushing ? 'Pushing Digest...' : 'Push Digest Now'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* 6. Universal Webhook API (cURL) */}
-                <div className="settings-section" style={{ marginTop: '24px' }}>
-                  <div className="settings-section-header">
-                    <span className="settings-section-title">Direct Webhook API</span>
-                    <span className="settings-section-desc">
-                      Send data from Apple Shortcuts, Zapier, n8n, Raycast, or browser extensions
-                    </span>
-                  </div>
-
-                  <div className="setup-info-box">
-                    <Terminal size={16} />
-                    <span>
-                      Use your master passphrase as the Bearer token to authorize requests.
-                    </span>
-                  </div>
-
-                  <div className="setup-form-group">
-                    <label>Example cURL Request</label>
-                    <pre style={{
-                      background: '#090a0f',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-subtle)',
-                      fontSize: '12px',
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--text-dim)',
-                      overflowX: 'auto',
-                      whiteSpace: 'pre-wrap'
-                    }}>
-{`curl -X POST ${window.location.origin}/api/v1/capture \\
-  -H "Authorization: Bearer YOUR_MASTER_PASSPHRASE" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "url": "https://example.com/article",
-    "text": "Some optional caption or notes"
-  }'`}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 6: Security & Access */}
-            {activeTab === 'security' && (
-              <div className="settings-panel" role="tabpanel">
-                {/* Security Status Card */}
-                <div className="settings-status-card">
-                  <div className="settings-status-info">
-                    <span className="settings-status-title">Instance Protection</span>
-                    <span className="settings-status-sub">
-                      Master passphrase required to unlock the dashboard and query APIs
-                    </span>
-                  </div>
-                  <span className={`settings-badge ${hasAuthToken ? 'success' : 'neutral'}`}>
-                    <Shield size={12} />
-                    {hasAuthToken ? 'Passphrase Protected' : 'Open Access'}
-                  </span>
-                </div>
-
-                {/* New Master Token */}
-                <div className="setup-form-group">
-                  <label htmlFor="settings-auth-token">
-                    New Master Passphrase {hasAuthToken ? '(Leave blank to retain current)' : ''}
-                  </label>
-                  <div className="setup-input-wrapper">
-                    <input
-                      id="settings-auth-token"
-                      type={showAuthToken ? 'text' : 'password'}
-                      value={authToken}
-                      onChange={(e) => setAuthToken(e.target.value)}
-                      className="setup-input"
-                      placeholder={hasAuthToken ? 'Enter new passphrase to replace existing...' : 'Create master passphrase...'}
-                    />
-                    <button
-                      type="button"
-                      className="setup-eye-btn"
-                      onClick={() => setShowAuthToken(!showAuthToken)}
-                      aria-label={showAuthToken ? 'Hide passphrase' : 'Show passphrase'}
-                      tabIndex={-1}
-                    >
-                      {showAuthToken ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Confirm Token */}
-                {authToken.trim().length > 0 && (
-                  <div className="setup-form-group">
-                    <label htmlFor="settings-confirm-token">Confirm New Passphrase</label>
-                    <input
-                      id="settings-confirm-token"
-                      type={showAuthToken ? 'text' : 'password'}
-                      value={confirmAuthToken}
-                      onChange={(e) => setConfirmAuthToken(e.target.value)}
-                      className="setup-input"
-                      placeholder="Re-type new passphrase to confirm..."
-                    />
                   </div>
                 )}
 
-                <div className="setup-info-box">
-                  <AlertCircle size={16} />
-                  <span>
-                    Updating your master passphrase will invalidate active tokens across other browser tabs and sessions.
-                  </span>
-                </div>
+                {/* TAB 2: User Profile (About Me) */}
+                {activeTab === 'profile' && (
+                  <UserProfileTab
+                    goals={profileGoals}
+                    setGoals={setProfileGoals}
+                    skills={profileSkills}
+                    setSkills={setProfileSkills}
+                    stack={profileStack}
+                    setStack={setProfileStack}
+                    interests={profileInterests}
+                    setInterests={setProfileInterests}
+                    constraints={profileConstraints}
+                    setConstraints={setProfileConstraints}
+                    language={profileLanguage}
+                    setLanguage={setProfileLanguage}
+                    showToast={showToast}
+                    onError={setError}
+                  />
+                )}
+
+                {/* TAB 3: AI Engine */}
+                {activeTab === 'ai' && (
+                  <AIProfileTab
+                    profiles={profiles}
+                    setProfiles={setProfiles}
+                    llmRoles={llmRoles}
+                    setLlmRoles={setLlmRoles}
+                    tokenCaps={tokenCaps}
+                    setTokenCaps={setTokenCaps}
+                    showToast={showToast}
+                    onError={setError}
+                  />
+                )}
+
+                {/* TAB 4: Research Playbooks */}
+                {activeTab === 'playbooks' && (
+                  <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
+                    <PlaybookManager showToast={showToast} onOpenLicenseModal={onOpenLicenseModal} />
+                  </div>
+                )}
+
+                {/* TAB 5: Scheduled Research */}
+                {activeTab === 'schedule' && (
+                  <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
+                    <ResearchScheduler showToast={showToast} onOpenLicenseModal={onOpenLicenseModal} />
+                  </div>
+                )}
+
+                {/* TAB 6: Channels */}
+                {activeTab === 'channels' && (
+                  <ChannelsTab
+                    tgToken={tgToken}
+                    setTgToken={setTgToken}
+                    hasTgToken={hasTgToken}
+                    tgChatId={tgChatId}
+                    openclawUrl={openclawUrl}
+                    setOpenclawUrl={setOpenclawUrl}
+                    openclawToken={openclawToken}
+                    setOpenclawToken={setOpenclawToken}
+                    hasOpenclawToken={hasOpenclawToken}
+                    openclawChannel={openclawChannel}
+                    setOpenclawChannel={setOpenclawChannel}
+                    openclawTarget={openclawTarget}
+                    setOpenclawTarget={setOpenclawTarget}
+                    openclawEnabled={openclawEnabled}
+                    setOpenclawEnabled={setOpenclawEnabled}
+                    discordToken={discordToken}
+                    setDiscordToken={setDiscordToken}
+                    hasDiscordToken={hasDiscordToken}
+                    discordChannelId={discordChannelId}
+                    setDiscordChannelId={setDiscordChannelId}
+                    slackWebhookUrl={slackWebhookUrl}
+                    setSlackWebhookUrl={setSlackWebhookUrl}
+                    hasSlackWebhook={hasSlackWebhook}
+                    showToast={showToast}
+                  />
+                )}
+
+                {/* TAB 7: Integrations & API */}
+                {activeTab === 'integrations' && (
+                  <IntegrationsTab showToast={showToast} />
+                )}
+
+                {/* TAB 8: Security & Access */}
+                {activeTab === 'security' && (
+                  <SecurityTab
+                    authToken={authToken}
+                    setAuthToken={setAuthToken}
+                    confirmAuthToken={confirmAuthToken}
+                    setConfirmAuthToken={setConfirmAuthToken}
+                    hasAuthToken={hasAuthToken}
+                    showToast={showToast}
+                    onOpenLicenseModal={onOpenLicenseModal}
+                  />
+                )}
               </div>
             )}
-            </div>
-          )}
 
-        {/* Modal Footer */}
-        {activeTab !== 'playbooks' && activeTab !== 'schedule' && (
-          <div className="settings-modal-footer">
-            <button type="button" className="setup-btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="setup-btn-primary"
-              onClick={handleSave}
-              disabled={submitting || loading}
-            >
-              <Save size={16} />
-              <span>{submitting ? 'Saving Preferences...' : 'Save Settings'}</span>
-            </button>
+            {/* Modal Footer Actions (Save Changes / Cancel) with Dirty Tracking */}
+            {activeTab !== 'playbooks' && activeTab !== 'schedule' && (
+              <div className="settings-modal-footer">
+                {isDirty && (
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--accent-amber, #eab308)',
+                      marginRight: 'auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--accent-amber, #eab308)',
+                        display: 'inline-block',
+                      }}
+                    />
+                    Unsaved changes
+                  </span>
+                )}
+                <button type="button" className="setup-btn-secondary" onClick={onClose}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="setup-btn-primary"
+                  onClick={handleSave}
+                  disabled={submitting || loading || !isDirty}
+                  title={!isDirty ? 'No changes to save' : 'Save platform preferences'}
+                >
+                  <Save size={16} />
+                  <span>{submitting ? 'Saving Changes...' : 'Save Changes'}</span>
+                </button>
+              </div>
+            )}
           </div>
-        )}
-        </div>
         </div>
       </div>
     </div>,
