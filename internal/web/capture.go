@@ -5,10 +5,8 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"sparkkeep/internal/capture"
 )
@@ -203,62 +201,16 @@ func (e *tooLargeError) Error() string {
 	return "file too large: " + e.name
 }
 
-// media serves a retained upload. filepath.Base is the sanitisation that
-// prevents traversal: a name containing separators can only ever resolve to a
-// file directly inside uploadDir.
-func (a *api) media(w http.ResponseWriter, r *http.Request) {
-	name := filepath.Base(r.PathValue("name"))
-	if name == "" || name == "." || name == ".." || name == "/" || a.uploadDir == "" {
-		writeErr(w, http.StatusNotFound, "not found")
+func (a *api) getCapture(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
 		return
 	}
-	full := filepath.Join(a.uploadDir, name)
-	// Lstat, not Stat: reject directories and symlinks so a planted link cannot
-	// escape uploadDir, and avoid the Stat/Open TOCTOU pair.
-	fi, err := os.Lstat(full)
-	if err != nil || fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 {
-		writeErr(w, http.StatusNotFound, "not found")
-		return
-	}
-	f, err := os.Open(full)
+	cap, err := a.store.GetCapture(r.Context(), id)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, "not found")
+		a.fail(w, err)
 		return
 	}
-	defer f.Close()
-	// Never let ServeContent sniff an executable type (SVG/HTML inline =
-	// stored XSS). Known media types are served inline; everything else is an
-	// opaque download.
-	ct := ctByExt(name)
-	if ct == "" {
-		ct = "application/octet-stream"
-		w.Header().Set("Content-Disposition", "attachment")
-	}
-	w.Header().Set("Content-Type", ct)
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	http.ServeContent(w, r, name, time.Time{}, f)
-}
-
-func ctByExt(name string) string {
-	switch strings.ToLower(filepath.Ext(name)) {
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".png":
-		return "image/png"
-	case ".webp":
-		return "image/webp"
-	case ".gif":
-		return "image/gif"
-	case ".mp4":
-		return "video/mp4"
-	case ".pdf":
-		return "application/pdf"
-	case ".ogg":
-		return "audio/ogg"
-	case ".wav":
-		return "audio/wav"
-	case ".webm":
-		return "audio/webm"
-	}
-	return ""
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": cap})
 }
