@@ -21,6 +21,41 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 		a.captureShare(w, r)
 		return
 	}
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		var req struct {
+			URL     string `json:"url"`
+			Text    string `json:"text"`
+			Caption string `json:"caption"`
+		}
+		if err := decodeJSON(w, r, &req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad json: "+err.Error())
+			return
+		}
+		url := strings.TrimSpace(req.URL)
+		text := strings.TrimSpace(req.Text)
+		caption := strings.TrimSpace(req.Caption)
+		raw := url
+		if raw == "" {
+			raw = text
+		}
+		if raw == "" {
+			writeErr(w, http.StatusBadRequest, "provide a url or text")
+			return
+		}
+		share := capture.Recognize(raw)
+		if caption != "" {
+			share.Caption = caption
+		} else if text != "" && text != raw {
+			share.Caption = text
+		}
+		ids, err := a.svc.CaptureShare(r.Context(), share)
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "card_ids": ids})
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, a.maxUpload+(1<<20))
 	if err := r.ParseMultipartForm(4 << 20); err != nil {
 		var mbe *http.MaxBytesError
@@ -35,6 +70,7 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 
 	url := strings.TrimSpace(r.FormValue("url"))
 	text := strings.TrimSpace(r.FormValue("text"))
+	caption := strings.TrimSpace(r.FormValue("caption"))
 	raw := url
 	if raw == "" {
 		raw = text
@@ -55,7 +91,9 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case raw != "":
 		share = capture.Recognize(raw)
-		if text != "" && text != raw {
+		if caption != "" {
+			share.Caption = caption
+		} else if text != "" && text != raw {
 			// Both url and text were supplied; keep the text as the caption
 			// instead of silently dropping it.
 			share.Caption = text

@@ -54,6 +54,12 @@ export const Header: React.FC<HeaderProps> = ({
         e.preventDefault();
         inputRef.current?.focus();
       }
+
+      // 'c' or 'n' when not inside an input/textarea opens capture
+      if ((e.key === 'c' || e.key === 'n') && !isInputActive && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        onOpenNewCard();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -191,9 +197,9 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           className="btn-primary new-card-cta"
           onClick={onOpenNewCard}
-          title="Capture New Spark"
+          title="Capture New Spark (C)"
         >
-          <Plus size={14} strokeWidth={2.25} />
+          <Sparkles size={14} strokeWidth={2} />
           <span>New Spark</span>
         </button>
       </div>

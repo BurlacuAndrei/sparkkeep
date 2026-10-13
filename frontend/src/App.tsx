@@ -222,7 +222,32 @@ function AppContent() {
     }
   };
 
-  // Create Card
+  // Capture Spark (Telegram parity: URL or idea -> AI triage synthesis)
+  const handleCaptureSpark = async (params: api.CaptureParams): Promise<number[] | null> => {
+    try {
+      const res = await api.captureSpark(params);
+      const cardIds = res.card_ids || res.cards || [];
+      reloadAll();
+      if (cardIds.length > 0) {
+        showToast(`✨ Spark captured & synthesized (${cardIds.length} card${cardIds.length > 1 ? 's' : ''})!`);
+        try {
+          const newCard = await api.fetchCard(cardIds[0]);
+          setSelectedCard(newCard);
+        } catch {
+          // Ignore if immediate fetch fails
+        }
+      } else {
+        showToast('Link recognized! (Already captured or merged into existing card)');
+      }
+      return cardIds;
+    } catch (err: unknown) {
+      const msg = api.getErrorMessage(err);
+      showToast(msg);
+      throw err;
+    }
+  };
+
+  // Create Card (Manual fallback)
   const handleCreateCard = async (newCard: Partial<Card>) => {
     try {
       await api.createCard(newCard);
@@ -386,6 +411,7 @@ function AppContent() {
       {isNewModalOpen && (
         <NewCardModal
           onClose={() => setIsNewModalOpen(false)}
+          onCapture={handleCaptureSpark}
           onCreate={handleCreateCard}
         />
       )}

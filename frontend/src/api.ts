@@ -370,4 +370,41 @@ export async function updateQuietWindow(cfg: QuietWindowConfig): Promise<void> {
   });
 }
 
+export interface CaptureParams {
+  url?: string;
+  text?: string;
+  caption?: string;
+  file?: File | null;
+}
+
+export interface CaptureResult {
+  ok: boolean;
+  card_ids?: number[];
+  cards?: number[];
+  error?: string;
+}
+
+export async function captureSpark(params: CaptureParams): Promise<CaptureResult> {
+  const token = localStorage.getItem(TOKEN_KEY) || '';
+  const formData = new FormData();
+  if (params.url) formData.append('url', params.url.trim());
+  if (params.text) formData.append('text', params.text.trim());
+  if (params.caption) formData.append('caption', params.caption.trim());
+  if (params.file) formData.append('file', params.file);
+
+  const res = await fetch('/api/v1/capture', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
 

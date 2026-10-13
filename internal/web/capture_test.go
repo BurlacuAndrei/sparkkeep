@@ -134,6 +134,28 @@ func TestCaptureTextAndURL(t *testing.T) {
 	}
 }
 
+func TestCaptureJSON(t *testing.T) {
+	h, _ := testHandler(t, t.TempDir())
+	req := httptest.NewRequest("POST", "/api/v1/capture",
+		strings.NewReader(`{"url":"https://example.com/test","caption":"read later"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		OK      bool    `json:"ok"`
+		CardIDs []int64 `json:"card_ids"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !out.OK {
+		t.Errorf("body = %s, want ok: true", rec.Body.String())
+	}
+}
+
 // The PWA share_target posts a form-encoded title/text/url from the OS share
 // sheet. There is no page to render a response in, so it must bounce the user
 // back to the dashboard with ?captured=true.
