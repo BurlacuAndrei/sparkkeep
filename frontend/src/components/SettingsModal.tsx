@@ -31,7 +31,6 @@ import {
 export interface SettingsModalProps {
   onClose: () => void;
   showToast: (msg: string) => void;
-  onOpenLicenseModal?: () => void;
 }
 
 export type SettingsTab =
@@ -61,7 +60,7 @@ interface SettingsBaseline {
   discordChannelId: string;
 }
 
-export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: SettingsModalProps) {
+export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
 
   // AI & Profiles state
@@ -660,14 +659,14 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
                 {/* TAB 4: Research Playbooks */}
                 {activeTab === 'playbooks' && (
                   <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
-                    <PlaybookManager showToast={showToast} onOpenLicenseModal={onOpenLicenseModal} />
+                    <PlaybookManager showToast={showToast} />
                   </div>
                 )}
 
                 {/* TAB 5: Scheduled Research */}
                 {activeTab === 'schedule' && (
                   <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
-                    <ResearchScheduler showToast={showToast} onOpenLicenseModal={onOpenLicenseModal} />
+                    <ResearchScheduler showToast={showToast} />
                   </div>
                 )}
 
@@ -715,7 +714,6 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
                     setConfirmAuthToken={setConfirmAuthToken}
                     hasAuthToken={hasAuthToken}
                     showToast={showToast}
-                    onOpenLicenseModal={onOpenLicenseModal}
                   />
                 )}
               </div>

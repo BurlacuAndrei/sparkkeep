@@ -42,19 +42,28 @@ func (m *memoryStore) ListSettings(_ context.Context) (map[string]string, error)
 	return out, nil
 }
 
-func TestLicenseManager_DefaultCommunity(t *testing.T) {
+func TestLicenseManager_DefaultOpenSource(t *testing.T) {
 	store := newMemoryStore()
 	mgr := NewManager(nil)
 	status := mgr.Status(context.Background())
 
 	if status.Tier != TierCommunity {
-		t.Fatalf("expected tier %s, got %s", TierCommunity, status.Tier)
+		t.Fatalf("expected tier %s under MIT, got %s", TierCommunity, status.Tier)
 	}
-	if !status.IsValid {
-		t.Fatalf("expected community to be valid")
+	if !status.IsValid || !status.IsLifetime {
+		t.Fatalf("expected open-source license to be valid and lifetime")
 	}
-	if mgr.HasCapability(context.Background(), FeatureObsidianSync) {
-		t.Fatalf("community tier should not have %s", FeatureObsidianSync)
+	if !mgr.HasCapability(context.Background(), FeatureObsidianSync) {
+		t.Fatalf("MIT open source should have %s", FeatureObsidianSync)
+	}
+	if !mgr.HasCapability(context.Background(), FeatureDeepResearchV2) {
+		t.Fatalf("MIT open source should have %s", FeatureDeepResearchV2)
+	}
+	if !mgr.HasCapability(context.Background(), FeatureWebhooks) {
+		t.Fatalf("MIT open source should have %s", FeatureWebhooks)
+	}
+	if mgr.HasCapability(context.Background(), "unknown_feature") {
+		t.Fatalf("unknown feature should return false")
 	}
 
 	// With store
@@ -77,7 +86,7 @@ func TestLicenseManager_ActivateValidPro(t *testing.T) {
 
 	validPayload := LicensePayload{
 		Email:     "founder@example.com",
-		Tier:      TierPro,
+		Tier:      TierCommunity,
 		Features:  []string{FeatureObsidianSync, FeatureWebhooks},
 		IssuedAt:  time.Now().Unix(),
 		ExpiresAt: 0, // lifetime
@@ -93,7 +102,7 @@ func TestLicenseManager_ActivateValidPro(t *testing.T) {
 		t.Fatalf("Activate: %v", err)
 	}
 
-	if status.Tier != TierPro || status.Email != "founder@example.com" {
+	if status.Tier != TierCommunity || status.Email != "founder@example.com" {
 		t.Fatalf("unexpected activated status: %+v", status)
 	}
 	if !status.IsLifetime {
@@ -124,7 +133,7 @@ func TestLicenseManager_ExpiredLicense(t *testing.T) {
 
 	expiredPayload := LicensePayload{
 		Email:     "expired@example.com",
-		Tier:      TierPro,
+		Tier:      TierCommunity,
 		Features:  []string{FeatureObsidianSync},
 		IssuedAt:  time.Now().Add(-48 * time.Hour).Unix(),
 		ExpiresAt: time.Now().Add(-24 * time.Hour).Unix(),
@@ -140,10 +149,10 @@ func TestLicenseManager_ExpiredLicense(t *testing.T) {
 		t.Fatalf("expected ErrLicenseExpired, got %v", err)
 	}
 
-	// Status should remain Community
+	// Status should remain default open-source TierCommunity
 	status := mgr.Status(context.Background())
 	if status.Tier != TierCommunity {
-		t.Fatalf("expected status to remain community, got %s", status.Tier)
+		t.Fatalf("expected status to remain %s, got %s", TierCommunity, status.Tier)
 	}
 }
 
@@ -166,7 +175,7 @@ func TestLicenseManager_InvalidOrTamperedKey(t *testing.T) {
 	// Tampered signature
 	validPayload := LicensePayload{
 		Email:    "test@example.com",
-		Tier:     TierPro,
+		Tier:     TierCommunity,
 		Features: []string{FeatureObsidianSync},
 	}
 	key, _ := SignLicenseForTest(priv, validPayload)
@@ -188,7 +197,7 @@ func TestLicenseManager_MasterKeyVerification(t *testing.T) {
 
 	payload := LicensePayload{
 		Email:    "buyer@example.com",
-		Tier:     TierPro,
+		Tier:     TierCommunity,
 		Features: []string{FeatureObsidianSync, FeatureWebhooks},
 	}
 	key, err := SignLicense(priv, payload)
@@ -200,7 +209,7 @@ func TestLicenseManager_MasterKeyVerification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Activate with default public key failed: %v", err)
 	}
-	if status.Tier != TierPro || status.Email != "buyer@example.com" {
+	if status.Tier != TierCommunity || status.Email != "buyer@example.com" {
 		t.Fatalf("unexpected status: %+v", status)
 	}
 	if !mgr.HasCapability(context.Background(), FeatureObsidianSync) {

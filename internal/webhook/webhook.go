@@ -50,7 +50,7 @@ func NewDispatcher(store port.SettingsStore, lic *license.Manager, logf func(for
 	}
 }
 
-// Dispatch triggers an asynchronous outbound HTTP POST if a webhook URL is configured and Pro tier is active.
+// Dispatch triggers an asynchronous outbound HTTP POST if a webhook URL is configured and webhook capability is active.
 func (d *Dispatcher) Dispatch(ctx context.Context, event EventType, data any) {
 	if d.license != nil && !d.license.HasCapability(ctx, license.FeatureWebhooks) {
 		return

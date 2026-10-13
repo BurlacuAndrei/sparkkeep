@@ -38,7 +38,7 @@ func (a *api) createPlaybook(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Custom playbooks require an active Pro license",
+			"error":   "Custom playbooks require deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return
@@ -60,7 +60,7 @@ func (a *api) updatePlaybook(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Custom playbooks require an active Pro license",
+			"error":   "Custom playbooks require deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return
@@ -101,7 +101,7 @@ func (a *api) duplicatePlaybook(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Custom playbooks require an active Pro license",
+			"error":   "Custom playbooks require deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return

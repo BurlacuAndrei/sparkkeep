@@ -21,7 +21,7 @@ import (
 
 func (a *api) syncObsidian(w http.ResponseWriter, r *http.Request) {
 	if a.svc == nil || !a.svc.HasCapability(r.Context(), license.FeatureObsidianSync) {
-		writeErr(w, http.StatusPaymentRequired, "feature requires a pro license")
+		writeErr(w, http.StatusPaymentRequired, "feature not enabled")
 		return
 	}
 	var b struct {
@@ -57,7 +57,7 @@ func (a *api) syncObsidian(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) testWebhook(w http.ResponseWriter, r *http.Request) {
 	if a.svc == nil || a.svc.Webhook == nil || !a.svc.HasCapability(r.Context(), license.FeatureWebhooks) {
-		writeErr(w, http.StatusPaymentRequired, "webhooks require a pro license")
+		writeErr(w, http.StatusPaymentRequired, "webhooks not enabled")
 		return
 	}
 	var b struct {

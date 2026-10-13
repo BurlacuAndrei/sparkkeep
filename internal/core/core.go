@@ -367,9 +367,10 @@ func (s *Service) SetRouter(router *analyze.Router) {
 }
 
 // HasCapability checks whether a feature is permitted under the active license.
+// In 100% Permissive Open Source mode, all capabilities are permitted by default.
 func (s *Service) HasCapability(ctx context.Context, feature string) bool {
 	if s.License == nil {
-		return false
+		return true
 	}
 	return s.License.HasCapability(ctx, feature)
 }
@@ -382,7 +383,7 @@ func (s *Service) LicenseStatus(ctx context.Context) license.LicenseStatus {
 	return s.License.Status(ctx)
 }
 
-// ActivateLicense attempts to verify and activate a Pro license key.
+// ActivateLicense attempts to verify and activate a license key.
 func (s *Service) ActivateLicense(ctx context.Context, key string) (*license.LicenseStatus, error) {
 	if s.License == nil {
 		return nil, errors.New("license manager not initialized")
@@ -714,10 +715,10 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 		}
 		if reqPB != nil {
 			if !reqPB.IsBuiltin {
-				return errors.New("custom playbooks require Pro license")
+				return errors.New("custom playbooks require deep research capability")
 			}
 			if reqPB.ID != 1 && reqPB.ID != 2 && !strings.EqualFold(reqPB.Name, "Default") && !strings.EqualFold(reqPB.Name, "Claim check only") {
-				return errors.New("this playbook requires Pro license")
+				return errors.New("this playbook requires deep research capability")
 			}
 		}
 	}

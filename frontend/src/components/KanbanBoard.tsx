@@ -12,8 +12,6 @@ interface KanbanBoardProps {
   onUpdateCard: (id: number, patch: Partial<Card>) => void;
   onResearch: (id: number) => void;
   onRetry: (id: number) => void;
-  isPro?: boolean;
-  onOpenLicenseModal?: () => void;
   showToast?: (msg: string, onUndo?: () => Promise<void> | void) => void;
   onRefresh?: () => void;
   onSwitchToTriage?: () => void;

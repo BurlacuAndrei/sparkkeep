@@ -25,8 +25,6 @@ interface OmnisearchProps {
   onViewModeChange: (mode: 'triage' | 'boards' | 'digest') => void;
   onOpenNewCard: () => void;
   onOpenSettingsModal: () => void;
-  onOpenLicenseModal?: () => void;
-  isPro?: boolean;
 }
 
 export interface CommandItem {

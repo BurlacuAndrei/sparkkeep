@@ -17,14 +17,11 @@ import { ResearchRule, QuietWindowConfig, Playbook } from '../types';
 
 interface ResearchSchedulerProps {
   showToast: (msg: string) => void;
-  onOpenLicenseModal?: () => void;
 }
 
 export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
   showToast,
-  onOpenLicenseModal,
 }) => {
-  const [isPro, setIsPro] = useState(false);
   const [loading, setLoading] = useState(true);
   const [quietWindow, setQuietWindow] = useState<QuietWindowConfig>({
     enabled: false,
@@ -40,27 +37,16 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
 
   useEffect(() => {
     let alive = true;
-    api.fetchLicenseStatus()
-      .catch(() => ({
-        ok: false,
-        status: { tier: 'community', features: [] as string[], is_lifetime: false, is_valid: false },
-      }))
-      .then(async (lic) => {
+    Promise.all([
+      api.fetchQuietWindow().catch(() => ({ enabled: false, start: '23:00', end: '07:00' })),
+      api.fetchResearchRules().catch(() => []),
+      api.fetchPlaybooks().catch(() => []),
+    ])
+      .then(([qw, rls, pbs]) => {
         if (!alive) return;
-        const pro = Boolean(lic?.status?.features?.includes('deep_research_v2'));
-        setIsPro(pro);
-
-        if (pro) {
-          const [qw, rls, pbs] = await Promise.all([
-            api.fetchQuietWindow().catch(() => ({ enabled: false, start: '23:00', end: '07:00' })),
-            api.fetchResearchRules().catch(() => []),
-            api.fetchPlaybooks().catch(() => []),
-          ]);
-          if (!alive) return;
-          setQuietWindow(qw);
-          setRules(rls);
-          setPlaybooks(pbs);
-        }
+        setQuietWindow(qw);
+        setRules(rls);
+        setPlaybooks(pbs);
       })
       .catch((err) => {
         if (!alive) return;
@@ -150,88 +136,6 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
     return (
       <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8' }}>
         Loading scheduled research settings...
-      </div>
-    );
-  }
-
-  if (!isPro) {
-    return (
-      <div className="settings-panel">
-        <div
-          style={{
-            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.08))',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
-            borderRadius: 14,
-            padding: 24,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 10,
-                background: 'rgba(99, 102, 241, 0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#818cf8',
-              }}
-            >
-              <Moon size={22} />
-            </div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
-                Batch & Scheduled Overnight Research
-              </h3>
-              <p style={{ margin: '2px 0 0', fontSize: 12.5, color: '#94a3b8' }}>
-                Pro Feature · Bounded background queue with overnight windows & automation rules
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '8px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#cbd5e1' }}>
-              <Sparkles size={16} color="#818cf8" style={{ marginTop: 2, flexShrink: 0 }} />
-              <span>
-                <strong>Persistent Overnight Queue:</strong> Queue cards during the day; the background worker processes them sequentially overnight.
-              </span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#cbd5e1' }}>
-              <Clock size={16} color="#818cf8" style={{ marginTop: 2, flexShrink: 0 }} />
-              <span>
-                <strong>Quiet Window:</strong> Confine resource-heavy LLM passes to specific hours (e.g. 23:00 – 07:00).
-              </span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#cbd5e1' }}>
-              <Filter size={16} color="#818cf8" style={{ marginTop: 2, flexShrink: 0 }} />
-              <span>
-                <strong>Automated Nightly Rules:</strong> Automatically research high-worthiness inbox items created in the last 24h.
-              </span>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-            <button
-              type="button"
-              className="btn-primary"
-              style={{
-                background: 'linear-gradient(135deg, #6366f1, #9333ea)',
-                border: 'none',
-                padding: '9px 18px',
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-              onClick={onOpenLicenseModal}
-            >
-              <Lock size={14} style={{ marginRight: 6 }} />
-              Unlock with Pro License
-            </button>
-          </div>
-        </div>
       </div>
     );
   }

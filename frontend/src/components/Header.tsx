@@ -8,8 +8,6 @@ interface HeaderProps {
   onViewModeChange: (mode: 'triage' | 'boards' | 'digest') => void;
   onOpenNewCard: () => void;
   flashMessage: string;
-  isPro?: boolean;
-  onOpenLicenseModal: () => void;
   onOpenSettingsModal: () => void;
   triageCount?: number;
   allCards: Card[];
@@ -23,8 +21,6 @@ export const Header: React.FC<HeaderProps> = ({
   onViewModeChange,
   onOpenNewCard,
   flashMessage,
-  isPro,
-  onOpenLicenseModal,
   onOpenSettingsModal,
   triageCount,
   allCards,
@@ -122,23 +118,11 @@ export const Header: React.FC<HeaderProps> = ({
           onViewModeChange={onViewModeChange}
           onOpenNewCard={onOpenNewCard}
           onOpenSettingsModal={onOpenSettingsModal}
-          onOpenLicenseModal={onOpenLicenseModal}
-          isPro={isPro}
         />
       </div>
 
       {/* Zone 3: Actions & System */}
       <div className="topbar-right">
-        <button
-          type="button"
-          className={`license-trigger-btn ${isPro ? 'pro' : 'community'}`}
-          onClick={onOpenLicenseModal}
-          title={isPro ? "Sparkkeep Pro Lifetime Active" : "Upgrade to Sparkkeep Pro"}
-        >
-          <Sparkles size={12} strokeWidth={2} />
-          <span>{isPro ? "PRO" : "Upgrade"}</span>
-        </button>
-
         <button
           type="button"
           className="btn-secondary icon-only-btn"

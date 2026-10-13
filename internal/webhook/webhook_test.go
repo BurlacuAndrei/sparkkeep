@@ -53,7 +53,7 @@ func (m *memoryStore) ListSettings(_ context.Context) (map[string]string, error)
 	return out, nil
 }
 
-func TestWebhook_GatedForCommunity(t *testing.T) {
+func TestWebhook_DispatchedByDefault(t *testing.T) {
 	called := false
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -64,14 +64,14 @@ func TestWebhook_GatedForCommunity(t *testing.T) {
 	store := newMemoryStore()
 	store.SetSetting(context.Background(), "webhook_url", ts.URL)
 
-	licMgr := license.NewManager(store) // Community by default
+	licMgr := license.NewManager(store)
 	d := NewDispatcher(store, licMgr, t.Logf)
 
 	d.Dispatch(context.Background(), EventCardCreated, map[string]string{"title": "Test"})
 	time.Sleep(50 * time.Millisecond)
 
-	if called {
-		t.Fatalf("webhook was dispatched for community tier, expected to be gated")
+	if !called {
+		t.Fatalf("webhook should be dispatched by default under MIT open source")
 	}
 }
 
@@ -101,8 +101,8 @@ func TestWebhook_DispatchedForPro(t *testing.T) {
 
 	// Activate Pro with webhooks capability
 	key, _ := license.SignLicense(priv, license.LicensePayload{
-		Email:    "pro@example.com",
-		Tier:     license.TierPro,
+		Email:    "user@example.com",
+		Tier:     license.TierCommunity,
 		Features: []string{license.FeatureWebhooks},
 	})
 	_, _ = licMgr.Activate(context.Background(), key)

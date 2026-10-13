@@ -1,303 +1,223 @@
-# sparkkeep — design
+# Sparkkeep — System Architecture & Design
 
-## 1. Pitch & scope
+## 1. Pitch & Scope
 
-**Pitch.** Shorten the path from seeing an idea to doing it. You share a
-post/link/repo/media from any device; sparkkeep analyzes it, splits it into
-short idea cards, routes each into the right horizon (short-term actionable
-vs lifetime bucket-list), and lets you act on it — from Telegram, then the
-web dashboard.
+**Pitch.** Shorten the path from discovering an idea to executing it. Share a post, link, repo, note, or media from mobile (Telegram, WhatsApp, Signal, Discord, Slack) or the web; Sparkkeep captures it immutably, analyzes it using your preferred AI model, splits it into actionable idea cards, routes each into the appropriate horizon (short-term actionable vs. lifetime reference), and empowers you to triage them Kanban-style or run deep research playbooks.
 
-**Form factor.** One Go binary. Capture + organize + dashboard in one
-process. Telegram is the first *channel* (in/out), not the product — the
-core speaks to a `Channel` interface so more channels can drop in later.
+**Form Factor.** Single, self-contained binary. Capture engine, multi-channel hub, research execution pipeline, embedded SQLite database, and embedded modern web dashboard run in a single process with zero external database dependencies.
 
-**Explicitly out of scope for v1 (YAGNI):**
-- No user accounts / multi-tenant auth — single-user, single-instance.
-- No Postgres — SQLite first, behind a thin storage boundary.
-- No React/build toolchain — embedded static dashboard (stdlib net/http).
-- No persistent agent infra — a research task is one bounded goroutine.
-- No IG/FB deep scraping — auto-fetch what's open, paste caption otherwise.
-- No self-hosted LLM router — BYO OpenAI-compatible endpoint (Ollama works).
+**Core Principles:**
+- **Local-First & Zero External DBs:** Uses SQLite via `modernc.org/sqlite` (pure Go, CGO-free, cross-platform) with WAL mode, serialized single-writer pool, and FTS5 full-text indexing.
+- **Embedded Web Application:** Modern React 19 + Vite + TypeScript frontend compiled and embedded directly into the Go executable via `//go:embed`.
+- **Bring Your Own Keys (BYOK):** Seamless integration with any OpenAI-compatible endpoint (OpenAI, DeepSeek, local Ollama, vLLM, LM Studio) without vendor lock-in.
+- **Channel Independence:** Multi-channel hub supports Telegram, OpenClaw (WhatsApp, Signal, iMessage, Matrix), Discord, Slack, and Webhooks with full provenance tracking.
+- **100% Permissive Open Source (MIT):** All capture, analysis, search, kanban, research playbooks, obsidian sync, and webhook automations are fully open-source and unrestricted under the MIT License.
 
-## 2. Architecture
+---
 
-One binary, two entry points: a **Telegram long-poll goroutine** (capture in,
-notify out) and a **net/http server** (API + embedded dashboard). Shared core
-in the middle.
+## 2. Architecture Overview
+
+One binary, multiple entry points: long-polling channel goroutines (e.g. Telegram), webhook receivers (Discord, OpenClaw, Slack), and an HTTP server (REST API + embedded web dashboard).
 
 ```
-  Telegram IN ──┐
-  OpenClaw IN ──┼─► ┌──────────────────────────────────────────────┐
-  Discord IN  ──┤   │ internal/channel (Hub router & adapters)     │
-  Slack IN    ──┘   │   · telegram, openclaw, discord, slack       │
-                    └───────────────────┬──────────────────────────┘
-                                        ▼
-                    ┌──────────────────────────────────────────────┐
-                    │ core  capture.Handler                        │
-                    │   · recognize link / text / media            │
-                    │   · fetch open sources (HTTP, yt-dlp)        │
-                    │   · LLM analyze → split → classify            │
-                    │   · persist cards, emit Hub.Notify           │
-                    │   · preserve provenance (channel, chat, msg) │
-                    └───────────────────┬──────────────────────────┘
-                                        ▼
-                    ┌──────────────────────────────────────────────┐
-                    │ store  (SQLite via database/sql)             │
-                    │   spans: cards, tags, research, events       │
-                    └──────────────────────────────────────────────┘
+   Telegram IN  ──┐
+   OpenClaw IN  ──┼─► ┌──────────────────────────────────────────────┐
+   Discord IN   ──┤   │ internal/channel (Hub router & adapters)     │
+   Slack IN     ──┤   │   · telegram, openclaw, discord, slack       │
+   Web/API IN   ──┘   └───────────────────┬──────────────────────────┘
+                                          ▼
+                      ┌──────────────────────────────────────────────┐
+                      │ core.Service & capture.Handler               │
+                      │   · recognize link / text / media / audio    │
+                      │   · fetch sources (HTTP, headless Chrome, yt-dlp)
+                      │   · transcribe audio (Whisper ASR)           │
+                      │   · LLM analyze → triage brief → split cards │
+                      │   · persist cards, emit Hub.Notify           │
+                      │   · preserve provenance (channel, chat, msg) │
+                      └───────────────────┬──────────────────────────┘
+                                          ▼
+                      ┌──────────────────────────────────────────────┐
+                      │ store (SQLite via database/sql + FTS5)       │
+                      │   spans: captures, cards, tags, research,    │
+                      │          playbooks, settings, channels       │
+                      └──────────────────────────────────────────────┘
 
-  HTTP server ──► /api/* (cards, channels, digest, webhooks) + embed.FS dashboard
-                       shared core, same process
+   HTTP Server  ──► /api/v1/* (cards, research, channels, settings)
+                    /assets/* (embedded React SPA dist via embed.FS)
 ```
 
-**Package layout:**
+### Package Layout
 
 ```
-cmd/sparkkeep/               main.go — flags/env, wiring, graceful shutdown
-internal/port/               interfaces: Channel, ChannelHub, Store, ModelRouter
-internal/channel/            hub.go — targeted routing, broadcast fallback
-internal/channel/telegram/   long-poll adapter (stdlib, inline buttons)
-internal/channel/openclaw/   HTTP bridge for WhatsApp, Signal, iMessage
-internal/channel/discord/    rich embeds, action rows & interactions
-internal/channel/slack/      block kit cards & webhooks
-internal/capture/            link recognition + fetch (net/http, yt-dlp subprocess)
-internal/analyze/            OpenAI-compatible LLM client (stdlib JSON over HTTP)
-internal/research/           bounded loop: query → search → read → synthesize
-internal/store/              SQLite repository (database/sql + modernc.org/sqlite)
-internal/web/                embed.FS dashboard + API & webhook handlers
+cmd/sparkkeep/               main.go — flag/env config, dependency injection, graceful shutdown
+internal/port/               interfaces: Store, ChannelHub, ModelRouter, Playbook, etc.
+internal/core/               orchestration service, capture handler, background research queue
+internal/channel/            multi-channel hub router, broadcast fan-out, provenance dispatch
+internal/channel/telegram/   Telegram Bot API long-poll adapter with interactive inline buttons
+internal/channel/openclaw/   HTTP bridge for WhatsApp, Signal, iMessage, and Matrix
+internal/channel/discord/    rich embeds and interactive ActionRow button webhooks
+internal/channel/slack/      Block Kit interactive cards and incoming webhooks
+internal/capture/            URL scrapers (plain HTTP + headless Chrome), yt-dlp, media handling
+internal/asr/                Whisper ASR audio transcription client
+internal/analyze/            OpenAI-compatible LLM client, prompt templates, model routing
+internal/research/           playbook step execution engine, search, synthesizer, reporter
+internal/obsidian/           local Obsidian note export and synchronization
+internal/webhook/            outbound HMAC-signed webhook dispatcher
+internal/license/            license capability manager & status provider
+internal/store/              modular SQLite repository, migrations runner, FTS5 sync triggers
+internal/web/                domain HTTP handlers, auth middleware, embedded static file server
+frontend/                    React 19 + TypeScript + Vite SPA, CSS design tokens, Vitest harness
 ```
 
-**Deliberate simplification:** only abstraction is `port.Store` (interface →
-SQLite impl) and `port.Channel` — because you called for channel-independence
-and a Postgres escape hatch. Everything else is concrete types. `ponytail:
-single-user sync app; if ever multi-writer, the Store interface is the seam
-to Postgres or a queue.`
+---
 
-**Dependencies (only three, two are SQLite+yt-dlp):**
-- `modernc.org/sqlite` — pure-Go SQLite driver (no cgo, static binary)
-- `yt-dlp` — external binary, only for YouTube/IG media metadata
-- stdlib for everything else (Telegram API, HTTP, JSON, embed)
+## 3. Data Model & Storage
 
-## 3. Data model & storage
+Sparkkeep stores all application state in a single SQLite database file (`/data/sparkkeep.db`), configured with Write-Ahead Logging (WAL) and a single-writer connection pool to serialize write transactions safely.
 
-SQLite, single file. Three tables.
+### Primary Entities
 
-**`cards`** — the idea.
+- **`captures`**: Immutable record of raw inbound messages, fetched web page bodies, transcribed voice notes, and media provenance (`source_channel`, `source_channel_chat_id`, `source_channel_msg_id`).
+- **`cards`**: The core idea unit. Contains title, summary, horizon (`short-term` vs. `lifetime`), status (`inbox`, `doing`, `shelved`, `done`), triage brief JSON, capture reference, and tags.
+- **`cards_fts`**: SQLite FTS5 virtual table synchronized via database triggers for instant full-text search across card titles, summaries, notes, and tags.
+- **`tags` & `card_tags`**: Normalized tags assigned via LLM analysis or manual organization.
+- **`research`**: Executed research runs with step progress snapshots, citations, synthesized Markdown reports, token usage, and user feedback.
+- **`playbooks` & `playbook_steps`**: Deterministic step-based investigation definitions (ground, plan, search, read, verify, report, custom).
+- **`channel_messages`**: Mapping between Sparkkeep card IDs and upstream platform message IDs to enable live in-place edits (e.g. Telegram send-and-edit pattern).
+- **`settings`**: Dynamic key-value store for API keys, AI model profiles, channel credentials, and auth tokens, configurable directly through the web UI.
 
-| column     | type      | notes |
-|------------|-----------|-------|
-| id         | INTEGER PK|    |
-| title      | TEXT      | 1-line, LLM-generated |
-| summary    | TEXT      | 2–3 lines, LLM |
-| horizon    | TEXT      | `short-term` \| `lifetime` (LLM-classified) |
-| status     | TEXT      | `inbox` → `doing` → `done` / `shelved` |
-| source_url | TEXT      | original post/link, if any |
-| source_note| TEXT      | pasted caption when scraping blocked |
-| created_at | TEXT      | RFC3339 UTC |
-| updated_at | TEXT      |    |
+### Automated Migrations
 
-**`tags`** — freeform, LLM-suggested + channel-reaction refinement. `cards_tags` join table.
+Schema evolution is managed via sequential SQL migration scripts embedded in `internal/store/migrations/` (`0001_init.sql` through `0020_cards_fts.sql`). On startup, Sparkkeep automatically applies pending migrations within a transaction.
 
-**`research`** — one row per bounded research run: card_id, status (`queued`/`running`/`done`/`failed`), query, findings (markdown), created_at.
+---
 
-**`events`** — optional audit trail of channel interactions (used for the weekly digest and debugging).
+## 4. Two-Stage Pipeline: Capture & Triage
 
-**Migrations:** embedded SQL files in `internal/store/migrations/` (`0001_init.sql`, …), applied at startup behind `doc_id`-style version tracking. No migration library — a 20-line runner in `store` (`ponytail: single-user, forward-only migrations; add a library only if you ever need downward/conflict resolution`).
+Sparkkeep decouples raw ingestion from synthesis into a reliable two-stage pipeline:
 
-**API shape** (`/api/v1`):
-- `GET /cards?horizon=&tag=&status=` — list
-- `POST /cards` — create manually
-- `PATCH /cards/{id}` — status/tag/horizon/note
-- `GET /tags`, `GET /research`, `POST /research` (trigger from a card)
-
-Dashboard is read-heavy; no pagination beyond `?limit=` for now (`ponytail: fine until a user has thousands of cards; add cursor paging then`).
-
-## 4. Two-stage pipeline — captures → triage brief → cards
-
-Sparkkeep decouples raw ingestion from synthesis via a two-stage pipeline: **Capture** followed by **Triage**.
-
-### Stage 1: Capture (Raw Ingestion)
-Incoming shares (links, text, images, or audio voice notes) are first saved into the `captures` table with `status=pending`:
-- **Plain links (HTTP/HTTPS):** fetched and parsed into clean readable text.
-- **YouTube / Video URLs:** metadata extracted via `yt-dlp -j`.
-- **Audio / Voice Notes:** transcribed into text via Whisper ASR client.
-- **Images & Screenshots:** digested into text descriptions using the `vision` model role.
-- **Captioned Posts:** caption preserved in `source_note`; linked URL fetched if open.
-
-Captures preserve the raw source content immutably, ensuring re-analysis and multi-card decomposition have complete provenance.
-
-### Stage 2: Triage & Brief Synthesis
-The capture is evaluated by the LLM client routed for the `triage` role:
-- **Personal Fit Context Injection:** If a user profile ("About Me") is configured, background context (goals, skills, stack, constraints) is injected as a passive context block.
-- **Triage Brief Generation:** The model produces an actionable structured brief:
-  - `tldr`: 1–2 sentence executive summary.
-  - `why_care`: specific value proposition, tailored to personal fit.
-  - `worthiness`: `high` | `medium` | `low` rating with concrete rationale.
-  - `type`: card typology (`tool`, `reading`, `architecture`, `company`, `idea`, etc.).
-  - `claims`: key factual claims to verify during research.
-  - `open_questions`: targeted investigative angles.
-  - `suggested_horizon`: `short-term` (actionable now) vs `lifetime` (long-term reference).
-  - `tags`: topic categorization tags.
-- **Distinct Idea Splitting:** Multi-item posts or digests are split into distinct cards, each linked to the parent capture via `capture_id`. Cards share the source URL without unique constraint conflicts.
-- **Persistence & Notification:** Cards are saved in `inbox` status and dispatched via `Channel.Notify` with inline action buttons (`→ Doing`, `→ Done`, `Research`, `Shelve`).
+```
+  Input (Link/Text/Media/Audio)
+               │
+               ▼
+   [Stage 1: Ingestion & Capture]
+   • Save raw payload in `captures` table (status=pending)
+   • HTTP / Headless Chrome fetch for URLs
+   • yt-dlp for video metadata
+   • Whisper ASR for voice notes
+   • Vision model for image screenshots
+               │
+               ▼
+   [Stage 2: Triage & Brief Synthesis]
+   • Inject user "About Me" profile context (skills, stack, goals)
+   • Generate structured Triage Brief:
+     - TL;DR executive summary
+     - Value proposition ("why care")
+     - Worthiness rating (high | medium | low)
+     - Typology (tool, article, architecture, idea, etc.)
+     - Factual claims to verify & open questions
+     - Horizon recommendation (short-term vs. lifetime)
+   • Decompose multi-item shares into distinct idea cards
+   • Save cards to inbox and notify originating channel
+```
 
 ### Model Roles & Router
-Sparkkeep supports multiple AI endpoints configured through profiles:
-- **Roles:** `triage`, `vision`, `research_plan`, `research_synthesis`.
-- **Pro Gating:** Pro instances can route each role to separate providers/models (e.g. fast cheap models for triage/planning, high-reasoning models for research synthesis) with per-role token caps. Community instances route all roles to the default profile.
 
-## 5. Multi-channel hub & adapter ecosystem
+The backend supports assigning distinct model configurations by role:
+- `triage`: Fast, structured extraction for inbound captures.
+- `vision`: Multimodal description of screenshots and images.
+- `research_plan`: Investigative decomposition and search query generation.
+- `research_synthesis`: High-reasoning report synthesis with factual citations.
 
-Sparkkeep provides a unified channel abstraction (`port.Channel` and `port.ChannelHub`) enabling multi-channel ingestion, outbound interactive notifications, and full card provenance tracking (`source_channel`, `source_channel_chat_id`, `source_channel_msg_id`).
+---
 
-### Channel Hub (`internal/channel/hub.go`)
-- **Targeted Routing:** Outbound card notifications route back to the channel of origin when available (e.g. captures from Discord notify Discord; captures from WhatsApp via OpenClaw notify WhatsApp).
+## 5. Multi-Channel Hub & Provenance
+
+Sparkkeep provides a unified channel abstraction (`port.Channel` and `port.ChannelHub`) for multi-channel ingestion, outbound interactive notifications, and provenance tracking:
+
+- **Targeted Notification Routing:** Outbound card notifications route back to the channel of origin (e.g. captures from Discord notify Discord; captures from WhatsApp notify WhatsApp).
 - **Sub-Channel Routing:** Supports prefix routing such as `openclaw:whatsapp` or `openclaw:signal`.
-- **Broadcast Fallback:** System broadcasts (such as scheduled weekly digests or cards created via Web UI) dispatch across all active channels concurrently with per-adapter error isolation.
-- **Dynamic Registry:** Adapters register themselves at startup or via live reconfiguration.
+- **Concurrent Broadcast Fallback:** System broadcasts (such as scheduled weekly digests or cards created via Web UI) fan out across active channels concurrently with per-adapter error isolation and timeouts.
+- **Telegram:** Stdlib HTTP long-polling (`getUpdates`) with atomic offset persistence, interactive inline keyboards (`→ Doing`, `→ Done`, `Research`, `Shelve`), and in-place message edit updates.
+- **OpenClaw Bridge:** Connects to OpenClaw Gateway `POST /hooks/agent` with Bearer auth, unlocking 15+ external messaging transports (**WhatsApp**, **Signal**, **iMessage**, **Matrix**) without heavy dependencies.
+- **Discord:** Rich Embeds with action color bars and interactive ActionRow button components via interaction webhooks.
+- **Slack:** Rich Block Kit formatting with header blocks, markdown sections, and interactive action buttons.
 
-### Adapters
-1. **Telegram (`internal/channel/telegram/`):**
-   - Inbound: Stdlib HTTP long-polling (`getUpdates`) with atomic offset persistence.
-   - Outbound: HTML formatted messages with interactive inline keyboards (`→ Doing`, `→ Done`, `Research`, `Shelve`).
-   - Reaction refinement: Passive emoji mappings (`⭐`, `📌`, etc.).
-   - Reply organization: Intercepts reply messages to append tags or notes.
+---
 
-2. **OpenClaw Bridge (`internal/channel/openclaw/`):**
-   - Unifies 15+ external messaging transports (**WhatsApp**, **Signal**, **iMessage**, **Matrix**, etc.) without bundling heavy external runtimes or CGO dependencies.
-   - Outbound: Dispatches to OpenClaw Gateway `POST /hooks/agent` with Bearer auth and targeted recipient routing (`to` field).
-   - Inbound: Listens at `POST /api/v1/channels/openclaw/webhook` for incoming messages.
-   - Text Action Parsing: Parses inbound command text (`/research`, `/short`, `/done`, `/shelve`) for clients that lack native interactive button widgets (e.g., standard SMS or Signal).
-
-3. **Discord (`internal/channel/discord/`):**
-   - Outbound: Rich Discord Embeds with action color bars, clickable title links, and interactive ActionRow button components.
-   - Inbound: Interaction webhook handler (`POST /api/v1/channels/discord/interactions`) handling button clicks with Discord Ed25519 signature verification support and modal/ephemeral responses.
-
-4. **Slack (`internal/channel/slack/`):**
-   - Outbound: Slack Block Kit formatting with header blocks, markdown sections, and interactive action buttons.
-   - Inbound: Incoming Webhook integration and Block Kit action responses.
-
-### Card Provenance & Ingestion Pipeline
-When a share arrives through any channel:
-- `source_channel` records the transport identifier (`telegram`, `openclaw:whatsapp`, `discord`, `slack`, `web`).
-- `source_channel_chat_id` records the originating conversation or thread.
-- `source_channel_msg_id` records the upstream message identifier to facilitate reply updates.
-- All provenance fields are persisted in `captures` and flow into generated `cards` (migration `0018_channels_and_provenance.sql`).
-
-
-## 6. Research playbooks & execution pipeline
+## 6. Research Engine & Playbooks
 
 Research investigations in Sparkkeep are deterministic, step-based workflows governed by **Playbooks**. There is no unbounded autonomous loop: every research run executes an ordered sequence of discrete, verifiable steps with hard stop conditions.
 
-### Playbook Architecture
-A playbook (`port.Playbook`) consists of a sequence of `PlaybookStep` items:
+### Playbook Steps
 - **`ground`:** Ingests card context, raw capture text, and metadata into run memory.
 - **`resolve_refs`:** Discovers and fetches URLs referenced in card notes or content.
-- **`plan`:** Formulates decomposing investigative questions and web search queries (`RoleResearchPlan`).
+- **`plan`:** Formulates decomposing investigative questions and search queries.
 - **`search`:** Executes queries against SearXNG or search APIs, tracking candidate source URLs.
 - **`read`:** Fetches and clips content from discovered sources in round-robin fashion.
 - **`verify_claims`:** Fact-checks assertions against extracted evidence with `[S#]` citations.
 - **`landscape`:** Evaluates competitive alternatives and industry positioning.
-- **`verdict`:** Synthesizes pursue/skip/watch recommendation, confidence, and next actions.
+- **`verdict`:** Synthesizes pursue/skip/watch recommendations with confidence scores.
 - **`report`:** Compiles the complete Markdown briefing.
-- **`custom`:** User-defined prompts with customizable role, tools (`search` / `none`), and heading.
+- **`custom`:** User-defined prompts with customizable role, tools, and headings.
 
-### Tiers & Gating
-- **Community:**
-  - Includes **Default (lite)** playbook: `ground, resolve_refs, search, read, report`.
-  - Includes built-in **"Claim check only"** playbook: `ground, resolve_refs, verify_claims, report`.
-  - Runs all steps through the single default AI model profile.
-- **Pro (`deep_research_v2`):**
-  - Full 7-step **Default** playbook with planning, claim verification, landscape, and verdict.
-  - Built-in specialist playbooks: **Deep Investigation** and **Vendor Comparison**.
-  - **Custom Playbooks:** Create, edit, duplicate, and assign card-type affinities (up to 12 steps).
-  - **Curated Step Library:** Instant insertion of pre-built domain analysis modules.
-  - Per-role model routing (planning vs synthesis).
-- **Graceful License Lapsing:** Custom playbooks remain readable if a Pro license expires, but cannot be run or edited until reactivated. User data is never deleted.
+### Scheduled Execution & Queue Worker
+- **Bounded Background Queue:** Sequential processing of research jobs with restart resilience (interrupted jobs recover automatically on boot).
+- **Quiet Window:** Configurable off-peak execution window (e.g. `23:00` to `07:00`).
+- **Morning Digest:** Push digest summarizing overnight reports, verdicts, and card links.
 
-### Run Snapshots & Observability
-- **Immutable Snapshot:** The exact playbook configuration is captured in `playbook_snapshot` on every research row, guaranteeing historical reproducibility.
-- **Live Progress:** Progress is updated per-step (`steps` JSON array) and streamed to the UI.
-- **Feedback & Metrics:**
-  - Reports collect user 👍 / 👎 feedback and optional comments directly on the run.
-  - Local endpoint `GET /api/v1/metrics/pipeline` computes funnel conversion %, median inbox time, playbook run counts, step success rates, feedback satisfaction, and average token consumption.
-  - **Zero Telemetry:** All metrics remain 100% private and on-instance.
+---
 
-### Scheduled & Batch Overnight Research (Pro)
-- **Persistent Bounded Queue:** Research requests can be queued with `scheduled_for` and `batch_id`. A dedicated background queue worker (default concurrency: 1) processes queued items sequentially.
-- **Restart Resilience:** On server boot, `RecoverInterruptedResearch` transitions stale `running` jobs to `failed` (`interrupted by server restart`) with immediate retry support. Remaining `queued` jobs survive restarts intact.
-- **Quiet Execution Window:** Configurable time window (e.g. `23:00` to `07:00`) halts processing during business hours and releases queue worker execution during off-peak hours.
-- **Automation Rules:** Configurable scheduled triggers (e.g. daily at `02:00`) query cards matching criteria (status, worthiness, type, max age, tags) up to a max limit, avoiding duplicate queued passes.
-- **Morning Research Digest:** Morning Telegram push (`/morning` command or scheduled delivery) summarizing overnight report counts, recommendations/verdicts, direct card links, and any interrupted runs.
-- **Pro Gating:** Batch queuing (`POST /api/v1/research/batch`), rules management (`/api/v1/research/rules`), and quiet window endpoints are gated by `deep_research_v2`.
+## 7. Web Dashboard & User Interface
 
-## 7. Web dashboard & API
+The web interface is a modern single-page application built with **React 19**, **TypeScript**, and **Vite**, with stylesheets organized into CSS design tokens, layout primitives, and component styles.
 
-**Dashboard** — one static HTML page + a single JS file, embedded via
-`embed.FS`, served by the same binary on `:8080`. No build step, no
-framework: vanilla JS calling `/api/v1`. Dark, card-grid UI modeled as:
+- **Omnisearch (Cmd+K / Ctrl+K):** Instant global search palette powered by backend FTS5 indexing with keyboard navigation.
+- **Dual Views:**
+  - **Kanban Board:** Smooth workflow management across Inbox, Doing, Done, and Shelved columns with horizon filtering.
+  - **Triage Deck:** Tinder-style rapid swipe triage view for processing capture backlogs.
+- **Slide-Over Research Drawer:** Full Markdown report view with rendered citations, step progress indicators, and user feedback triggers.
+- **Smart Capture Modal:** Quick entry with auto-fetch preview, channel origin selection, and tag autocompletion.
+- **Playbook Manager:** Interface to inspect built-in playbooks, create custom multi-step workflows, and test configurations.
+- **Settings Modal:** Unified tabbed settings for AI profiles, channel integrations, Obsidian vault path, outbound webhooks, and security passphrases.
+- **Theme Selector:** Curated theme palette with instant preview and persistent preference storage.
 
-- **left rail** — filter facets: horizon (`short-term` / `lifetime`), tag
-  chips, status
-- **main grid** — idea cards (title, summary, tags, horizon badge, status)
-- **top bar** — search box (SQL LIKE on title/summary/tags), "New card" +
-  "Research" actions
-- **row of two boards** — convenience split: *Action queue* (short-term,
-  inbox/doing) vs *Bucket list* (lifetime), same data, two filtered grids
+---
 
-**API** (from section 3, plus):
-- `POST /api/v1/research` — start research from card id
-- `POST /api/v1/cards/{id}/retry` — re-analyze a failed-analysis card
-- `POST /api/v1/cards/{id}/notify` — re-send a card as notification
+## 8. Configuration & Deployment
 
-**Serve mode:** static assets + `json` API handlers on one `http.ServeMux`
-with `http.FileServer` for `/assets`. CORS unneeded (same origin).
-`ponytail: hide the server behind your existing Traefik/Authelia on the NAS
-if you want auth; in-app auth is out of scope.`
+### Environment Variables
 
-## 8. Config, deployment, testing
+All settings can be pre-configured via environment variables or managed dynamically via the First-Run Setup Wizard and Web UI Settings:
 
-**Config.** Env-only, no config file. All keys prefixed `SPARKKEEP_`:
+| Environment Variable | Default | Purpose |
+|---|---|---|
+| `SPARKKEEP_DB` | `/data/sparkkeep.db` | SQLite database file path |
+| `SPARKKEEP_HTTP_ADDR` | `:8080` | Bind address and port |
+| `SPARKKEEP_AUTH_TOKEN` | *(Dynamic DB)* | Master authentication bearer token / cookie secret |
+| `SPARKKEEP_LLM_BASE` | `http://localhost:11434/v1` | OpenAI-compatible API base URL |
+| `SPARKKEEP_LLM_KEY` | *(Dynamic DB)* | API Key for LLM provider (empty for Ollama) |
+| `SPARKKEEP_LLM_MODEL` | *(Dynamic DB)* | Model identifier (e.g. `gpt-4o`, `llama3.2`) |
+| `SPARKKEEP_MAX_ANALYZE_TOKENS` | `2048` | Maximum token cap for analysis calls |
+| `SPARKKEEP_TG_TOKEN` | `""` | Telegram bot token (empty = disabled) |
+| `SPARKKEEP_TG_CHAT_ID` | `0` | Authorized Telegram user/chat ID |
+| `SPARKKEEP_SEARCH_URL` | `https://searx.be` | SearXNG JSON search endpoint |
+| `SPARKKEEP_HEADLESS_ENABLED` | `true` | Headless Chromium rendering toggle |
+| `SPARKKEEP_ASR_URL` | `""` | Optional Whisper transcription endpoint |
+| `SPARKKEEP_OPENCLAW_URL` | `http://localhost:18789` | OpenClaw Gateway bridge endpoint |
+| `SPARKKEEP_DISCORD_TOKEN` | `""` | Discord bot token |
+| `SPARKKEEP_SLACK_BOT_TOKEN` | `""` | Slack bot token |
 
-| key | default | purpose |
-|-----|---------|---------|
-| `SPARKKEEP_DB` | `./sparkkeep.db` | SQLite path |
-| `SPARKKEEP_HTTP_ADDR` | `:8080` | dashboard + API |
-| `SPARKKEEP_LLM_BASE` | `http://localhost:11434/v1` | OpenAI-compatible base — Ollama default |
-| `SPARKKEEP_LLM_KEY` | `` | API key, empty for Ollama |
-| `SPARKKEEP_LLM_MODEL` | `` | required |
-| `SPARKKEEP_TG_TOKEN` | `` | empty = Telegram off |
-| `SPARKKEEP_TG_CHAT_ID` | `` | owner chat id |
-| `SPARKKEEP_SEARCH_URL` | `` | SearXNG JSON search |
-| `SPARKKEEP_MAX_ANALYZE_TOKENS` | `2048` | cap analysis output |
+### Deployment Options
 
-**Deployment.** A `Dockerfile` (`FROM golang:… AS build` multi-stage →
-`scratch`/`alpine:runtime`, plus `yt-dlp` in runtime image) + a compose
-service with volume mount for the SQLite file. Runs as one container on the
-NAS; Telegram long-poll and HTTP server both live in it.
+1. **Docker / Docker Compose (Recommended):**
+   ```bash
+   docker run -d \
+     --name sparkkeep \
+     -p 8080:8080 \
+     -v sparkkeep_data:/data \
+     ghcr.io/burlacuandrei/sparkkeep:latest
+   ```
 
-**Testing.**
-- `store`: table-driven tests against a temp-dir SQLite file.
-- `analyze`: prompt/JSON parsing round-trip; LLM endpoint stubbed with
-  `httptest` returning canned JSON — no real LLM in CI.
-- `capture`: URL fetch stubbed; yt-dlp path faked as a script that emits
-  canned JSON.
-- `channel/telegram`: long-poll loop tested with `httptest` simulating the
-  Telegram API (updates in, button callbacks out).
-- `research`: full pipeline smoke test against stubbed search + LLM.
-- `ponytail`: no test framework beyond stdlib `testing`; no CI infra in v1 —
-  `make test` + `make build`. A GitHub Actions workflow is added when the
-  repo goes public.`
-
-## 9. Open questions before implementation
-
-- App name (sparkkeep? final call).
-- Telegram bot username will be one you register — placeholder now.
-- Which SearXNG instance **resolved:** configurable via `SPARKKEEP_SEARCH_URL`,
-  default is a public instance (`https://searx.be`); local self-hosted deployments
-  can override it to an internal instance (e.g. `http://searxng:8080`).
-- Weekly digest **resolved:** shipped as a dashboard view (`GET
-  /api/v1/digest` + top-bar toggle). The Telegram `/digest` bot command
-  (push the same digest to chat) is documented but not implemented — do it
-  when a push channel is wanted.
+2. **Standalone Binary:**
+   Compiled static binaries are available for Linux, macOS, and Windows from GitHub Releases. Run `./sparkkeep` and open `http://localhost:8080`.

@@ -310,7 +310,7 @@ export interface SetupPayload {
 }
 
 export interface LicenseStatus {
-  tier: 'community' | 'pro' | string;
+  tier: 'community' | string;
   email?: string;
   features: string[];
   expires_at?: number;

@@ -191,7 +191,7 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 			if !reqPB.IsBuiltin {
 				writeJSON(w, http.StatusForbidden, map[string]any{
 					"ok":      false,
-					"error":   "Custom playbooks require an active Pro license",
+					"error":   "Custom playbooks require deep research capability",
 					"feature": license.FeatureDeepResearchV2,
 				})
 				return
@@ -199,7 +199,7 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 			if reqPB.ID != 1 && reqPB.ID != 2 && !strings.EqualFold(reqPB.Name, "Default") && !strings.EqualFold(reqPB.Name, "Claim check only") {
 				writeJSON(w, http.StatusForbidden, map[string]any{
 					"ok":      false,
-					"error":   "This playbook requires an active Pro license",
+					"error":   "This playbook requires deep research capability",
 					"feature": license.FeatureDeepResearchV2,
 				})
 				return
@@ -305,7 +305,7 @@ func (a *api) batchQueueResearch(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Batch research requires an active Pro license",
+			"error":   "Batch research requires deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return
@@ -333,7 +333,7 @@ func (a *api) listResearchRules(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Scheduled research rules require an active Pro license",
+			"error":   "Scheduled research rules require deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return
@@ -350,7 +350,7 @@ func (a *api) createResearchRule(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Scheduled research rules require an active Pro license",
+			"error":   "Scheduled research rules require deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return
@@ -381,7 +381,7 @@ func (a *api) updateResearchRule(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Scheduled research rules require an active Pro license",
+			"error":   "Scheduled research rules require deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return
@@ -408,7 +408,7 @@ func (a *api) deleteResearchRule(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Scheduled research rules require an active Pro license",
+			"error":   "Scheduled research rules require deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return
@@ -429,7 +429,7 @@ func (a *api) runResearchRule(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Scheduled research rules require an active Pro license",
+			"error":   "Scheduled research rules require deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return
@@ -463,7 +463,7 @@ func (a *api) getQuietWindow(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Quiet window requires an active Pro license",
+			"error":   "Quiet window requires deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return
@@ -485,7 +485,7 @@ func (a *api) setQuietWindow(w http.ResponseWriter, r *http.Request) {
 	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"error":   "Quiet window requires an active Pro license",
+			"error":   "Quiet window requires deep research capability",
 			"feature": license.FeatureDeepResearchV2,
 		})
 		return

@@ -25,8 +25,6 @@ interface TriageViewProps {
   onRetry: (id: number) => void;
   onOpenCardDetail: (card: Card) => void;
   onRefresh?: () => void;
-  isPro?: boolean;
-  onOpenLicenseModal?: () => void;
   showToast?: (msg: string, onUndo?: () => Promise<void> | void) => void;
   onExitFocus?: () => void;
 }

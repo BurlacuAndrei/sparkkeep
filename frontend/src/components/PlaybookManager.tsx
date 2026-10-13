@@ -23,7 +23,6 @@ import { Playbook, PlaybookStep, StepLibraryTemplate, CustomStepConfig } from '.
 
 interface PlaybookManagerProps {
   showToast: (msg: string) => void;
-  onOpenLicenseModal?: () => void;
 }
 
 const AVAILABLE_CARD_TYPES = [
@@ -50,7 +49,7 @@ const CORE_STEP_DESCRIPTIONS: Record<string, string> = {
   custom: 'User-configured custom research analysis step',
 };
 
-export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onOpenLicenseModal }) => {
+export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) => {
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [libraryTemplates, setLibraryTemplates] = useState<StepLibraryTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,23 +60,20 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [defaultPlaybookId, setDefaultPlaybookId] = useState<number | null>(null);
-  const [isPro, setIsPro] = useState(false);
 
   // Load playbooks & library
   const loadData = useCallback(async () => {
     try {
-      const [pbs, lib, st, lic] = await Promise.all([
+      const [pbs, lib, st] = await Promise.all([
         api.fetchPlaybooks(),
         api.fetchStepLibrary(),
         api.getSettings(),
-        api.fetchLicenseStatus().catch(() => ({ ok: false, status: { tier: 'community', features: [] as string[], is_lifetime: false, is_valid: false } })),
       ]);
       setPlaybooks(pbs);
       setLibraryTemplates(lib);
       if (st.settings?.default_playbook_id) {
         setDefaultPlaybookId(st.settings.default_playbook_id);
       }
-      setIsPro(Boolean(lic?.status?.features?.includes('deep_research_v2')));
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     } finally {
@@ -101,16 +97,14 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
       api.fetchPlaybooks(),
       api.fetchStepLibrary(),
       api.getSettings(),
-      api.fetchLicenseStatus().catch(() => ({ ok: false, status: { tier: 'community', features: [] as string[], is_lifetime: false, is_valid: false } })),
     ])
-      .then(([pbs, lib, st, lic]) => {
+      .then(([pbs, lib, st]) => {
         if (!alive) return;
         setPlaybooks(pbs);
         setLibraryTemplates(lib);
         if (st.settings?.default_playbook_id) {
           setDefaultPlaybookId(st.settings.default_playbook_id);
         }
-        setIsPro(Boolean(lic?.status?.features?.includes('deep_research_v2')));
       })
       .catch((err: unknown) => {
         if (!alive) return;
@@ -127,11 +121,6 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
 
   // Duplicate a playbook
   const handleDuplicate = async (id: number) => {
-    if (!isPro) {
-      if (onOpenLicenseModal) onOpenLicenseModal();
-      else showToast('Duplicating playbooks requires a Sparkkeep Pro license.');
-      return;
-    }
     try {
       const dup = await api.duplicatePlaybook(id);
       showToast(`Duplicated playbook: "${dup.name}"`);
@@ -165,11 +154,6 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
 
   // Start creating a new blank/custom playbook
   const startCreateNew = () => {
-    if (!isPro) {
-      if (onOpenLicenseModal) onOpenLicenseModal();
-      else showToast('Custom research playbooks require a Sparkkeep Pro license.');
-      return;
-    }
     const newPb: Playbook = {
       id: 0,
       name: 'New Custom Playbook',
@@ -389,11 +373,6 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
   // Save playbook
   const handleSave = async () => {
     if (!editingPlaybook) return;
-    if (!isPro) {
-      if (onOpenLicenseModal) onOpenLicenseModal();
-      else showToast('Saving custom playbooks requires an active Sparkkeep Pro license.');
-      return;
-    }
     if (validationErrors.length > 0) {
       setServerError(validationErrors[0]);
       return;
@@ -413,9 +392,6 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
     } catch (err: unknown) {
       const msg = api.getErrorMessage(err);
       setServerError(msg);
-      if (msg.toLowerCase().includes('pro') || msg.toLowerCase().includes('deep_research_v2')) {
-        onOpenLicenseModal?.();
-      }
     } finally {
       setSaving(false);
     }
@@ -467,48 +443,12 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
               type="button"
               className="btn-primary"
               onClick={handleSave}
-              disabled={saving || (!isPro && editingPlaybook.id > 0) || validationErrors.length > 0}
+              disabled={saving || validationErrors.length > 0}
             >
               <CheckCircle2 size={14} />
-              <span>{!isPro ? 'Pro Required to Save' : saving ? 'Saving…' : 'Save Playbook'}</span>
+              <span>{saving ? 'Saving…' : 'Save Playbook'}</span>
             </button>
           </div>
-        </div>
-      )}
-
-      {/* READ-ONLY LICENSE LAPSED NOTICE */}
-      {editingPlaybook && !editingPlaybook.is_builtin && !isPro && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            background: 'rgba(234, 179, 8, 0.12)',
-            border: '1px solid rgba(234, 179, 8, 0.3)',
-            padding: '10px 16px',
-            borderRadius: 6,
-            color: '#facc15',
-            fontSize: 13,
-            marginBottom: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Lock size={15} />
-            <span>
-              <strong>License lapsed:</strong> This custom playbook is read-only. Existing configuration is safe, but reactivating Sparkkeep Pro is required to edit or run.
-            </span>
-          </div>
-          {onOpenLicenseModal && (
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ fontSize: 12, padding: '4px 10px', color: '#facc15', borderColor: '#facc15' }}
-              onClick={onOpenLicenseModal}
-            >
-              Unlock Pro
-            </button>
-          )}
         </div>
       )}
 
@@ -596,9 +536,9 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
                     .map((p) => (
                       <div key={p.id} className="pb-card custom">
                         <div className="pb-card-top">
-                          <div className={`pb-card-badge ${!isPro ? '' : 'custom'}`} style={!isPro ? { background: 'rgba(234, 179, 8, 0.15)', color: '#facc15' } : undefined}>
-                            {!isPro ? <Lock size={12} /> : <Sparkles size={12} />}
-                            <span>{!isPro ? 'Read-only (Lapsed)' : 'Custom'}</span>
+                          <div className="pb-card-badge custom">
+                            <Sparkles size={12} />
+                            <span>Custom</span>
                           </div>
                           <span className="pb-card-steps">{p.steps?.length || 0} steps</span>
                         </div>
@@ -611,15 +551,15 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
                             onClick={() => startEdit(p)}
                           >
                             <Pencil size={12} />
-                            <span>{!isPro ? 'View' : 'Edit'}</span>
+                            <span>Edit</span>
                           </button>
                           <button
                             type="button"
                             className="btn-secondary btn-sm"
                             onClick={() => handleDuplicate(p.id)}
-                            title={!isPro ? 'Pro required to duplicate' : 'Duplicate'}
+                            title="Duplicate"
                           >
-                            {!isPro ? <Lock size={12} /> : <Copy size={12} />}
+                            <Copy size={12} />
                           </button>
                           <button
                             type="button"

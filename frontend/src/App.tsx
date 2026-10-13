@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
-import { Card, Tag, DigestData, LicenseStatus } from './types';
+import { Card, Tag, DigestData } from './types';
 import * as api from './api';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -14,7 +14,6 @@ import { ThemeProvider } from './context/ThemeContext';
 const SettingsModal = React.lazy(() => import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal })));
 const CardModal = React.lazy(() => import('./components/CardModal').then((m) => ({ default: m.CardModal })));
 const NewCardModal = React.lazy(() => import('./components/NewCardModal').then((m) => ({ default: m.NewCardModal })));
-const LicenseModal = React.lazy(() => import('./components/LicenseModal').then((m) => ({ default: m.LicenseModal })));
 
 function AppContent() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -43,9 +42,6 @@ function AppContent() {
   const [tokenInput, setTokenInput] = useState('');
   const [isSetupNeeded, setIsSetupNeeded] = useState(false);
 
-  // License & Pro Features
-  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
-  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const showToast = useCallback((msg: string, onUndo?: () => Promise<void> | void) => {
@@ -95,27 +91,16 @@ function AppContent() {
     }
   }, [showToast]);
 
-  const loadLicense = useCallback(async () => {
-    try {
-      const res = await api.fetchLicenseStatus();
-      setLicenseStatus(res.status);
-    } catch {
-      // ignore
-    }
-  }, []);
-
   const reloadAll = useCallback(() => {
     loadCards();
     loadTags();
-    loadLicense();
     if (viewMode === 'digest') loadDigest();
-  }, [loadCards, loadTags, loadLicense, loadDigest, viewMode]);
+  }, [loadCards, loadTags, loadDigest, viewMode]);
 
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
     loadTags();
-    loadLicense();
-  }, [loadTags, loadLicense]);
+  }, [loadTags]);
 
   useEffect(() => {
     api.getSetupStatus()
@@ -310,8 +295,6 @@ function AppContent() {
           onViewModeChange={setViewMode}
           onOpenNewCard={() => setIsNewModalOpen(true)}
           flashMessage={toast?.message || ''}
-          isPro={licenseStatus?.tier === 'pro'}
-          onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
           onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
           triageCount={triageCount}
           allCards={cards}
@@ -341,8 +324,6 @@ function AppContent() {
               onRetry={handleRetry}
               onOpenCardDetail={setSelectedCard}
               onRefresh={reloadAll}
-              isPro={licenseStatus?.tier === 'pro'}
-              onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
               showToast={showToast}
             />
           )}
@@ -356,8 +337,6 @@ function AppContent() {
               onUpdateCard={handleUpdateCard}
               onResearch={handleResearch}
               onRetry={handleRetry}
-              isPro={licenseStatus?.tier === 'pro'}
-              onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
               showToast={showToast}
               onRefresh={reloadAll}
               onSwitchToTriage={() => setViewMode('triage')}
@@ -371,8 +350,6 @@ function AppContent() {
               onStatusChange={handleStatusChange}
               onResearch={handleResearch}
               onRetry={handleRetry}
-              isPro={licenseStatus?.tier === 'pro'}
-              onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
               showToast={showToast}
               onRefresh={loadDigest}
             />
@@ -463,19 +440,6 @@ function AppContent() {
         />
       )}
 
-      {/* Sparkkeep Pro License & Features Modal */}
-      {isLicenseModalOpen && (
-        <Suspense fallback={null}>
-          <LicenseModal
-            isOpen={isLicenseModalOpen}
-            onClose={() => setIsLicenseModalOpen(false)}
-            licenseStatus={licenseStatus}
-            onLicenseUpdated={(newStatus) => setLicenseStatus(newStatus)}
-            onToast={showToast}
-          />
-        </Suspense>
-      )}
-
       {isSettingsModalOpen && (
         <Suspense fallback={null}>
           <SettingsModal
@@ -483,7 +447,6 @@ function AppContent() {
               setIsSettingsModalOpen(false);
               reloadAll();
             }}
-            onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
             showToast={showToast}
           />
         </Suspense>

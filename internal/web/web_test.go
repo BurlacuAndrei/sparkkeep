@@ -2199,7 +2199,7 @@ func TestLicenseAndObsidianGating(t *testing.T) {
 		Summary: "Testing Obsidian Sync gating",
 	})
 
-	// 1. Check initial license status (should be Community)
+	// 1. Check initial license status (should be unlocked under MIT)
 	rr := doJSON(t, h, http.MethodGet, "/api/v1/license/status", "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("license status code = %d", rr.Code)
@@ -2212,18 +2212,18 @@ func TestLicenseAndObsidianGating(t *testing.T) {
 		t.Fatalf("unmarshal license status: %v", err)
 	}
 	if licResp.Status.Tier != license.TierCommunity {
-		t.Fatalf("expected tier community, got %s", licResp.Status.Tier)
+		t.Fatalf("expected tier %s under MIT, got %s", license.TierCommunity, licResp.Status.Tier)
 	}
 
-	// 2. Obsidian sync should be blocked with 402 Payment Required for Community tier
+	// 2. Obsidian sync succeeds directly without artificial payment barrier
 	tempVault := filepath.Join(t.TempDir(), "ObsidianVault")
 	syncBody := fmt.Sprintf(`{"vault_path":%q}`, tempVault)
 	rr = doJSON(t, h, http.MethodPost, "/api/v1/export/obsidian", syncBody)
-	if rr.Code != http.StatusPaymentRequired {
-		t.Fatalf("expected 402 Payment Required on obsidian sync, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 on obsidian sync, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	// 3. Generate a valid Pro license key with test Ed25519 keypair
+	// 3. Generate a valid license key with test Ed25519 keypair
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
@@ -2231,8 +2231,8 @@ func TestLicenseAndObsidianGating(t *testing.T) {
 	svc.License.SetPublicKeyForTest(pub)
 
 	validPayload := license.LicensePayload{
-		Email:     "pro-user@sparkkeep.dev",
-		Tier:      license.TierPro,
+		Email:     "user@sparkkeep.dev",
+		Tier:      license.TierCommunity,
 		Features:  []string{license.FeatureObsidianSync, license.FeatureWebhooks},
 		IssuedAt:  time.Now().Unix(),
 		ExpiresAt: 0,
@@ -2242,26 +2242,26 @@ func TestLicenseAndObsidianGating(t *testing.T) {
 		t.Fatalf("SignLicense: %v", err)
 	}
 
-	// 4. Activate Pro license
+	// 4. Activate license
 	activateBody := fmt.Sprintf(`{"key":%q}`, signedKey)
 	rr = doJSON(t, h, http.MethodPost, "/api/v1/license/activate", activateBody)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 on license activate, got %d, body: %s", rr.Code, rr.Body.String())
 	}
 
-	// 5. License status is now Pro
+	// 5. License status is valid
 	rr = doJSON(t, h, http.MethodGet, "/api/v1/license/status", "")
 	if err := json.Unmarshal(rr.Body.Bytes(), &licResp); err != nil {
 		t.Fatalf("unmarshal license: %v", err)
 	}
-	if licResp.Status.Tier != license.TierPro || licResp.Status.Email != "pro-user@sparkkeep.dev" {
-		t.Fatalf("expected pro status, got %+v", licResp.Status)
+	if licResp.Status.Tier != license.TierCommunity || licResp.Status.Email != "user@sparkkeep.dev" {
+		t.Fatalf("expected community status, got %+v", licResp.Status)
 	}
 
 	// 6. Obsidian sync now succeeds!
 	rr = doJSON(t, h, http.MethodPost, "/api/v1/export/obsidian", syncBody)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200 on obsidian sync as Pro, got %d, body: %s", rr.Code, rr.Body.String())
+		t.Fatalf("expected 200 on obsidian sync, got %d, body: %s", rr.Code, rr.Body.String())
 	}
 	var syncResp struct {
 		OK        bool   `json:"ok"`
@@ -2303,30 +2303,30 @@ func TestWebhookEndpointAndGating(t *testing.T) {
 	}))
 	defer mockTarget.Close()
 
-	// 1. Community tier should receive 402 Payment Required
+	// 1. Webhook testing succeeds directly under open-source MIT
 	body := fmt.Sprintf(`{"url":%q}`, mockTarget.URL)
 	rr := doJSON(t, h, http.MethodPost, "/api/v1/webhooks/test", body)
-	if rr.Code != http.StatusPaymentRequired {
-		t.Fatalf("expected 402 on webhook test for community tier, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 on webhook test under MIT, got %d", rr.Code)
 	}
 
-	// 2. Activate Pro license
+	// 2. Activate test license
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
 	svc.License.SetPublicKeyForTest(pub)
 	key, _ := license.SignLicense(priv, license.LicensePayload{
-		Email:    "webhook-pro@example.com",
-		Tier:     license.TierPro,
+		Email:    "webhook@example.com",
+		Tier:     license.TierCommunity,
 		Features: []string{license.FeatureWebhooks},
 	})
 	_, _ = svc.License.Activate(context.Background(), key)
 
-	// 3. Pro tier now succeeds
+	// 3. Webhook test succeeds
 	rr = doJSON(t, h, http.MethodPost, "/api/v1/webhooks/test", body)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200 on webhook test as Pro, got %d, body: %s", rr.Code, rr.Body.String())
+		t.Fatalf("expected 200 on webhook test, got %d, body: %s", rr.Code, rr.Body.String())
 	}
 	var resp struct {
 		OK         bool `json:"ok"`
@@ -2505,7 +2505,7 @@ func TestSettingsLLMRolesRoundTrip(t *testing.T) {
 	svc := &core.Service{
 		Store:   st,
 		Analyze: analyzeClient,
-		License: license.SetupProForTest(ctx, st),
+		License: license.NewManager(st),
 		Logf:    t.Logf,
 	}
 	h := New(st, svc, config.Config{MaxUploadMB: 25})
@@ -2697,8 +2697,7 @@ func TestTriageBriefAPIFields(t *testing.T) {
 
 func TestPlaybookAPI(t *testing.T) {
 	st := newStubStore()
-	ctx := context.Background()
-	h := webHandler(st, &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, License: license.SetupProForTest(ctx, st), Logf: t.Logf})
+	h := webHandler(st, &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, License: license.NewManager(st), Logf: t.Logf})
 
 	// 1. GET /api/v1/playbooks (should contain Default)
 	rr := doJSON(t, h, http.MethodGet, "/api/v1/playbooks", "")
@@ -2934,31 +2933,22 @@ func TestPlaybookLicenseMatrix(t *testing.T) {
 		]
 	}`
 
-	// Create -> 403
+	// Create succeeds under MIT open source
 	rrCreate := doJSON(t, commH, http.MethodPost, "/api/v1/playbooks", validCustomPB)
-	if rrCreate.Code != http.StatusForbidden {
-		t.Fatalf("Community: expected 403 for create playbook, got %d: %s", rrCreate.Code, rrCreate.Body.String())
-	}
-	var errResp struct {
-		OK      bool   `json:"ok"`
-		Error   string `json:"error"`
-		Feature string `json:"feature"`
-	}
-	_ = json.Unmarshal(rrCreate.Body.Bytes(), &errResp)
-	if errResp.Feature != license.FeatureDeepResearchV2 {
-		t.Errorf("Community create: expected feature %q, got %q", license.FeatureDeepResearchV2, errResp.Feature)
+	if rrCreate.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for create playbook, got %d: %s", rrCreate.Code, rrCreate.Body.String())
 	}
 
-	// Duplicate -> 403
+	// Duplicate succeeds
 	rrDup := doJSON(t, commH, http.MethodPost, "/api/v1/playbooks/1/duplicate", "")
-	if rrDup.Code != http.StatusForbidden {
-		t.Fatalf("Community: expected 403 for duplicate playbook, got %d", rrDup.Code)
+	if rrDup.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for duplicate playbook, got %d", rrDup.Code)
 	}
 
-	// Update -> 403
+	// Update builtin playbook 1 fails with 403 (built-in playbooks are immutable)
 	rrUpd := doJSON(t, commH, http.MethodPut, "/api/v1/playbooks/1", validCustomPB)
 	if rrUpd.Code != http.StatusForbidden {
-		t.Fatalf("Community: expected 403 for update playbook, got %d", rrUpd.Code)
+		t.Fatalf("expected 403 for updating builtin playbook, got %d", rrUpd.Code)
 	}
 
 	// Seed custom playbook directly into store (e.g. created while on Pro)
@@ -2997,30 +2987,30 @@ func TestPlaybookLicenseMatrix(t *testing.T) {
 	// Create test card
 	card, _ := st.CreateCard(ctx, port.Card{Title: "AI Search Paper"})
 
-	// Trigger research with custom playbook -> 403
+	// Trigger research with custom playbook succeeds under MIT
 	runCustomPayload := fmt.Sprintf(`{"card_id": %d, "playbook_id": %d}`, card.ID, customID)
 	rrRunCustom := doJSON(t, commH, http.MethodPost, "/api/v1/research", runCustomPayload)
-	if rrRunCustom.Code != http.StatusForbidden {
-		t.Fatalf("Community: expected 403 for running custom playbook, got %d: %s", rrRunCustom.Code, rrRunCustom.Body.String())
+	if rrRunCustom.Code != http.StatusOK {
+		t.Fatalf("expected 200 for running custom playbook, got %d: %s", rrRunCustom.Code, rrRunCustom.Body.String())
 	}
 
 	// Trigger research without playbook -> 200 and uses Default (lite) variant
 	runDefPayload := fmt.Sprintf(`{"card_id": %d}`, card.ID)
 	rrRunDef := doJSON(t, commH, http.MethodPost, "/api/v1/research", runDefPayload)
 	if rrRunDef.Code != http.StatusOK {
-		t.Fatalf("Community: expected 200 for running default research, got %d: %s", rrRunDef.Code, rrRunDef.Body.String())
+		t.Fatalf("expected 200 for running default research, got %d: %s", rrRunDef.Code, rrRunDef.Body.String())
 	}
 	var runResp struct {
 		OK       bool          `json:"ok"`
 		Playbook port.Playbook `json:"playbook"`
 	}
 	_ = json.Unmarshal(rrRunDef.Body.Bytes(), &runResp)
-	if len(runResp.Playbook.Steps) != 5 {
-		t.Errorf("Community: expected Default (lite) with 5 steps, got %d steps", len(runResp.Playbook.Steps))
+	if len(runResp.Playbook.Steps) != 9 {
+		t.Errorf("expected full default playbook with 9 steps under MIT, got %d steps", len(runResp.Playbook.Steps))
 	}
 
-	// 2. Pro instance
-	proSvc := &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, License: license.SetupProForTest(ctx, st), Logf: t.Logf}
+	// 2. Open-source instance
+	proSvc := &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, License: license.NewManager(st), Logf: t.Logf}
 	proH := webHandler(st, proSvc)
 
 	// Create succeeds
@@ -3037,8 +3027,8 @@ func TestPlaybookLicenseMatrix(t *testing.T) {
 		t.Fatalf("Pro: expected 200 for running custom playbook, got %d: %s", rrProRun.Code, rrProRun.Body.String())
 	}
 
-	// 3. Lapsed instance
-	lapsedSvc := &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, License: license.SetupLapsedForTest(ctx, st), Logf: t.Logf}
+	// 3. Store instance also succeeds under MIT open source
+	lapsedSvc := &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, License: license.NewManager(st), Logf: t.Logf}
 	lapsedH := webHandler(st, lapsedSvc)
 
 	// Custom playbook still readable
@@ -3047,10 +3037,10 @@ func TestPlaybookLicenseMatrix(t *testing.T) {
 		t.Fatalf("Lapsed: expected 200 for GET custom playbook, got %d", rrLapsedGet.Code)
 	}
 
-	// Creating / running custom is locked with 403
+	// Creating custom succeeds under MIT
 	rrLapsedCreate := doJSON(t, lapsedH, http.MethodPost, "/api/v1/playbooks", validCustomPB)
-	if rrLapsedCreate.Code != http.StatusForbidden {
-		t.Fatalf("Lapsed: expected 403 for create playbook, got %d", rrLapsedCreate.Code)
+	if rrLapsedCreate.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for create playbook, got %d", rrLapsedCreate.Code)
 	}
 }
 
@@ -3128,53 +3118,36 @@ func TestBatchAndScheduledResearchAPI(t *testing.T) {
 	commSvc := &core.Service{Store: st, Logf: t.Logf}
 	commH := webHandler(st, commSvc)
 
-	// Batch queue -> 403
+	// Batch queue succeeds under MIT open source
 	batchPayload := fmt.Sprintf(`{"card_ids": [%d, %d]}`, c1.ID, c2.ID)
 	rrBatchComm := doJSON(t, commH, http.MethodPost, "/api/v1/research/batch", batchPayload)
-	if rrBatchComm.Code != http.StatusForbidden {
-		t.Fatalf("Community batch: expected 403, got %d: %s", rrBatchComm.Code, rrBatchComm.Body.String())
+	if rrBatchComm.Code != http.StatusOK {
+		t.Fatalf("Community batch: expected 200, got %d: %s", rrBatchComm.Code, rrBatchComm.Body.String())
 	}
-	var errResp struct {
-		Feature string `json:"feature"`
+	var commBatchResp struct {
+		OK     bool            `json:"ok"`
+		Queued []port.Research `json:"queued"`
 	}
-	_ = json.Unmarshal(rrBatchComm.Body.Bytes(), &errResp)
-	if errResp.Feature != license.FeatureDeepResearchV2 {
-		t.Errorf("Community batch: expected feature %q, got %q", license.FeatureDeepResearchV2, errResp.Feature)
+	if err := json.Unmarshal(rrBatchComm.Body.Bytes(), &commBatchResp); err != nil {
+		t.Fatalf("unmarshal batch response: %v", err)
 	}
-
-	// Rules GET, POST, PUT, DELETE, RUN -> 403
-	if code := doJSON(t, commH, http.MethodGet, "/api/v1/research/rules", "").Code; code != http.StatusForbidden {
-		t.Errorf("Community rules GET: expected 403, got %d", code)
-	}
-	if code := doJSON(t, commH, http.MethodPost, "/api/v1/research/rules", `{"name": "Rule 1"}`).Code; code != http.StatusForbidden {
-		t.Errorf("Community rules POST: expected 403, got %d", code)
-	}
-	if code := doJSON(t, commH, http.MethodPut, "/api/v1/research/rules/rule-1", `{"name": "Rule 1"}`).Code; code != http.StatusForbidden {
-		t.Errorf("Community rules PUT: expected 403, got %d", code)
-	}
-	if code := doJSON(t, commH, http.MethodDelete, "/api/v1/research/rules/rule-1", "").Code; code != http.StatusForbidden {
-		t.Errorf("Community rules DELETE: expected 403, got %d", code)
-	}
-	if code := doJSON(t, commH, http.MethodPost, "/api/v1/research/rules/rule-1/run", "").Code; code != http.StatusForbidden {
-		t.Errorf("Community rules RUN: expected 403, got %d", code)
-	}
-	if code := doJSON(t, commH, http.MethodGet, "/api/v1/research/quiet-window", "").Code; code != http.StatusForbidden {
-		t.Errorf("Community quiet window GET: expected 403, got %d", code)
-	}
-	if code := doJSON(t, commH, http.MethodPut, "/api/v1/research/quiet-window", `{"enabled": true}`).Code; code != http.StatusForbidden {
-		t.Errorf("Community quiet window PUT: expected 403, got %d", code)
+	if !commBatchResp.OK || len(commBatchResp.Queued) != 2 {
+		t.Errorf("expected 2 queued research items, got %d", len(commBatchResp.Queued))
 	}
 
 	// 2. Pro instance
+	c3, _ := st.CreateCard(ctx, port.Card{Title: "Card 3", Status: "inbox"})
+	c4, _ := st.CreateCard(ctx, port.Card{Title: "Card 4", Status: "inbox"})
+	batchPayloadPro := fmt.Sprintf(`{"card_ids": [%d, %d]}`, c3.ID, c4.ID)
 	proSvc := &core.Service{
 		Store:   st,
-		License: license.SetupProForTest(ctx, st),
+		License: license.NewManager(st),
 		Logf:    t.Logf,
 	}
 	proH := webHandler(st, proSvc)
 
 	// Batch queue succeeds
-	rrBatchPro := doJSON(t, proH, http.MethodPost, "/api/v1/research/batch", batchPayload)
+	rrBatchPro := doJSON(t, proH, http.MethodPost, "/api/v1/research/batch", batchPayloadPro)
 	if rrBatchPro.Code != http.StatusOK {
 		t.Fatalf("Pro batch: expected 200, got %d: %s", rrBatchPro.Code, rrBatchPro.Body.String())
 	}

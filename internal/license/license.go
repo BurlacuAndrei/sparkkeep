@@ -15,7 +15,6 @@ import (
 
 const (
 	TierCommunity = "community"
-	TierPro       = "pro"
 
 	FeatureObsidianSync   = "obsidian_sync"
 	FeatureWebhooks       = "webhooks"
@@ -28,7 +27,7 @@ var (
 	ErrLicenseExpired  = errors.New("license has expired")
 )
 
-// MasterPublicKeyB64 is the production Ed25519 public key used to verify Sparkkeep Pro licenses.
+// MasterPublicKeyB64 is the production Ed25519 public key used to verify Sparkkeep licenses.
 const MasterPublicKeyB64 = "B/AsNyeyi8Fy9nhAlccP9tB5juXJIve+EhOwbHm9+68="
 
 var defaultPublicKey = func() ed25519.PublicKey {
@@ -137,12 +136,26 @@ func (m *Manager) Activate(ctx context.Context, key string) (*LicenseStatus, err
 	}, nil
 }
 
-// Status returns current tier status, falling back safely to Community if unactivated or invalid.
+// Status returns current tier status.
+// In 100% Permissive Open Source mode (Option A), all capabilities
+// are unlocked by default with lifetime validity under the MIT License.
 func (m *Manager) Status(ctx context.Context) LicenseStatus {
+	allFeatures := []string{
+		"core_capture",
+		"triage",
+		"llm_analysis",
+		"search",
+		FeatureObsidianSync,
+		FeatureWebhooks,
+		FeatureDeepResearchV2,
+	}
+
 	community := LicenseStatus{
-		Tier:     TierCommunity,
-		Features: []string{"core_capture", "triage", "llm_analysis", "search"},
-		IsValid:  true,
+		Tier:       TierCommunity,
+		Email:      "open-source@sparkkeep.dev",
+		Features:   allFeatures,
+		IsLifetime: true,
+		IsValid:    true,
 	}
 
 	if m.store == nil {
@@ -159,12 +172,10 @@ func (m *Manager) Status(ctx context.Context) LicenseStatus {
 		return community
 	}
 
-	features := append(community.Features, payload.Features...)
-
 	return LicenseStatus{
-		Tier:       payload.Tier,
+		Tier:       TierCommunity,
 		Email:      payload.Email,
-		Features:   features,
+		Features:   allFeatures,
 		ExpiresAt:  payload.ExpiresAt,
 		IsLifetime: payload.ExpiresAt == 0,
 		IsValid:    true,
@@ -172,6 +183,7 @@ func (m *Manager) Status(ctx context.Context) LicenseStatus {
 }
 
 // HasCapability checks whether the requested feature is enabled under the current license.
+// In 100% Permissive Open Source mode (Option A), all capabilities are active.
 func (m *Manager) HasCapability(ctx context.Context, feature string) bool {
 	status := m.Status(ctx)
 	for _, f := range status.Features {
@@ -199,46 +211,7 @@ func SignLicenseForTest(priv ed25519.PrivateKey, payload LicensePayload) (string
 	return fmt.Sprintf("%s.%s", encodedPayload, encodedSig), nil
 }
 
-// SetupProForTest configures a Manager with a valid Pro license (including FeatureDeepResearchV2) in the given store.
-func SetupProForTest(ctx context.Context, st port.SettingsStore) *Manager {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		panic(err)
-	}
-	mgr := NewManager(st)
-	mgr.SetPublicKeyForTest(pub)
-	key, err := SignLicenseForTest(priv, LicensePayload{
-		Tier:     TierPro,
-		Email:    "pro-test@sparkkeep.dev",
-		Features: []string{FeatureObsidianSync, FeatureWebhooks, FeatureDeepResearchV2},
-	})
-	if err != nil {
-		panic(err)
-	}
-	_, _ = mgr.Activate(ctx, key)
-	return mgr
-}
-
-// SetupLapsedForTest configures a Manager with an expired Pro license in the given store.
-func SetupLapsedForTest(ctx context.Context, st port.SettingsStore) *Manager {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		panic(err)
-	}
-	mgr := NewManager(st)
-	mgr.SetPublicKeyForTest(pub)
-	key, err := SignLicenseForTest(priv, LicensePayload{
-		Tier:      TierPro,
-		Email:     "lapsed-test@sparkkeep.dev",
-		Features:  []string{FeatureObsidianSync, FeatureWebhooks, FeatureDeepResearchV2},
-		ExpiresAt: time.Now().Add(-24 * time.Hour).Unix(),
-	})
-	if err != nil {
-		panic(err)
-	}
-	if st != nil {
-		_ = st.SetSetting(ctx, "license_key", key)
-		_ = st.SetSetting(ctx, "license_tier", TierPro)
-	}
-	return mgr
+// SetupTest configures a Manager with all features enabled for testing.
+func SetupTest(ctx context.Context, st port.SettingsStore) *Manager {
+	return NewManager(st)
 }

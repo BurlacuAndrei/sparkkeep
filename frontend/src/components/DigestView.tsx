@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   TrendingUp,
   Layers,
-  Crown,
   ChevronDown,
   ChevronUp,
   AlertTriangle,
@@ -26,8 +25,6 @@ interface DigestViewProps {
   onStatusChange: (id: number, status: string) => void;
   onResearch: (id: number) => void;
   onRetry: (id: number) => void;
-  isPro?: boolean;
-  onOpenLicenseModal?: () => void;
   showToast?: (msg: string) => void;
   onRefresh?: () => void;
 }
@@ -48,8 +45,6 @@ export const DigestView: React.FC<DigestViewProps> = ({
   onStatusChange,
   onResearch,
   onRetry,
-  isPro = false,
-  onOpenLicenseModal,
   showToast,
 }) => {
   const [windowDays, setWindowDays] = useState<number>(7);
@@ -229,14 +224,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
     }
   };
 
-  // Handle Markdown Export (Gated for Pro)
+  // Handle Markdown Export
   const handleExportMarkdown = () => {
-    if (!isPro) {
-      showToast?.('👑 Markdown Export is a Pro feature');
-      onOpenLicenseModal?.();
-      return;
-    }
-
     const mdLines: string[] = [];
     mdLines.push(`# 📊 Sparkkeep Intelligence Digest`);
     mdLines.push(`**Period:** ${formatDateRange(windowDays)}`);
@@ -369,15 +358,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
             type="button"
             className="digest-btn digest-btn-export"
             onClick={handleExportMarkdown}
-            title={isPro ? 'Copy Markdown for Obsidian / Notion / Logseq' : 'Pro Feature: Export to Markdown'}
+            title="Copy Markdown for Obsidian / Notion / Logseq"
           >
-            {isPro ? <FileText size={13} /> : <Crown size={13} color="#f59e0b" />}
+            <FileText size={13} />
             <span>Export Markdown</span>
-            {!isPro && (
-              <span style={{ fontSize: 9.5, background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', padding: '1px 5px', borderRadius: 4 }}>
-                PRO
-              </span>
-            )}
           </button>
         </div>
       </div>

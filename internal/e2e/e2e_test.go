@@ -129,7 +129,7 @@ func newE2EHarness(t *testing.T, llmResponseJSON string) *harness {
 			Timeout:      5 * time.Second,
 		},
 		Logf:    t.Logf,
-		License: license.SetupProForTest(context.Background(), st),
+		License: license.NewManager(st),
 	}
 
 	// 5. Telegram Adapter
