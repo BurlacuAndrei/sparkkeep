@@ -313,16 +313,21 @@ func serveEmbedded(path, contentType string) http.HandlerFunc {
 
 // isPublicPath reports a request that must stay reachable without a token: the
 // PWA shell and its assets (the SPA has to load to render the unlock prompt),
-// the health probe, the standalone research report, and verify itself. The
-// report exception is HTML-only — a JSON caller still needs the token.
+// the health probe, public webhook ingresses (Discord, OpenClaw), verify itself,
+// and the standalone research report view. The research report exception is
+// GET HTML-only — non-GET methods and JSON callers still need the token.
 func isPublicPath(r *http.Request) bool {
 	p := r.URL.Path
 	switch p {
-	case "/api/v1/health", "/api/v1/auth/verify", "/api/v1/setup/status", "/api/v1/setup", "/manifest.json", "/sw.js", "/icon.svg":
+	case "/api/v1/health", "/api/v1/auth/verify", "/api/v1/setup/status", "/api/v1/setup", "/manifest.json", "/sw.js", "/icon.svg",
+		"/api/v1/channels/discord/interactions", "/api/v1/channels/openclaw/webhook":
 		return true
 	}
 	if strings.HasPrefix(p, "/assets/") {
 		return true
+	}
+	if r.Method != http.MethodGet {
+		return false
 	}
 	html := !strings.Contains(r.Header.Get("Accept"), "application/json") &&
 		r.URL.Query().Get("format") != "json"

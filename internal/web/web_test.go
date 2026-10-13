@@ -1792,6 +1792,86 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 }
 
+func TestAuthMiddleware_WebhookIngressAndMethodSafeValidation(t *testing.T) {
+	t.Setenv("SPARKKEEP_AUTH_TOKEN", "secret123")
+	cfg := config.Config{
+		MaxUploadMB: 25,
+		AuthToken:   os.Getenv("SPARKKEEP_AUTH_TOKEN"),
+	}
+
+	st := newStubStore()
+	st.researches[42] = port.Research{
+		ID:        42,
+		CardID:    1,
+		Status:    "done",
+		Findings:  "Comprehensive analysis report",
+		CreatedAt: time.Now().UTC(),
+	}
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := New(st, svc, cfg)
+
+	// a) Discord interaction and OpenClaw webhook are allowed through auth middleware without Bearer token.
+	rDC := httptest.NewRequest(http.MethodPost, "/api/v1/channels/discord/interactions", strings.NewReader(`{"type": 1}`))
+	rDC.Header.Set("Content-Type", "application/json")
+	rrDC := httptest.NewRecorder()
+	h.ServeHTTP(rrDC, rDC)
+	if rrDC.Code != http.StatusOK {
+		t.Fatalf("Discord interaction without Bearer token: status = %d, want 200 (body %s)", rrDC.Code, rrDC.Body.String())
+	}
+
+	ocPayload := `{"channel":"whatsapp","sender":"+1555123","text":"/short 1"}`
+	rOC := httptest.NewRequest(http.MethodPost, "/api/v1/channels/openclaw/webhook", strings.NewReader(ocPayload))
+	rOC.Header.Set("Content-Type", "application/json")
+	rrOC := httptest.NewRecorder()
+	h.ServeHTTP(rrOC, rOC)
+	if rrOC.Code != http.StatusOK {
+		t.Fatalf("OpenClaw webhook without Bearer token: status = %d, want 200 (body %s)", rrOC.Code, rrOC.Body.String())
+	}
+
+	// b) POST /api/v1/research/{id}/feedback with Accept: text/html is rejected with 401 when no token is provided.
+	fbPayload := `{"rating":"thumbs_up","comment":"insightful"}`
+	rFB := httptest.NewRequest(http.MethodPost, "/api/v1/research/42/feedback", strings.NewReader(fbPayload))
+	rFB.Header.Set("Content-Type", "application/json")
+	rFB.Header.Set("Accept", "text/html")
+	rrFB := httptest.NewRecorder()
+	h.ServeHTTP(rrFB, rFB)
+	if rrFB.Code != http.StatusUnauthorized {
+		t.Fatalf("POST /api/v1/research/42/feedback with Accept: text/html without token: status = %d, want 401", rrFB.Code)
+	}
+
+	// With Bearer token, the feedback request is accepted (not 401).
+	rFBAuth := httptest.NewRequest(http.MethodPost, "/api/v1/research/42/feedback", strings.NewReader(fbPayload))
+	rFBAuth.Header.Set("Content-Type", "application/json")
+	rFBAuth.Header.Set("Accept", "text/html")
+	rFBAuth.Header.Set("Authorization", "Bearer secret123")
+	rrFBAuth := httptest.NewRecorder()
+	h.ServeHTTP(rrFBAuth, rFBAuth)
+	if rrFBAuth.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/research/42/feedback with Bearer token: status = %d, want 200 (body %s)", rrFBAuth.Code, rrFBAuth.Body.String())
+	}
+
+	// c) GET /api/v1/research/{id} with Accept: text/html is allowed without token.
+	rGetHTML := httptest.NewRequest(http.MethodGet, "/api/v1/research/42", nil)
+	rGetHTML.Header.Set("Accept", "text/html")
+	rrGetHTML := httptest.NewRecorder()
+	h.ServeHTTP(rrGetHTML, rGetHTML)
+	if rrGetHTML.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/research/42 with Accept: text/html without token: status = %d, want 200 (body %s)", rrGetHTML.Code, rrGetHTML.Body.String())
+	}
+	if !strings.Contains(rrGetHTML.Body.String(), "<html") {
+		t.Errorf("GET /api/v1/research/42 expected HTML body, got: %s", rrGetHTML.Body.String())
+	}
+
+	// Confirm GET /api/v1/research/{id} with Accept: application/json without token is rejected with 401.
+	rGetJSON := httptest.NewRequest(http.MethodGet, "/api/v1/research/42", nil)
+	rGetJSON.Header.Set("Accept", "application/json")
+	rrGetJSON := httptest.NewRecorder()
+	h.ServeHTTP(rrGetJSON, rGetJSON)
+	if rrGetJSON.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /api/v1/research/42 with Accept: application/json without token: status = %d, want 401", rrGetJSON.Code)
+	}
+}
+
 func TestListTagsEndpoint(t *testing.T) {
 	st := newStubStore()
 	h := webHandler(st, nil)
@@ -3236,4 +3316,3 @@ func TestChannelEndpoints(t *testing.T) {
 		t.Fatalf("POST /api/v1/digest/push: expected 200, got %d: %s", rrDigest.Code, rrDigest.Body.String())
 	}
 }
-
