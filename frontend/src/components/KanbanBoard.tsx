@@ -68,12 +68,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const inProgressCards = displayedCards.filter((c) => c.status === 'in-progress');
   const doneCards = displayedCards.filter((c) => c.status === 'done');
 
+  const [now] = useState(() => Date.now());
+
   const isOlderThan7Days = (card: Card) => {
     const timeStr = card.updated_at || card.created_at;
     if (!timeStr) return false;
     const time = new Date(timeStr).getTime();
     if (isNaN(time)) return false;
-    return Date.now() - time > SEVEN_DAYS_MS;
+    return now - time > SEVEN_DAYS_MS;
   };
 
   const activeDoneCards = doneCards.filter((c) => !isOlderThan7Days(c));

@@ -2,14 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Card } from '../types';
 import {
   X,
-  Plus,
   Sparkles,
   Link,
   Lightbulb,
   Paperclip,
   ChevronDown,
   ChevronUp,
-  Loader2,
   FileText,
   AlertCircle,
   CornerDownLeft,

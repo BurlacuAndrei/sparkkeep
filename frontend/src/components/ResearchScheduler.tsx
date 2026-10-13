@@ -7,12 +7,9 @@ import {
   Trash2,
   Play,
   Save,
-  CheckCircle2,
-  AlertCircle,
   Lock,
   Calendar,
   Filter,
-  Check,
   X,
 } from 'lucide-react';
 import * as api from '../api';
@@ -41,36 +38,43 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
   const [editingRule, setEditingRule] = useState<ResearchRule | null>(null);
   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const lic = await api.fetchLicenseStatus().catch(() => ({
+  useEffect(() => {
+    let alive = true;
+    api.fetchLicenseStatus()
+      .catch(() => ({
         ok: false,
         status: { tier: 'community', features: [] as string[], is_lifetime: false, is_valid: false },
-      }));
-      const pro = Boolean(lic?.status?.features?.includes('deep_research_v2'));
-      setIsPro(pro);
+      }))
+      .then(async (lic) => {
+        if (!alive) return;
+        const pro = Boolean(lic?.status?.features?.includes('deep_research_v2'));
+        setIsPro(pro);
 
-      if (pro) {
-        const [qw, rls, pbs] = await Promise.all([
-          api.fetchQuietWindow().catch(() => ({ enabled: false, start: '23:00', end: '07:00' })),
-          api.fetchResearchRules().catch(() => []),
-          api.fetchPlaybooks().catch(() => []),
-        ]);
-        setQuietWindow(qw);
-        setRules(rls);
-        setPlaybooks(pbs);
-      }
-    } catch (err) {
-      showToast(api.getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
+        if (pro) {
+          const [qw, rls, pbs] = await Promise.all([
+            api.fetchQuietWindow().catch(() => ({ enabled: false, start: '23:00', end: '07:00' })),
+            api.fetchResearchRules().catch(() => []),
+            api.fetchPlaybooks().catch(() => []),
+          ]);
+          if (!alive) return;
+          setQuietWindow(qw);
+          setRules(rls);
+          setPlaybooks(pbs);
+        }
+      })
+      .catch((err) => {
+        if (!alive) return;
+        showToast(api.getErrorMessage(err));
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoading(false);
+      });
 
-  useEffect(() => {
-    loadData();
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [showToast]);
 
   const handleSaveQuietWindow = async () => {
     setSavingQuietWindow(true);

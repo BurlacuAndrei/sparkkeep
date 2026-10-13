@@ -173,22 +173,24 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
   const [appliedTags, setAppliedTags] = useState(false);
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [prevRunId, setPrevRunId] = useState<number | null>(selectedRun?.id ?? null);
   const [feedbackRating, setFeedbackRating] = useState<'thumbs_up' | 'thumbs_down' | null>(
-    initialResearch?.feedback_rating || null
+    selectedRun?.feedback_rating ?? initialResearch?.feedback_rating ?? null
   );
   const [feedbackComment, setFeedbackComment] = useState<string>(
-    initialResearch?.feedback_comment || ''
+    selectedRun?.feedback_comment ?? initialResearch?.feedback_comment ?? ''
   );
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
-  const [feedbackSaved, setFeedbackSaved] = useState(false);
+  const [feedbackSaved, setFeedbackSaved] = useState(
+    Boolean(selectedRun?.feedback_rating ?? initialResearch?.feedback_rating)
+  );
 
-  useEffect(() => {
-    if (selectedRun) {
-      setFeedbackRating(selectedRun.feedback_rating || null);
-      setFeedbackComment(selectedRun.feedback_comment || '');
-      setFeedbackSaved(Boolean(selectedRun.feedback_rating));
-    }
-  }, [selectedRun?.id]);
+  if (selectedRun && selectedRun.id !== prevRunId) {
+    setPrevRunId(selectedRun.id);
+    setFeedbackRating(selectedRun.feedback_rating || null);
+    setFeedbackComment(selectedRun.feedback_comment || '');
+    setFeedbackSaved(Boolean(selectedRun.feedback_rating));
+  }
 
   useEffect(() => {
     fetchPlaybooks().then(setPlaybooks).catch(() => {});
@@ -201,13 +203,17 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
       .then((res) => {
         if (!alive) return;
         setHistory(res.history || []);
-        if (!selectedRun && res.latest) {
-          setSelectedRun(res.latest);
-        } else if (res.latest && selectedRun) {
-          // If latest run is updated (e.g., active -> done), refresh selectedRun
-          const match = res.history.find((h) => h.id === selectedRun.id);
-          if (match) setSelectedRun(match);
-        }
+        setSelectedRun((prev) => {
+          if (!prev && res.latest) {
+            return res.latest;
+          }
+          if (res.latest && prev) {
+            // If latest run is updated (e.g., active -> done), refresh selectedRun
+            const match = (res.history || []).find((h) => h.id === prev.id);
+            return match || prev;
+          }
+          return prev;
+        });
       })
       .catch(() => {});
     return () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DigestData, Card, DigestSynthesisResult, DigestSynthesisTheme } from '../types';
 import { CardItem } from './CardItem';
 import {
@@ -14,7 +14,6 @@ import {
   ChevronUp,
   AlertTriangle,
   RotateCw,
-  ExternalLink,
   Compass,
 } from 'lucide-react';
 import * as api from '../api';
@@ -52,39 +51,35 @@ export const DigestView: React.FC<DigestViewProps> = ({
   isPro = false,
   onOpenLicenseModal,
   showToast,
-  onRefresh,
 }) => {
   const [windowDays, setWindowDays] = useState<number>(7);
-  const [digest, setDigest] = useState<DigestData | null>(initialDigest);
+  const [customDigest, setCustomDigest] = useState<DigestData | null>(null);
   const [synthesis, setSynthesis] = useState<DigestSynthesisResult | null>(null);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [isSendingTelegram, setIsSendingTelegram] = useState(false);
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [userToggledDays, setUserToggledDays] = useState<Record<string, boolean>>({});
 
-  // Load digest whenever windowDays changes
-  const loadDigestForWindow = useCallback(async (days: number) => {
-    try {
-      const data = await api.fetchDigest(days);
-      setDigest(data);
-      // Auto-expand first 2 days
-      if (data.days && data.days.length > 0) {
-        setExpandedDays(new Set(data.days.slice(0, 2).map((d) => d.date)));
-      }
-    } catch (err: unknown) {
-      showToast?.(api.getErrorMessage(err));
-    }
-  }, [showToast]);
+  // Derive digest based on selected window
+  const digest = windowDays === 7 ? (initialDigest ?? customDigest) : customDigest;
 
+  // Load digest whenever windowDays changes (or if initialDigest is not yet available for 7-day window)
   useEffect(() => {
-    if (initialDigest && windowDays === 7) {
-      setDigest(initialDigest);
-      if (initialDigest.days && initialDigest.days.length > 0) {
-        setExpandedDays(new Set(initialDigest.days.slice(0, 2).map((d) => d.date)));
-      }
-    } else {
-      loadDigestForWindow(windowDays);
+    if (windowDays === 7 && initialDigest) {
+      return;
     }
-  }, [initialDigest, windowDays, loadDigestForWindow]);
+    let alive = true;
+    api.fetchDigest(windowDays)
+      .then((data) => {
+        if (!alive) return;
+        setCustomDigest(data);
+      })
+      .catch((err: unknown) => {
+        showToast?.(api.getErrorMessage(err));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [windowDays, initialDigest, showToast]);
 
   // Flatten all cards from current window
   const allCards = useMemo(() => {
@@ -110,14 +105,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
         ),
       }))
       .filter((day) => day.cards.length > 0);
-  }, [digest?.days, query]);
-
-  // Auto-expand days when searching
-  useEffect(() => {
-    if (query.trim() && digest?.days) {
-      setExpandedDays(new Set(digest.days.map((d) => d.date)));
-    }
-  }, [query, digest?.days]);
+  }, [digest, query]);
 
   // Card lookup map
   const cardById = useMemo(() => {
@@ -183,8 +171,6 @@ export const DigestView: React.FC<DigestViewProps> = ({
   // Status counts (including to-do!)
   const byStatus = digest?.by_status || {};
   const inboxCount = byStatus.inbox || 0;
-  const todoCount = byStatus['to-do'] || 0;
-  const inProgressCount = (byStatus['in-progress'] || 0) + (byStatus.doing || 0);
   const doneCount = byStatus.done || digest?.weekly_wins?.length || 0;
   const totalSparks = digest?.week_total || 0;
   const decidedCount = Math.max(0, totalSparks - inboxCount);
@@ -309,15 +295,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
       });
   };
 
-  const toggleDayExpanded = (date: string) => {
-    setExpandedDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(date)) {
-        next.delete(date);
-      } else {
-        next.add(date);
-      }
-      return next;
+  const toggleDayExpanded = (date: string, defaultExpanded: boolean) => {
+    setUserToggledDays((prev) => {
+      const current = prev[date] !== undefined ? prev[date] : defaultExpanded;
+      return { ...prev, [date]: !current };
     });
   };
 
@@ -333,7 +314,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
           <select
             className="digest-window-select"
             value={windowDays}
-            onChange={(e) => setWindowDays(Number(e.target.value))}
+            onChange={(e) => {
+              setWindowDays(Number(e.target.value));
+              setUserToggledDays({});
+            }}
           >
             <option value={7}>Past 7 Days</option>
             <option value={14}>Past 14 Days</option>
@@ -360,7 +344,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
           <select
             className="digest-window-select"
             value={windowDays}
-            onChange={(e) => setWindowDays(Number(e.target.value))}
+            onChange={(e) => {
+              setWindowDays(Number(e.target.value));
+              setUserToggledDays({});
+            }}
           >
             <option value={7}>Past 7 Days</option>
             <option value={14}>Past 14 Days</option>
@@ -678,14 +665,15 @@ export const DigestView: React.FC<DigestViewProps> = ({
           </div>
         ) : (
           <div className="digest-days-accordion">
-            {filteredDays.map((day) => {
-            const isExpanded = expandedDays.has(day.date);
-            return (
-              <div key={day.date} className="day-section">
-                <div
-                  className="digest-accordion-header"
-                  onClick={() => toggleDayExpanded(day.date)}
-                >
+            {filteredDays.map((day, index) => {
+              const isDefaultExpanded = Boolean(query.trim()) || index < 2;
+              const isExpanded = userToggledDays[day.date] !== undefined ? userToggledDays[day.date] : isDefaultExpanded;
+              return (
+                <div key={day.date} className="day-section">
+                  <div
+                    className="digest-accordion-header"
+                    onClick={() => toggleDayExpanded(day.date, isDefaultExpanded)}
+                  >
                   <div className="digest-accordion-title">
                     <Calendar size={14} color="#38bdf8" />
                     <span>{day.date}</span>

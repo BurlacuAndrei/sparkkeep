@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   BookOpen,
   Lock,
@@ -14,10 +14,7 @@ import {
   AlertCircle,
   Clock,
   Sparkles,
-  Zap,
   Globe,
-  Sliders,
-  HelpCircle,
   X,
   Layers,
 } from 'lucide-react';
@@ -67,8 +64,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
   const [isPro, setIsPro] = useState(false);
 
   // Load playbooks & library
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = useCallback(async () => {
     try {
       const [pbs, lib, st, lic] = await Promise.all([
         api.fetchPlaybooks(),
@@ -87,7 +83,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
 
   const handleDefaultPlaybookChange = async (newId: number) => {
     try {
@@ -100,8 +96,34 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, onO
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    let alive = true;
+    Promise.all([
+      api.fetchPlaybooks(),
+      api.fetchStepLibrary(),
+      api.getSettings(),
+      api.fetchLicenseStatus().catch(() => ({ ok: false, status: { tier: 'community', features: [] as string[], is_lifetime: false, is_valid: false } })),
+    ])
+      .then(([pbs, lib, st, lic]) => {
+        if (!alive) return;
+        setPlaybooks(pbs);
+        setLibraryTemplates(lib);
+        if (st.settings?.default_playbook_id) {
+          setDefaultPlaybookId(st.settings.default_playbook_id);
+        }
+        setIsPro(Boolean(lic?.status?.features?.includes('deep_research_v2')));
+      })
+      .catch((err: unknown) => {
+        if (!alive) return;
+        showToast(api.getErrorMessage(err));
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [showToast]);
 
   // Duplicate a playbook
   const handleDuplicate = async (id: number) => {

@@ -27,23 +27,26 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
   onComplete,
   className = '',
 }) => {
-  const [research, setResearch] = useState<ResearchItem | null>(initialResearch || null);
+  const [polledResearch, setPolledResearch] = useState<ResearchItem | null>(null);
+  const [prevInitialResearch, setPrevInitialResearch] = useState(initialResearch);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
 
-  // Sync initialResearch if prop changes
-  useEffect(() => {
-    if (initialResearch) {
-      setResearch(initialResearch);
-    }
-  }, [initialResearch]);
+  if (initialResearch !== prevInitialResearch) {
+    setPrevInitialResearch(initialResearch);
+    setPolledResearch(null);
+  }
+
+  const research = polledResearch ?? initialResearch ?? null;
+  const researchStatus = research?.status;
+  const researchCreatedAt = research?.created_at;
 
   // Elapsed time counter
   useEffect(() => {
-    if (!research || (research.status !== 'running' && research.status !== 'queued')) {
+    if (!researchStatus || (researchStatus !== 'running' && researchStatus !== 'queued')) {
       return;
     }
 
-    const startTime = research.created_at ? new Date(research.created_at).getTime() : Date.now();
+    const startTime = researchCreatedAt ? new Date(researchCreatedAt).getTime() : Date.now();
     const updateElapsed = () => {
       const now = Date.now();
       const sec = Math.max(0, Math.floor((now - startTime) / 1000));
@@ -53,12 +56,12 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
     updateElapsed();
     const timer = setInterval(updateElapsed, 1000);
     return () => clearInterval(timer);
-  }, [research?.status, research?.created_at]);
+  }, [researchStatus, researchCreatedAt]);
 
   // Poller: 2.5s poll while active, stops when terminal
   useEffect(() => {
     if (!cardId) return;
-    if (research && research.status !== 'queued' && research.status !== 'running') {
+    if (researchStatus && researchStatus !== 'queued' && researchStatus !== 'running') {
       return; // Already terminal
     }
 
@@ -68,7 +71,7 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
         const runs = await fetchCardResearchRuns(cardId);
         if (!active) return;
         if (runs.latest) {
-          setResearch(runs.latest);
+          setPolledResearch(runs.latest);
           if (runs.latest.status === 'done' || runs.latest.status === 'failed') {
             onComplete?.(runs.latest);
           }
@@ -87,7 +90,7 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
       active = false;
       clearInterval(interval);
     };
-  }, [cardId, research?.status, onComplete]);
+  }, [cardId, researchStatus, onComplete]);
 
   if (!research) return null;
 

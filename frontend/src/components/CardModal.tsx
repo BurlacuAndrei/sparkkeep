@@ -230,7 +230,7 @@ export const CardModal: React.FC<CardModalProps> = ({
       alive = false;
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [cardId, card.capture_id, card.research_state, showToast]);
+  }, [cardId, card.capture_id, card.research_state, status]);
 
   // Outside click for menu
   useEffect(() => {

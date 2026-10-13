@@ -88,13 +88,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
 
   // Debounce user input for network search
   useEffect(() => {
-    if (!query) {
-      setDebouncedQuery('');
-      setBackendResults([]);
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
+    if (!query) return;
     const handler = setTimeout(() => {
       setDebouncedQuery(query);
     }, 200);
@@ -147,6 +141,8 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
     setQuery('');
     setDebouncedQuery('');
     setBackendResults([]);
+    setIsLoading(false);
+    setSelectedIndex(0);
     inputRef.current?.blur();
   }, []);
 
@@ -325,10 +321,6 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
     onSelectTag,
   ]);
 
-  // Keep selectedIndex within bounds when results change
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
 
   // Scroll active item into view
   useEffect(() => {
@@ -404,7 +396,16 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
           placeholder="Search briefings, tags, sparks, or commands…"
           value={query}
           onChange={(e) => {
-            setQuery(e.target.value);
+            const val = e.target.value;
+            setQuery(val);
+            setSelectedIndex(0);
+            if (!val) {
+              setDebouncedQuery('');
+              setBackendResults([]);
+              setIsLoading(false);
+            } else {
+              setIsLoading(true);
+            }
             if (!isOpen) setIsOpen(true);
           }}
           onFocus={() => setIsOpen(true)}
@@ -421,6 +422,10 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
             className="search-clear-btn"
             onClick={() => {
               setQuery('');
+              setDebouncedQuery('');
+              setBackendResults([]);
+              setIsLoading(false);
+              setSelectedIndex(0);
               inputRef.current?.focus();
             }}
             title="Clear search"
