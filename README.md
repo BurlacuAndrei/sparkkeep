@@ -73,7 +73,8 @@ No need to hand-edit `.env` files or mount API key secrets before booting. When 
 
 Sparkkeep is designed to be a lightweight, privacy-first engine that helps you move from an idea to execution without friction.
 
-- **Seamless Capture & Triage:** Instantly capture links, repos, and notes from the web or Telegram and turn them into actionable cards.
+- **Seamless Capture & Triage:** Instantly capture links, repos, and notes from the web, Telegram, OpenClaw (WhatsApp, Signal, iMessage), Discord, and Slack and turn them into actionable cards.
+- **Multi-Channel Hub & Provenance:** Evolve past single-chat bots. Ingest and notify across Telegram, Discord, Slack, and OpenClaw gateways with full card provenance tracking (`source_channel`).
 - **Kanban-Style Organization:** Organize ideas smoothly into Inbox, Doing, Done, and Shelved workflows.
 - **Horizon Routing:** Keep your focus sharp with Now, Next, and Later horizons.
 - **Bring Your Own Keys (BYOK):** Use your preferred AI models. Sparkkeep supports OpenAI, DeepSeek, local Ollama, and any custom OpenAI-compatible endpoint.
@@ -82,9 +83,21 @@ Sparkkeep is designed to be a lightweight, privacy-first engine that helps you m
 
 ---
 
+## 📡 Multi-Channel Hub & OpenClaw Integration
+
+Sparkkeep features a unified **Channel Hub** supporting both in-binary native transports and external gateway bridges:
+
+1. **Telegram:** Native stdlib HTTP long-polling with interactive inline buttons (`→ Doing`, `→ Done`, `Research`, `Shelve`).
+2. **OpenClaw Bridge:** Connects to [OpenClaw Gateway](https://github.com/openclaw) via `POST /hooks/agent`. Unlocks **WhatsApp, Signal, iMessage, and Matrix** without bloating the Sparkkeep binary with headless browser drivers or native C bindings.
+3. **Discord:** Rich Embed cards with interactive ActionRow components for instant triage from any server or channel.
+4. **Slack:** Rich Block Kit formatting with interactive action buttons and incoming webhook support.
+5. **Interactive Testing:** Test connectivity and dispatch weekly digests to any or all configured channels right from the Settings modal.
+
+---
+
 ## ⚙️ Advanced Configuration (Optional)
 
-If you prefer pre-seeding settings via environment variables (e.g. in Kubernetes or headless homelabs), you can still pass them:
+If you prefer pre-seeding settings via environment variables (e.g. in Kubernetes or headless homelabs), you can still pass them (or configure them dynamically in the web UI Settings):
 
 | Environment Variable | Default | Description |
 |---|---|---|
@@ -96,6 +109,16 @@ If you prefer pre-seeding settings via environment variables (e.g. in Kubernetes
 | `SPARKKEEP_LLM_MODEL` | *Dynamic (DB)* | LLM model identifier |
 | `SPARKKEEP_TG_TOKEN` | `""` | Telegram bot token for mobile captures |
 | `SPARKKEEP_TG_CHAT_ID` | `0` | Authorized Telegram user/chat ID |
+| `SPARKKEEP_OPENCLAW_URL` | `http://localhost:18789` | OpenClaw Gateway endpoint |
+| `SPARKKEEP_OPENCLAW_TOKEN` | `""` | Bearer token for OpenClaw Gateway |
+| `SPARKKEEP_OPENCLAW_CHANNEL`| `whatsapp` | Primary transport target (whatsapp, signal, imessage) |
+| `SPARKKEEP_OPENCLAW_TARGET` | `""` | Target recipient phone number, jid, or group ID |
+| `SPARKKEEP_DISCORD_TOKEN` | `""` | Discord Bot Token |
+| `SPARKKEEP_DISCORD_CHANNEL_ID`| `""` | Default Discord channel ID for notifications |
+| `SPARKKEEP_DISCORD_PUBLIC_KEY`| `""` | Discord Interaction verification public key |
+| `SPARKKEEP_SLACK_WEBHOOK_URL`| `""` | Slack Incoming Webhook URL |
+| `SPARKKEEP_SLACK_BOT_TOKEN` | `""` | Slack Bot OAuth Token |
+| `SPARKKEEP_SLACK_CHANNEL_ID` | `""` | Default Slack channel ID |
 | `SPARKKEEP_SEARCH_URL` | `https://searx.be` | SearXNG instance for deep research |
 | `SPARKKEEP_HEADLESS_ENABLED` | `true` | Enable Chrome headless DOM scraping |
 

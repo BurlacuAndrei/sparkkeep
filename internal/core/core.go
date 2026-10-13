@@ -54,6 +54,7 @@ var (
 type Service struct {
 	Store             port.Store
 	Channel           port.Channel
+	Hub               port.ChannelHub
 	Fetcher           capture.Fetcher // recognize+fetch (field named Fetcher: Capture collided with the method)
 	Analyze           *analyze.Client
 	Vision            Describer           // nil disables image digests
@@ -476,6 +477,9 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 		if capRow.ID > 0 {
 			card.CaptureID = &capRow.ID
 		}
+		card.SourceChannel = share.SourceChannel
+		card.SourceChannelChatID = share.SourceChannelChatID
+		card.SourceChannelMsgID = share.SourceChannelMsgID
 		created, err := s.Store.CreateCard(ctx, card)
 		if err != nil {
 			return ids, err
@@ -504,15 +508,16 @@ func (s *Service) persistCapture(ctx context.Context, share capture.Share, fetch
 	}
 	sourceURL := strings.TrimSpace(share.URL)
 	capRecord := port.Capture{
-		Kind:        kind,
-		SourceURL:   sourceURL,
-		Title:       clipRunes(fetched.Title, 1000),
-		Description: clipRunes(fetched.Description, 5000),
-		Text:        clipRunes(fetched.Text, 20000),
-		Caption:     clipRunes(fetched.Caption, 5000),
-		Transcript:  clipRunes(fetched.Transcript, 50000),
-		ImageDigest: clipRunes(fetched.ImageDigest, 5000),
-		Notes:       fetched.Notes,
+		Kind:          kind,
+		SourceURL:     sourceURL,
+		SourceChannel: share.SourceChannel,
+		Title:         clipRunes(fetched.Title, 1000),
+		Description:   clipRunes(fetched.Description, 5000),
+		Text:          clipRunes(fetched.Text, 20000),
+		Caption:       clipRunes(fetched.Caption, 5000),
+		Transcript:    clipRunes(fetched.Transcript, 50000),
+		ImageDigest:   clipRunes(fetched.ImageDigest, 5000),
+		Notes:         fetched.Notes,
 	}
 	return s.Store.CreateCapture(ctx, capRecord)
 }

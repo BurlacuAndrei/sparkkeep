@@ -1,0 +1,117 @@
+package openclaw
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"sparkkeep/internal/port"
+)
+
+type mockStore struct {
+	port.Store
+	updatedID    int64
+	updatedPatch port.CardPatch
+}
+
+func (m *mockStore) UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error) {
+	m.updatedID = id
+	m.updatedPatch = patch
+	return port.Card{ID: id}, nil
+}
+
+func TestOpenClawNotify(t *testing.T) {
+	var receivedPayload gatewayHookPayload
+	var receivedAuth string
+	var called bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		receivedAuth = r.Header.Get("Authorization")
+		_ = json.NewDecoder(r.Body).Decode(&receivedPayload)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok": true}`))
+	}))
+	defer server.Close()
+
+	adapter := New(Config{
+		GatewayURL:     server.URL,
+		HookToken:      "secret-token-123",
+		DefaultChannel: "whatsapp",
+		DefaultTarget:  "+1555123456",
+	}, nil, nil, "http://localhost:8080", nil)
+
+	ctx := context.Background()
+	card := port.Card{
+		ID:            42,
+		Title:         "OpenClaw Architecture",
+		Summary:       "A gateway for multi-channel personal agents.",
+		Type:          "tool",
+		Horizon:       "short-term",
+		SourceChannel: "openclaw:whatsapp",
+	}
+
+	err := adapter.Notify(ctx, port.Notification{Kind: "created", Card: card})
+	if err != nil {
+		t.Fatalf("Notify failed: %v", err)
+	}
+
+	if !called {
+		t.Fatalf("expected HTTP request to OpenClaw gateway")
+	}
+	if receivedAuth != "Bearer secret-token-123" {
+		t.Errorf("expected Bearer secret-token-123, got %q", receivedAuth)
+	}
+	if receivedPayload.Channel != "whatsapp" {
+		t.Errorf("expected channel whatsapp, got %q", receivedPayload.Channel)
+	}
+	if !receivedPayload.Deliver {
+		t.Errorf("expected deliver = true")
+	}
+}
+
+func TestOpenClawHandleActionCommand(t *testing.T) {
+	st := &mockStore{}
+	adapter := New(Config{HookToken: "tok"}, nil, st, "", nil)
+
+	// Inbound webhook with action command
+	payload := InboundWebhookPayload{
+		Channel: "whatsapp",
+		Sender:  "+1555123456",
+		Text:    "/short 42",
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/openclaw/webhook", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer tok")
+	rec := httptest.NewRecorder()
+
+	adapter.HandleWebhook(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if st.updatedID != 42 {
+		t.Errorf("expected updated card ID 42, got %d", st.updatedID)
+	}
+	if st.updatedPatch.Horizon == nil || *st.updatedPatch.Horizon != port.HorizonShortTerm {
+		t.Errorf("expected horizon short-term, got %+v", st.updatedPatch.Horizon)
+	}
+}
+
+func TestOpenClawUnauthorizedWebhook(t *testing.T) {
+	adapter := New(Config{HookToken: "secret"}, nil, nil, "", nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/openclaw/webhook", io.NopCloser(bytes.NewReader([]byte("{}"))))
+	req.Header.Set("Authorization", "Bearer wrong-token")
+	rec := httptest.NewRecorder()
+
+	adapter.HandleWebhook(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got %d", rec.Code)
+	}
+}

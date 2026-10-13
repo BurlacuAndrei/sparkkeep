@@ -33,6 +33,7 @@ import (
 const apiBase = "https://api.telegram.org"
 
 var _ port.Channel = (*Adapter)(nil)
+var _ port.ChannelAdapter = (*Adapter)(nil)
 
 // Adapter implements port.Channel (outbound Notify) and the long-poll Run
 // loop. Service and Store are injected; callback/reaction handling uses the
@@ -62,6 +63,32 @@ type Adapter struct {
 
 	lastDigestSent string     // "2006-01-02" of the last scheduled digest
 	digestMu       sync.Mutex // guards lastDigestSent
+}
+
+// ID implements port.ChannelAdapter.
+func (a *Adapter) ID() string {
+	return "telegram"
+}
+
+// Name implements port.ChannelAdapter.
+func (a *Adapter) Name() string {
+	return "Telegram"
+}
+
+// Start implements port.ChannelAdapter.
+func (a *Adapter) Start(ctx context.Context) error {
+	return a.Run(ctx)
+}
+
+// Capabilities implements port.ChannelAdapter.
+func (a *Adapter) Capabilities() port.ChannelCapabilities {
+	return port.ChannelCapabilities{
+		SupportsInlineButtons: true,
+		SupportsReactions:     true,
+		SupportsThreads:       true,
+		MarkdownFlavor:        "telegram",
+		MaxTextLength:         4096,
+	}
 }
 
 // Run blocks long-polling getUpdates until ctx is cancelled. Each update is
@@ -517,12 +544,11 @@ func cardButtons(id int64, retry bool) [][]button {
 			{Text: "▾", CallbackData: fmt.Sprintf("%d:pb_menu", id)},
 		},
 		{
-			{Text: "Inbox", CallbackData: fmt.Sprintf("%d:status:inbox", id)},
 			{Text: "Short", CallbackData: fmt.Sprintf("%d:commit:short-term", id)},
 			{Text: "Medium", CallbackData: fmt.Sprintf("%d:commit:medium-term", id)},
+			{Text: "Long", CallbackData: fmt.Sprintf("%d:commit:long-term", id)},
 		},
 		{
-			{Text: "Long", CallbackData: fmt.Sprintf("%d:commit:long-term", id)},
 			{Text: "✕ Discard", CallbackData: fmt.Sprintf("%d:dismiss", id)},
 		},
 	}
@@ -788,6 +814,11 @@ func (a *Adapter) handleMessage(m *message) {
 	if !ok {
 		return
 	}
+	share.SourceChannel = "telegram"
+	if m.Chat != nil {
+		share.SourceChannelChatID = strconv.FormatInt(m.Chat.ID, 10)
+	}
+	share.SourceChannelMsgID = strconv.FormatInt(m.MessageID, 10)
 
 	_ = a.sendChatAction(ctx, m.Chat.ID, "typing")
 	label := placeholderLabel(share, m)

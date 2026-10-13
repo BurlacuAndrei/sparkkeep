@@ -42,6 +42,18 @@ type Config struct {
 	DigestPushEnabled bool
 	DigestPushDay     int
 	DigestPushHour    int
+
+	// Multi-Channel Integrations
+	OpenClawURL      string
+	OpenClawToken    string
+	OpenClawChannel  string
+	OpenClawTarget   string
+	DiscordToken     string
+	DiscordChannelID string
+	DiscordPublicKey string
+	SlackWebhookURL  string
+	SlackBotToken    string
+	SlackChannelID   string
 }
 
 // DefaultSearchURL is the public SearXNG instance used when
@@ -74,6 +86,16 @@ func Load() (Config, error) {
 		TranscriptLangs:  getenv("SPARKKEEP_TRANSCRIPT_LANGS", "en.*,en"),
 		FFmpegBin:        os.Getenv("SPARKKEEP_FFMPEG_BIN"),
 		AuthToken:        os.Getenv("SPARKKEEP_AUTH_TOKEN"),
+		OpenClawURL:      getenv("SPARKKEEP_OPENCLAW_URL", "http://localhost:18789"),
+		OpenClawToken:    os.Getenv("SPARKKEEP_OPENCLAW_TOKEN"),
+		OpenClawChannel:  getenv("SPARKKEEP_OPENCLAW_CHANNEL", "whatsapp"),
+		OpenClawTarget:   os.Getenv("SPARKKEEP_OPENCLAW_TARGET"),
+		DiscordToken:     os.Getenv("SPARKKEEP_DISCORD_TOKEN"),
+		DiscordChannelID: os.Getenv("SPARKKEEP_DISCORD_CHANNEL_ID"),
+		DiscordPublicKey: os.Getenv("SPARKKEEP_DISCORD_PUBLIC_KEY"),
+		SlackWebhookURL:  os.Getenv("SPARKKEEP_SLACK_WEBHOOK_URL"),
+		SlackBotToken:    os.Getenv("SPARKKEEP_SLACK_BOT_TOKEN"),
+		SlackChannelID:   os.Getenv("SPARKKEEP_SLACK_CHANNEL_ID"),
 	}
 
 	headless, err := getenvBool("SPARKKEEP_HEADLESS_ENABLED", true)

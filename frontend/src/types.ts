@@ -87,9 +87,30 @@ export interface Card {
   suggested_horizon?: string;
   suggested_tags?: string[];
   research_state?: 'none' | 'queued' | 'running' | 'done' | 'failed' | string;
+  source_channel?: string;
+  source_channel_chat_id?: string;
+  source_channel_msg_id?: string;
   created_at: string;
   updated_at: string;
   comments?: CardComment[];
+}
+
+export interface ChannelInfo {
+  id: string;
+  name: string;
+  enabled: boolean;
+  chat_id?: string;
+  channel_id?: string;
+  gateway_url?: string;
+  channel?: string;
+  target?: string;
+  has_token?: boolean;
+  has_webhook?: boolean;
+  capabilities?: {
+    buttons: boolean;
+    reactions: boolean;
+    markdown: string;
+  };
 }
 
 export interface ClaimVerdict {

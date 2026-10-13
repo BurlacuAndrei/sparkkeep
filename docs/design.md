@@ -27,38 +27,45 @@ notify out) and a **net/http server** (API + embedded dashboard). Shared core
 in the middle.
 
 ```
-                  ┌─────────────────────────────────────────┐
-  Telegram IN ──► │ channel/telegram  (adapter, stdlib HTTP) │
-                  └───────────────┬─────────────────────────┘
-                                  ▼
-                  ┌─────────────────────────────────────────┐
-                  │ core  capture.Handler                    │
-                  │   · recognize link / text / media        │
-                  │   · fetch open sources (HTTP, yt-dlp)    │
-                  │   · LLM analyze → split → classify        │
-                  │   · persist cards, emit Channel.Notify    │
-                  └───────────────┬─────────────────────────┘
-                                  ▼
-                  ┌─────────────────────────────────────────┐
-                  │ store  (SQLite via database/sql)         │
-                  │   spans: cards, tags, research, events    │
-                  └─────────────────────────────────────────┘
+  Telegram IN ──┐
+  OpenClaw IN ──┼─► ┌──────────────────────────────────────────────┐
+  Discord IN  ──┤   │ internal/channel (Hub router & adapters)     │
+  Slack IN    ──┘   │   · telegram, openclaw, discord, slack       │
+                    └───────────────────┬──────────────────────────┘
+                                        ▼
+                    ┌──────────────────────────────────────────────┐
+                    │ core  capture.Handler                        │
+                    │   · recognize link / text / media            │
+                    │   · fetch open sources (HTTP, yt-dlp)        │
+                    │   · LLM analyze → split → classify            │
+                    │   · persist cards, emit Hub.Notify           │
+                    │   · preserve provenance (channel, chat, msg) │
+                    └───────────────────┬──────────────────────────┘
+                                        ▼
+                    ┌──────────────────────────────────────────────┐
+                    │ store  (SQLite via database/sql)             │
+                    │   spans: cards, tags, research, events       │
+                    └──────────────────────────────────────────────┘
 
-  HTTP server ──► /api/* (cards, research, events)  +  embed.FS dashboard
+  HTTP server ──► /api/* (cards, channels, digest, webhooks) + embed.FS dashboard
                        shared core, same process
 ```
 
 **Package layout:**
 
 ```
-cmd/sparkkeep/        main.go — flags/env, wiring, graceful shutdown
-internal/port/        minimal interfaces: Channel (In/Out), Store
-internal/channel/telegram/   long-poll adapter (stdlib, no bot lib)
-internal/capture/     link recognition + fetch (net/http, yt-dlp subprocess)
-internal/analyze/     OpenAI-compatible LLM client (stdlib JSON over HTTP)
-internal/research/    bounded loop: query → search → read → synthesize
-internal/store/       SQLite repository (database/sql + modernc.org/sqlite)
-internal/web/         embed.FS dashboard + API handlers
+cmd/sparkkeep/               main.go — flags/env, wiring, graceful shutdown
+internal/port/               interfaces: Channel, ChannelHub, Store, ModelRouter
+internal/channel/            hub.go — targeted routing, broadcast fallback
+internal/channel/telegram/   long-poll adapter (stdlib, inline buttons)
+internal/channel/openclaw/   HTTP bridge for WhatsApp, Signal, iMessage
+internal/channel/discord/    rich embeds, action rows & interactions
+internal/channel/slack/      block kit cards & webhooks
+internal/capture/            link recognition + fetch (net/http, yt-dlp subprocess)
+internal/analyze/            OpenAI-compatible LLM client (stdlib JSON over HTTP)
+internal/research/           bounded loop: query → search → read → synthesize
+internal/store/              SQLite repository (database/sql + modernc.org/sqlite)
+internal/web/                embed.FS dashboard + API & webhook handlers
 ```
 
 **Deliberate simplification:** only abstraction is `port.Store` (interface →
@@ -140,36 +147,44 @@ Sparkkeep supports multiple AI endpoints configured through profiles:
 - **Roles:** `triage`, `vision`, `research_plan`, `research_synthesis`.
 - **Pro Gating:** Pro instances can route each role to separate providers/models (e.g. fast cheap models for triage/planning, high-reasoning models for research synthesis) with per-role token caps. Community instances route all roles to the default profile.
 
-## 5. Telegram channel adapter
+## 5. Multi-channel hub & adapter ecosystem
 
-First implementation of `port.Channel`. Stdlib HTTP long-polling — exactly
-the pattern your NAS `digest_bot.py` already uses, in Go.
+Sparkkeep provides a unified channel abstraction (`port.Channel` and `port.ChannelHub`) enabling multi-channel ingestion, outbound interactive notifications, and full card provenance tracking (`source_channel`, `source_channel_chat_id`, `source_channel_msg_id`).
 
-**Inbound:**
-- Long-poll `getUpdates` with `offset` persisted to disk after each batch
-  (crash-safe restart).
-- Owner lock: only one configured `TG_CHAT_ID` is allowed to speak to the
-  bot; everyone else gets silence (`ponytail: single-user product; a
-  multi-tenant ACL is a whole feature, add when there are real other users`).
-- Message handler: photo/video/link/text all funnel into
-  `core.Capture(rawText, media)`.
+### Channel Hub (`internal/channel/hub.go`)
+- **Targeted Routing:** Outbound card notifications route back to the channel of origin when available (e.g. captures from Discord notify Discord; captures from WhatsApp via OpenClaw notify WhatsApp).
+- **Sub-Channel Routing:** Supports prefix routing such as `openclaw:whatsapp` or `openclaw:signal`.
+- **Broadcast Fallback:** System broadcasts (such as scheduled weekly digests or cards created via Web UI) dispatch across all active channels concurrently with per-adapter error isolation.
+- **Dynamic Registry:** Adapters register themselves at startup or via live reconfiguration.
 
-**Outbound (`Notify`):**
-- Text message + inline keyboard: buttons `→ Doing`, `→ Done`, `Research`,
-  `Shelve`. Button presses come back as `callback_query` updates and map to
-  status changes / research trigger — same long-poll loop, no webhook.
+### Adapters
+1. **Telegram (`internal/channel/telegram/`):**
+   - Inbound: Stdlib HTTP long-polling (`getUpdates`) with atomic offset persistence.
+   - Outbound: HTML formatted messages with interactive inline keyboards (`→ Doing`, `→ Done`, `Research`, `Shelve`).
+   - Reaction refinement: Passive emoji mappings (`⭐`, `📌`, etc.).
+   - Reply organization: Intercepts reply messages to append tags or notes.
 
-**Reactions as refinement:** emoji reactions on the card message map to tag
-or horizon tweaks (`⭐` → re-moving to lifetime, etc.) — implemented as a
-small `reaction → action` map, passive and explicit.
+2. **OpenClaw Bridge (`internal/channel/openclaw/`):**
+   - Unifies 15+ external messaging transports (**WhatsApp**, **Signal**, **iMessage**, **Matrix**, etc.) without bundling heavy external runtimes or CGO dependencies.
+   - Outbound: Dispatches to OpenClaw Gateway `POST /hooks/agent` with Bearer auth and targeted recipient routing (`to` field).
+   - Inbound: Listens at `POST /api/v1/channels/openclaw/webhook` for incoming messages.
+   - Text Action Parsing: Parses inbound command text (`/research`, `/short`, `/done`, `/shelve`) for clients that lack native interactive button widgets (e.g., standard SMS or Signal).
 
-**Inbound "organize-by-reply":** replying to a card message with text/tag
-edits the card (append tag, set note). This is the "intercept the reply and
-organize" part you asked for — replies are matched by message thread id, not
-parsed commands.
+3. **Discord (`internal/channel/discord/`):**
+   - Outbound: Rich Discord Embeds with action color bars, clickable title links, and interactive ActionRow button components.
+   - Inbound: Interaction webhook handler (`POST /api/v1/channels/discord/interactions`) handling button clicks with Discord Ed25519 signature verification support and modal/ephemeral responses.
 
-**Config (env):** `SPARKKEEP_TG_TOKEN`, `SPARKKEEP_TG_CHAT_ID` (owner),
-`SPARKKEEP_TG_ENABLED` (off = dashboard-only mode).
+4. **Slack (`internal/channel/slack/`):**
+   - Outbound: Slack Block Kit formatting with header blocks, markdown sections, and interactive action buttons.
+   - Inbound: Incoming Webhook integration and Block Kit action responses.
+
+### Card Provenance & Ingestion Pipeline
+When a share arrives through any channel:
+- `source_channel` records the transport identifier (`telegram`, `openclaw:whatsapp`, `discord`, `slack`, `web`).
+- `source_channel_chat_id` records the originating conversation or thread.
+- `source_channel_msg_id` records the upstream message identifier to facilitate reply updates.
+- All provenance fields are persisted in `captures` and flow into generated `cards` (migration `0018_channels_and_provenance.sql`).
+
 
 ## 6. Research playbooks & execution pipeline
 

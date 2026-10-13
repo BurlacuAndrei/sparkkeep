@@ -165,10 +165,14 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	if researchState == "" {
 		researchState = "none"
 	}
+	sourceChannel := c.SourceChannel
+	if sourceChannel == "" {
+		sourceChannel = "web"
+	}
 	res, err := exec.ExecContext(ctx,
-		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, completedActionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, actionsSource, analysisFailedInt, c.ResearchVerdict, c.ResearchConfidence, c.SuggestedHorizon, suggestedTagsJSON, researchState, ts, ts)
+		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, source_channel, source_channel_chat_id, source_channel_msg_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, completedActionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, actionsSource, analysisFailedInt, c.ResearchVerdict, c.ResearchConfidence, c.SuggestedHorizon, suggestedTagsJSON, researchState, sourceChannel, c.SourceChannelChatID, c.SourceChannelMsgID, ts, ts)
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return port.Card{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
@@ -183,6 +187,7 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	c.CreatedAt, _ = parseTime(ts)
 	c.UpdatedAt = c.CreatedAt
 	c.ResearchState = researchState
+	c.SourceChannel = sourceChannel
 	c.Type = cardType
 	c.TLDR = tldr
 	c.WhyCare = whyCare
@@ -244,14 +249,14 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 
 func (s *Store) GetCard(ctx context.Context, id int64) (port.Card, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, created_at, updated_at
+		`SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, source_channel, source_channel_chat_id, source_channel_msg_id, created_at, updated_at
 		 FROM cards WHERE id = ?`, id)
 	var c port.Card
 	var captureID sql.NullInt64
 	var created, updated string
 	var actionsRaw, completedActionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw, suggestedTagsRaw string
 	var analysisFailedInt int
-	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &completedActionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &analysisFailedInt, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &c.ResearchState, &created, &updated)
+	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &completedActionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &analysisFailedInt, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &c.ResearchState, &c.SourceChannel, &c.SourceChannelChatID, &c.SourceChannelMsgID, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Card{}, port.ErrNotFound
 	}
@@ -446,7 +451,7 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	if limit <= 0 {
 		limit = defaultLimit
 	}
-	sqlq := `SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, created_at, updated_at FROM cards`
+	sqlq := `SELECT id, capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, source_channel, source_channel_chat_id, source_channel_msg_id, created_at, updated_at FROM cards`
 	if len(where) > 0 {
 		sqlq += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -469,7 +474,7 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		var created, updated string
 		var actionsRaw, completedActionsRaw, claimsRaw, oqRaw, signalsRaw, worthinessRaw, suggestedTagsRaw string
 		var analysisFailedInt int
-		if err := rows.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &completedActionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &analysisFailedInt, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &c.ResearchState, &created, &updated); err != nil {
+		if err := rows.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &completedActionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &analysisFailedInt, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &c.ResearchState, &c.SourceChannel, &c.SourceChannelChatID, &c.SourceChannelMsgID, &created, &updated); err != nil {
 			return nil, err
 		}
 		if captureID.Valid {
@@ -822,6 +827,15 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 	}
 	if p.ResearchState != nil {
 		b.set("research_state", *p.ResearchState)
+	}
+	if p.SourceChannel != nil {
+		b.set("source_channel", *p.SourceChannel)
+	}
+	if p.SourceChannelChatID != nil {
+		b.set("source_channel_chat_id", *p.SourceChannelChatID)
+	}
+	if p.SourceChannelMsgID != nil {
+		b.set("source_channel_msg_id", *p.SourceChannelMsgID)
 	}
 	if p.CaptureID != nil {
 		b.set("capture_id", *p.CaptureID)
@@ -1743,10 +1757,14 @@ func (s *Store) CreateCapture(ctx context.Context, c port.Capture) (port.Capture
 			notesJSON = string(b)
 		}
 	}
+	sourceChannel := c.SourceChannel
+	if sourceChannel == "" {
+		sourceChannel = "web"
+	}
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO captures (kind, source_url, title, description, text, caption, transcript, image_digest, notes, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.Kind, c.SourceURL, c.Title, c.Description, c.Text, c.Caption, c.Transcript, c.ImageDigest, notesJSON, ts)
+		`INSERT INTO captures (kind, source_url, source_channel, title, description, text, caption, transcript, image_digest, notes, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.Kind, c.SourceURL, sourceChannel, c.Title, c.Description, c.Text, c.Caption, c.Transcript, c.ImageDigest, notesJSON, ts)
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return port.Capture{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
@@ -1758,6 +1776,7 @@ func (s *Store) CreateCapture(ctx context.Context, c port.Capture) (port.Capture
 		return port.Capture{}, err
 	}
 	c.ID = id
+	c.SourceChannel = sourceChannel
 	t, _ := parseTime(ts)
 	c.CreatedAt = t
 	if c.Notes == nil {
@@ -1768,12 +1787,12 @@ func (s *Store) CreateCapture(ctx context.Context, c port.Capture) (port.Capture
 
 func (s *Store) GetCapture(ctx context.Context, id int64) (port.Capture, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, kind, source_url, title, description, text, caption, transcript, image_digest, notes, created_at
+		`SELECT id, kind, source_url, source_channel, title, description, text, caption, transcript, image_digest, notes, created_at
 		 FROM captures WHERE id = ?`, id)
 	var c port.Capture
 	var notesJSON string
 	var created string
-	err := row.Scan(&c.ID, &c.Kind, &c.SourceURL, &c.Title, &c.Description, &c.Text, &c.Caption, &c.Transcript, &c.ImageDigest, &notesJSON, &created)
+	err := row.Scan(&c.ID, &c.Kind, &c.SourceURL, &c.SourceChannel, &c.Title, &c.Description, &c.Text, &c.Caption, &c.Transcript, &c.ImageDigest, &notesJSON, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Capture{}, port.ErrNotFound
 	}

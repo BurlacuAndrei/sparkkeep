@@ -3180,3 +3180,60 @@ func TestBatchAndScheduledResearchAPI(t *testing.T) {
 		t.Errorf("quiet window response mismatch: %+v", qwResp)
 	}
 }
+
+type stubChannel struct{}
+
+func (s *stubChannel) Notify(_ context.Context, _ port.Notification) error {
+	return nil
+}
+
+func TestChannelEndpoints(t *testing.T) {
+	st := newStubStore()
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	// 1. List channels
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/channels", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/channels: expected 200, got %d", rr.Code)
+	}
+	var resp struct {
+		OK       bool             `json:"ok"`
+		Channels []map[string]any `json:"channels"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil || !resp.OK {
+		t.Fatalf("failed to decode channels response: %v", err)
+	}
+	if len(resp.Channels) != 4 {
+		t.Fatalf("expected 4 channels, got %d", len(resp.Channels))
+	}
+
+	// 2. OpenClaw Webhook
+	ocPayload := `{"channel":"whatsapp","sender":"+1555123","text":"/short 1"}`
+	rrOC := doJSON(t, h, http.MethodPost, "/api/v1/channels/openclaw/webhook", ocPayload)
+	if rrOC.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/channels/openclaw/webhook: expected 200, got %d: %s", rrOC.Code, rrOC.Body.String())
+	}
+
+	// 3. Discord Interactions ping
+	dcPing := `{"type": 1}`
+	rrDC := doJSON(t, h, http.MethodPost, "/api/v1/channels/discord/interactions", dcPing)
+	if rrDC.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/channels/discord/interactions: expected 200, got %d", rrDC.Code)
+	}
+
+	// 4. Test channel notification
+	hub := &stubChannel{}
+	svc.Channel = hub
+	rrTest := doJSON(t, h, http.MethodPost, "/api/v1/channels/telegram/test", "")
+	if rrTest.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/channels/telegram/test: expected 200, got %d: %s", rrTest.Code, rrTest.Body.String())
+	}
+
+	// 5. Digest push
+	rrDigest := doJSON(t, h, http.MethodPost, "/api/v1/digest/push?channel=telegram", "")
+	if rrDigest.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/digest/push: expected 200, got %d: %s", rrDigest.Code, rrDigest.Body.String())
+	}
+}
+

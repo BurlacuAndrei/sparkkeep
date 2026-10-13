@@ -1,4 +1,4 @@
-import { Card, Capture, Tag, DigestData, DigestSynthesisResult, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig } from './types';
+import { Card, Capture, Tag, DigestData, DigestSynthesisResult, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig, ChannelInfo } from './types';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -234,6 +234,14 @@ export async function getSettings(): Promise<{
     user_profile?: UserProfile;
     has_tg_token?: boolean;
     tg_chat_id?: string;
+    openclaw_url?: string;
+    openclaw_channel?: string;
+    openclaw_target?: string;
+    openclaw_enabled?: boolean;
+    has_openclaw_token?: boolean;
+    discord_channel_id?: string;
+    has_discord_token?: boolean;
+    has_slack_webhook?: boolean;
   };
 }> {
   return request('/api/v1/settings');
@@ -252,12 +260,32 @@ export async function patchSettings(payload: {
   user_profile?: UserProfile;
   tg_token?: string;
   tg_chat_id?: string;
+  openclaw_url?: string;
+  openclaw_token?: string;
+  openclaw_channel?: string;
+  openclaw_target?: string;
+  openclaw_enabled?: boolean;
+  discord_token?: string;
+  discord_channel_id?: string;
+  slack_webhook_url?: string;
 }): Promise<{ ok: boolean }> {
   return request('/api/v1/settings', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+}
+
+export async function listChannels(): Promise<{ ok: boolean; channels: ChannelInfo[] }> {
+  return request('/api/v1/channels');
+}
+
+export async function testChannel(id: string): Promise<{ ok: boolean; message: string }> {
+  return request(`/api/v1/channels/${id}/test`, { method: 'POST' });
+}
+
+export async function pushDigestToChannel(channel: string = 'all', days: number = 7): Promise<{ ok: boolean; message: string }> {
+  return request(`/api/v1/digest/push?channel=${encodeURIComponent(channel)}&days=${days}`, { method: 'POST' });
 }
 
 export async function fetchPlaybooks(): Promise<Playbook[]> {

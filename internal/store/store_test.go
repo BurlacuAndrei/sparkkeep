@@ -29,8 +29,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 17 {
-		t.Fatalf("version = %d, want 17", version)
+	if version != 18 {
+		t.Fatalf("version = %d, want 18", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -1075,8 +1075,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 17 {
-		t.Fatalf("version = %d, want 17", version)
+	if version != 18 {
+		t.Fatalf("version = %d, want 18", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1188,8 +1188,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 17 {
-		t.Fatalf("version = %d, want 17", version)
+	if version != 18 {
+		t.Fatalf("version = %d, want 18", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -1892,3 +1892,64 @@ func TestCardTrustFixesP0(t *testing.T) {
 		t.Fatalf("card %d not found in ListCards", c.ID)
 	}
 }
+
+func TestCardChannelProvenance(t *testing.T) {
+	s, ctx := newTestStore(t)
+	// Create capture with channel
+	cap, err := s.CreateCapture(ctx, port.Capture{
+		Kind:          "link",
+		SourceURL:     "https://github.com/openclaw/openclaw",
+		SourceChannel: "openclaw:whatsapp",
+		Title:         "OpenClaw Gateway",
+	})
+	if err != nil {
+		t.Fatalf("CreateCapture: %v", err)
+	}
+	if cap.SourceChannel != "openclaw:whatsapp" {
+		t.Errorf("cap.SourceChannel = %q, want openclaw:whatsapp", cap.SourceChannel)
+	}
+
+	retrievedCap, err := s.GetCapture(ctx, cap.ID)
+	if err != nil {
+		t.Fatalf("GetCapture: %v", err)
+	}
+	if retrievedCap.SourceChannel != "openclaw:whatsapp" {
+		t.Errorf("retrievedCap.SourceChannel = %q, want openclaw:whatsapp", retrievedCap.SourceChannel)
+	}
+
+	// Create card with channel provenance
+	c, err := s.CreateCard(ctx, port.Card{
+		CaptureID:           &cap.ID,
+		Title:               "OpenClaw Card",
+		Status:              port.StatusInbox,
+		Horizon:             port.HorizonShortTerm,
+		SourceChannel:       "openclaw:whatsapp",
+		SourceChannelChatID: "+1555123456",
+		SourceChannelMsgID:  "msg_12345",
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+	if c.SourceChannel != "openclaw:whatsapp" || c.SourceChannelChatID != "+1555123456" || c.SourceChannelMsgID != "msg_12345" {
+		t.Fatalf("CreateCard provenance mismatch: %+v", c)
+	}
+
+	// GetCard
+	retrievedCard, err := s.GetCard(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if retrievedCard.SourceChannel != "openclaw:whatsapp" || retrievedCard.SourceChannelChatID != "+1555123456" || retrievedCard.SourceChannelMsgID != "msg_12345" {
+		t.Fatalf("GetCard provenance mismatch: %+v", retrievedCard)
+	}
+
+	// ListCards
+	cards, err := s.ListCards(ctx, port.CardFilter{})
+	if err != nil {
+		t.Fatalf("ListCards: %v", err)
+	}
+	if len(cards) == 0 || cards[0].SourceChannel != "openclaw:whatsapp" {
+		t.Fatalf("ListCards provenance mismatch: %+v", cards[0])
+	}
+}
+

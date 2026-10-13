@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"sparkkeep/internal/analyze"
+	"sparkkeep/internal/channel/discord"
+	"sparkkeep/internal/channel/openclaw"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
 	"sparkkeep/internal/license"
@@ -215,6 +217,12 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/tags", a.listTags)
 	mux.HandleFunc("GET /api/v1/digest", a.weeklyDigest)
 	mux.HandleFunc("POST /api/v1/digest/synthesize", a.synthesizeDigest)
+	mux.HandleFunc("GET /api/v1/channels", a.listChannels)
+	mux.HandleFunc("POST /api/v1/channels/{id}/test", a.testChannel)
+	mux.HandleFunc("POST /api/v1/channels/openclaw/webhook", a.openclawWebhook)
+	mux.HandleFunc("POST /api/v1/channels/discord/interactions", a.discordInteractions)
+	mux.HandleFunc("POST /api/v1/channels/discord/capture", a.discordCapture)
+	mux.HandleFunc("POST /api/v1/digest/push", a.pushDigest)
 	mux.HandleFunc("POST /api/v1/digest/telegram", a.pushDigestTelegram)
 	mux.HandleFunc("GET /api/v1/research", a.listResearch)
 	mux.HandleFunc("POST /api/v1/research", a.triggerResearch)
@@ -675,6 +683,22 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 		tgToken = a.tgToken
 	}
 
+	openclawURL, _ := a.store.GetSetting(ctx, "openclaw_url")
+	if openclawURL == "" {
+		openclawURL = "http://localhost:18789"
+	}
+	openclawToken, _ := a.store.GetSetting(ctx, "openclaw_token")
+	openclawChan, _ := a.store.GetSetting(ctx, "openclaw_channel")
+	if openclawChan == "" {
+		openclawChan = "whatsapp"
+	}
+	openclawTarget, _ := a.store.GetSetting(ctx, "openclaw_target")
+	openclawEnabled, _ := a.store.GetSetting(ctx, "openclaw_enabled")
+
+	discordToken, _ := a.store.GetSetting(ctx, "discord_token")
+	discordChanID, _ := a.store.GetSetting(ctx, "discord_channel_id")
+	slackWebhook, _ := a.store.GetSetting(ctx, "slack_webhook_url")
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
@@ -689,6 +713,14 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 			"user_profile":        userProfile,
 			"tg_chat_id":          tgChatID,
 			"has_tg_token":        tgToken != "",
+			"openclaw_url":        openclawURL,
+			"openclaw_channel":    openclawChan,
+			"openclaw_target":     openclawTarget,
+			"openclaw_enabled":    openclawEnabled == "true",
+			"has_openclaw_token":  openclawToken != "",
+			"discord_channel_id":  discordChanID,
+			"has_discord_token":   discordToken != "",
+			"has_slack_webhook":   slackWebhook != "",
 		},
 	})
 }
@@ -708,6 +740,14 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 		UserProfile       *port.UserProfile  `json:"user_profile,omitempty"`
 		TGToken           *string            `json:"tg_token,omitempty"`
 		TGChatID          *string            `json:"tg_chat_id,omitempty"`
+		OpenClawURL       *string            `json:"openclaw_url,omitempty"`
+		OpenClawToken     *string            `json:"openclaw_token,omitempty"`
+		OpenClawChannel   *string            `json:"openclaw_channel,omitempty"`
+		OpenClawTarget    *string            `json:"openclaw_target,omitempty"`
+		OpenClawEnabled   *bool              `json:"openclaw_enabled,omitempty"`
+		DiscordToken      *string            `json:"discord_token,omitempty"`
+		DiscordChannelID  *string            `json:"discord_channel_id,omitempty"`
+		SlackWebhookURL   *string            `json:"slack_webhook_url,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -756,6 +796,35 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, err)
 			return
 		}
+	}
+
+	if b.OpenClawURL != nil {
+		_ = a.store.SetSetting(ctx, "openclaw_url", *b.OpenClawURL)
+	}
+	if b.OpenClawToken != nil {
+		_ = a.store.SetSetting(ctx, "openclaw_token", *b.OpenClawToken)
+	}
+	if b.OpenClawChannel != nil {
+		_ = a.store.SetSetting(ctx, "openclaw_channel", *b.OpenClawChannel)
+	}
+	if b.OpenClawTarget != nil {
+		_ = a.store.SetSetting(ctx, "openclaw_target", *b.OpenClawTarget)
+	}
+	if b.OpenClawEnabled != nil {
+		val := "false"
+		if *b.OpenClawEnabled {
+			val = "true"
+		}
+		_ = a.store.SetSetting(ctx, "openclaw_enabled", val)
+	}
+	if b.DiscordToken != nil {
+		_ = a.store.SetSetting(ctx, "discord_token", *b.DiscordToken)
+	}
+	if b.DiscordChannelID != nil {
+		_ = a.store.SetSetting(ctx, "discord_channel_id", *b.DiscordChannelID)
+	}
+	if b.SlackWebhookURL != nil {
+		_ = a.store.SetSetting(ctx, "slack_webhook_url", *b.SlackWebhookURL)
 	}
 
 	settings, _ := a.store.ListSettings(ctx)
@@ -1662,11 +1731,11 @@ func (a *api) synthesizeDigest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (a *api) pushDigestTelegram(w http.ResponseWriter, r *http.Request) {
+func (a *api) pushDigest(w http.ResponseWriter, r *http.Request) {
 	if a.svc == nil || a.svc.Channel == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"ok":    false,
-			"error": "Telegram channel is not configured or disabled.",
+			"error": "No notification channels configured or available.",
 		})
 		return
 	}
@@ -1676,6 +1745,11 @@ func (a *api) pushDigestTelegram(w http.ResponseWriter, r *http.Request) {
 		if d, err := strconv.Atoi(q); err == nil && d > 0 && d <= 90 {
 			days = d
 		}
+	}
+
+	targetChannel := r.URL.Query().Get("channel")
+	if targetChannel == "" {
+		targetChannel = "all"
 	}
 
 	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Since: time.Now().UTC().AddDate(0, 0, -days), Limit: 500})
@@ -1699,7 +1773,7 @@ func (a *api) pushDigestTelegram(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("📊 *Sparkkeep Weekly Intelligence Digest*\n")
+	sb.WriteString("📊 *Sparkkeep Intelligence Digest*\n")
 	fmt.Fprintf(&sb, "Window: Last %d days • Total: %d sparks\n\n", days, len(cards))
 	fmt.Fprintf(&sb, "• 📥 Inbox: %d\n• ⚡ In Progress: %d\n• ✅ Done: %d\n• 📦 Shelved: %d\n\n",
 		inbox, doing, done, shelved)
@@ -1718,6 +1792,7 @@ func (a *api) pushDigestTelegram(w http.ResponseWriter, r *http.Request) {
 
 	err = a.svc.Channel.Notify(r.Context(), port.Notification{
 		Kind: "digest",
+		Card: port.Card{SourceChannel: targetChannel},
 		Text: sb.String(),
 	})
 	if err != nil {
@@ -1728,10 +1803,182 @@ func (a *api) pushDigestTelegram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	msg := "Digest successfully sent to configured channels!"
+	if targetChannel != "all" {
+		msg = fmt.Sprintf("Digest successfully sent to %s!", targetChannel)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
-		"message": "Digest successfully sent to Telegram!",
+		"message": msg,
 	})
+}
+
+func (a *api) pushDigestTelegram(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	q.Set("channel", "telegram")
+	r.URL.RawQuery = q.Encode()
+	a.pushDigest(w, r)
+}
+
+func (a *api) listChannels(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tgToken, _ := a.store.GetSetting(ctx, "tg_token")
+	if tgToken == "" {
+		tgToken = a.tgToken
+	}
+	tgChatID, _ := a.store.GetSetting(ctx, "tg_chat_id")
+
+	openclawURL, _ := a.store.GetSetting(ctx, "openclaw_url")
+	if openclawURL == "" {
+		openclawURL = "http://localhost:18789"
+	}
+	openclawToken, _ := a.store.GetSetting(ctx, "openclaw_token")
+	openclawChan, _ := a.store.GetSetting(ctx, "openclaw_channel")
+	if openclawChan == "" {
+		openclawChan = "whatsapp"
+	}
+	openclawTarget, _ := a.store.GetSetting(ctx, "openclaw_target")
+	openclawEnabled, _ := a.store.GetSetting(ctx, "openclaw_enabled")
+
+	discordToken, _ := a.store.GetSetting(ctx, "discord_token")
+	discordChanID, _ := a.store.GetSetting(ctx, "discord_channel_id")
+	slackWebhook, _ := a.store.GetSetting(ctx, "slack_webhook_url")
+
+	channels := []map[string]any{
+		{
+			"id":        "telegram",
+			"name":      "Telegram",
+			"enabled":   tgToken != "",
+			"chat_id":   tgChatID,
+			"has_token": tgToken != "",
+			"capabilities": map[string]any{
+				"buttons":   true,
+				"reactions": true,
+				"markdown":  "telegram",
+			},
+		},
+		{
+			"id":          "openclaw",
+			"name":        "OpenClaw Bridge",
+			"enabled":     openclawEnabled == "true" || openclawToken != "",
+			"gateway_url": openclawURL,
+			"channel":     openclawChan,
+			"target":      openclawTarget,
+			"has_token":   openclawToken != "",
+			"capabilities": map[string]any{
+				"buttons":   false,
+				"reactions": true,
+				"markdown":  "markdown",
+			},
+		},
+		{
+			"id":         "discord",
+			"name":       "Discord",
+			"enabled":    discordToken != "" && discordChanID != "",
+			"channel_id": discordChanID,
+			"has_token":  discordToken != "",
+			"capabilities": map[string]any{
+				"buttons":   true,
+				"reactions": true,
+				"markdown":  "discord",
+			},
+		},
+		{
+			"id":          "slack",
+			"name":        "Slack",
+			"enabled":     slackWebhook != "",
+			"has_webhook": slackWebhook != "",
+			"capabilities": map[string]any{
+				"buttons":   true,
+				"reactions": true,
+				"markdown":  "slack",
+			},
+		},
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "channels": channels})
+}
+
+func (a *api) testChannel(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeErr(w, http.StatusBadRequest, "channel id required")
+		return
+	}
+
+	testCard := port.Card{
+		ID:            999,
+		Title:         "Sparkkeep Channel Connectivity Test",
+		Summary:       "This is a test notification confirming that Sparkkeep can deliver alerts and cards to this channel.",
+		Type:          "tool",
+		Horizon:       "short-term",
+		SourceChannel: id,
+		Worthiness:    port.Worthiness{Level: "High", Reason: "Testing connectivity"},
+	}
+
+	if a.svc == nil || a.svc.Channel == nil {
+		writeErr(w, http.StatusServiceUnavailable, "channel service not available")
+		return
+	}
+
+	err := a.svc.Channel.Notify(r.Context(), port.Notification{
+		Kind: "created",
+		Card: testCard,
+		Text: "Sparkkeep Channel Connectivity Test: OK",
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"message": fmt.Sprintf("Test notification sent successfully to %s", id),
+	})
+}
+
+func (a *api) openclawWebhook(w http.ResponseWriter, r *http.Request) {
+	if a.svc != nil && a.svc.Hub != nil {
+		if adapter, ok := a.svc.Hub.Get("openclaw"); ok {
+			if oc, ok := adapter.(*openclaw.Adapter); ok {
+				oc.HandleWebhook(w, r)
+				return
+			}
+		}
+	}
+	gwURL, _ := a.store.GetSetting(r.Context(), "openclaw_url")
+	gwTok, _ := a.store.GetSetting(r.Context(), "openclaw_token")
+	oc := openclaw.New(openclaw.Config{
+		GatewayURL: gwURL,
+		HookToken:  gwTok,
+	}, a.svc, a.store, "", nil)
+	oc.HandleWebhook(w, r)
+}
+
+func (a *api) discordInteractions(w http.ResponseWriter, r *http.Request) {
+	if a.svc != nil && a.svc.Hub != nil {
+		if adapter, ok := a.svc.Hub.Get("discord"); ok {
+			if dc, ok := adapter.(*discord.Adapter); ok {
+				dc.HandleInteraction(w, r)
+				return
+			}
+		}
+	}
+	dc := discord.New(discord.Config{}, a.svc, a.store, "", nil)
+	dc.HandleInteraction(w, r)
+}
+
+func (a *api) discordCapture(w http.ResponseWriter, r *http.Request) {
+	if a.svc != nil && a.svc.Hub != nil {
+		if adapter, ok := a.svc.Hub.Get("discord"); ok {
+			if dc, ok := adapter.(*discord.Adapter); ok {
+				dc.HandleCapture(w, r)
+				return
+			}
+		}
+	}
+	dc := discord.New(discord.Config{}, a.svc, a.store, "", nil)
+	dc.HandleCapture(w, r)
 }
 
 func (a *api) listTags(w http.ResponseWriter, r *http.Request) {

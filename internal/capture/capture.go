@@ -43,10 +43,13 @@ type File struct {
 }
 
 type Share struct {
-	Kind    string
-	URL     string
-	Caption string
-	Files   []File
+	Kind                string
+	URL                 string
+	Caption             string
+	Files               []File
+	SourceChannel       string
+	SourceChannelChatID string
+	SourceChannelMsgID  string
 }
 
 type Fetched struct {

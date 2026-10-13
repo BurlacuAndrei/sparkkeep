@@ -115,6 +115,9 @@ type Card struct {
 	SuggestedHorizon   string        `json:"suggested_horizon,omitempty"`
 	SuggestedTags      []string      `json:"suggested_tags,omitempty"`
 	ResearchState      string        `json:"research_state,omitempty"`
+	SourceChannel       string        `json:"source_channel,omitempty"`
+	SourceChannelChatID string        `json:"source_channel_chat_id,omitempty"`
+	SourceChannelMsgID  string        `json:"source_channel_msg_id,omitempty"`
 	CreatedAt          time.Time     `json:"created_at"`
 	UpdatedAt          time.Time     `json:"updated_at"`
 	Comments           []CardComment `json:"comments,omitempty"`
@@ -128,17 +131,18 @@ type CardComment struct {
 }
 
 type Capture struct {
-	ID          int64     `json:"id"`
-	Kind        string    `json:"kind"`
-	SourceURL   string    `json:"source_url"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	Text        string    `json:"text"`
-	Caption     string    `json:"caption"`
-	Transcript  string    `json:"transcript"`
-	ImageDigest string    `json:"image_digest"`
-	Notes       []string  `json:"notes"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID            int64     `json:"id"`
+	Kind          string    `json:"kind"`
+	SourceURL     string    `json:"source_url"`
+	SourceChannel string    `json:"source_channel,omitempty"`
+	Title         string    `json:"title"`
+	Description   string    `json:"description"`
+	Text          string    `json:"text"`
+	Caption       string    `json:"caption"`
+	Transcript    string    `json:"transcript"`
+	ImageDigest   string    `json:"image_digest"`
+	Notes         []string  `json:"notes"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type ResearchStep struct {
@@ -459,6 +463,9 @@ type CardPatch struct {
 	SuggestedHorizon   *string
 	SuggestedTags      *[]string
 	ResearchState      *string
+	SourceChannel       *string
+	SourceChannelChatID *string
+	SourceChannelMsgID  *string
 }
 
 type TagPair struct {

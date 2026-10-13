@@ -195,6 +195,25 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
   const [hasTgToken, setHasTgToken] = useState(false);
   const [tgChatId, setTgChatId] = useState('');
 
+  // Multi-Channel Integrations state
+  const [openclawUrl, setOpenclawUrl] = useState('http://localhost:18789');
+  const [openclawToken, setOpenclawToken] = useState('');
+  const [hasOpenclawToken, setHasOpenclawToken] = useState(false);
+  const [openclawChannel, setOpenclawChannel] = useState('whatsapp');
+  const [openclawTarget, setOpenclawTarget] = useState('');
+  const [openclawEnabled, setOpenclawEnabled] = useState(false);
+
+  const [discordToken, setDiscordToken] = useState('');
+  const [hasDiscordToken, setHasDiscordToken] = useState(false);
+  const [discordChannelId, setDiscordChannelId] = useState('');
+
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
+  const [hasSlackWebhook, setHasSlackWebhook] = useState(false);
+
+  const [channelTesting, setChannelTesting] = useState<string | null>(null);
+  const [digestPushing, setDigestPushing] = useState(false);
+  const [selectedDigestChannel, setSelectedDigestChannel] = useState('all');
+
   // Dashboard display preferences (persisted locally)
   const [defaultView, setDefaultView] = useState<'kanban' | 'digest'>(() => {
     if (typeof window !== 'undefined') {
@@ -277,6 +296,16 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
         if (res.settings.tg_chat_id) {
           setTgChatId(res.settings.tg_chat_id);
         }
+        if (res.settings.openclaw_url) setOpenclawUrl(res.settings.openclaw_url);
+        if (res.settings.openclaw_channel) setOpenclawChannel(res.settings.openclaw_channel);
+        if (res.settings.openclaw_target) setOpenclawTarget(res.settings.openclaw_target);
+        setHasOpenclawToken(Boolean(res.settings.has_openclaw_token));
+        setOpenclawEnabled(Boolean(res.settings.openclaw_enabled));
+
+        setHasDiscordToken(Boolean(res.settings.has_discord_token));
+        if (res.settings.discord_channel_id) setDiscordChannelId(res.settings.discord_channel_id);
+
+        setHasSlackWebhook(Boolean(res.settings.has_slack_webhook));
         setLoading(false);
       })
       .catch((err) => {
@@ -576,15 +605,47 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
         await api.patchSettings({ auth_token: authToken.trim() });
       }
 
-      if (tgToken.trim()) {
-        await api.patchSettings({ tg_token: tgToken.trim() });
-      }
+      await api.patchSettings({
+        ...(tgToken.trim() ? { tg_token: tgToken.trim() } : {}),
+        openclaw_url: openclawUrl.trim(),
+        ...(openclawToken.trim() ? { openclaw_token: openclawToken.trim() } : {}),
+        openclaw_channel: openclawChannel.trim(),
+        openclaw_target: openclawTarget.trim(),
+        openclaw_enabled: openclawEnabled,
+        ...(discordToken.trim() ? { discord_token: discordToken.trim() } : {}),
+        discord_channel_id: discordChannelId.trim(),
+        ...(slackWebhookUrl.trim() ? { slack_webhook_url: slackWebhookUrl.trim() } : {}),
+      });
 
       showToast('Platform preferences saved successfully.');
       onClose();
     } catch (err: unknown) {
       setError(api.getErrorMessage(err));
       setSubmitting(false);
+    }
+  };
+
+  const handleTestChannel = async (channelId: string) => {
+    setChannelTesting(channelId);
+    try {
+      const res = await api.testChannel(channelId);
+      showToast(res.message || `Test notification sent to ${channelId}!`);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
+    } finally {
+      setChannelTesting(null);
+    }
+  };
+
+  const handlePushDigest = async () => {
+    setDigestPushing(true);
+    try {
+      const res = await api.pushDigestToChannel(selectedDigestChannel);
+      showToast(res.message || 'Digest pushed successfully!');
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
+    } finally {
+      setDigestPushing(false);
     }
   };
 
@@ -1286,53 +1347,29 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
             )}
 
             {/* TAB 5: Integrations */}
+            {/* TAB 5: Channels & Integrations */}
             {activeTab === 'integrations' && (
               <div className="settings-panel" role="tabpanel">
+                {/* 1. Telegram Bot */}
                 <div className="settings-section">
-                  <div className="settings-section-header">
-                    <span className="settings-section-title">Universal Webhook API</span>
-                    <span className="settings-section-desc">
-                      Send data from Apple Shortcuts, Zapier, n8n, or browser extensions
-                    </span>
-                  </div>
-                  
-                  <div className="setup-info-box">
-                    <Terminal size={16} />
-                    <span>
-                      Use your master passphrase as the Bearer token to authorize requests.
-                    </span>
-                  </div>
-
-                  <div className="setup-form-group">
-                    <label>Example cURL Request</label>
-                    <pre style={{
-                      background: '#090a0f',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-subtle)',
-                      fontSize: '12px',
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--text-dim)',
-                      overflowX: 'auto',
-                      whiteSpace: 'pre-wrap'
-                    }}>
-{`curl -X POST ${window.location.origin}/api/v1/capture \\
-  -H "Authorization: Bearer YOUR_MASTER_PASSPHRASE" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "url": "https://example.com/article",
-    "text": "Some optional caption or notes"
-  }'`}
-                    </pre>
-                  </div>
-                </div>
-
-                <div className="settings-section" style={{ marginTop: '24px' }}>
-                  <div className="settings-section-header">
-                    <span className="settings-section-title">Telegram Bot Link</span>
-                    <span className="settings-section-desc">
-                      Forward messages, share links, and record voice notes directly into Sparkkeep
-                    </span>
+                  <div className="settings-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span className="settings-section-title">Telegram Bot</span>
+                      <span className="settings-section-desc">
+                        Forward messages, links, and audio notes directly into Sparkkeep with inline interactive buttons
+                      </span>
+                    </div>
+                    {hasTgToken && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                        disabled={channelTesting === 'telegram'}
+                        onClick={() => handleTestChannel('telegram')}
+                      >
+                        {channelTesting === 'telegram' ? 'Testing...' : 'Send Test Notification'}
+                      </button>
+                    )}
                   </div>
 
                   <div className="setup-form-group">
@@ -1379,6 +1416,261 @@ export function SettingsModal({ onClose, showToast, onOpenLicenseModal }: Settin
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* 2. OpenClaw Gateway Bridge */}
+                <div className="settings-section" style={{ marginTop: '24px' }}>
+                  <div className="settings-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span className="settings-section-title">OpenClaw Bridge</span>
+                        <span className={`settings-badge ${openclawEnabled || hasOpenclawToken ? 'success' : 'neutral'}`} style={{ fontSize: '11px', padding: '2px 8px' }}>
+                          {openclawEnabled || hasOpenclawToken ? 'Active' : 'Optional'}
+                        </span>
+                      </div>
+                      <span className="settings-section-desc">
+                        Connect to OpenClaw's Gateway daemon to capture and notify via WhatsApp, Signal, iMessage, and Matrix
+                      </span>
+                    </div>
+                    {(openclawEnabled || hasOpenclawToken) && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                        disabled={channelTesting === 'openclaw'}
+                        onClick={() => handleTestChannel('openclaw')}
+                      >
+                        {channelTesting === 'openclaw' ? 'Testing...' : 'Test Bridge Notification'}
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                    <input
+                      type="checkbox"
+                      id="openclaw-enabled-toggle"
+                      checked={openclawEnabled}
+                      onChange={(e) => setOpenclawEnabled(e.target.checked)}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                    />
+                    <label htmlFor="openclaw-enabled-toggle" style={{ cursor: 'pointer', fontSize: '13px', color: 'var(--text-main)', fontWeight: 500 }}>
+                      Enable OpenClaw Bridge Channel
+                    </label>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div className="setup-form-group">
+                      <label>OpenClaw Gateway URL</label>
+                      <input
+                        type="text"
+                        value={openclawUrl}
+                        onChange={(e) => setOpenclawUrl(e.target.value)}
+                        className="setup-input"
+                        placeholder="http://localhost:18789"
+                      />
+                    </div>
+
+                    <div className="setup-form-group">
+                      <label>Gateway Hook Token {hasOpenclawToken ? '(Configured)' : ''}</label>
+                      <input
+                        type="password"
+                        value={openclawToken}
+                        onChange={(e) => setOpenclawToken(e.target.value)}
+                        className="setup-input"
+                        placeholder={hasOpenclawToken ? '••••••••••••••••' : 'Secret hook token'}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '10px' }}>
+                    <div className="setup-form-group">
+                      <label>Default Outbound Channel</label>
+                      <select
+                        value={openclawChannel}
+                        onChange={(e) => setOpenclawChannel(e.target.value)}
+                        className="setup-input"
+                        style={{ background: 'var(--bg-input)', color: 'var(--text-main)' }}
+                      >
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="signal">Signal</option>
+                        <option value="imessage">iMessage</option>
+                        <option value="discord">Discord</option>
+                        <option value="slack">Slack</option>
+                        <option value="matrix">Matrix</option>
+                      </select>
+                    </div>
+
+                    <div className="setup-form-group">
+                      <label>Default Recipient Target</label>
+                      <input
+                        type="text"
+                        value={openclawTarget}
+                        onChange={(e) => setOpenclawTarget(e.target.value)}
+                        className="setup-input"
+                        placeholder="+15550199 or Chat ID"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="setup-info-box" style={{ marginTop: '12px' }}>
+                    <Terminal size={14} />
+                    <span style={{ fontSize: '12px' }}>
+                      Inbound webhook for OpenClaw skill / forwarder: <code>{window.location.origin}/api/v1/channels/openclaw/webhook</code>
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Discord Bot */}
+                <div className="settings-section" style={{ marginTop: '24px' }}>
+                  <div className="settings-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span className="settings-section-title">Discord Bot</span>
+                      <span className="settings-section-desc">
+                        Deliver Rich Embeds with action buttons into your private Discord server
+                      </span>
+                    </div>
+                    {hasDiscordToken && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                        disabled={channelTesting === 'discord'}
+                        onClick={() => handleTestChannel('discord')}
+                      >
+                        {channelTesting === 'discord' ? 'Testing...' : 'Send Test Embed'}
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div className="setup-form-group">
+                      <label>Discord Bot Token {hasDiscordToken ? '(Configured)' : ''}</label>
+                      <input
+                        type="password"
+                        value={discordToken}
+                        onChange={(e) => setDiscordToken(e.target.value)}
+                        className="setup-input"
+                        placeholder={hasDiscordToken ? '••••••••••••••••' : 'Discord Bot Token'}
+                      />
+                    </div>
+                    <div className="setup-form-group">
+                      <label>Discord Channel ID</label>
+                      <input
+                        type="text"
+                        value={discordChannelId}
+                        onChange={(e) => setDiscordChannelId(e.target.value)}
+                        className="setup-input"
+                        placeholder="e.g. 112233445566778899"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Slack */}
+                <div className="settings-section" style={{ marginTop: '24px' }}>
+                  <div className="settings-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span className="settings-section-title">Slack Webhook</span>
+                      <span className="settings-section-desc">
+                        Post Block Kit interactive cards into your Slack workplace
+                      </span>
+                    </div>
+                    {hasSlackWebhook && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                        disabled={channelTesting === 'slack'}
+                        onClick={() => handleTestChannel('slack')}
+                      >
+                        {channelTesting === 'slack' ? 'Testing...' : 'Send Test Message'}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="setup-form-group">
+                    <label>Slack Incoming Webhook URL {hasSlackWebhook ? '(Configured)' : ''}</label>
+                    <input
+                      type="password"
+                      value={slackWebhookUrl}
+                      onChange={(e) => setSlackWebhookUrl(e.target.value)}
+                      className="setup-input"
+                      placeholder={hasSlackWebhook ? '••••••••••••••••' : 'https://hooks.slack.com/services/...'}
+                    />
+                  </div>
+                </div>
+
+                {/* 5. Intelligence Digest Push */}
+                <div className="settings-section" style={{ marginTop: '24px' }}>
+                  <div className="settings-section-header">
+                    <span className="settings-section-title">Manual Digest Dispatch</span>
+                    <span className="settings-section-desc">
+                      Push your weekly sparks summary to any active channel on demand
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px' }}>
+                    <select
+                      value={selectedDigestChannel}
+                      onChange={(e) => setSelectedDigestChannel(e.target.value)}
+                      className="setup-input"
+                      style={{ maxWidth: '240px', background: 'var(--bg-input)', color: 'var(--text-main)' }}
+                    >
+                      <option value="all">All Configured Channels</option>
+                      <option value="telegram">Telegram</option>
+                      <option value="openclaw">OpenClaw Bridge</option>
+                      <option value="discord">Discord</option>
+                      <option value="slack">Slack</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={digestPushing}
+                      onClick={handlePushDigest}
+                    >
+                      {digestPushing ? 'Pushing Digest...' : 'Push Digest Now'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 6. Universal Webhook API (cURL) */}
+                <div className="settings-section" style={{ marginTop: '24px' }}>
+                  <div className="settings-section-header">
+                    <span className="settings-section-title">Direct Webhook API</span>
+                    <span className="settings-section-desc">
+                      Send data from Apple Shortcuts, Zapier, n8n, Raycast, or browser extensions
+                    </span>
+                  </div>
+
+                  <div className="setup-info-box">
+                    <Terminal size={16} />
+                    <span>
+                      Use your master passphrase as the Bearer token to authorize requests.
+                    </span>
+                  </div>
+
+                  <div className="setup-form-group">
+                    <label>Example cURL Request</label>
+                    <pre style={{
+                      background: '#090a0f',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '12px',
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-dim)',
+                      overflowX: 'auto',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+{`curl -X POST ${window.location.origin}/api/v1/capture \\
+  -H "Authorization: Bearer YOUR_MASTER_PASSPHRASE" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "url": "https://example.com/article",
+    "text": "Some optional caption or notes"
+  }'`}
+                    </pre>
+                  </div>
                 </div>
               </div>
             )}

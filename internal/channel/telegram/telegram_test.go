@@ -737,7 +737,7 @@ func TestCardButtons(t *testing.T) {
 	if len(btns) != 3 {
 		t.Fatalf("expected 3 rows of buttons, got %d", len(btns))
 	}
-	if len(btns[0]) != 2 || len(btns[1]) != 3 || len(btns[2]) != 2 {
+	if len(btns[0]) != 2 || len(btns[1]) != 3 || len(btns[2]) != 1 {
 		t.Fatalf("unexpected button layout: %v", btns)
 	}
 	if btns[0][0].Text != "🔬 Deep Research" || btns[0][0].CallbackData != "42:research" {
@@ -746,28 +746,25 @@ func TestCardButtons(t *testing.T) {
 	if btns[0][1].Text != "▾" || btns[0][1].CallbackData != "42:pb_menu" {
 		t.Errorf("button 0,1 mismatch: %+v", btns[0][1])
 	}
-	if btns[1][0].Text != "Inbox" || btns[1][0].CallbackData != "42:status:inbox" {
+	if btns[1][0].Text != "Short" || btns[1][0].CallbackData != "42:commit:short-term" {
 		t.Errorf("button 1,0 mismatch: %+v", btns[1][0])
 	}
-	if btns[1][1].Text != "Short" || btns[1][1].CallbackData != "42:commit:short-term" {
+	if btns[1][1].Text != "Medium" || btns[1][1].CallbackData != "42:commit:medium-term" {
 		t.Errorf("button 1,1 mismatch: %+v", btns[1][1])
 	}
-	if btns[1][2].Text != "Medium" || btns[1][2].CallbackData != "42:commit:medium-term" {
+	if btns[1][2].Text != "Long" || btns[1][2].CallbackData != "42:commit:long-term" {
 		t.Errorf("button 1,2 mismatch: %+v", btns[1][2])
 	}
-	if btns[2][0].Text != "Long" || btns[2][0].CallbackData != "42:commit:long-term" {
+	if btns[2][0].Text != "✕ Discard" || btns[2][0].CallbackData != "42:dismiss" {
 		t.Errorf("button 2,0 mismatch: %+v", btns[2][0])
-	}
-	if btns[2][1].Text != "✕ Discard" || btns[2][1].CallbackData != "42:dismiss" {
-		t.Errorf("button 2,1 mismatch: %+v", btns[2][1])
 	}
 
 	retryBtns := cardButtons(42, true)
-	if len(retryBtns[2]) != 3 {
-		t.Fatalf("expected 3 buttons in row 2 with retry, got %d", len(retryBtns[2]))
+	if len(retryBtns[2]) != 2 {
+		t.Fatalf("expected 2 buttons in row 2 with retry, got %d", len(retryBtns[2]))
 	}
-	if retryBtns[2][2].Text != "Retry" || retryBtns[2][2].CallbackData != "42:retry" {
-		t.Errorf("unexpected retry button: %+v", retryBtns[2][2])
+	if retryBtns[2][1].Text != "Retry" || retryBtns[2][1].CallbackData != "42:retry" {
+		t.Errorf("unexpected retry button: %+v", retryBtns[2][1])
 	}
 }
 
