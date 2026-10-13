@@ -72,6 +72,10 @@ type Service struct {
 	QueueConcurrency  int
 	QueuePollInterval time.Duration
 	Clock             func() time.Time
+	Config            config.Config
+	tgToken           string
+	tgCancel          context.CancelFunc
+	channelMu         sync.Mutex
 	queueWakeup       chan struct{}
 	queueWorkerStop   context.CancelFunc
 	workerMu          sync.Mutex
@@ -230,6 +234,7 @@ func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format
 		QueueConcurrency:  1,
 		QueuePollInterval: 1 * time.Second,
 		Clock:             func() time.Time { return time.Now().UTC() },
+		Config:            cfg,
 		queueWakeup:       make(chan struct{}, 1),
 		ctx:               ctx,
 	}

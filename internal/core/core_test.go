@@ -18,6 +18,7 @@ import (
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/asr"
 	"sparkkeep/internal/capture"
+	"sparkkeep/internal/channel"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
@@ -2072,4 +2073,114 @@ func TestFFmpegBinConfig(t *testing.T) {
 	bin := ffmpegBin(config.Config{FFmpegBin: "/nonexistent/binary"})
 	// Could be empty or "ffmpeg" if installed on host
 	_ = bin
+}
+
+func TestReloadChannels_DynamicallyUpdatesHub(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	st := newStubStore()
+	hub := channel.NewHub(t.Logf)
+	svc := &Service{
+		Store:   st,
+		Hub:     hub,
+		Channel: hub,
+		Logf:    t.Logf,
+		ctx:     ctx,
+	}
+
+	// 1. Initial reload: store is empty, hub should have 0 adapters
+	if err := svc.ReloadChannels(ctx); err != nil {
+		t.Fatalf("ReloadChannels: %v", err)
+	}
+	if len(hub.Adapters()) != 0 {
+		t.Fatalf("expected 0 adapters, got %d", len(hub.Adapters()))
+	}
+
+	// 2. Configure Telegram credentials
+	_ = st.SetSetting(ctx, "tg_token", "test-tg-token")
+	_ = st.SetSetting(ctx, "tg_chat_id", "123456")
+	if err := svc.ReloadChannels(ctx); err != nil {
+		t.Fatalf("ReloadChannels: %v", err)
+	}
+	tgAdp, ok := hub.Get("telegram")
+	if !ok || tgAdp == nil {
+		t.Fatalf("expected telegram adapter to be registered in hub")
+	}
+
+	// 3. Configure OpenClaw credentials
+	_ = st.SetSetting(ctx, "openclaw_url", "http://localhost:18789")
+	_ = st.SetSetting(ctx, "openclaw_token", "claw-secret")
+	_ = st.SetSetting(ctx, "openclaw_enabled", "true")
+	if err := svc.ReloadChannels(ctx); err != nil {
+		t.Fatalf("ReloadChannels: %v", err)
+	}
+	ocAdp, ok := hub.Get("openclaw")
+	if !ok || ocAdp == nil {
+		t.Fatalf("expected openclaw adapter to be registered in hub")
+	}
+
+	// 4. Configure Discord credentials
+	_ = st.SetSetting(ctx, "discord_token", "dc-bot-token")
+	_ = st.SetSetting(ctx, "discord_channel_id", "11223344")
+	if err := svc.ReloadChannels(ctx); err != nil {
+		t.Fatalf("ReloadChannels: %v", err)
+	}
+	dcAdp, ok := hub.Get("discord")
+	if !ok || dcAdp == nil {
+		t.Fatalf("expected discord adapter to be registered in hub")
+	}
+
+	// 5. Configure Slack credentials
+	_ = st.SetSetting(ctx, "slack_webhook_url", "https://hooks.slack.com/services/T/B/X")
+	if err := svc.ReloadChannels(ctx); err != nil {
+		t.Fatalf("ReloadChannels: %v", err)
+	}
+	slAdp, ok := hub.Get("slack")
+	if !ok || slAdp == nil {
+		t.Fatalf("expected slack adapter to be registered in hub")
+	}
+	if len(hub.Adapters()) != 4 {
+		t.Fatalf("expected 4 adapters registered, got %d", len(hub.Adapters()))
+	}
+
+	// 6. Dynamically clear Telegram and Slack credentials -> should unregister from hub
+	_ = st.SetSetting(ctx, "tg_token", "")
+	_ = st.SetSetting(ctx, "slack_webhook_url", "")
+	if err := svc.ReloadChannels(ctx); err != nil {
+		t.Fatalf("ReloadChannels: %v", err)
+	}
+	if _, ok := hub.Get("telegram"); ok {
+		t.Errorf("expected telegram to be unregistered after token cleared")
+	}
+	if _, ok := hub.Get("slack"); ok {
+		t.Errorf("expected slack to be unregistered after webhook cleared")
+	}
+	if _, ok := hub.Get("openclaw"); !ok {
+		t.Errorf("expected openclaw to remain registered")
+	}
+	if _, ok := hub.Get("discord"); !ok {
+		t.Errorf("expected discord to remain registered")
+	}
+
+	// 7. Disable OpenClaw -> should unregister
+	_ = st.SetSetting(ctx, "openclaw_enabled", "false")
+	if err := svc.ReloadChannels(ctx); err != nil {
+		t.Fatalf("ReloadChannels: %v", err)
+	}
+	if _, ok := hub.Get("openclaw"); ok {
+		t.Errorf("expected openclaw to be unregistered when disabled")
+	}
+
+	// 8. Remove Discord channel ID -> should unregister
+	_ = st.SetSetting(ctx, "discord_channel_id", "")
+	if err := svc.ReloadChannels(ctx); err != nil {
+		t.Fatalf("ReloadChannels: %v", err)
+	}
+	if _, ok := hub.Get("discord"); ok {
+		t.Errorf("expected discord to be unregistered when channel ID is empty")
+	}
+	if len(hub.Adapters()) != 0 {
+		t.Fatalf("expected 0 adapters left, got %d", len(hub.Adapters()))
+	}
 }

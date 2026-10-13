@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"sparkkeep/internal/analyze"
+	"sparkkeep/internal/channel"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
 	"sparkkeep/internal/license"
@@ -3322,5 +3323,55 @@ func TestChannelEndpoints(t *testing.T) {
 	rrDigest := doJSON(t, h, http.MethodPost, "/api/v1/digest/push?channel=telegram", "")
 	if rrDigest.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/digest/push: expected 200, got %d: %s", rrDigest.Code, rrDigest.Body.String())
+	}
+}
+
+func TestPatchSettings_HotReloadsChannels(t *testing.T) {
+	st := newStubStore()
+	hub := channel.NewHub(t.Logf)
+	svc := &core.Service{
+		Store:   st,
+		Hub:     hub,
+		Channel: hub,
+		Logf:    t.Logf,
+	}
+	h := webHandler(st, svc)
+
+	// 1. Initial state: no adapters
+	if len(hub.Adapters()) != 0 {
+		t.Fatalf("expected 0 adapters initially, got %d", len(hub.Adapters()))
+	}
+
+	// 2. Patch discord credentials via API
+	patchDC := `{"discord_token":"bot-tok","discord_channel_id":"998877"}`
+	rrDC := doJSON(t, h, http.MethodPatch, "/api/v1/settings", patchDC)
+	if rrDC.Code != http.StatusOK {
+		t.Fatalf("PATCH discord settings: expected 200, got %d: %s", rrDC.Code, rrDC.Body.String())
+	}
+	if _, ok := hub.Get("discord"); !ok {
+		t.Fatalf("expected discord adapter to be registered in svc.Hub")
+	}
+
+	// 3. Patch slack credentials via API
+	patchSlack := `{"slack_webhook_url":"https://hooks.slack.com/test"}`
+	rrSlack := doJSON(t, h, http.MethodPatch, "/api/v1/settings", patchSlack)
+	if rrSlack.Code != http.StatusOK {
+		t.Fatalf("PATCH slack settings: expected 200, got %d: %s", rrSlack.Code, rrSlack.Body.String())
+	}
+	if _, ok := hub.Get("slack"); !ok {
+		t.Fatalf("expected slack adapter to be registered in svc.Hub")
+	}
+
+	// 4. Clear discord credentials via API -> should hot-reload and unregister from hub
+	clearDC := `{"discord_token":""}`
+	rrClearDC := doJSON(t, h, http.MethodPatch, "/api/v1/settings", clearDC)
+	if rrClearDC.Code != http.StatusOK {
+		t.Fatalf("PATCH clear discord settings: expected 200, got %d: %s", rrClearDC.Code, rrClearDC.Body.String())
+	}
+	if _, ok := hub.Get("discord"); ok {
+		t.Fatalf("expected discord adapter to be unregistered from svc.Hub")
+	}
+	if _, ok := hub.Get("slack"); !ok {
+		t.Fatalf("expected slack adapter to remain registered in svc.Hub")
 	}
 }

@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,6 @@ import (
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
-	"sparkkeep/internal/core"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/store"
 )
@@ -261,12 +261,97 @@ func llmStub(t *testing.T, content string) *httptest.Server {
 	return srv
 }
 
+type testStubService struct {
+	Store   port.Store
+	Fetcher capture.Capture
+	Analyze *analyze.Client
+	Channel port.Channel
+	Logf    func(format string, args ...any)
+}
+
+func (s *testStubService) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
+	if share.URL != "" && s.Store != nil {
+		if _, err := s.Store.GetCardBySourceURL(ctx, share.URL); err == nil {
+			if s.Channel != nil {
+				_ = s.Channel.Notify(ctx, port.Notification{
+					Kind: "duplicate",
+					Card: port.Card{SourceURL: share.URL, Title: "Existing"},
+					Text: "Already captured",
+				})
+			}
+			return []int64{}, nil
+		}
+	}
+	fetched := s.Fetcher.Fetch(share)
+	fetched.Caption = share.Caption
+	if s.Analyze == nil {
+		return nil, errors.New("no analyze client")
+	}
+	res, err := s.Analyze.Analyze(ctx, fetched, nil)
+	if err != nil {
+		if s.Channel != nil {
+			_ = s.Channel.Notify(ctx, port.Notification{Kind: "analysis_failed", Text: "analysis failed"})
+		}
+		return nil, err
+	}
+	var ids []int64
+	for _, idea := range res.Cards {
+		card := port.Card{
+			Title:            idea.Title,
+			ExecutiveSummary: idea.Summary,
+			Horizon:          idea.Horizon,
+			Tags:             idea.Tags,
+			SourceURL:        share.URL,
+			Status:           port.StatusInbox,
+		}
+		if s.Store != nil {
+			saved, _ := s.Store.CreateCard(ctx, card)
+			card.ID = saved.ID
+		}
+		ids = append(ids, card.ID)
+		if s.Channel != nil {
+			_ = s.Channel.Notify(ctx, port.Notification{Kind: "created", Card: card})
+		}
+	}
+	return ids, nil
+}
+
+func (s *testStubService) Retry(ctx context.Context, cardID int64) ([]port.Card, error) {
+	card, err := s.Store.GetCard(ctx, cardID)
+	if err != nil {
+		return nil, err
+	}
+	fetched := capture.Fetched{URL: card.SourceNote}
+	res, err := s.Analyze.Analyze(ctx, fetched, nil)
+	if err != nil {
+		return nil, err
+	}
+	var cards []port.Card
+	for _, idea := range res.Cards {
+		c := port.Card{
+			ID:               cardID,
+			Title:            idea.Title,
+			ExecutiveSummary: idea.Summary,
+			Horizon:          idea.Horizon,
+			Tags:             idea.Tags,
+			Status:           port.StatusInbox,
+		}
+		cards = append(cards, c)
+		if s.Channel != nil {
+			_ = s.Channel.Notify(ctx, port.Notification{Kind: "created", Card: c})
+		}
+	}
+	return cards, nil
+}
+
+func (s *testStubService) GoResearch(ctx context.Context, cardID int64, playbookID ...*int64) {}
+
 // stubService is a capture pipeline that never touches the network: a text
 // share is echoed by the fetcher, the analyzer answers from llmStub.
-func stubService(t *testing.T, st port.Store, llm *httptest.Server) *core.Service {
+func stubService(t *testing.T, st port.Store, llm *httptest.Server) *testStubService {
 	t.Helper()
 	ac := analyze.New(config.Config{LLMBase: llm.URL, LLMModel: "stub"}, llm.Client())
-	return &core.Service{Store: st, Fetcher: capture.Capture{}, Analyze: ac, Logf: t.Logf}
+	return &testStubService{Store: st, Fetcher: capture.Capture{}, Analyze: ac, Logf: t.Logf}
 }
 
 func TestSendCardIncludesProposedActions(t *testing.T) {
@@ -831,7 +916,7 @@ func TestTelegramPlaybookPicker(t *testing.T) {
 		OwnerID: 12345,
 		baseURL: srv.URL,
 		Store:   st,
-		Service: &core.Service{Store: st},
+		Service: &testStubService{Store: st},
 		httpc:   srv.Client(),
 	}
 

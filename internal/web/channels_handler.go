@@ -426,6 +426,8 @@ func (a *api) listChannels(w http.ResponseWriter, r *http.Request) {
 	discordToken, _ := a.store.GetSetting(ctx, "discord_token")
 	discordChanID, _ := a.store.GetSetting(ctx, "discord_channel_id")
 	slackWebhook, _ := a.store.GetSetting(ctx, "slack_webhook_url")
+	slackBotToken, _ := a.store.GetSetting(ctx, "slack_bot_token")
+	slackChanID, _ := a.store.GetSetting(ctx, "slack_channel_id")
 
 	channels := []map[string]any{
 		{
@@ -467,10 +469,11 @@ func (a *api) listChannels(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 		{
-			"id":          "slack",
-			"name":        "Slack",
-			"enabled":     slackWebhook != "",
-			"has_webhook": slackWebhook != "",
+			"id":            "slack",
+			"name":          "Slack",
+			"enabled":       slackWebhook != "" || (slackBotToken != "" && slackChanID != ""),
+			"has_webhook":   slackWebhook != "",
+			"has_bot_token": slackBotToken != "",
 			"capabilities": map[string]any{
 				"buttons":   true,
 				"reactions": true,

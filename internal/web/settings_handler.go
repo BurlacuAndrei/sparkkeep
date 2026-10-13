@@ -137,6 +137,9 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 
 	if a.svc != nil {
 		a.svc.UpdateLLMConfig(b.LLMBase, b.LLMKey, b.LLMModel)
+		if b.TGToken != "" {
+			_ = a.svc.ReloadChannels(ctx)
+		}
 	}
 
 	if b.LLMModel != "" || b.LLMBase != "" {
@@ -335,30 +338,36 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 
 	discordToken, _ := a.store.GetSetting(ctx, "discord_token")
 	discordChanID, _ := a.store.GetSetting(ctx, "discord_channel_id")
+	discordPubKey, _ := a.store.GetSetting(ctx, "discord_public_key")
 	slackWebhook, _ := a.store.GetSetting(ctx, "slack_webhook_url")
+	slackBotToken, _ := a.store.GetSetting(ctx, "slack_bot_token")
+	slackChanID, _ := a.store.GetSetting(ctx, "slack_channel_id")
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
-			"llm_base":            activeBase,
-			"llm_model":           activeModel,
-			"has_llm_key":         hasKey,
-			"has_auth_token":      a.effectiveAuthToken(ctx) != "",
-			"llm_profiles":        pubProfiles,
-			"llm_roles":           llmRoles,
-			"llm_token_caps":      tokenCaps,
-			"default_playbook_id": defaultPlaybookID,
-			"user_profile":        userProfile,
-			"tg_chat_id":          tgChatID,
-			"has_tg_token":        tgToken != "",
-			"openclaw_url":        openclawURL,
-			"openclaw_channel":    openclawChan,
-			"openclaw_target":     openclawTarget,
-			"openclaw_enabled":    openclawEnabled == "true",
-			"has_openclaw_token":  openclawToken != "",
-			"discord_channel_id":  discordChanID,
-			"has_discord_token":   discordToken != "",
-			"has_slack_webhook":   slackWebhook != "",
+			"llm_base":               activeBase,
+			"llm_model":              activeModel,
+			"has_llm_key":            hasKey,
+			"has_auth_token":         a.effectiveAuthToken(ctx) != "",
+			"llm_profiles":           pubProfiles,
+			"llm_roles":              llmRoles,
+			"llm_token_caps":         tokenCaps,
+			"default_playbook_id":    defaultPlaybookID,
+			"user_profile":           userProfile,
+			"tg_chat_id":             tgChatID,
+			"has_tg_token":           tgToken != "",
+			"openclaw_url":           openclawURL,
+			"openclaw_channel":       openclawChan,
+			"openclaw_target":        openclawTarget,
+			"openclaw_enabled":       openclawEnabled == "true",
+			"has_openclaw_token":     openclawToken != "",
+			"discord_channel_id":     discordChanID,
+			"has_discord_token":      discordToken != "",
+			"has_discord_public_key": discordPubKey != "",
+			"has_slack_webhook":      slackWebhook != "",
+			"has_slack_bot_token":    slackBotToken != "",
+			"slack_channel_id":       slackChanID,
 		},
 	})
 }
@@ -385,7 +394,10 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 		OpenClawEnabled   *bool              `json:"openclaw_enabled,omitempty"`
 		DiscordToken      *string            `json:"discord_token,omitempty"`
 		DiscordChannelID  *string            `json:"discord_channel_id,omitempty"`
+		DiscordPublicKey  *string            `json:"discord_public_key,omitempty"`
 		SlackWebhookURL   *string            `json:"slack_webhook_url,omitempty"`
+		SlackBotToken     *string            `json:"slack_bot_token,omitempty"`
+		SlackChannelID    *string            `json:"slack_channel_id,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -461,8 +473,38 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	if b.DiscordChannelID != nil {
 		_ = a.store.SetSetting(ctx, "discord_channel_id", *b.DiscordChannelID)
 	}
+	if b.DiscordPublicKey != nil {
+		_ = a.store.SetSetting(ctx, "discord_public_key", *b.DiscordPublicKey)
+	}
 	if b.SlackWebhookURL != nil {
 		_ = a.store.SetSetting(ctx, "slack_webhook_url", *b.SlackWebhookURL)
+	}
+	if b.SlackBotToken != nil {
+		_ = a.store.SetSetting(ctx, "slack_bot_token", *b.SlackBotToken)
+	}
+	if b.SlackChannelID != nil {
+		_ = a.store.SetSetting(ctx, "slack_channel_id", *b.SlackChannelID)
+	}
+
+	channelsChanged := b.TGToken != nil ||
+		b.TGChatID != nil ||
+		b.OpenClawURL != nil ||
+		b.OpenClawToken != nil ||
+		b.OpenClawChannel != nil ||
+		b.OpenClawTarget != nil ||
+		b.OpenClawEnabled != nil ||
+		b.DiscordToken != nil ||
+		b.DiscordChannelID != nil ||
+		b.DiscordPublicKey != nil ||
+		b.SlackWebhookURL != nil ||
+		b.SlackBotToken != nil ||
+		b.SlackChannelID != nil
+
+	if a.svc != nil && channelsChanged {
+		if err := a.svc.ReloadChannels(ctx); err != nil {
+			a.fail(w, err)
+			return
+		}
 	}
 
 	settings, _ := a.store.ListSettings(ctx)

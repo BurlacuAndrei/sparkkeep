@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"sparkkeep/internal/capture"
-	"sparkkeep/internal/core"
 	"sparkkeep/internal/port"
 )
 
@@ -35,6 +34,13 @@ const apiBase = "https://api.telegram.org"
 var _ port.Channel = (*Adapter)(nil)
 var _ port.ChannelAdapter = (*Adapter)(nil)
 
+// Service abstracts the orchestration methods consumed by the Telegram adapter.
+type Service interface {
+	CaptureShare(ctx context.Context, share capture.Share) ([]int64, error)
+	Retry(ctx context.Context, cardID int64) ([]port.Card, error)
+	GoResearch(ctx context.Context, cardID int64, playbookID ...*int64)
+}
+
 // Adapter implements port.Channel (outbound Notify) and the long-poll Run
 // loop. Service and Store are injected; callback/reaction handling uses the
 // injected Store directly, inbound messages go through Service.Capture.
@@ -42,7 +48,7 @@ type Adapter struct {
 	Token     string
 	OwnerID   int64 // configured TG_CHAT_ID; everyone else is ignored
 	PublicURL string
-	Service   *core.Service
+	Service   Service
 	Store     port.Store
 	Logf      func(format string, args ...any)
 
@@ -953,7 +959,7 @@ func (a *Adapter) sendMorningDigest(ctx context.Context) {
 		}
 	}
 
-	msg := core.FormatMorningResearchDigest(runs, cardTitles, a.PublicURL)
+	msg := FormatMorningResearchDigest(runs, cardTitles, a.PublicURL)
 	if _, err := a.sendMessage(ctx, msg, 0, nil); err != nil {
 		a.logf("telegram: morning digest: sendMessage: %v", err)
 		return

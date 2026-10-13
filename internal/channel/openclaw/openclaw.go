@@ -16,11 +16,16 @@ import (
 	"time"
 
 	"sparkkeep/internal/capture"
-	"sparkkeep/internal/core"
 	"sparkkeep/internal/port"
 )
 
 var _ port.ChannelAdapter = (*Adapter)(nil)
+
+// Service abstracts the orchestration methods consumed by the OpenClaw adapter.
+type Service interface {
+	CaptureShare(ctx context.Context, share capture.Share) ([]int64, error)
+	GoResearch(ctx context.Context, cardID int64, playbookID ...*int64)
+}
 
 // Adapter connects Sparkkeep with a local or remote OpenClaw Gateway.
 type Adapter struct {
@@ -29,7 +34,7 @@ type Adapter struct {
 	DefaultChannel string // e.g. "whatsapp", "signal", "discord"
 	DefaultTarget  string // e.g. "+15550199" or user ID
 	PublicURL      string
-	Service        *core.Service
+	Service        Service
 	Store          port.Store
 	Logf           func(format string, args ...any)
 
@@ -47,7 +52,7 @@ type Config struct {
 }
 
 // New constructs an OpenClaw bridge adapter.
-func New(cfg Config, svc *core.Service, st port.Store, publicURL string, logf func(format string, args ...any)) *Adapter {
+func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(format string, args ...any)) *Adapter {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
@@ -356,14 +361,9 @@ func (a *Adapter) handleActionCommand(ctx context.Context, text string) (bool, s
 
 	switch cmd {
 	case "research", "deep", "1":
-		if a.Service != nil && a.Service.Runner != nil && a.Store != nil {
-			card, err := a.Store.GetCard(ctx, cardID)
-			if err == nil {
-				go func() {
-					_, _ = a.Service.Runner.Run(context.Background(), card)
-				}()
-				return true, fmt.Sprintf("Started Deep Research for card %d", cardID)
-			}
+		if a.Service != nil {
+			a.Service.GoResearch(context.Background(), cardID)
+			return true, fmt.Sprintf("Started Deep Research for card %d", cardID)
 		}
 	case "short", "2":
 		h := port.HorizonShortTerm

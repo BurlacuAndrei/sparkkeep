@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"sparkkeep/internal/core"
 	"sparkkeep/internal/port"
 )
 
@@ -26,19 +25,22 @@ type Config struct {
 	Enabled    bool   `json:"enabled"`
 }
 
+// Service abstracts the orchestration methods consumed by the Slack adapter.
+type Service interface{}
+
 type Adapter struct {
 	WebhookURL string
 	BotToken   string
 	ChannelID  string
 	PublicURL  string
-	Service    *core.Service
+	Service    Service
 	Store      port.Store
 	Logf       func(format string, args ...any)
 
 	client *http.Client
 }
 
-func New(cfg Config, svc *core.Service, st port.Store, publicURL string, logf func(format string, args ...any)) *Adapter {
+func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(format string, args ...any)) *Adapter {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
