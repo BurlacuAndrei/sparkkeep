@@ -752,6 +752,14 @@ func (s *stubStore) ListCardComments(_ context.Context, cardID int64) ([]port.Ca
 	return nil, nil
 }
 
+func (s *stubStore) RecordChannelMessage(_ context.Context, _, _ string, _ int64) error {
+	return nil
+}
+
+func (s *stubStore) GetCardIDByChannelMessage(_ context.Context, _, _ string) (int64, error) {
+	return 0, port.ErrNotFound
+}
+
 func (s *stubStore) Close() error { return nil }
 
 func (s *stubStore) researchFor(cardID int64) bool {

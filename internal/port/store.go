@@ -79,4 +79,7 @@ type Store interface {
 	BatchQueueResearch(ctx context.Context, cardIDs []int64, playbookID *int64, scheduledFor *time.Time, batchID string) ([]Research, error)
 	FindCardsForRule(ctx context.Context, filter ResearchRuleFilter, maxCards int, asOf time.Time) ([]Card, error)
 	ListCompletedResearchSince(ctx context.Context, since time.Time) ([]Research, error)
+	// Channel message mapping persistence
+	RecordChannelMessage(ctx context.Context, channel, messageID string, cardID int64) error
+	GetCardIDByChannelMessage(ctx context.Context, channel, messageID string) (int64, error)
 }

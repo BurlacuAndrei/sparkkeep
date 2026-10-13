@@ -30,14 +30,17 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 18 {
-		t.Fatalf("version = %d, want 18", version)
+	if version != 19 {
+		t.Fatalf("version = %d, want 19", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM card_references LIMIT 1`); err != nil {
 		t.Fatalf("card_references table: %v", err)
+	}
+	if _, err := s.db.Exec(`SELECT 1 FROM channel_messages LIMIT 1`); err != nil {
+		t.Fatalf("channel_messages table: %v", err)
 	}
 }
 
@@ -1076,8 +1079,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 18 {
-		t.Fatalf("version = %d, want 18", version)
+	if version != 19 {
+		t.Fatalf("version = %d, want 19", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1189,8 +1192,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 18 {
-		t.Fatalf("version = %d, want 18", version)
+	if version != 19 {
+		t.Fatalf("version = %d, want 19", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -2020,6 +2023,77 @@ func TestConcurrentAccessUnderLoad(t *testing.T) {
 	}
 	if len(cards) != goroutines*opsPerWorker {
 		t.Fatalf("got %d cards, want %d", len(cards), goroutines*opsPerWorker)
+	}
+}
+
+func TestChannelMessages(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	c1, err := s.CreateCard(ctx, port.Card{Title: "Card 1", Horizon: port.HorizonShortTerm})
+	if err != nil {
+		t.Fatalf("create card 1: %v", err)
+	}
+	c2, err := s.CreateCard(ctx, port.Card{Title: "Card 2", Horizon: port.HorizonLongTerm})
+	if err != nil {
+		t.Fatalf("create card 2: %v", err)
+	}
+
+	// 1. Not found lookup
+	if _, err := s.GetCardIDByChannelMessage(ctx, "telegram", "999"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("GetCardIDByChannelMessage non-existent: want port.ErrNotFound, got %v", err)
+	}
+
+	// 2. Record channel message
+	if err := s.RecordChannelMessage(ctx, "telegram", "1001", c1.ID); err != nil {
+		t.Fatalf("RecordChannelMessage: %v", err)
+	}
+
+	// 3. Lookup recorded message
+	gotCardID, err := s.GetCardIDByChannelMessage(ctx, "telegram", "1001")
+	if err != nil {
+		t.Fatalf("GetCardIDByChannelMessage: %v", err)
+	}
+	if gotCardID != c1.ID {
+		t.Fatalf("got card ID %d, want %d", gotCardID, c1.ID)
+	}
+
+	// 4. Same message ID on different channel is distinct
+	if err := s.RecordChannelMessage(ctx, "discord", "1001", c2.ID); err != nil {
+		t.Fatalf("RecordChannelMessage discord: %v", err)
+	}
+	discordCardID, err := s.GetCardIDByChannelMessage(ctx, "discord", "1001")
+	if err != nil {
+		t.Fatalf("GetCardIDByChannelMessage discord: %v", err)
+	}
+	if discordCardID != c2.ID {
+		t.Fatalf("got discord card ID %d, want %d", discordCardID, c2.ID)
+	}
+	tgCardID, err := s.GetCardIDByChannelMessage(ctx, "telegram", "1001")
+	if err != nil || tgCardID != c1.ID {
+		t.Fatalf("telegram mapping altered: got %d, want %d (err: %v)", tgCardID, c1.ID, err)
+	}
+
+	// 5. Upsert updates card_id
+	if err := s.RecordChannelMessage(ctx, "telegram", "1001", c2.ID); err != nil {
+		t.Fatalf("RecordChannelMessage update: %v", err)
+	}
+	updatedCardID, err := s.GetCardIDByChannelMessage(ctx, "telegram", "1001")
+	if err != nil {
+		t.Fatalf("GetCardIDByChannelMessage updated: %v", err)
+	}
+	if updatedCardID != c2.ID {
+		t.Fatalf("got updated card ID %d, want %d", updatedCardID, c2.ID)
+	}
+
+	// 6. Cascade delete: deleting card removes channel_message rows
+	if err := s.DeleteCard(ctx, c2.ID); err != nil {
+		t.Fatalf("DeleteCard: %v", err)
+	}
+	if _, err := s.GetCardIDByChannelMessage(ctx, "telegram", "1001"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("channel message after card delete: want port.ErrNotFound, got %v", err)
+	}
+	if _, err := s.GetCardIDByChannelMessage(ctx, "discord", "1001"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("discord channel message after card delete: want port.ErrNotFound, got %v", err)
 	}
 }
 

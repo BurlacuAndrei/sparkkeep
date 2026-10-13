@@ -344,7 +344,7 @@ func (a *Adapter) editMessageText(ctx context.Context, chatID int64, messageID i
 		return err
 	}
 	if cardID > 0 {
-		a.trackMessage(messageID, cardID)
+		a.recordMsgCard(messageID, cardID)
 	}
 	return nil
 }
@@ -411,7 +411,7 @@ func (a *Adapter) sendMessageReply(ctx context.Context, text string, replyTo int
 	if err := json.Unmarshal(res, &sent); err != nil {
 		return 0, fmt.Errorf("telegram: sendMessage result: %w", err)
 	}
-	a.trackMessage(sent.MessageID, cardID)
+	a.recordMsgCard(sent.MessageID, cardID)
 	return sent.MessageID, nil
 }
 
@@ -792,7 +792,7 @@ func (a *Adapter) handleMessage(m *message) {
 		// A reply to a card the bot posted organizes that card. A reply to
 		// anything else (or to a card evicted from the tracked map) falls
 		// through, so the message is never lost.
-		if cardID := a.cardForMessage(m.ReplyToMessage.MessageID); cardID > 0 {
+		if cardID := a.cardForMsg(m.ReplyToMessage.MessageID); cardID > 0 {
 			raw := m.Text
 			if raw == "" {
 				raw = m.Caption
@@ -1373,7 +1373,7 @@ func (a *Adapter) handleReaction(r *messageReaction) {
 	if horizon == "" {
 		return
 	}
-	cardID := a.cardForMessage(r.MessageID)
+	cardID := a.cardForMsg(r.MessageID)
 	if cardID == 0 {
 		return
 	}
@@ -1386,7 +1386,7 @@ func (a *Adapter) handleReaction(r *messageReaction) {
 // grow without limit over months of use.
 const maxTrackedMessages = 500
 
-func (a *Adapter) trackMessage(msgID, cardID int64) {
+func (a *Adapter) recordMsgCard(msgID, cardID int64) {
 	if msgID == 0 || cardID == 0 {
 		return
 	}
@@ -1403,15 +1403,54 @@ func (a *Adapter) trackMessage(msgID, cardID int64) {
 	}
 	a.msgCard[msgID] = cardID
 	a.msgMu.Unlock()
+
+	if a.Store != nil {
+		if err := a.Store.RecordChannelMessage(context.Background(), a.ID(), strconv.FormatInt(msgID, 10), cardID); err != nil {
+			a.logf("telegram: record channel message %d -> %d: %v", msgID, cardID, err)
+		}
+	}
+}
+
+func (a *Adapter) cardForMsg(msgID int64) int64 {
+	if msgID == 0 {
+		return 0
+	}
+	a.msgMu.Lock()
+	if a.msgCard != nil {
+		if cardID, ok := a.msgCard[msgID]; ok && cardID > 0 {
+			a.msgMu.Unlock()
+			return cardID
+		}
+	}
+	a.msgMu.Unlock()
+
+	if a.Store != nil {
+		cardID, err := a.Store.GetCardIDByChannelMessage(context.Background(), a.ID(), strconv.FormatInt(msgID, 10))
+		if err == nil && cardID > 0 {
+			a.msgMu.Lock()
+			if a.msgCard == nil {
+				a.msgCard = map[int64]int64{}
+			}
+			if len(a.msgCard) >= maxTrackedMessages {
+				for k := range a.msgCard {
+					delete(a.msgCard, k)
+					break
+				}
+			}
+			a.msgCard[msgID] = cardID
+			a.msgMu.Unlock()
+			return cardID
+		}
+	}
+	return 0
+}
+
+func (a *Adapter) trackMessage(msgID, cardID int64) {
+	a.recordMsgCard(msgID, cardID)
 }
 
 func (a *Adapter) cardForMessage(msgID int64) int64 {
-	a.msgMu.Lock()
-	defer a.msgMu.Unlock()
-	if a.msgCard == nil {
-		return 0
-	}
-	return a.msgCard[msgID]
+	return a.cardForMsg(msgID)
 }
 
 // --- offset persistence -----------------------------------------------------

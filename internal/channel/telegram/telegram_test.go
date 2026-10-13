@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,22 +18,29 @@ import (
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
 	"sparkkeep/internal/port"
+	"sparkkeep/internal/store"
 )
 
 // stubStore embeds the interface so only the methods these tests exercise are
 // implemented; anything else panics instead of pretending to work.
 type stubStore struct {
 	port.Store
-	cards      map[int64]port.Card
-	captures   map[int64]port.Capture
-	researches map[int64]port.Research
-	nextCard   int64
-	nextCap    int64
-	nextRes    int64
+	cards       map[int64]port.Card
+	captures    map[int64]port.Capture
+	researches  map[int64]port.Research
+	channelMsgs map[string]int64
+	nextCard    int64
+	nextCap     int64
+	nextRes     int64
 }
 
 func newStubStore() *stubStore {
-	return &stubStore{cards: map[int64]port.Card{}, captures: map[int64]port.Capture{}, researches: map[int64]port.Research{}}
+	return &stubStore{
+		cards:       map[int64]port.Card{},
+		captures:    map[int64]port.Capture{},
+		researches:  map[int64]port.Research{},
+		channelMsgs: map[string]int64{},
+	}
 }
 
 func (s *stubStore) GetSetting(_ context.Context, _ string) (string, error) {
@@ -186,6 +194,23 @@ func (s *stubStore) HasActiveResearch(_ context.Context, cardID int64) (bool, er
 
 func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string, playbookID ...*int64) (port.Research, error) {
 	return port.Research{ID: 1, CardID: cardID, Status: "queued"}, nil
+}
+
+func (s *stubStore) RecordChannelMessage(_ context.Context, channel, messageID string, cardID int64) error {
+	if s.channelMsgs == nil {
+		s.channelMsgs = map[string]int64{}
+	}
+	s.channelMsgs[channel+":"+messageID] = cardID
+	return nil
+}
+
+func (s *stubStore) GetCardIDByChannelMessage(_ context.Context, channel, messageID string) (int64, error) {
+	if s.channelMsgs != nil {
+		if id, ok := s.channelMsgs[channel+":"+messageID]; ok {
+			return id, nil
+		}
+	}
+	return 0, port.ErrNotFound
 }
 
 // stubTelegram points the adapter built by build at a stub Telegram API
@@ -1258,5 +1283,151 @@ func TestTelegramResearchCallbackTracksAndCleansMessage(t *testing.T) {
 	// Verify the original message was popped
 	if _, ok := a.popResearchMessage(c.ID); ok {
 		t.Errorf("expected research message to be popped after notify")
+	}
+}
+
+func TestCardForMsg_ResolvesFromStoreAfterMemoryReset(t *testing.T) {
+	st := newStubStore()
+	a := &Adapter{Token: "tok", OwnerID: 1, Store: st}
+
+	a.recordMsgCard(500, 42)
+
+	if got := a.cardForMsg(500); got != 42 {
+		t.Fatalf("cardForMsg before reset: got %d, want 42", got)
+	}
+
+	// Reset in-memory cache to simulate cache eviction or memory wipe
+	a.msgMu.Lock()
+	a.msgCard = nil
+	a.msgMu.Unlock()
+
+	// Resolves from store as fallback
+	if got := a.cardForMsg(500); got != 42 {
+		t.Fatalf("cardForMsg after memory reset: got %d, want 42", got)
+	}
+
+	// Verify in-memory map was repopulated
+	a.msgMu.Lock()
+	cachedID := a.msgCard[500]
+	a.msgMu.Unlock()
+	if cachedID != 42 {
+		t.Fatalf("cached ID after reload: got %d, want 42", cachedID)
+	}
+
+	// Also verify cardForMessage alias
+	a.msgMu.Lock()
+	a.msgCard = nil
+	a.msgMu.Unlock()
+	if got := a.cardForMessage(500); got != 42 {
+		t.Fatalf("cardForMessage after memory reset: got %d, want 42", got)
+	}
+
+	// Unknown message returns 0
+	if got := a.cardForMsg(999); got != 0 {
+		t.Fatalf("cardForMsg for unknown msg: got %d, want 0", got)
+	}
+}
+
+func TestCardForMsg_ServerRestart_WithRealStore(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test_restart.db")
+	st1, err := store.New(dbPath)
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+
+	ctx := context.Background()
+	c, err := st1.CreateCard(ctx, port.Card{Title: "Persisted Card", Horizon: port.HorizonLongTerm})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	a1 := &Adapter{Token: "tok", OwnerID: 1, Store: st1}
+	a1.recordMsgCard(777, c.ID)
+
+	// Close store and simulate full server shutdown
+	if err := st1.Close(); err != nil {
+		t.Fatalf("Close st1: %v", err)
+	}
+
+	// Server restarts: open store fresh and instantiate new Adapter
+	st2, err := store.New(dbPath)
+	if err != nil {
+		t.Fatalf("store.New on restart: %v", err)
+	}
+	defer st2.Close()
+
+	a2 := &Adapter{Token: "tok", OwnerID: 1, Store: st2}
+	if got := a2.cardForMsg(777); got != c.ID {
+		t.Fatalf("a2.cardForMsg(777) after restart: got %d, want %d", got, c.ID)
+	}
+	if got := a2.cardForMsg(9999); got != 0 {
+		t.Fatalf("a2.cardForMsg(9999): got %d, want 0", got)
+	}
+}
+
+func TestReactionAndReplyAfterRestart(t *testing.T) {
+	st := newStubStore()
+	c, err := st.CreateCard(context.Background(), port.Card{
+		Title:   "Watch the talk",
+		Tags:    []string{"ml"},
+		Horizon: port.HorizonShortTerm,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	svc := stubService(t, st, llmStub(t, `[{"title":"New","summary":"s","horizon":"short-term","tags":[],"links":[]}]`))
+	a := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+
+	// Bot sent card out as message 500
+	a.recordMsgCard(500, c.ID)
+
+	// Simulate restart: wipe in-memory cache
+	a.msgMu.Lock()
+	a.msgCard = nil
+	a.msgMu.Unlock()
+
+	// 1. Reaction tracking after restart
+	a.handleReaction(&messageReaction{
+		MessageID: 500,
+		Chat:      &chat{ID: 1},
+		NewReaction: []emojiReaction{
+			{Type: "emoji", Emoji: "⭐"}, // maps to long-term
+		},
+	})
+
+	cardAfterReaction, err := st.GetCard(context.Background(), c.ID)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if cardAfterReaction.Horizon != port.HorizonLongTerm {
+		t.Fatalf("horizon after reaction = %q, want %q", cardAfterReaction.Horizon, port.HorizonLongTerm)
+	}
+
+	// Simulate another restart: wipe in-memory cache again
+	a.msgMu.Lock()
+	a.msgCard = nil
+	a.msgMu.Unlock()
+
+	// 2. Organize-by-reply after restart
+	sent := stubTelegram(t, func() *Adapter { return a }, func(ad *Adapter) {
+		ad.handleMessage(&message{
+			MessageID:      501,
+			Chat:           &chat{ID: 1},
+			Text:           "#AI #ML extra note",
+			ReplyToMessage: &message{MessageID: 500},
+		})
+	})
+	_ = sent
+
+	if len(st.cards) != 1 {
+		t.Fatalf("cards = %d, want 1 (organized reply must not create a new card)", len(st.cards))
+	}
+	cardAfterReply := st.cards[c.ID]
+	if !slices.Contains(cardAfterReply.Tags, "ai") {
+		t.Errorf("tags = %v, want containing 'ai'", cardAfterReply.Tags)
+	}
+	if !strings.Contains(cardAfterReply.SourceNote, "extra note") {
+		t.Errorf("sourceNote = %q, want containing 'extra note'", cardAfterReply.SourceNote)
 	}
 }
