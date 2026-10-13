@@ -33,6 +33,19 @@ function AppContent() {
   const [horizon, setHorizon] = useState('short-term');
   const [selectedTag, setSelectedTag] = useState('');
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  // Debounce search query to prevent hammering the backend on every keystroke
+  useEffect(() => {
+    if (!query) {
+      setDebouncedQuery('');
+      return;
+    }
+    const handler = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [query]);
 
   // Modals & Feedback
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
@@ -68,13 +81,13 @@ function AppContent() {
     try {
       const data = await api.fetchCards({
         tag: selectedTag,
-        q: query,
+        q: debouncedQuery,
       });
       setCards(data);
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
-  }, [selectedTag, query, showToast]);
+  }, [selectedTag, debouncedQuery, showToast]);
 
   const loadTags = useCallback(async () => {
     try {
@@ -283,18 +296,17 @@ function AppContent() {
     >
       <div className="app-container">
         <Header
-        query={query}
-        onQueryChange={setQuery}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        onOpenNewCard={() => setIsNewModalOpen(true)}
-        onTriggerResearch={handleResearch}
-        flashMessage={toast?.message || ''}
-        isPro={licenseStatus?.tier === 'pro'}
-        onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
-        onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
-        triageCount={triageCount}
-      />
+          query={query}
+          onQueryChange={setQuery}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onOpenNewCard={() => setIsNewModalOpen(true)}
+          flashMessage={toast?.message || ''}
+          isPro={licenseStatus?.tier === 'pro'}
+          onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
+          onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+          triageCount={triageCount}
+        />
 
       <div className={`main-layout ${viewMode === 'digest' ? 'no-sidebar' : ''}`}>
         {viewMode !== 'digest' && (
@@ -340,10 +352,15 @@ function AppContent() {
           {viewMode === 'digest' && (
             <DigestView
               digest={digest}
+              query={debouncedQuery}
               onSelectCard={setSelectedCard}
               onStatusChange={handleStatusChange}
               onResearch={handleResearch}
               onRetry={handleRetry}
+              isPro={licenseStatus?.tier === 'pro'}
+              onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
+              showToast={showToast}
+              onRefresh={loadDigest}
             />
           )}
         </main>

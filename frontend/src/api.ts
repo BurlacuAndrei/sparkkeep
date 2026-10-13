@@ -1,4 +1,4 @@
-import { Card, Capture, Tag, DigestData, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig } from './types';
+import { Card, Capture, Tag, DigestData, DigestSynthesisResult, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig } from './types';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -103,8 +103,23 @@ export async function fetchTags(): Promise<Tag[]> {
   return res.tags || [];
 }
 
-export async function fetchDigest(): Promise<DigestData> {
-  return request<DigestData>('/api/v1/digest');
+export async function fetchDigest(days?: number): Promise<DigestData> {
+  const query = days ? `?days=${days}` : '';
+  return request<DigestData>(`/api/v1/digest${query}`);
+}
+
+export async function synthesizeDigest(days?: number): Promise<DigestSynthesisResult> {
+  const query = days ? `?days=${days}` : '';
+  return request<DigestSynthesisResult>(`/api/v1/digest/synthesize${query}`, {
+    method: 'POST',
+  });
+}
+
+export async function pushDigestToTelegram(days?: number): Promise<{ ok: boolean; message?: string; error?: string }> {
+  const query = days ? `?days=${days}` : '';
+  return request<{ ok: boolean; message?: string; error?: string }>(`/api/v1/digest/telegram${query}`, {
+    method: 'POST',
+  });
 }
 
 export async function triggerResearch(cardId: number, playbookId?: number): Promise<{ ok: boolean; accepted: boolean; playbook?: Playbook }> {

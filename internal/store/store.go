@@ -431,8 +431,8 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 	}
 	if f.Query != "" {
 		q := "%" + strings.ToLower(f.Query) + "%"
-		where = append(where, "(LOWER(title) LIKE ? OR LOWER(summary) LIKE ? OR LOWER(executive_summary) LIKE ? OR LOWER(tldr) LIKE ?)")
-		args = append(args, q, q, q, q)
+		where = append(where, "(LOWER(title) LIKE ? OR LOWER(summary) LIKE ? OR LOWER(executive_summary) LIKE ? OR LOWER(tldr) LIKE ? OR LOWER(why_care) LIKE ? OR LOWER(proposed_actions) LIKE ? OR LOWER(source_url) LIKE ? OR LOWER(source_note) LIKE ? OR EXISTS (SELECT 1 FROM cards_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.card_id = cards.id AND LOWER(t.name) LIKE ?))")
+		args = append(args, q, q, q, q, q, q, q, q, q)
 	}
 	if !f.Since.IsZero() {
 		where = append(where, "created_at >= ?")

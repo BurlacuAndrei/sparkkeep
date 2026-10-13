@@ -852,6 +852,82 @@ func TestWeeklyDigest(t *testing.T) {
 	}
 }
 
+func TestWeeklyDigest_Extended(t *testing.T) {
+	st := newStubStore()
+	now := time.Now().UTC()
+	st.cards[1] = port.Card{ID: 1, Title: "old prev window", Status: port.StatusDone, CreatedAt: now.AddDate(0, 0, -10)}
+	st.cards[2] = port.Card{ID: 2, Title: "card current done", Status: port.StatusDone, Horizon: "short-term", CreatedAt: now.AddDate(0, 0, -2)}
+	st.cards[3] = port.Card{ID: 3, Title: "card current todo", Status: port.StatusToDo, Horizon: "short-term", CreatedAt: now.AddDate(0, 0, -1), ResearchVerdict: "pursue", UpdatedAt: now.AddDate(0, 0, -6)}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/digest?days=7", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	var body struct {
+		OK              bool           `json:"ok"`
+		WeekTotal       int            `json:"week_total"`
+		PrevTotal       int            `json:"prev_total"`
+		WowDeltaPercent int            `json:"wow_delta_percent"`
+		StaleCount      int            `json:"stale_count"`
+		WeeklyWins      []port.Card    `json:"weekly_wins"`
+		ResearchHarvest []port.Card    `json:"research_harvest"`
+		ByStatus        map[string]int `json:"by_status"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if body.WeekTotal != 2 {
+		t.Errorf("WeekTotal = %d, want 2", body.WeekTotal)
+	}
+	if body.PrevTotal != 1 {
+		t.Errorf("PrevTotal = %d, want 1", body.PrevTotal)
+	}
+	if body.WowDeltaPercent != 100 {
+		t.Errorf("WowDeltaPercent = %d, want 100", body.WowDeltaPercent)
+	}
+	if len(body.WeeklyWins) != 1 {
+		t.Errorf("WeeklyWins len = %d, want 1", len(body.WeeklyWins))
+	}
+	if len(body.ResearchHarvest) != 1 {
+		t.Errorf("ResearchHarvest len = %d, want 1", len(body.ResearchHarvest))
+	}
+	if body.StaleCount != 1 {
+		t.Errorf("StaleCount = %d, want 1", body.StaleCount)
+	}
+}
+
+func TestSynthesizeDigest(t *testing.T) {
+	st := newStubStore()
+	now := time.Now().UTC()
+	st.cards[1] = port.Card{ID: 1, Title: "AI Agent", Status: port.StatusDone, Tags: []string{"ai", "agents"}, CreatedAt: now.AddDate(0, 0, -1)}
+	st.cards[2] = port.Card{ID: 2, Title: "SQLite WAL", Status: port.StatusToDo, Tags: []string{"sqlite"}, CreatedAt: now.AddDate(0, 0, -2)}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/digest/synthesize?days=7", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	var body struct {
+		OK       bool   `json:"ok"`
+		Briefing string `json:"briefing"`
+		Themes   []struct {
+			Title   string  `json:"title"`
+			Summary string  `json:"summary"`
+			CardIDs []int64 `json:"card_ids"`
+		} `json:"themes"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !body.OK || body.Briefing == "" {
+		t.Fatalf("got empty briefing or ok=false: %+v", body)
+	}
+	if len(body.Themes) == 0 {
+		t.Fatalf("expected at least 1 theme in heuristic fallback, got 0")
+	}
+}
+
 func TestDeleteCardEndpoint(t *testing.T) {
 	st := newStubStore()
 	c, _ := st.CreateCard(context.Background(), port.Card{Title: "To Be Deleted"})

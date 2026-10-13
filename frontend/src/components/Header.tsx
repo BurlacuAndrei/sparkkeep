@@ -1,5 +1,5 @@
-import React from 'react';
-import { Sparkles, Search, Plus, Calendar, Layers, Zap, Settings } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Sparkles, Search, Plus, Calendar, Layers, Zap, Settings, X } from 'lucide-react';
 
 interface HeaderProps {
   query: string;
@@ -7,7 +7,6 @@ interface HeaderProps {
   viewMode: 'triage' | 'boards' | 'digest';
   onViewModeChange: (mode: 'triage' | 'boards' | 'digest') => void;
   onOpenNewCard: () => void;
-  onTriggerResearch: (cardId: number) => void;
   flashMessage: string;
   isPro?: boolean;
   onOpenLicenseModal: () => void;
@@ -21,70 +20,79 @@ export const Header: React.FC<HeaderProps> = ({
   viewMode,
   onViewModeChange,
   onOpenNewCard,
-  onTriggerResearch,
   flashMessage,
   isPro,
   onOpenLicenseModal,
   onOpenSettingsModal,
   triageCount,
 }) => {
-  const [researchId, setResearchId] = React.useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
 
-  const handleResearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const id = parseInt(researchId.trim(), 10);
-    if (!isNaN(id) && id > 0) {
-      onTriggerResearch(id);
-      setResearchId('');
-    }
-  };
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
+  const shortcutLabel = isMac ? '⌘K' : 'Ctrl+K';
+
+  // Global keyboard shortcut to focus search: '/' or 'Cmd+K' / 'Ctrl+K'
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInputActive =
+        activeEl instanceof HTMLInputElement ||
+        activeEl instanceof HTMLTextAreaElement ||
+        (activeEl instanceof HTMLElement && activeEl.isContentEditable);
+
+      // Cmd+K or Ctrl+K anywhere
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+        return;
+      }
+
+      // '/' when not inside an input/textarea
+      if (e.key === '/' && !isInputActive) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <header className="topbar">
-      <div className="brand" onClick={() => onViewModeChange('boards')}>
-        <div className="brand-icon">
-          <Sparkles size={16} strokeWidth={1.75} color="#fff" />
+      {/* Zone 1: Identity & Mode Navigation */}
+      <div className="topbar-left">
+        <div
+          className="brand"
+          onClick={() => onViewModeChange('boards')}
+          title="Sparkkeep (Execution Boards)"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              onViewModeChange('boards');
+            }
+          }}
+        >
+          <div className="brand-icon">
+            <Sparkles size={16} strokeWidth={1.75} color="#fff" />
+          </div>
+          <span className="brand-title">sparkkeep</span>
         </div>
-        <span className="brand-title">sparkkeep</span>
-      </div>
 
-      <div className="search-wrapper">
-        <Search size={14} strokeWidth={1.5} className="search-icon" />
-        <input
-          id="q"
-          type="search"
-          className="search-input"
-          placeholder="Search briefings, actions, tags, titles… (Ctrl+/)"
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-        />
-      </div>
-
-      <div className="topbar-actions">
-        <div className="nav-tabs">
+        <nav className="nav-tabs" aria-label="Main Navigation">
           <button
             type="button"
             className={`nav-tab ${viewMode === 'triage' ? 'active' : ''}`}
             onClick={() => onViewModeChange('triage')}
-            title="Idea Funnel"
+            title="Idea Funnel & Triage Deck"
           >
-            <Zap size={13} strokeWidth={1.5} />
+            <Zap size={13} strokeWidth={1.75} />
             <span>Triage</span>
             {typeof triageCount === 'number' && triageCount > 0 && (
-              <span
-                style={{
-                  background: 'rgba(99, 102, 241, 0.25)',
-                  color: '#a5b4fc',
-                  border: '1px solid rgba(99, 102, 241, 0.4)',
-                  fontSize: 10,
-                  fontWeight: 600,
-                  borderRadius: 10,
-                  padding: '0 5px',
-                  minWidth: 16,
-                  textAlign: 'center',
-                  lineHeight: '14px',
-                }}
-              >
+              <span className="nav-tab-badge">
                 {triageCount}
               </span>
             )}
@@ -95,7 +103,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onViewModeChange('boards')}
             title="Execution Boards"
           >
-            <Layers size={13} strokeWidth={1.5} />
+            <Layers size={13} strokeWidth={1.75} />
             <span>Boards</span>
           </button>
           <button
@@ -105,42 +113,88 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onViewModeChange(viewMode === 'digest' ? 'boards' : 'digest')}
             title="Weekly Digest Timeline"
           >
-            <Calendar size={13} strokeWidth={1.5} />
+            <Calendar size={13} strokeWidth={1.75} />
             <span>Digest</span>
           </button>
-        </div>
+        </nav>
+      </div>
 
-        <form onSubmit={handleResearchSubmit} className="quick-research">
+      {/* Zone 2: Global Omnisearch */}
+      <div className="topbar-center">
+        <div className={`search-wrapper ${isFocused ? 'focused' : ''} ${query ? 'has-query' : ''}`}>
+          <Search size={14} strokeWidth={1.75} className="search-icon" />
           <input
-            id="research-id"
-            type="number"
-            min="1"
-            placeholder="Card ID"
-            value={researchId}
-            onChange={(e) => setResearchId(e.target.value)}
+            ref={inputRef}
+            id="q"
+            type="search"
+            className="search-input"
+            placeholder="Search briefings, tags, sparks…"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                if (query) {
+                  onQueryChange('');
+                } else {
+                  inputRef.current?.blur();
+                }
+              }
+            }}
           />
-          <button id="research-btn" type="submit" className="btn-secondary">
-            Research
-          </button>
-        </form>
+          {query ? (
+            <button
+              type="button"
+              className="search-clear-btn"
+              onClick={() => {
+                onQueryChange('');
+                inputRef.current?.focus();
+              }}
+              title="Clear search (Esc)"
+              aria-label="Clear search"
+            >
+              <X size={13} strokeWidth={2} />
+            </button>
+          ) : (
+            <div className="search-kbd-badge" title={`Press ${shortcutLabel} or / to search`}>
+              <kbd>{shortcutLabel}</kbd>
+            </div>
+          )}
+        </div>
+      </div>
 
+      {/* Zone 3: Actions & System */}
+      <div className="topbar-right">
         <button
           type="button"
           className={`license-trigger-btn ${isPro ? 'pro' : 'community'}`}
           onClick={onOpenLicenseModal}
           title={isPro ? "Sparkkeep Pro Lifetime Active" : "Upgrade to Sparkkeep Pro"}
         >
-          <Sparkles size={13} strokeWidth={1.75} />
+          <Sparkles size={12} strokeWidth={2} />
           <span>{isPro ? "PRO" : "Upgrade"}</span>
         </button>
 
-        <button type="button" className="btn-secondary" onClick={onOpenSettingsModal} title="Settings" style={{ padding: '0 10px' }}>
+        <button
+          type="button"
+          className="btn-secondary icon-only-btn"
+          onClick={onOpenSettingsModal}
+          title="Settings & Integrations"
+          aria-label="Settings"
+        >
           <Settings size={14} strokeWidth={1.75} />
         </button>
 
-        <button id="new-card-btn" type="button" className="btn-primary" onClick={onOpenNewCard}>
-          <Plus size={14} strokeWidth={1.75} />
-          <span>New Card</span>
+        <button
+          id="new-card-btn"
+          type="button"
+          className="btn-primary new-card-cta"
+          onClick={onOpenNewCard}
+          title="Capture New Spark"
+        >
+          <Plus size={14} strokeWidth={2.25} />
+          <span>New Spark</span>
         </button>
       </div>
 

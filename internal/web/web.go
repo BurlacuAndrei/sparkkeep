@@ -214,6 +214,8 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/cards/{id}/research", a.getCardResearch)
 	mux.HandleFunc("GET /api/v1/tags", a.listTags)
 	mux.HandleFunc("GET /api/v1/digest", a.weeklyDigest)
+	mux.HandleFunc("POST /api/v1/digest/synthesize", a.synthesizeDigest)
+	mux.HandleFunc("POST /api/v1/digest/telegram", a.pushDigestTelegram)
 	mux.HandleFunc("GET /api/v1/research", a.listResearch)
 	mux.HandleFunc("POST /api/v1/research", a.triggerResearch)
 	mux.HandleFunc("GET /api/v1/research/{id}", a.getResearch)
@@ -1426,12 +1428,22 @@ func (a *api) exportMarkdown(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, b.String())
 }
 
-// weeklyDigest groups cards created in the last 7 calendar days by day,
-// newest first, with a total and per-status count.
+// weeklyDigest groups cards created in the window (default 7 days) by day,
+// newest first, with a total and per-status count, WoW delta, research harvest,
+// wins, horizon balance, and stale alerts.
 func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
-	const days = 7
+	days := 7
+	if q := r.URL.Query().Get("days"); q != "" {
+		if d, err := strconv.Atoi(q); err == nil && d > 0 && d <= 90 {
+			days = d
+		}
+	}
 	now := time.Now().UTC()
-	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Since: now.AddDate(0, 0, -days)})
+	since := now.AddDate(0, 0, -days)
+	prevSince := now.AddDate(0, 0, -2*days)
+
+	// List cards covering both current and previous windows (for WoW calculations)
+	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Since: prevSince, Limit: 2000})
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -1449,15 +1461,36 @@ func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
 
 	byDay := map[string][]port.Card{}
 	byStatus := map[string]int{}
-	var total int
+	byHorizon := map[string]int{}
+	var currentTotal, prevTotal int
+	var weeklyWins []port.Card
+	var researchHarvest []port.Card
+	var staleCount int
+	staleCutoff := now.AddDate(0, 0, -5)
+
 	for _, c := range cards {
+		if c.CreatedAt.Before(since) {
+			prevTotal++
+			continue
+		}
 		dk := key(c.CreatedAt)
 		if !window[dk] {
 			continue
 		}
 		byDay[dk] = append(byDay[dk], c)
 		byStatus[c.Status]++
-		total++
+		byHorizon[c.Horizon]++
+		currentTotal++
+
+		if c.Status == port.StatusDone {
+			weeklyWins = append(weeklyWins, c)
+		}
+		if c.ResearchVerdict != "" || c.ResearchState == "done" {
+			researchHarvest = append(researchHarvest, c)
+		}
+		if c.Horizon == "short-term" && (c.Status == port.StatusInbox || c.Status == port.StatusToDo || c.Status == port.StatusInProgress) && c.UpdatedAt.Before(staleCutoff) {
+			staleCount++
+		}
 	}
 
 	type dayGroup struct {
@@ -1474,11 +1507,230 @@ func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
 		groups = append(groups, dayGroup{Date: d, Cards: cs})
 	}
 
+	var wowDelta int
+	if prevTotal > 0 {
+		wowDelta = int(float64(currentTotal-prevTotal) / float64(prevTotal) * 100.0)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":         true,
-		"week_total": total,
-		"by_status":  byStatus,
-		"days":       groups,
+		"ok":                true,
+		"week_total":        currentTotal,
+		"prev_total":        prevTotal,
+		"wow_delta_percent": wowDelta,
+		"by_status":         byStatus,
+		"by_horizon":        byHorizon,
+		"weekly_wins":       weeklyWins,
+		"research_harvest":  researchHarvest,
+		"stale_count":       staleCount,
+		"days":              groups,
+	})
+}
+
+func heuristicSynthesis(cards []port.Card) (string, []map[string]any) {
+	tagCounts := make(map[string][]int64)
+	var doneCount int
+	for _, c := range cards {
+		if c.Status == port.StatusDone {
+			doneCount++
+		}
+		for _, t := range c.Tags {
+			t = strings.ToLower(strings.TrimSpace(t))
+			if t != "" {
+				tagCounts[t] = append(tagCounts[t], c.ID)
+			}
+		}
+	}
+	type tagPair struct {
+		tag string
+		ids []int64
+	}
+	var pairs []tagPair
+	for t, ids := range tagCounts {
+		pairs = append(pairs, tagPair{tag: t, ids: ids})
+	}
+	sort.Slice(pairs, func(i, j int) bool { return len(pairs[i].ids) > len(pairs[j].ids) })
+
+	var themes []map[string]any
+	for i, p := range pairs {
+		if i >= 4 {
+			break
+		}
+		themes = append(themes, map[string]any{
+			"title":    strings.ToUpper(p.tag[:1]) + p.tag[1:],
+			"summary":  fmt.Sprintf("%d spark(s) under #%s", len(p.ids), p.tag),
+			"card_ids": p.ids,
+		})
+	}
+
+	briefing := fmt.Sprintf("• Ingested %d sparks during this window across %d active topics.\n• %d card(s) marked as completed Done.\n• %d items categorized and ready for review.",
+		len(cards), len(pairs), doneCount, len(cards)-doneCount)
+
+	return briefing, themes
+}
+
+func (a *api) synthesizeDigest(w http.ResponseWriter, r *http.Request) {
+	days := 7
+	if q := r.URL.Query().Get("days"); q != "" {
+		if d, err := strconv.Atoi(q); err == nil && d > 0 && d <= 90 {
+			days = d
+		}
+	}
+	now := time.Now().UTC()
+	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Since: now.AddDate(0, 0, -days), Limit: 500})
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	if len(cards) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"briefing": "No cards captured in this period yet.",
+			"themes":   []any{},
+		})
+		return
+	}
+
+	var llm *analyze.Client
+	if a.svc != nil {
+		llm = a.svc.Analyze
+	}
+
+	if llm == nil || llm.Model == "" {
+		briefing, themes := heuristicSynthesis(cards)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"briefing": briefing,
+			"themes":   themes,
+		})
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Analyze this period's captured sparks for a personal intelligence digest.\n")
+	sb.WriteString("Return ONLY a valid JSON object with:\n")
+	sb.WriteString("1. \"briefing\": a 2-3 bullet string summarizing the main ideas, focus areas, and progress.\n")
+	sb.WriteString("2. \"themes\": an array of 2-4 themes, each with \"title\" (short theme name), \"summary\" (1 sentence explanation), and \"card_ids\" (array of matching card IDs).\n\nSparks:\n")
+	for i, c := range cards {
+		if i >= 35 {
+			break
+		}
+		tags := strings.Join(c.Tags, ", ")
+		fmt.Fprintf(&sb, "- ID:%d | Title: %s | Tags: [%s] | Horizon: %s | Status: %s | TLDR: %s\n",
+			c.ID, c.Title, tags, c.Horizon, c.Status, c.TLDR)
+	}
+
+	ans, err := llm.Ask(r.Context(), sb.String())
+	if err != nil {
+		briefing, themes := heuristicSynthesis(cards)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"briefing": briefing,
+			"themes":   themes,
+		})
+		return
+	}
+
+	clean := strings.TrimSpace(ans)
+	if idx := strings.Index(clean, "{"); idx >= 0 {
+		if end := strings.LastIndex(clean, "}"); end > idx {
+			clean = clean[idx : end+1]
+		}
+	}
+
+	var parsed struct {
+		Briefing string `json:"briefing"`
+		Themes   []struct {
+			Title   string  `json:"title"`
+			Summary string  `json:"summary"`
+			CardIDs []int64 `json:"card_ids"`
+		} `json:"themes"`
+	}
+	if err := json.Unmarshal([]byte(clean), &parsed); err != nil || parsed.Briefing == "" {
+		briefing, themes := heuristicSynthesis(cards)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"briefing": briefing,
+			"themes":   themes,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":       true,
+		"briefing": parsed.Briefing,
+		"themes":   parsed.Themes,
+	})
+}
+
+func (a *api) pushDigestTelegram(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil || a.svc.Channel == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok":    false,
+			"error": "Telegram channel is not configured or disabled.",
+		})
+		return
+	}
+
+	days := 7
+	if q := r.URL.Query().Get("days"); q != "" {
+		if d, err := strconv.Atoi(q); err == nil && d > 0 && d <= 90 {
+			days = d
+		}
+	}
+
+	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Since: time.Now().UTC().AddDate(0, 0, -days), Limit: 500})
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+
+	var inbox, doing, done, shelved int
+	for _, c := range cards {
+		switch c.Status {
+		case port.StatusInbox:
+			inbox++
+		case port.StatusToDo, port.StatusInProgress:
+			doing++
+		case port.StatusDone:
+			done++
+		case port.StatusShelved:
+			shelved++
+		}
+	}
+
+	var sb strings.Builder
+	sb.WriteString("📊 *Sparkkeep Weekly Intelligence Digest*\n")
+	fmt.Fprintf(&sb, "Window: Last %d days • Total: %d sparks\n\n", days, len(cards))
+	fmt.Fprintf(&sb, "• 📥 Inbox: %d\n• ⚡ In Progress: %d\n• ✅ Done: %d\n• 📦 Shelved: %d\n\n",
+		inbox, doing, done, shelved)
+
+	if len(cards) > 0 {
+		sb.WriteString("*Top Sparks:*\n")
+		limit := 5
+		if len(cards) < limit {
+			limit = len(cards)
+		}
+		for i := 0; i < limit; i++ {
+			c := cards[i]
+			fmt.Fprintf(&sb, "%d. %s [%s]\n", i+1, strings.TrimSpace(c.Title), c.Horizon)
+		}
+	}
+
+	err = a.svc.Channel.Notify(r.Context(), port.Notification{
+		Kind: "digest",
+		Text: sb.String(),
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"message": "Digest successfully sent to Telegram!",
 	})
 }
 

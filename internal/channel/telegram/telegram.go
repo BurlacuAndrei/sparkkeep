@@ -52,8 +52,8 @@ type Adapter struct {
 	DigestPushHour    int
 	BaseURL           string // optional: httptest server in tests or custom proxy, else apiBase
 
-	baseURL string          // unexported: httptest server in tests, else apiBase
-	httpc   *http.Client    // unexported: default client unless tests override
+	baseURL      string           // unexported: httptest server in tests, else apiBase
+	httpc        *http.Client     // unexported: default client unless tests override
 	msgCard      map[int64]int64  // bot message_id → card_id, for reactions
 	researchMsgs map[int64]msgRef // card_id → original message, for restoring buttons
 	msgMu        sync.Mutex

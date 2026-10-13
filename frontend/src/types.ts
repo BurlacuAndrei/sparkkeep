@@ -136,8 +136,26 @@ export interface DayGroup {
 export interface DigestData {
   ok: boolean;
   week_total: number;
+  prev_total?: number;
+  wow_delta_percent?: number;
   by_status: Record<string, number>;
+  by_horizon?: Record<string, number>;
+  weekly_wins?: Card[];
+  research_harvest?: Card[];
+  stale_count?: number;
   days: DayGroup[];
+}
+
+export interface DigestSynthesisTheme {
+  title: string;
+  summary: string;
+  card_ids?: number[];
+}
+
+export interface DigestSynthesisResult {
+  ok: boolean;
+  briefing: string;
+  themes?: DigestSynthesisTheme[];
 }
 
 export interface ResearchStep {
