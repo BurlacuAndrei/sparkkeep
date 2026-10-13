@@ -607,7 +607,7 @@ EXTRACTION NOTES: %s`,
 		clip(transcript, 6000), clip(digest, 2000), notes)
 
 	if len(profile) > 0 && profile[0] != nil && !profile[0].IsEmpty() {
-		if block := port.FormatProfileBlock(profile[0]); block != "" {
+		if block := FormatProfileBlock(profile[0]); block != "" {
 			return base + "\n\n" + block
 		}
 	}

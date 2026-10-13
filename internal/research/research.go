@@ -460,7 +460,7 @@ func (r *Runner) stepCustom(ctx context.Context, state *RunState, cfg port.Custo
 
 	b.WriteString(fmt.Sprintf("\nInstruction:\n%s\n", cfg.Instruction))
 	if (cfg.UseProfile == nil || *cfg.UseProfile) && state.Profile != nil && !state.Profile.IsEmpty() {
-		if block := port.FormatProfileBlock(state.Profile); block != "" {
+		if block := analyze.FormatProfileBlock(state.Profile); block != "" {
 			b.WriteString("\n" + block + "\n")
 		}
 	}
@@ -1036,7 +1036,7 @@ Title: ` + state.Card.Title + "\n")
 	b.WriteString("\nSources:\n")
 	b.WriteString(state.Sources.FormatForSynthesis())
 	if state.Profile != nil && !state.Profile.IsEmpty() {
-		if block := port.FormatProfileBlock(state.Profile); block != "" {
+		if block := analyze.FormatProfileBlock(state.Profile); block != "" {
 			b.WriteString("\n\n" + block)
 		}
 	}
