@@ -1,9 +1,9 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { Sparkles, Search, Plus, Calendar, Layers, Zap, Settings, X } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Sparkles, Calendar, Layers, Zap, Settings } from 'lucide-react';
+import { Omnisearch } from './Omnisearch';
+import { Card, Tag } from '../types';
 
 interface HeaderProps {
-  query: string;
-  onQueryChange: (q: string) => void;
   viewMode: 'triage' | 'boards' | 'digest';
   onViewModeChange: (mode: 'triage' | 'boards' | 'digest') => void;
   onOpenNewCard: () => void;
@@ -12,11 +12,13 @@ interface HeaderProps {
   onOpenLicenseModal: () => void;
   onOpenSettingsModal: () => void;
   triageCount?: number;
+  allCards: Card[];
+  tags: Tag[];
+  onSelectCard: (card: Card) => void;
+  onSelectTag: (tag: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  query,
-  onQueryChange,
   viewMode,
   onViewModeChange,
   onOpenNewCard,
@@ -25,14 +27,12 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLicenseModal,
   onOpenSettingsModal,
   triageCount,
+  allCards,
+  tags,
+  onSelectCard,
+  onSelectTag,
 }) => {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [isFocused, setIsFocused] = useState(false);
-
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
-  const shortcutLabel = isMac ? '⌘K' : 'Ctrl+K';
-
-  // Global keyboard shortcut to focus search: '/' or 'Cmd+K' / 'Ctrl+K'
+  // Global keyboard shortcut to open new spark: 'c' or 'n'
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -40,20 +40,6 @@ export const Header: React.FC<HeaderProps> = ({
         activeEl instanceof HTMLInputElement ||
         activeEl instanceof HTMLTextAreaElement ||
         (activeEl instanceof HTMLElement && activeEl.isContentEditable);
-
-      // Cmd+K or Ctrl+K anywhere
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
-        return;
-      }
-
-      // '/' when not inside an input/textarea
-      if (e.key === '/' && !isInputActive) {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
 
       // 'c' or 'n' when not inside an input/textarea opens capture
       if ((e.key === 'c' || e.key === 'n') && !isInputActive && !e.metaKey && !e.ctrlKey) {
@@ -64,7 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [onOpenNewCard]);
 
   return (
     <header className="topbar">
@@ -127,47 +113,18 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Zone 2: Global Omnisearch */}
       <div className="topbar-center">
-        <div className={`search-wrapper ${isFocused ? 'focused' : ''} ${query ? 'has-query' : ''}`}>
-          <Search size={14} strokeWidth={1.75} className="search-icon" />
-          <input
-            ref={inputRef}
-            id="q"
-            type="search"
-            className="search-input"
-            placeholder="Search briefings, tags, sparks…"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                if (query) {
-                  onQueryChange('');
-                } else {
-                  inputRef.current?.blur();
-                }
-              }
-            }}
-          />
-          {query ? (
-            <button
-              type="button"
-              className="search-clear-btn"
-              onClick={() => {
-                onQueryChange('');
-                inputRef.current?.focus();
-              }}
-              title="Clear search (Esc)"
-              aria-label="Clear search"
-            >
-              <X size={13} strokeWidth={2} />
-            </button>
-          ) : (
-            <div className="search-kbd-badge" title={`Press ${shortcutLabel} or / to search`}>
-              <kbd>{shortcutLabel}</kbd>
-            </div>
-          )}
-        </div>
+        <Omnisearch
+          allCards={allCards}
+          tags={tags}
+          triageCount={triageCount}
+          onSelectCard={onSelectCard}
+          onSelectTag={onSelectTag}
+          onViewModeChange={onViewModeChange}
+          onOpenNewCard={onOpenNewCard}
+          onOpenSettingsModal={onOpenSettingsModal}
+          onOpenLicenseModal={onOpenLicenseModal}
+          isPro={isPro}
+        />
       </div>
 
       {/* Zone 3: Actions & System */}
