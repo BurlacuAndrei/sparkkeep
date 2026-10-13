@@ -1,0 +1,116 @@
+import React, { useState } from 'react';
+import { CardComment } from '../../types';
+import { MessageSquare, User, Send } from 'lucide-react';
+
+export interface CardCommentsSectionProps {
+  cardId: number;
+  comments: CardComment[];
+  onAddComment: (content: string) => Promise<void> | void;
+}
+
+export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
+  comments,
+  onAddComment,
+}) => {
+  const [newComment, setNewComment] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    const trimmed = newComment.trim();
+    if (!trimmed || isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      await onAddComment(trimmed);
+      setNewComment('');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="rail-section">
+      <div className="rail-section-title">
+        <MessageSquare size={13} color="#f59e0b" />
+        <span>Comments & History ({comments.length})</span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
+        {comments.map((c) => (
+          <div
+            key={c.id}
+            style={{
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 4,
+              padding: 6,
+              fontSize: 11.5,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+              {/* Author Badge */}
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  fontSize: 9.5,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  padding: '1px 5px',
+                  borderRadius: 3,
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#fbbf24',
+                }}
+              >
+                <User size={9} />
+                <span>User</span>
+              </span>
+
+              {/* Timestamp */}
+              <span style={{ fontSize: 10, color: '#64748b' }}>
+                {new Date(c.created_at).toLocaleString()}
+              </span>
+            </div>
+
+            <div style={{ color: '#cbd5e1', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {c.content}
+            </div>
+          </div>
+        ))}
+
+        {comments.length === 0 && (
+          <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>
+            No comments yet. Add a note or observation below.
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+        <textarea
+          className="form-textarea"
+          rows={2}
+          value={newComment}
+          onChange={(e) => setNewComment(e.target.value)}
+          placeholder="Add note or comment... (Cmd+Enter to submit)"
+          style={{ flex: 1, fontSize: 11.5 }}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={handleSubmit}
+          disabled={!newComment.trim() || isSubmitting}
+          style={{ padding: '4px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+        >
+          <Send size={11} />
+          <span>{isSubmitting ? 'Posting...' : 'Post'}</span>
+        </button>
+      </div>
+    </div>
+  );
+};

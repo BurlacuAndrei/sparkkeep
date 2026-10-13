@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Card, ResearchItem, Reference, ReferenceKind, CardComment, Capture } from '../types';
+import { Card, ResearchItem, Reference, CardComment, Capture } from '../types';
 import { fetchCard, fetchCardResearch, addCardComment, getErrorMessage, fetchCapture, createCard } from '../api';
 import {
   X,
@@ -9,24 +9,16 @@ import {
   FileText,
   Lightbulb,
   CheckCircle2,
-  ClipboardCopy,
-  CheckSquare,
   Trash2,
   Plus,
   FileSearch,
-  Link2,
-  HelpCircle,
-  ArrowRight,
   Check,
   RotateCcw,
   Clock,
   ChevronDown,
   ChevronUp,
-  MoreHorizontal,
   Layers,
   Split,
-  GitBranch,
-  MessageSquare,
   AlertTriangle,
   FileCode,
   Maximize2,
@@ -37,6 +29,13 @@ import { CARD_HORIZON_OPTIONS, CARD_TYPE_OPTIONS } from './selectOptions';
 import { ResearchReportView } from './ResearchReportView';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 import { getPlatformInfo, formatRelativeAge } from '../utils/cardUtils';
+import {
+  CardLifecycleStepper,
+  CardHeaderActions,
+  CardMetadataPanel,
+  CardActionsChecklist,
+  CardCommentsSection,
+} from './card-modal';
 
 export interface CardModalProps {
   card: Card;
@@ -49,14 +48,6 @@ export interface CardModalProps {
   onRetry: (id: number) => void;
   showToast?: (msg: string, onUndo?: () => Promise<void> | void) => void;
 }
-
-const LIFECYCLE_STEPS = [
-  { id: 'inbox', label: 'Inbox' },
-  { id: 'review', label: 'Review' },
-  { id: 'to-do', label: 'To Do' },
-  { id: 'in-progress', label: 'In Progress' },
-  { id: 'done', label: 'Done' },
-];
 
 export const CardModal: React.FC<CardModalProps> = ({
   card,
@@ -81,7 +72,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [status, setStatus] = useState(card.status || 'inbox');
   const [cardType, setCardType] = useState<string>(card.type || 'idea');
   const [note, setNote] = useState(card.source_note || '');
-  const [tagsInput, setTagsInput] = useState((card.tags || []).join(', '));
+  const [tags, setTags] = useState<string[]>(card.tags || []);
   const [references, setReferences] = useState<Reference[]>(card.references || []);
   const [actions, setActions] = useState<string[]>(card.proposed_actions || []);
   const [completedActions, setCompletedActions] = useState<Record<number, boolean>>(() => {
@@ -96,15 +87,8 @@ export const CardModal: React.FC<CardModalProps> = ({
     }
     return init;
   });
-  const [newAction, setNewAction] = useState('');
   const [research, setResearch] = useState<ResearchItem | null>(null);
   const [comments, setComments] = useState<CardComment[]>(card.comments || []);
-  const [newComment, setNewComment] = useState('');
-
-  // References Input
-  const [newRefKind, setNewRefKind] = useState<ReferenceKind>('url');
-  const [newRefLabel, setNewRefLabel] = useState('');
-  const [newRefUrl, setNewRefUrl] = useState('');
 
   // Captured Content & Sibling states
   const [capture, setCapture] = useState<Capture | null>(null);
@@ -116,9 +100,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   // UI state
   const [isReportOpen, setIsReportOpen] = useState(status === 'review');
   const [isReportExpanded, setIsReportExpanded] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const menuRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<any>(null);
   const reportContainerRef = useRef<HTMLDivElement>(null);
   const mainColRef = useRef<HTMLDivElement>(null);
@@ -132,14 +114,12 @@ export const CardModal: React.FC<CardModalProps> = ({
     setIsReportOpen(nextState);
 
     if (nextState) {
-      // Allow React to mount and layout the report view
       requestAnimationFrame(() => {
         setTimeout(() => {
           const container = mainColRef.current;
           const target = reportContainerRef.current;
           if (!target) return;
 
-          // Find the active scrollable container
           const scroller = container && container.scrollHeight > container.clientHeight
             ? container
             : (target.closest('.drawer-main-col') as HTMLElement) ||
@@ -214,7 +194,10 @@ export const CardModal: React.FC<CardModalProps> = ({
 
     fetchCard(cardId)
       .then((c) => {
-        if (alive && c.comments) setComments(c.comments);
+        if (alive) {
+          if (c.comments) setComments(c.comments);
+          if (c.tags) setTags(c.tags);
+        }
       })
       .catch(() => {});
 
@@ -231,18 +214,6 @@ export const CardModal: React.FC<CardModalProps> = ({
       if (pollInterval) clearInterval(pollInterval);
     };
   }, [cardId, card.capture_id, card.research_state, status]);
-
-  // Outside click for menu
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [menuOpen]);
 
   // Debounced Autosave for Text & Field Changes
   const triggerAutosave = useCallback(
@@ -279,12 +250,6 @@ export const CardModal: React.FC<CardModalProps> = ({
     triggerAutosave({ source_note: val });
   };
 
-  const handleTagsChange = (val: string) => {
-    setTagsInput(val);
-    const parsed = val.split(',').map((t) => t.trim()).filter(Boolean);
-    triggerAutosave({ tags: parsed });
-  };
-
   const handleHorizonChange = (h: 'short-term' | 'medium-term' | 'long-term') => {
     setHorizon(h);
     onUpdate(card.id, { horizon: h });
@@ -296,8 +261,45 @@ export const CardModal: React.FC<CardModalProps> = ({
     onUpdate(card.id, { status: newStatus as any });
   };
 
+  const handleTypeChange = (val: string) => {
+    setCardType(val);
+    onUpdate(card.id, { type: val });
+  };
+
+  // Tags handlers
+  const handleAddTag = (newTag: string) => {
+    const trimmed = newTag.trim();
+    if (!trimmed) return;
+    const splitTags = trimmed
+      .split(',')
+      .map((t) => t.trim().replace(/^#/, ''))
+      .filter(Boolean);
+    const updated = Array.from(new Set([...tags, ...splitTags]));
+    setTags(updated);
+    triggerAutosave({ tags: updated });
+  };
+
+  const handleRemoveTag = (index: number) => {
+    const updated = tags.filter((_, i) => i !== index);
+    setTags(updated);
+    triggerAutosave({ tags: updated });
+  };
+
+  // References handlers
+  const handleAddReference = (item: Reference) => {
+    const updated = [...references, item];
+    setReferences(updated);
+    onUpdate(card.id, { references: updated });
+  };
+
+  const handleRemoveReference = (index: number) => {
+    const updated = references.filter((_, i) => i !== index);
+    setReferences(updated);
+    onUpdate(card.id, { references: updated });
+  };
+
   // Actions handling
-  const toggleAction = (index: number) => {
+  const handleToggleAction = (index: number) => {
     setCompletedActions((prev) => {
       const next = { ...prev, [index]: !prev[index] };
       const completedList = actions.filter((_, idx) => next[idx]);
@@ -306,13 +308,13 @@ export const CardModal: React.FC<CardModalProps> = ({
     });
   };
 
-  const editAction = (index: number, text: string) => {
+  const handleEditAction = (index: number, text: string) => {
     const updated = actions.map((a, i) => (i === index ? text : a));
     setActions(updated);
     triggerAutosave({ proposed_actions: updated });
   };
 
-  const removeAction = (index: number) => {
+  const handleRemoveAction = (index: number) => {
     const updated = actions.filter((_, i) => i !== index);
     setActions(updated);
     const nextCompleted: Record<number, boolean> = {};
@@ -326,12 +328,11 @@ export const CardModal: React.FC<CardModalProps> = ({
     onUpdate(card.id, { proposed_actions: updated, completed_actions: completedList });
   };
 
-  const addAction = () => {
-    const text = newAction.trim();
-    if (!text) return;
-    const updated = [...actions, text];
+  const handleAddAction = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const updated = [...actions, trimmed];
     setActions(updated);
-    setNewAction('');
     onUpdate(card.id, { proposed_actions: updated });
   };
 
@@ -379,28 +380,16 @@ export const CardModal: React.FC<CardModalProps> = ({
     onUpdate(card.id, { open_questions: updated });
   };
 
-  // References handling
-  const addReference = () => {
-    const lbl = newRefLabel.trim();
-    const u = newRefUrl.trim();
-    if (!lbl && !u) return;
-    const item: Reference = {
-      kind: newRefKind,
-      label: lbl || u,
-      ...(u ? { url: u } : {}),
-    };
-    const updated = [...references, item];
-    setReferences(updated);
-    setNewRefLabel('');
-    setNewRefUrl('');
-    setNewRefKind('url');
-    onUpdate(card.id, { references: updated });
-  };
-
-  const removeReference = (index: number) => {
-    const updated = references.filter((_, i) => i !== index);
-    setReferences(updated);
-    onUpdate(card.id, { references: updated });
+  // Comments handling
+  const handleAddComment = async (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    try {
+      const c = await addCardComment(card.id, trimmed);
+      setComments((prev) => [...prev, c]);
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
+    }
   };
 
   // Sibling cards from same capture
@@ -419,6 +408,22 @@ export const CardModal: React.FC<CardModalProps> = ({
     try {
       await navigator.clipboard.writeText(await fetchMarkdown());
       showToast?.('Markdown copied to clipboard');
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
+    }
+  };
+
+  const handleDownloadMarkdown = async () => {
+    try {
+      const md = await fetchMarkdown();
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `spark-${card.id}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast?.('Markdown downloaded');
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -456,7 +461,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   };
 
   // Split Card Handler
-  const handlePerformSplit = async () => {
+  const handlePerformSplit = useCallback(async () => {
     if (!splitSecondTitle.trim()) {
       showToast?.('Please give Card B a title');
       return;
@@ -485,7 +490,7 @@ export const CardModal: React.FC<CardModalProps> = ({
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
-  };
+  }, [card.id, card.capture_id, card.horizon, card.source_url, claims, onUpdate, showToast, splitClaimIndices, splitSecondTitle]);
 
   // Merge with Sibling Handler
   const handleMergeWith = async (sibling: Card) => {
@@ -511,15 +516,80 @@ export const CardModal: React.FC<CardModalProps> = ({
     }
   };
 
+  // Keyboard Shortcuts (Esc to close submodals or drawer, Cmd+Enter to execute split or flush autosave)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isCaptureModalOpen) {
+          setIsCaptureModalOpen(false);
+          return;
+        }
+        if (isSplitModalOpen) {
+          setIsSplitModalOpen(false);
+          return;
+        }
+        onClose();
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        if (isSplitModalOpen) {
+          if (splitSecondTitle.trim()) {
+            e.preventDefault();
+            handlePerformSplit();
+          }
+          return;
+        }
+
+        // Flush pending autosave immediately
+        if (autosaveTimerRef.current) {
+          clearTimeout(autosaveTimerRef.current);
+          autosaveTimerRef.current = null;
+          onUpdate(card.id, {
+            title,
+            tldr,
+            summary: tldr,
+            executive_summary: tldr,
+            why_care: whyCare,
+            value_proposition: whyCare,
+            source_note: note,
+            tags,
+            claims,
+            open_questions: openQuestions,
+            proposed_actions: actions,
+            references,
+          });
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus('idle'), 2500);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isCaptureModalOpen,
+    isSplitModalOpen,
+    splitSecondTitle,
+    onClose,
+    card.id,
+    title,
+    tldr,
+    whyCare,
+    note,
+    tags,
+    claims,
+    openQuestions,
+    actions,
+    references,
+    onUpdate,
+    handlePerformSplit,
+  ]);
+
   const isFailed = Boolean(card.analysis_failed || card.title === 'Analysis failed');
   const platform = getPlatformInfo(card.source_url);
   const verdict = (card.research_verdict || '').toLowerCase();
   const confidence = card.research_confidence || '';
-
-  // Calculate Action Progress
-  const completedCount = actions.filter((_, idx) => completedActions[idx]).length;
-  const totalActions = actions.length;
-  const progressPercent = totalActions > 0 ? Math.round((completedCount / totalActions) * 100) : 0;
 
   // Reusable Left Panel Section Renderers
   const renderTldr = () => (
@@ -551,86 +621,6 @@ export const CardModal: React.FC<CardModalProps> = ({
         onChange={(e) => handleWhyCareChange(e.target.value)}
         placeholder="Why this matters, practical implications..."
       />
-    </div>
-  );
-
-  const renderNextActionsChecklist = (customTitle = 'Next Actions Checklist') => (
-    <div className="briefing-section">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div className="briefing-heading heading-actions" style={{ margin: 0 }}>
-          <CheckCircle2 size={13} strokeWidth={1.5} />
-          <span>{customTitle}</span>
-        </div>
-        <span style={{ fontSize: 11.5, color: '#34d399', fontWeight: 600 }}>
-          {totalActions > 0 ? `${completedCount}/${totalActions} completed (${progressPercent}%)` : 'No steps yet'}
-        </span>
-      </div>
-
-      {totalActions > 0 && (
-        <div className="card-progress-bar-track" style={{ height: 6, marginBottom: 12 }}>
-          <div className="card-progress-bar-fill" style={{ width: `${Math.max(5, progressPercent)}%` }} />
-        </div>
-      )}
-
-      <div className="actions-list">
-        {actions.map((act, idx) => (
-          <div
-            key={idx}
-            className="action-item"
-            style={{ alignItems: 'center', opacity: completedActions[idx] ? 0.6 : 1 }}
-          >
-            <input
-              type="checkbox"
-              checked={Boolean(completedActions[idx])}
-              onChange={() => toggleAction(idx)}
-              style={{ cursor: 'pointer' }}
-            />
-            <input
-              type="text"
-              className="form-input"
-              value={act}
-              onChange={(e) => editAction(idx, e.target.value)}
-              style={{
-                flex: 1,
-                padding: '3px 8px',
-                background: 'transparent',
-                border: '1px solid transparent',
-                fontSize: 13,
-                color: completedActions[idx] ? '#94a3b8' : '#f1f5f9',
-                textDecoration: completedActions[idx] ? 'line-through' : 'none',
-              }}
-            />
-            <button
-              type="button"
-              className="close-btn"
-              onClick={() => removeAction(idx)}
-              title="Remove action"
-            >
-              <Trash2 size={12} strokeWidth={1.5} />
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-        <input
-          type="text"
-          className="form-input"
-          value={newAction}
-          placeholder="Add an action..."
-          onChange={(e) => setNewAction(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              addAction();
-            }
-          }}
-        />
-        <button type="button" className="btn-secondary" onClick={addAction}>
-          <Plus size={13} color="#34d399" />
-          <span>Add</span>
-        </button>
-      </div>
     </div>
   );
 
@@ -849,7 +839,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       e.stopPropagation();
                       setIsReportExpanded((v) => !v);
                     }}
-                    title={isReportExpanded ? "Collapse to contained scroll" : "Expand full height"}
+                    title={isReportExpanded ? 'Collapse to contained scroll' : 'Expand full height'}
                     style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
                   >
                     {isReportExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
@@ -934,47 +924,12 @@ export const CardModal: React.FC<CardModalProps> = ({
       <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
         {/* Sticky Header */}
         <div className="drawer-header">
-          {/* Top Row: Stepper + Status Indicator + Autosave Badge + Close */}
+          {/* Top Row: Stepper + Autosave Badge + Close */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            {/* Stepper */}
-            <div className="drawer-stepper">
-              {LIFECYCLE_STEPS.map((step, idx) => {
-                const isActive = status === step.id;
-                return (
-                  <React.Fragment key={step.id}>
-                    <button
-                      type="button"
-                      className={`drawer-stepper-step ${isActive ? 'active' : ''}`}
-                      onClick={() => handleStatusTransition(step.id)}
-                      title={`Move card to ${step.label}`}
-                    >
-                      <span>{step.label}</span>
-                    </button>
-                    {idx < LIFECYCLE_STEPS.length - 1 && (
-                      <span className="drawer-stepper-arrow">→</span>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-
-              {/* Side Status Indicator if Shelved or Dismissed */}
-              {(status === 'shelved' || status === 'dismissed') && (
-                <span
-                  style={{
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    padding: '2px 7px',
-                    borderRadius: 4,
-                    background: status === 'shelved' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(244, 63, 94, 0.2)',
-                    color: status === 'shelved' ? '#fbbf24' : '#fb7185',
-                    marginLeft: 6,
-                  }}
-                >
-                  {status}
-                </span>
-              )}
-            </div>
+            <CardLifecycleStepper
+              status={status}
+              onStatusChange={handleStatusTransition}
+            />
 
             {/* Autosave & Close */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1023,7 +978,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             />
           </div>
 
-          {/* Chips Row: Platform, Type, Horizon, Worthiness, Signals */}
+          {/* Chips Row: Platform, Type, Horizon, Worthiness, Signals, Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {/* Platform */}
             <span
@@ -1039,10 +994,7 @@ export const CardModal: React.FC<CardModalProps> = ({
               <CustomSelect
                 id="drawer-type-select"
                 value={cardType}
-                onChange={(val) => {
-                  setCardType(val);
-                  onUpdate(card.id, { type: val });
-                }}
+                onChange={handleTypeChange}
                 options={CARD_TYPE_OPTIONS}
                 ariaLabel="Card Type"
               />
@@ -1083,181 +1035,25 @@ export const CardModal: React.FC<CardModalProps> = ({
             )}
 
             {/* Header Action Buttons on the Right */}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {/* Primary Stage Action */}
-              {isFailed ? (
-                <button
-                  type="button"
-                  className="card-primary-action-btn retry"
-                  onClick={() => onRetry(card.id)}
-                >
-                  <RefreshCw size={12} />
-                  <span>Retry Extraction</span>
-                </button>
-              ) : status === 'inbox' ? (
-                <button
-                  type="button"
-                  className="card-primary-action-btn commit"
-                  onClick={() => handleStatusTransition('to-do')}
-                >
-                  <ArrowRight size={12} />
-                  <span>Commit → To Do</span>
-                </button>
-              ) : status === 'review' ? (
-                <button
-                  type="button"
-                  className="card-primary-action-btn accept"
-                  onClick={() => handleStatusTransition('to-do')}
-                >
-                  <Check size={12} />
-                  <span>Accept → To Do</span>
-                </button>
-              ) : status === 'to-do' ? (
-                <button
-                  type="button"
-                  className="card-primary-action-btn start"
-                  onClick={() => handleStatusTransition('in-progress')}
-                >
-                  <ArrowRight size={12} />
-                  <span>Start Working</span>
-                </button>
-              ) : status === 'in-progress' ? (
-                <button
-                  type="button"
-                  className="card-primary-action-btn done"
-                  onClick={() => handleStatusTransition('done')}
-                >
-                  <Check size={12} />
-                  <span>Mark Completed</span>
-                </button>
-              ) : status === 'shelved' || status === 'dismissed' ? (
-                <button
-                  type="button"
-                  className="card-primary-action-btn restore"
-                  onClick={() => handleStatusTransition('inbox')}
-                >
-                  <RotateCcw size={12} />
-                  <span>Restore</span>
-                </button>
-              ) : null}
-
-              {/* Research CTA / Scroll Jump */}
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => {
-                  if (research) {
-                    handleScrollToResearch();
-                  } else {
-                    onResearch(card.id);
-                  }
-                }}
-                title={research ? "Jump to Deep Research findings" : "Run autonomous deep research"}
-                style={{ padding: '4px 10px', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 5 }}
-              >
-                <Sparkles size={13} color="#c084fc" />
-                <span>{research ? 'Deep Research' : 'Research'}</span>
-              </button>
-
-              {/* Overflow Menu ⋯ */}
-              <div style={{ position: 'relative' }} ref={menuRef}>
-                <button
-                  type="button"
-                  className={`icon-btn ${menuOpen ? 'active' : ''}`}
-                  onClick={() => setMenuOpen(!menuOpen)}
-                  title="More actions"
-                >
-                  <MoreHorizontal size={14} />
-                </button>
-
-                {menuOpen && (
-                  <div className="card-context-menu" style={{ right: 0, top: '100%', bottom: 'auto', marginTop: 4 }}>
-                    <button
-                      type="button"
-                      className="card-context-item"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        handleCopyMarkdown();
-                      }}
-                    >
-                      <ClipboardCopy size={13} color="#34d399" />
-                      <span>Copy Markdown</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="card-context-item"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        handleAddToTodoist();
-                      }}
-                    >
-                      <CheckSquare size={13} color="#e879f9" />
-                      <span>Add to Todoist</span>
-                    </button>
-
-                    <div className="card-context-divider" />
-
-                    <button
-                      type="button"
-                      className="card-context-item"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setIsSplitModalOpen(true);
-                      }}
-                    >
-                      <Split size={13} color="#38bdf8" />
-                      <span>Split into Two Cards</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="card-context-item"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        handleSpinOff();
-                      }}
-                    >
-                      <GitBranch size={13} color="#a78bfa" />
-                      <span>Spin off Child Card</span>
-                    </button>
-
-                    {isFailed && (
-                      <button
-                        type="button"
-                        className="card-context-item"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onRetry(card.id);
-                        }}
-                      >
-                        <RefreshCw size={13} color="#fbbf24" />
-                        <span>Retry Extraction</span>
-                      </button>
-                    )}
-
-                    <div className="card-context-divider" />
-
-                    {onDelete && (
-                      <button
-                        type="button"
-                        className="card-context-item danger"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          if (window.confirm(`Delete card #${card.id} permanently?`)) {
-                            onDelete(card.id);
-                            onClose();
-                          }
-                        }}
-                      >
-                        <Trash2 size={13} color="#fb7185" />
-                        <span>Delete Card</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+            <CardHeaderActions
+              card={card}
+              research={research}
+              status={status}
+              isFailed={isFailed}
+              onStatusTransition={handleStatusTransition}
+              onRetry={onRetry}
+              onResearch={onResearch}
+              onScrollToResearch={handleScrollToResearch}
+              onOpenCapture={() => setIsCaptureModalOpen(true)}
+              onOpenSplit={() => setIsSplitModalOpen(true)}
+              onCopyMarkdown={handleCopyMarkdown}
+              onDownloadMarkdown={handleDownloadMarkdown}
+              onAddToTodoist={handleAddToTodoist}
+              onSpinOff={handleSpinOff}
+              onDelete={onDelete}
+              onClose={onClose}
+              showToast={showToast}
+            />
           </div>
         </div>
 
@@ -1316,7 +1112,14 @@ export const CardModal: React.FC<CardModalProps> = ({
                 {renderWhyCare()}
 
                 {/* 3. Next Actions Checklist */}
-                {renderNextActionsChecklist()}
+                <CardActionsChecklist
+                  actions={actions}
+                  completedActions={completedActions}
+                  onToggleAction={handleToggleAction}
+                  onEditAction={handleEditAction}
+                  onRemoveAction={handleRemoveAction}
+                  onAddAction={handleAddAction}
+                />
 
                 {/* 4. Deep Research Section */}
                 {renderDeepResearchSection()}
@@ -1368,7 +1171,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 {/* 6. Open Questions */}
                 <div className="briefing-section">
                   <div className="briefing-heading heading-questions">
-                    <HelpCircle size={13} strokeWidth={1.5} />
+                    <Lightbulb size={13} strokeWidth={1.5} />
                     <span>Open Questions (Research will address)</span>
                   </div>
                   <div className="actions-list">
@@ -1421,7 +1224,14 @@ export const CardModal: React.FC<CardModalProps> = ({
                 {renderWhyCare()}
 
                 {/* 3. Next Actions Checklist */}
-                {renderNextActionsChecklist()}
+                <CardActionsChecklist
+                  actions={actions}
+                  completedActions={completedActions}
+                  onToggleAction={handleToggleAction}
+                  onEditAction={handleEditAction}
+                  onRemoveAction={handleRemoveAction}
+                  onAddAction={handleAddAction}
+                />
 
                 {/* 4. Deep Research Section (contains verdict callout & research findings) */}
                 {renderDeepResearchSection()}
@@ -1478,7 +1288,14 @@ export const CardModal: React.FC<CardModalProps> = ({
                 {renderWhyCare()}
 
                 {/* 3. Next Actions Checklist */}
-                {renderNextActionsChecklist()}
+                <CardActionsChecklist
+                  actions={actions}
+                  completedActions={completedActions}
+                  onToggleAction={handleToggleAction}
+                  onEditAction={handleEditAction}
+                  onRemoveAction={handleRemoveAction}
+                  onAddAction={handleAddAction}
+                />
 
                 {/* 4. Deep Research Section */}
                 {renderDeepResearchSection()}
@@ -1564,7 +1381,14 @@ export const CardModal: React.FC<CardModalProps> = ({
                 {renderWhyCare()}
 
                 {/* 3. Next Actions Checklist */}
-                {renderNextActionsChecklist()}
+                <CardActionsChecklist
+                  actions={actions}
+                  completedActions={completedActions}
+                  onToggleAction={handleToggleAction}
+                  onEditAction={handleEditAction}
+                  onRemoveAction={handleRemoveAction}
+                  onAddAction={handleAddAction}
+                />
 
                 {/* 4. Deep Research Section */}
                 {renderDeepResearchSection()}
@@ -1612,7 +1436,15 @@ export const CardModal: React.FC<CardModalProps> = ({
                 {renderWhyCare()}
 
                 {/* 3. Completed Actions Checklist */}
-                {renderNextActionsChecklist('Completed Actions')}
+                <CardActionsChecklist
+                  title="Completed Actions"
+                  actions={actions}
+                  completedActions={completedActions}
+                  onToggleAction={handleToggleAction}
+                  onEditAction={handleEditAction}
+                  onRemoveAction={handleRemoveAction}
+                  onAddAction={handleAddAction}
+                />
 
                 {/* 4. Deep Research Section */}
                 {renderDeepResearchSection()}
@@ -1635,7 +1467,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             )}
           </div>
 
-          {/* Right Rail (Provenance, Siblings, References, Activity) */}
+          {/* Right Rail (Provenance, Siblings, References, Tags, Activity) */}
           <div className="drawer-right-rail">
             {/* 1. Source Provenance */}
             <div className="rail-section">
@@ -1760,155 +1592,30 @@ export const CardModal: React.FC<CardModalProps> = ({
               )}
             </div>
 
-            {/* 3. References */}
-            <div className="rail-section">
-              <div className="rail-section-title">
-                <Link2 size={13} color="#38bdf8" />
-                <span>References ({references.length})</span>
-              </div>
+            {/* 3. Metadata Panel (References & Tags with chips) */}
+            <CardMetadataPanel
+              card={card}
+              horizon={horizon}
+              status={status}
+              cardType={cardType}
+              tags={tags}
+              references={references}
+              onHorizonChange={handleHorizonChange}
+              onStatusChange={handleStatusTransition}
+              onTypeChange={handleTypeChange}
+              onAddTag={handleAddTag}
+              onRemoveTag={handleRemoveTag}
+              onAddReference={handleAddReference}
+              onRemoveReference={handleRemoveReference}
+              showSelectors={true}
+            />
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {references.map((ref, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '4px 6px',
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 4,
-                      fontSize: 12,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-                      <span className={`ref-kind-chip ref-kind-${ref.kind}`}>{ref.kind}</span>
-                      <span style={{ color: '#e2e8f0' }} className="line-clamp-1">
-                        {ref.label || ref.url}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {ref.url && (
-                        <a href={ref.url} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>
-                          <ExternalLink size={11} />
-                        </a>
-                      )}
-                      <button type="button" className="close-btn" onClick={() => removeReference(idx)}>
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add Reference inline */}
-              <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                <select
-                  className="form-input"
-                  value={newRefKind}
-                  onChange={(e) => setNewRefKind(e.target.value as ReferenceKind)}
-                  style={{ width: 68, padding: '3px 4px', fontSize: 11 }}
-                >
-                  <option value="url">url</option>
-                  <option value="repo">repo</option>
-                  <option value="tool">tool</option>
-                  <option value="paper">paper</option>
-                  <option value="other">other</option>
-                </select>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="URL or label..."
-                  value={newRefUrl || newRefLabel}
-                  onChange={(e) => {
-                    setNewRefUrl(e.target.value);
-                    setNewRefLabel(e.target.value);
-                  }}
-                  style={{ flex: 1, padding: '3px 6px', fontSize: 11 }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addReference();
-                    }
-                  }}
-                />
-                <button type="button" className="btn-secondary" onClick={addReference} style={{ padding: '3px 8px' }}>
-                  <Plus size={11} />
-                </button>
-              </div>
-            </div>
-
-            {/* 4. Tags Input */}
-            <div className="rail-section">
-              <div className="rail-section-title">
-                <span>Tags</span>
-              </div>
-              <input
-                type="text"
-                className="form-input"
-                value={tagsInput}
-                onChange={(e) => handleTagsChange(e.target.value)}
-                placeholder="tag1, tag2..."
-                style={{ fontSize: 12, padding: '4px 8px' }}
-              />
-            </div>
-
-            {/* 5. Activity & Comments */}
-            <div className="rail-section">
-              <div className="rail-section-title">
-                <MessageSquare size={13} color="#f59e0b" />
-                <span>Comments & History</span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
-                {comments.map((c) => (
-                  <div
-                    key={c.id}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 4,
-                      padding: 6,
-                      fontSize: 11.5,
-                    }}
-                  >
-                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 2 }}>
-                      {new Date(c.created_at).toLocaleString()}
-                    </div>
-                    <div style={{ color: '#cbd5e1', whiteSpace: 'pre-wrap' }}>{c.content}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                <textarea
-                  className="form-textarea"
-                  rows={2}
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add note or comment..."
-                  style={{ flex: 1, fontSize: 11.5 }}
-                />
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={async () => {
-                    if (!newComment.trim()) return;
-                    try {
-                      const c = await addCardComment(card.id, newComment);
-                      setComments((prev) => [...prev, c]);
-                      setNewComment('');
-                    } catch (err: unknown) {
-                      showToast?.(getErrorMessage(err));
-                    }
-                  }}
-                  style={{ padding: '4px 10px', fontSize: 11 }}
-                >
-                  Post
-                </button>
-              </div>
-            </div>
+            {/* 4. Activity & Comments */}
+            <CardCommentsSection
+              cardId={card.id}
+              comments={comments}
+              onAddComment={handleAddComment}
+            />
           </div>
         </div>
       </div>
