@@ -24,8 +24,8 @@ var ErrBuiltinReadOnly = errors.New("builtin playbook is read-only")
 // ErrInvalidPlaybook is returned when a playbook violates validation rules.
 var ErrInvalidPlaybook = errors.New("invalid playbook")
 
-// Store provides CRUD for cards, research, and tags.
-type Store interface {
+// CardStore provides CRUD and relationship operations for cards, tags, and comments.
+type CardStore interface {
 	CreateCard(ctx context.Context, c Card) (Card, error)
 	GetCard(ctx context.Context, id int64) (Card, error)
 	GetCardBySourceURL(ctx context.Context, url string) (Card, error)
@@ -40,6 +40,18 @@ type Store interface {
 	ListTags(ctx context.Context) ([]Tag, error)
 	AddCardComment(ctx context.Context, cardID int64, content string) (CardComment, error)
 	ListCardComments(ctx context.Context, cardID int64) ([]CardComment, error)
+}
+
+// CaptureStore provides persistence and lookup for raw captures.
+type CaptureStore interface {
+	CreateCapture(ctx context.Context, c Capture) (Capture, error)
+	GetCapture(ctx context.Context, id int64) (Capture, error)
+	GetCaptureBySourceURL(ctx context.Context, url string) (Capture, error)
+	UpdateCapture(ctx context.Context, c Capture) (Capture, error)
+}
+
+// ResearchStore provides research execution, queueing, history, and feedback operations.
+type ResearchStore interface {
 	CreateResearch(ctx context.Context, cardID int64, query string, playbookID ...*int64) (Research, error)
 	HasActiveResearch(ctx context.Context, cardID int64) (bool, error)
 	SetResearch(ctx context.Context, id int64, status, findings, errMsg string) (Research, error)
@@ -47,20 +59,20 @@ type Store interface {
 	GetResearch(ctx context.Context, id int64) (Research, error)
 	ListResearch(ctx context.Context) ([]Research, error)
 	ListResearchByCard(ctx context.Context, cardID int64) ([]Research, error)
-	Close() error
 	// GetResearchFindings returns only the findings column for a research row.
 	// Used by the single-row endpoint; ListResearch omits findings.
 	GetResearchFindings(ctx context.Context, id int64) (string, error)
-	// Key-value settings persistence for runtime BYOK and admin configuration.
-	GetSetting(ctx context.Context, key string) (string, error)
-	SetSetting(ctx context.Context, key, value string) error
-	ListSettings(ctx context.Context) (map[string]string, error)
-	// Capture persistence and lookup.
-	CreateCapture(ctx context.Context, c Capture) (Capture, error)
-	GetCapture(ctx context.Context, id int64) (Capture, error)
-	GetCaptureBySourceURL(ctx context.Context, url string) (Capture, error)
-	UpdateCapture(ctx context.Context, c Capture) (Capture, error)
-	// Playbooks
+	RecoverInterruptedResearch(ctx context.Context) (int, error)
+	GetNextQueuedResearch(ctx context.Context, asOf time.Time) (*Research, error)
+	CountQueuedAhead(ctx context.Context, researchID int64) (int, error)
+	BatchQueueResearch(ctx context.Context, cardIDs []int64, playbookID *int64, scheduledFor *time.Time, batchID string) ([]Research, error)
+	FindCardsForRule(ctx context.Context, filter ResearchRuleFilter, maxCards int, asOf time.Time) ([]Card, error)
+	ListCompletedResearchSince(ctx context.Context, since time.Time) ([]Research, error)
+	SetResearchFeedback(ctx context.Context, researchID int64, rating, comment string) error
+}
+
+// PlaybookStore provides CRUD, duplication, and resolution for playbooks.
+type PlaybookStore interface {
 	CreatePlaybook(ctx context.Context, pb Playbook) (Playbook, error)
 	GetPlaybook(ctx context.Context, id int64) (Playbook, error)
 	ListPlaybooks(ctx context.Context) ([]Playbook, error)
@@ -69,17 +81,34 @@ type Store interface {
 	DuplicatePlaybook(ctx context.Context, id int64) (Playbook, error)
 	GetDefaultPlaybook(ctx context.Context) (Playbook, error)
 	ResolvePlaybook(ctx context.Context, cardID int64, explicitPlaybookID ...*int64) (Playbook, error)
-	// Feedback and metrics
-	SetResearchFeedback(ctx context.Context, researchID int64, rating, comment string) error
+}
+
+// SettingsStore provides key-value settings persistence for runtime BYOK and admin configuration.
+type SettingsStore interface {
+	GetSetting(ctx context.Context, key string) (string, error)
+	SetSetting(ctx context.Context, key, value string) error
+	ListSettings(ctx context.Context) (map[string]string, error)
+}
+
+// MetricsStore provides pipeline metric aggregation and inspection.
+type MetricsStore interface {
 	GetPipelineMetrics(ctx context.Context) (PipelineMetrics, error)
-	// Scheduled, queued and batch research
-	RecoverInterruptedResearch(ctx context.Context) (int, error)
-	GetNextQueuedResearch(ctx context.Context, asOf time.Time) (*Research, error)
-	CountQueuedAhead(ctx context.Context, researchID int64) (int, error)
-	BatchQueueResearch(ctx context.Context, cardIDs []int64, playbookID *int64, scheduledFor *time.Time, batchID string) ([]Research, error)
-	FindCardsForRule(ctx context.Context, filter ResearchRuleFilter, maxCards int, asOf time.Time) ([]Card, error)
-	ListCompletedResearchSince(ctx context.Context, since time.Time) ([]Research, error)
-	// Channel message mapping persistence
+}
+
+// ChannelMessageStore provides channel message-to-card mapping persistence.
+type ChannelMessageStore interface {
 	RecordChannelMessage(ctx context.Context, channel, messageID string, cardID int64) error
 	GetCardIDByChannelMessage(ctx context.Context, channel, messageID string) (int64, error)
+}
+
+// Store provides the unified composite interface comprising all segregated stores.
+type Store interface {
+	CardStore
+	CaptureStore
+	ResearchStore
+	PlaybookStore
+	SettingsStore
+	MetricsStore
+	ChannelMessageStore
+	Close() error
 }

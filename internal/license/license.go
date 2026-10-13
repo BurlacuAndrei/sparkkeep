@@ -54,11 +54,11 @@ type LicenseStatus struct {
 }
 
 type Manager struct {
-	store     port.Store
+	store     port.SettingsStore
 	publicKey ed25519.PublicKey
 }
 
-func NewManager(store port.Store) *Manager {
+func NewManager(store port.SettingsStore) *Manager {
 	return &Manager{
 		store:     store,
 		publicKey: defaultPublicKey,
@@ -200,7 +200,7 @@ func SignLicenseForTest(priv ed25519.PrivateKey, payload LicensePayload) (string
 }
 
 // SetupProForTest configures a Manager with a valid Pro license (including FeatureDeepResearchV2) in the given store.
-func SetupProForTest(ctx context.Context, st port.Store) *Manager {
+func SetupProForTest(ctx context.Context, st port.SettingsStore) *Manager {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		panic(err)
@@ -220,7 +220,7 @@ func SetupProForTest(ctx context.Context, st port.Store) *Manager {
 }
 
 // SetupLapsedForTest configures a Manager with an expired Pro license in the given store.
-func SetupLapsedForTest(ctx context.Context, st port.Store) *Manager {
+func SetupLapsedForTest(ctx context.Context, st port.SettingsStore) *Manager {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		panic(err)

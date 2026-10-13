@@ -17,7 +17,16 @@ import (
 	"sparkkeep/internal/research"
 )
 
-var _ port.Store = (*Store)(nil)
+var (
+	_ port.Store               = (*Store)(nil)
+	_ port.CardStore           = (*Store)(nil)
+	_ port.CaptureStore        = (*Store)(nil)
+	_ port.ResearchStore       = (*Store)(nil)
+	_ port.PlaybookStore       = (*Store)(nil)
+	_ port.SettingsStore       = (*Store)(nil)
+	_ port.MetricsStore        = (*Store)(nil)
+	_ port.ChannelMessageStore = (*Store)(nil)
+)
 
 const (
 	timeLayout   = time.RFC3339

@@ -13,7 +13,7 @@ import (
 )
 
 type memoryStore struct {
-	port.Store
+	port.SettingsStore
 	settings map[string]string
 }
 

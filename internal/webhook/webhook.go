@@ -32,13 +32,13 @@ type Payload struct {
 }
 
 type Dispatcher struct {
-	store   port.Store
+	store   port.SettingsStore
 	license *license.Manager
 	client  *http.Client
 	logf    func(format string, args ...any)
 }
 
-func NewDispatcher(store port.Store, lic *license.Manager, logf func(format string, args ...any)) *Dispatcher {
+func NewDispatcher(store port.SettingsStore, lic *license.Manager, logf func(format string, args ...any)) *Dispatcher {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}

@@ -17,7 +17,7 @@ import (
 )
 
 type memoryStore struct {
-	port.Store
+	port.SettingsStore
 	mu       sync.Mutex
 	settings map[string]string
 }
@@ -41,6 +41,16 @@ func (m *memoryStore) SetSetting(_ context.Context, key, value string) error {
 	defer m.mu.Unlock()
 	m.settings[key] = value
 	return nil
+}
+
+func (m *memoryStore) ListSettings(_ context.Context) (map[string]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]string, len(m.settings))
+	for k, v := range m.settings {
+		out[k] = v
+	}
+	return out, nil
 }
 
 func TestWebhook_GatedForCommunity(t *testing.T) {
