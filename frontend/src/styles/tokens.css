@@ -1,0 +1,224 @@
+/* ==========================================================================
+   Design Tokens & Theme Definitions
+   ========================================================================== */
+
+:root {
+  /* Typography */
+  --font-sans: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Typography Scale */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.8125rem;
+  --font-size-base: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.625;
+
+  /* Geometry & Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Transitions & Motion */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 400ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Elevation Tokens */
+  --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.25);
+  --elevation-3: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --elevation-4: 0 16px 36px rgba(0, 0, 0, 0.45);
+}
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces & Canvas */
+  --bg-app: #0a0c10;
+  --bg-glass: rgba(14, 17, 24, 0.75);
+  --bg-topbar: rgba(10, 12, 16, 0.85);
+  --bg-surface: #11141c;
+  --bg-surface-elevated: #161a24;
+  --bg-card: rgba(20, 24, 34, 0.6);
+  --bg-card-hover: rgba(26, 32, 45, 0.85);
+
+  /* Form Elements & Inputs */
+  --bg-input: rgba(255, 255, 255, 0.03);
+  --bg-input-hover: rgba(255, 255, 255, 0.05);
+  --bg-input-focus: rgba(255, 255, 255, 0.07);
+  --border-input: rgba(255, 255, 255, 0.09);
+  --border-input-hover: rgba(255, 255, 255, 0.18);
+  --border-input-focus: rgba(99, 102, 241, 0.5);
+
+  /* Popovers, Menus & Dropdowns */
+  --bg-popover: #151923;
+  --border-popover: rgba(255, 255, 255, 0.1);
+  --shadow-popover: 0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --bg-item-hover: rgba(255, 255, 255, 0.06);
+  --bg-item-selected: rgba(99, 102, 241, 0.18);
+  --border-item-selected: rgba(99, 102, 241, 0.35);
+
+  /* Hairline Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-card: rgba(255, 255, 255, 0.08);
+  --border-card-hover: rgba(255, 255, 255, 0.16);
+  --border-hover: rgba(255, 255, 255, 0.18);
+  --border-highlight: rgba(99, 102, 241, 0.35);
+
+  /* Typography */
+  --text-main: #f3f4f6;
+  --text-dim: #9ca3af;
+  --text-faint: #6b7280;
+  --text-muted: #9ca3af;
+
+  /* Accent Palette */
+  --accent-blue: #38bdf8;
+  --accent-cyan: #38bdf8;
+  --accent-emerald: #10b981;
+  --accent-purple: #a855f7;
+  --accent-indigo: #6366f1;
+  --accent-amber: #f59e0b;
+  --accent-rose: #f43f5e;
+
+  /* Elevation & Shadows */
+  --shadow-glow: 0 0 20px -5px rgba(99, 102, 241, 0.18);
+  --shadow-card: 0 4px 16px -2px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 20px 40px -10px rgba(0, 0, 0, 0.7);
+  --modal-backdrop: rgba(0, 0, 0, 0.65);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces & Canvas */
+  --bg-app: #f8fafc;
+  --bg-glass: rgba(255, 255, 255, 0.85);
+  --bg-topbar: rgba(255, 255, 255, 0.9);
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f1f5f9;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-card-hover: #ffffff;
+
+  /* Form Elements & Inputs */
+  --bg-input: #ffffff;
+  --bg-input-hover: #f8fafc;
+  --bg-input-focus: #ffffff;
+  --border-input: #cbd5e1;
+  --border-input-hover: #94a3b8;
+  --border-input-focus: #6366f1;
+
+  /* Popovers, Menus & Dropdowns */
+  --bg-popover: #ffffff;
+  --border-popover: #e2e8f0;
+  --shadow-popover: 0 16px 36px -4px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  --bg-item-hover: #f1f5f9;
+  --bg-item-selected: rgba(99, 102, 241, 0.1);
+  --border-item-selected: rgba(99, 102, 241, 0.35);
+
+  /* Hairline Borders */
+  --border-subtle: #e2e8f0;
+  --border-card: #e2e8f0;
+  --border-card-hover: #cbd5e1;
+  --border-hover: #cbd5e1;
+  --border-highlight: rgba(99, 102, 241, 0.4);
+
+  /* Typography */
+  --text-main: #0f172a;
+  --text-dim: #475569;
+  --text-faint: #94a3b8;
+  --text-muted: #64748b;
+
+  /* Accent Palette */
+  --accent-blue: #0284c7;
+  --accent-cyan: #0891b2;
+  --accent-emerald: #059669;
+  --accent-purple: #9333ea;
+  --accent-indigo: #4f46e5;
+  --accent-amber: #d97706;
+  --accent-rose: #e11d48;
+
+  /* Elevation & Shadows */
+  --shadow-glow: 0 0 20px -5px rgba(99, 102, 241, 0.12);
+  --shadow-card: 0 2px 10px -2px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 8px 24px -4px rgba(0, 0, 0, 0.1);
+  --shadow-modal: 0 20px 40px -10px rgba(0, 0, 0, 0.18);
+  --modal-backdrop: rgba(15, 23, 42, 0.45);
+}
+
+[data-theme="oled"] {
+  color-scheme: dark;
+
+  /* Surfaces & Canvas */
+  --bg-app: #000000;
+  --bg-glass: rgba(0, 0, 0, 0.85);
+  --bg-topbar: rgba(0, 0, 0, 0.95);
+  --bg-surface: #000000;
+  --bg-surface-elevated: #09090b;
+  --bg-card: rgba(12, 12, 14, 0.85);
+  --bg-card-hover: rgba(20, 20, 24, 0.95);
+
+  /* Form Elements & Inputs */
+  --bg-input: rgba(255, 255, 255, 0.04);
+  --bg-input-hover: rgba(255, 255, 255, 0.07);
+  --bg-input-focus: rgba(255, 255, 255, 0.09);
+  --border-input: rgba(255, 255, 255, 0.12);
+  --border-input-hover: rgba(255, 255, 255, 0.22);
+  --border-input-focus: rgba(99, 102, 241, 0.6);
+
+  /* Popovers, Menus & Dropdowns */
+  --bg-popover: #09090b;
+  --border-popover: rgba(255, 255, 255, 0.12);
+  --shadow-popover: 0 16px 36px -4px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --bg-item-hover: rgba(255, 255, 255, 0.08);
+  --bg-item-selected: rgba(99, 102, 241, 0.22);
+  --border-item-selected: rgba(99, 102, 241, 0.45);
+
+  /* Hairline Borders */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-card: rgba(255, 255, 255, 0.12);
+  --border-card-hover: rgba(255, 255, 255, 0.22);
+  --border-hover: rgba(255, 255, 255, 0.22);
+  --border-highlight: rgba(99, 102, 241, 0.45);
+
+  /* Typography */
+  --text-main: #f9fafb;
+  --text-dim: #9ca3af;
+  --text-faint: #6b7280;
+  --text-muted: #9ca3af;
+
+  /* Accent Palette */
+  --accent-blue: #38bdf8;
+  --accent-cyan: #38bdf8;
+  --accent-emerald: #10b981;
+  --accent-purple: #a855f7;
+  --accent-indigo: #6366f1;
+  --accent-amber: #f59e0b;
+  --accent-rose: #f43f5e;
+
+  /* Elevation & Shadows */
+  --shadow-glow: 0 0 20px -5px rgba(99, 102, 241, 0.25);
+  --shadow-card: 0 4px 16px -2px rgba(0, 0, 0, 0.6);
+  --shadow-card-hover: 0 8px 24px -4px rgba(0, 0, 0, 0.8);
+  --shadow-modal: 0 20px 40px -10px rgba(0, 0, 0, 0.9);
+  --modal-backdrop: rgba(0, 0, 0, 0.85);
+}
