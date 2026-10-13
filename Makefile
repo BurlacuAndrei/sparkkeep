@@ -10,6 +10,7 @@ build-go:
 
 test:
 	go test ./...
+	cd frontend && npm run test
 
 fmt:
 	gofmt -w .
