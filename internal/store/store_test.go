@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -30,11 +32,14 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 19 {
-		t.Fatalf("version = %d, want 19", version)
+	if version != 20 {
+		t.Fatalf("version = %d, want 20", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
+	}
+	if _, err := s.db.Exec(`SELECT 1 FROM cards_fts LIMIT 1`); err != nil {
+		t.Fatalf("cards_fts table: %v", err)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM card_references LIMIT 1`); err != nil {
 		t.Fatalf("card_references table: %v", err)
@@ -1079,8 +1084,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 19 {
-		t.Fatalf("version = %d, want 19", version)
+	if version != 20 {
+		t.Fatalf("version = %d, want 20", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1192,8 +1197,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 19 {
-		t.Fatalf("version = %d, want 19", version)
+	if version != 20 {
+		t.Fatalf("version = %d, want 20", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -2094,6 +2099,289 @@ func TestChannelMessages(t *testing.T) {
 	}
 	if _, err := s.GetCardIDByChannelMessage(ctx, "discord", "1001"); !errors.Is(err, port.ErrNotFound) {
 		t.Fatalf("discord channel message after card delete: want port.ErrNotFound, got %v", err)
+	}
+}
+
+func TestCardsFTSSearch(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	c1, err := s.CreateCard(ctx, port.Card{
+		Title:            "Distributed Key-Value Engine",
+		Summary:          "High throughput in-memory caching layer",
+		ExecutiveSummary: "Solves latency spikes in database queries",
+		TLDR:             "Ultra fast memory caching architecture",
+		WhyCare:          "Drastically cuts down cloud infrastructure expenses",
+		ProposedActions:  []string{"Benchmark memory usage", "Deploy to staging cluster"},
+		SourceURL:        "https://github.com/fastcache/kv-engine",
+		Tags:             []string{"nosql", "caching-layer"},
+	})
+	if err != nil {
+		t.Fatalf("CreateCard c1: %v", err)
+	}
+
+	c2, err := s.CreateCard(ctx, port.Card{
+		Title:            "Machine Learning Observability with C++",
+		Summary:          "Realtime metrics and tracing pipeline for foo:bar service",
+		ExecutiveSummary: "Eliminates model regression blindspots",
+		TLDR:             "Observability stack for modern models",
+		WhyCare:          "Prevents silent failures in production deployments",
+		ProposedActions:  []string{"Setup Prometheus exporter", "Validate alert thresholds"},
+		SourceURL:        "https://github.com/mlops/pipeline",
+		Tags:             []string{"mlops", "monitoring"},
+	})
+	if err != nil {
+		t.Fatalf("CreateCard c2: %v", err)
+	}
+
+	testCases := []struct {
+		name      string
+		query     string
+		wantID    int64
+		wantCount int
+	}{
+		// Title search
+		{"title word", "Distributed", c1.ID, 1},
+		{"title case insensitive", "distributed", c1.ID, 1},
+		{"title prefix", "Distrib*", c1.ID, 1},
+		// Summary search
+		{"summary word", "throughput", c1.ID, 1},
+		{"summary multi-word", "in-memory caching", c1.ID, 1},
+		// Executive summary search
+		{"executive summary phrase", "latency spikes", c1.ID, 1},
+		// TLDR search
+		{"tldr word", "architecture", c1.ID, 1},
+		// WhyCare search
+		{"why care phrase", "infrastructure expenses", c1.ID, 1},
+		// ProposedActions search
+		{"proposed actions word", "Benchmark", c1.ID, 1},
+		{"proposed actions phrase", "staging cluster", c1.ID, 1},
+		{"proposed actions item 2", "Prometheus", c2.ID, 1},
+		// Source URL search
+		{"source url exact domain", "fastcache/kv-engine", c1.ID, 1},
+		{"source url domain", "mlops/pipeline", c2.ID, 1},
+		// Tag search
+		{"tag name", "nosql", c1.ID, 1},
+		{"tag hyphenated", "caching-layer", c1.ID, 1},
+		{"tag mlops", "monitoring", c2.ID, 1},
+		// Special characters & operators
+		{"special char c++", "C++", c2.ID, 1},
+		{"special char colon", "foo:bar", c2.ID, 1},
+		{"FTS keyword NOT", "NOT", 0, 0},
+		{"FTS keyword AND", "AND", c2.ID, 1},
+		{"FTS keyword NEAR", "NEAR", 0, 0},
+		{"quoted phrase", `"Ultra fast memory caching"`, c1.ID, 1},
+		{"whitespace and quotes", `  "Distributed Key-Value Engine"  `, c1.ID, 1},
+		{"wildcard only", `*`, 0, 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cards, err := s.ListCards(ctx, port.CardFilter{Query: tc.query})
+			if err != nil {
+				t.Fatalf("ListCards(Query=%q): %v", tc.query, err)
+			}
+			if len(cards) != tc.wantCount {
+				t.Fatalf("ListCards(Query=%q) got %d cards, want %d", tc.query, len(cards), tc.wantCount)
+			}
+			if tc.wantCount > 0 && cards[0].ID != tc.wantID {
+				t.Fatalf("ListCards(Query=%q) got card ID %d, want %d", tc.query, cards[0].ID, tc.wantID)
+			}
+		})
+	}
+}
+
+func TestCardsFTSTriggerSync(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	// 1. Create a card
+	c, err := s.CreateCard(ctx, port.Card{
+		Title:            "Original Alpha Title",
+		Summary:          "Common Summary",
+		ExecutiveSummary: "Initial Exec",
+		TLDR:             "Initial TLDR",
+		WhyCare:          "Initial WhyCare",
+		ProposedActions:  []string{"Original Alpha Action 1", "Original Alpha Action 2"},
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	// Verify indexed by initial terms
+	res, err := s.ListCards(ctx, port.CardFilter{Query: "Alpha"})
+	if err != nil {
+		t.Fatalf("ListCards initial: %v", err)
+	}
+	if len(res) != 1 || res[0].ID != c.ID {
+		t.Fatalf("ListCards initial query 'Alpha': got %d cards", len(res))
+	}
+
+	var ftsCount int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM cards_fts WHERE cards_fts MATCH 'Alpha'`).Scan(&ftsCount); err != nil {
+		t.Fatalf("query cards_fts match 'Alpha': %v", err)
+	}
+	if ftsCount != 1 {
+		t.Fatalf("cards_fts count for 'Alpha': got %d, want 1", ftsCount)
+	}
+
+	// 2. Update card (verify UPDATE trigger sync)
+	newTitle := "Updated Omega Heading"
+	newExec := "Updated Omega Overview"
+	newTLDR := "Updated Omega Digest"
+	newWhy := "Updated Omega Value"
+	newActions := []string{"Updated Omega Task 1", "Updated Omega Task 2"}
+
+	updated, err := s.UpdateCard(ctx, c.ID, port.CardPatch{
+		Title:            &newTitle,
+		ExecutiveSummary: &newExec,
+		TLDR:             &newTLDR,
+		WhyCare:          &newWhy,
+		ProposedActions:  &newActions,
+	})
+	if err != nil {
+		t.Fatalf("UpdateCard: %v", err)
+	}
+	if updated.Title != newTitle {
+		t.Fatalf("updated title = %q, want %q", updated.Title, newTitle)
+	}
+
+	// Old term "Alpha" must return no results
+	oldRes, err := s.ListCards(ctx, port.CardFilter{Query: "Alpha"})
+	if err != nil {
+		t.Fatalf("ListCards old term: %v", err)
+	}
+	if len(oldRes) != 0 {
+		t.Fatalf("expected 0 cards for old term 'Alpha', got %d", len(oldRes))
+	}
+
+	// Direct cards_fts query for old term
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM cards_fts WHERE cards_fts MATCH 'Alpha'`).Scan(&ftsCount); err != nil {
+		t.Fatalf("query cards_fts for old term: %v", err)
+	}
+	if ftsCount != 0 {
+		t.Fatalf("cards_fts count for old term 'Alpha': got %d, want 0", ftsCount)
+	}
+
+	// New terms must match
+	newRes, err := s.ListCards(ctx, port.CardFilter{Query: "Omega"})
+	if err != nil {
+		t.Fatalf("ListCards new term: %v", err)
+	}
+	if len(newRes) != 1 || newRes[0].ID != c.ID {
+		t.Fatalf("ListCards new term 'Omega': got %d cards, want 1", len(newRes))
+	}
+
+	newActionRes, err := s.ListCards(ctx, port.CardFilter{Query: "Task"})
+	if err != nil {
+		t.Fatalf("ListCards action term: %v", err)
+	}
+	if len(newActionRes) != 1 || newActionRes[0].ID != c.ID {
+		t.Fatalf("ListCards action term 'Task': got %d cards, want 1", len(newActionRes))
+	}
+
+	// 3. Delete card (verify DELETE trigger sync)
+	if err := s.DeleteCard(ctx, c.ID); err != nil {
+		t.Fatalf("DeleteCard: %v", err)
+	}
+
+	delRes, err := s.ListCards(ctx, port.CardFilter{Query: "Omega"})
+	if err != nil {
+		t.Fatalf("ListCards after delete: %v", err)
+	}
+	if len(delRes) != 0 {
+		t.Fatalf("ListCards after delete: got %d cards, want 0", len(delRes))
+	}
+
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM cards_fts WHERE cards_fts MATCH 'Omega'`).Scan(&ftsCount); err != nil {
+		t.Fatalf("query cards_fts after delete: %v", err)
+	}
+	if ftsCount != 0 {
+		t.Fatalf("cards_fts count after delete: got %d, want 0", ftsCount)
+	}
+}
+
+func TestCardsFTSMigrationPopulate(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "fts_migration_test.db")
+
+	// 1. Manually apply migrations 1..19 on a fresh DB
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatalf("open seed db: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create schema_version: %v", err)
+	}
+
+	files, err := fs.Glob(migrationFS, "migrations/*.sql")
+	if err != nil {
+		t.Fatalf("Glob migrations: %v", err)
+	}
+	sort.Strings(files)
+
+	for _, file := range files {
+		var version int
+		if _, err := fmt.Sscanf(file, "migrations/%d", &version); err != nil {
+			t.Fatalf("parse migration filename %s: %v", file, err)
+		}
+		if version >= 20 {
+			continue // only apply up to 19
+		}
+		sqlBytes, err := migrationFS.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		if _, err := db.Exec(string(sqlBytes)); err != nil {
+			t.Fatalf("apply %s: %v", file, err)
+		}
+		if _, err := db.Exec(`INSERT INTO schema_version (version, applied_at) VALUES (?, ?)`, version, "2026-01-01T00:00:00Z"); err != nil {
+			t.Fatalf("record %s: %v", file, err)
+		}
+	}
+
+	// 2. Insert card directly into cards table before migration 20
+	ts := "2026-01-01T12:00:00Z"
+	res, err := db.Exec(`INSERT INTO cards (title, summary, horizon, status, source_url, source_note, executive_summary, tldr, why_care, proposed_actions, created_at, updated_at)
+		VALUES ('PreMigration Legacy Title', 'PreMigration Legacy Summary', 'short-term', 'inbox', 'https://example.com/pre', 'note', 'PreExec', 'PreTLDR', 'PreWhy', '["LegacyActionItem"]', ?, ?)`,
+		ts, ts)
+	if err != nil {
+		t.Fatalf("seed card: %v", err)
+	}
+	legacyCardID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("LastInsertId: %v", err)
+	}
+	db.Close()
+
+	// 3. Open store with New(dbPath), which applies migration 0020_cards_fts.sql and runs rebuild
+	s, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	var version int
+	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
+		t.Fatalf("schema_version: %v", err)
+	}
+	if version != 20 {
+		t.Fatalf("version = %d, want 20", version)
+	}
+
+	// 4. Verify the pre-migration legacy card was backfilled into cards_fts
+	cards, err := s.ListCards(ctx, port.CardFilter{Query: "PreMigration"})
+	if err != nil {
+		t.Fatalf("ListCards PreMigration: %v", err)
+	}
+	if len(cards) != 1 || cards[0].ID != legacyCardID {
+		t.Fatalf("ListCards PreMigration: got %d cards, want 1 with ID %d", len(cards), legacyCardID)
+	}
+
+	actionCards, err := s.ListCards(ctx, port.CardFilter{Query: "LegacyActionItem"})
+	if err != nil {
+		t.Fatalf("ListCards LegacyActionItem: %v", err)
+	}
+	if len(actionCards) != 1 || actionCards[0].ID != legacyCardID {
+		t.Fatalf("ListCards LegacyActionItem: got %d cards, want 1 with ID %d", len(actionCards), legacyCardID)
 	}
 }
 

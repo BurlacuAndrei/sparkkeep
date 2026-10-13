@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"sparkkeep/internal/port"
 )
@@ -364,6 +365,59 @@ func (s *Store) cardTags(ctx context.Context, cardID int64) ([]string, error) {
 	return tags, rows.Err()
 }
 
+// sanitizeFTSQuery prepares user query input for SQLite FTS5 MATCH queries.
+// It handles phrase queries, multi-word tokens with prefix matching, and sanitizes
+// characters that could cause FTS5 syntax errors.
+func sanitizeFTSQuery(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return `""`
+	}
+	// Preserve exact phrase queries if the caller wrapped the string in quotes.
+	if strings.HasPrefix(raw, `"`) && strings.HasSuffix(raw, `"`) && len(raw) >= 2 {
+		clean := strings.Trim(raw, `"`)
+		clean = strings.ReplaceAll(clean, `"`, "")
+		clean = strings.TrimRight(clean, "*")
+		clean = strings.TrimSpace(clean)
+		if clean == "" {
+			return `""`
+		}
+		if endsWithAlphaNum(clean) {
+			return `"` + clean + `"*`
+		}
+		return `"` + clean + `"`
+	}
+
+	clean := strings.ReplaceAll(raw, `"`, "")
+	words := strings.Fields(clean)
+	if len(words) == 0 {
+		return `""`
+	}
+	var parts []string
+	for _, w := range words {
+		w = strings.TrimRight(w, "*")
+		if w != "" {
+			if endsWithAlphaNum(w) {
+				parts = append(parts, `"`+w+`"*`)
+			} else {
+				parts = append(parts, `"`+w+`"`)
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return `""`
+	}
+	return strings.Join(parts, " ")
+}
+
+func endsWithAlphaNum(s string) bool {
+	if s == "" {
+		return false
+	}
+	r := rune(s[len(s)-1])
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
 func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, error) {
 	var where []string
 	var args []any
@@ -380,9 +434,10 @@ func (s *Store) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, 
 		args = append(args, f.Tag)
 	}
 	if f.Query != "" {
-		q := "%" + strings.ToLower(f.Query) + "%"
-		where = append(where, "(LOWER(title) LIKE ? OR LOWER(summary) LIKE ? OR LOWER(executive_summary) LIKE ? OR LOWER(tldr) LIKE ? OR LOWER(why_care) LIKE ? OR LOWER(proposed_actions) LIKE ? OR LOWER(source_url) LIKE ? OR LOWER(source_note) LIKE ? OR EXISTS (SELECT 1 FROM cards_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.card_id = cards.id AND LOWER(t.name) LIKE ?))")
-		args = append(args, q, q, q, q, q, q, q, q, q)
+		ftsQ := sanitizeFTSQuery(f.Query)
+		likeQ := "%" + strings.ToLower(f.Query) + "%"
+		where = append(where, "(cards.id IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?) OR cards.source_url LIKE ? OR EXISTS (SELECT 1 FROM cards_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.card_id = cards.id AND LOWER(t.name) LIKE ?))")
+		args = append(args, ftsQ, likeQ, likeQ)
 	}
 	if !f.Since.IsZero() {
 		where = append(where, "created_at >= ?")
