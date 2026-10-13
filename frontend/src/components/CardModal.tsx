@@ -29,6 +29,8 @@ import {
   MessageSquare,
   AlertTriangle,
   FileCode,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
 import { CARD_HORIZON_OPTIONS, CARD_TYPE_OPTIONS } from './selectOptions';
@@ -112,11 +114,76 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [splitSecondTitle, setSplitSecondTitle] = useState('');
 
   // UI state
-  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(status === 'review');
+  const [isReportExpanded, setIsReportExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const menuRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<any>(null);
+  const reportContainerRef = useRef<HTMLDivElement>(null);
+  const mainColRef = useRef<HTMLDivElement>(null);
+
+  const handleToggleReport = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const nextState = !isReportOpen;
+    setIsReportOpen(nextState);
+
+    if (nextState) {
+      // Allow React to mount and layout the report view
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const container = mainColRef.current;
+          const target = reportContainerRef.current;
+          if (!target) return;
+
+          // Find the active scrollable container
+          const scroller = container && container.scrollHeight > container.clientHeight
+            ? container
+            : (target.closest('.drawer-main-col') as HTMLElement) ||
+              (target.closest('.drawer-body-layout') as HTMLElement) ||
+              container;
+
+          if (scroller) {
+            const scrollerRect = scroller.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const currentScrollTop = scroller.scrollTop;
+            const targetRelativeTop = targetRect.top - scrollerRect.top + currentScrollTop;
+
+            let scrollToY = Math.max(0, targetRelativeTop - 12);
+            if (scrollToY <= 20 && scroller.scrollTop <= 20) {
+              scrollToY = 90;
+            }
+
+            scroller.scrollTo({
+              top: scrollToY,
+              behavior: 'smooth',
+            });
+          } else {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 70);
+      });
+    }
+  };
+
+  const handleScrollToResearch = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setIsReportOpen(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const el = document.getElementById('briefing-section-deep-research');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 70);
+    });
+  };
 
   const cardId = card.id;
 
@@ -128,7 +195,12 @@ export const CardModal: React.FC<CardModalProps> = ({
     const loadResearch = () => {
       fetchCardResearch(cardId)
         .then((r) => {
-          if (alive && r) setResearch(r);
+          if (alive && r) {
+            setResearch(r);
+            if (status === 'review') {
+              setIsReportOpen(true);
+            }
+          }
         })
         .catch(() => {});
     };
@@ -449,6 +521,414 @@ export const CardModal: React.FC<CardModalProps> = ({
   const totalActions = actions.length;
   const progressPercent = totalActions > 0 ? Math.round((completedCount / totalActions) * 100) : 0;
 
+  // Reusable Left Panel Section Renderers
+  const renderTldr = () => (
+    <div className="briefing-section">
+      <div className="briefing-heading heading-summary">
+        <FileText size={13} strokeWidth={1.5} />
+        <span>TL;DR Takeaway</span>
+      </div>
+      <textarea
+        className="form-textarea"
+        rows={2}
+        value={tldr}
+        onChange={(e) => handleTldrChange(e.target.value)}
+        placeholder="Core takeaway and summary..."
+      />
+    </div>
+  );
+
+  const renderWhyCare = () => (
+    <div className="briefing-section">
+      <div className="briefing-heading heading-value">
+        <Lightbulb size={13} strokeWidth={1.5} />
+        <span>Why You Might Care</span>
+      </div>
+      <textarea
+        className="form-textarea"
+        rows={2}
+        value={whyCare}
+        onChange={(e) => handleWhyCareChange(e.target.value)}
+        placeholder="Why this matters, practical implications..."
+      />
+    </div>
+  );
+
+  const renderNextActionsChecklist = (customTitle = 'Next Actions Checklist') => (
+    <div className="briefing-section">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div className="briefing-heading heading-actions" style={{ margin: 0 }}>
+          <CheckCircle2 size={13} strokeWidth={1.5} />
+          <span>{customTitle}</span>
+        </div>
+        <span style={{ fontSize: 11.5, color: '#34d399', fontWeight: 600 }}>
+          {totalActions > 0 ? `${completedCount}/${totalActions} completed (${progressPercent}%)` : 'No steps yet'}
+        </span>
+      </div>
+
+      {totalActions > 0 && (
+        <div className="card-progress-bar-track" style={{ height: 6, marginBottom: 12 }}>
+          <div className="card-progress-bar-fill" style={{ width: `${Math.max(5, progressPercent)}%` }} />
+        </div>
+      )}
+
+      <div className="actions-list">
+        {actions.map((act, idx) => (
+          <div
+            key={idx}
+            className="action-item"
+            style={{ alignItems: 'center', opacity: completedActions[idx] ? 0.6 : 1 }}
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(completedActions[idx])}
+              onChange={() => toggleAction(idx)}
+              style={{ cursor: 'pointer' }}
+            />
+            <input
+              type="text"
+              className="form-input"
+              value={act}
+              onChange={(e) => editAction(idx, e.target.value)}
+              style={{
+                flex: 1,
+                padding: '3px 8px',
+                background: 'transparent',
+                border: '1px solid transparent',
+                fontSize: 13,
+                color: completedActions[idx] ? '#94a3b8' : '#f1f5f9',
+                textDecoration: completedActions[idx] ? 'line-through' : 'none',
+              }}
+            />
+            <button
+              type="button"
+              className="close-btn"
+              onClick={() => removeAction(idx)}
+              title="Remove action"
+            >
+              <Trash2 size={12} strokeWidth={1.5} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <input
+          type="text"
+          className="form-input"
+          value={newAction}
+          placeholder="Add an action..."
+          onChange={(e) => setNewAction(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addAction();
+            }
+          }}
+        />
+        <button type="button" className="btn-secondary" onClick={addAction}>
+          <Plus size={13} color="#34d399" />
+          <span>Add</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderDeepResearchSection = () => {
+    const isRunning = card.research_state === 'running' || card.research_state === 'queued';
+    const isDone = Boolean(research || card.research_state === 'done');
+
+    return (
+      <div className="briefing-section briefing-research-section" id="briefing-section-deep-research">
+        <div
+          className="briefing-heading heading-research"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Sparkles size={13} strokeWidth={1.8} color="#c084fc" />
+            <span>Deep Research</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {isRunning ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 11,
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#fbbf24',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                }}
+              >
+                <RefreshCw size={11} className="spin" />
+                <span>In Progress</span>
+              </span>
+            ) : isDone && research ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 11,
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  background: 'rgba(52, 211, 153, 0.15)',
+                  color: '#34d399',
+                  border: '1px solid rgba(52, 211, 153, 0.3)',
+                }}
+              >
+                <CheckCircle2 size={11} />
+                <span>Findings Ready</span>
+              </span>
+            ) : (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 11,
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  background: 'rgba(148, 163, 184, 0.1)',
+                  color: '#94a3b8',
+                  border: '1px solid rgba(148, 163, 184, 0.2)',
+                }}
+              >
+                <span>Not Run</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* In Review Stage, show Verdict Callout & Decision Bar right in Deep Research */}
+        {status === 'review' && (
+          <div className={`verdict-callout-card ${verdict}`} style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className={`card-verdict-pill ${verdict || 'pursue'}`}>
+                  <span className="verdict-dot" />
+                  <strong>{(verdict || 'PURSUE').toUpperCase()}</strong>
+                  {confidence && <span>· Confidence: {confidence}</span>}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                Research Synthesis
+              </div>
+            </div>
+
+            {research?.result?.verdict && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
+                {research.result.verdict.for_whom && (
+                  <div>
+                    <strong style={{ color: '#f1f5f9' }}>For Whom: </strong>
+                    <span>{research.result.verdict.for_whom}</span>
+                  </div>
+                )}
+                {research.result.verdict.risks && research.result.verdict.risks.length > 0 && (
+                  <div>
+                    <strong style={{ color: '#fb7185' }}>Risks & Watch-outs: </strong>
+                    <span>{research.result.verdict.risks.join(' · ')}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Accept / Decision Actions */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => handleStatusTransition('to-do')}
+                style={{ fontSize: 12, padding: '5px 12px' }}
+              >
+                <Check size={13} />
+                <span>Accept Verdict → To Do</span>
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => handleStatusTransition('shelved')}
+                style={{ fontSize: 12, padding: '5px 12px' }}
+              >
+                <Clock size={13} />
+                <span>Watch (Shelve)</span>
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => handleStatusTransition('dismissed')}
+                style={{ fontSize: 12, padding: '5px 12px', color: '#fb7185' }}
+              >
+                <X size={13} />
+                <span>Skip (Dismiss)</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* State 1: Autonomous research in progress */}
+        {isRunning && (
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 8,
+              background: 'rgba(99, 102, 241, 0.08)',
+              border: '1px solid rgba(99, 102, 241, 0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <RefreshCw size={16} className="spin" color="#818cf8" />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#e0e7ff' }}>
+                  Autonomous Deep Research in Progress...
+                </div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                  Verifying claims, exploring live web sources, and synthesizing takeaways. This section updates automatically upon completion.
+                </div>
+              </div>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <ResearchProgressStrip cardId={card.id} />
+            </div>
+          </div>
+        )}
+
+        {/* State 2: Findings Ready */}
+        {!isRunning && research && (
+          <div
+            ref={reportContainerRef}
+            className={`drawer-report-card ${isReportOpen ? 'open' : ''}`}
+          >
+            <div
+              className="drawer-report-card-header"
+              onClick={handleToggleReport}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 6,
+                    background: 'rgba(192, 132, 252, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Sparkles size={16} color="#c084fc" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span>Deep Research Report</span>
+                    {research.result?.verdict?.recommendation && (
+                      <span className={`card-verdict-pill ${research.result.verdict.recommendation}`} style={{ fontSize: 10, padding: '1px 6px' }}>
+                        {research.result.verdict.recommendation.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                    {research.result?.claims?.length
+                      ? `${research.result.claims.length} claims verified & synthesized`
+                      : 'Autonomous multi-step analysis completed'}
+                    {research.tokens ? ` · ${research.tokens.toLocaleString()} tokens` : ''}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {isReportOpen && (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsReportExpanded((v) => !v);
+                    }}
+                    title={isReportExpanded ? "Collapse to contained scroll" : "Expand full height"}
+                    style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  >
+                    {isReportExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                    <span>{isReportExpanded ? 'Fit Height' : 'Full Height'}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleToggleReport}
+                  style={{ fontSize: 12, padding: '5px 12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}
+                >
+                  <FileSearch size={13} color="#38bdf8" />
+                  <span>{isReportOpen ? 'Hide Report' : 'View Report'}</span>
+                  {isReportOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+              </div>
+            </div>
+
+            {isReportOpen && (
+              <div className={`drawer-report-scroll-container ${isReportExpanded ? 'expanded' : ''}`}>
+                <ResearchReportView
+                  card={card}
+                  initialResearch={research}
+                  onUpdateCard={async (id, updates) => onUpdate(id, updates)}
+                  onAddActions={(newActs) => {
+                    const fresh = newActs.filter((a) => !actions.includes(a));
+                    if (fresh.length > 0) {
+                      const updated = [...actions, ...fresh];
+                      setActions(updated);
+                      onUpdate(card.id, { proposed_actions: updated });
+                      if (showToast) showToast(`Added ${fresh.length} action(s) to checklist`);
+                    }
+                  }}
+                  showToast={showToast}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* State 3: Not Researched Yet */}
+        {!isRunning && !research && (
+          <div
+            style={{
+              background: 'rgba(99, 102, 241, 0.06)',
+              border: '1px solid rgba(192, 132, 252, 0.25)',
+              borderRadius: 8,
+              padding: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Sparkles size={14} color="#c084fc" />
+                <span>Ready to dig deeper?</span>
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                Trigger autonomous multi-step research to verify claims against live web sources, survey alternatives, and formulate next actions.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => onResearch(card.id)}
+              style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Sparkles size={13} />
+              <span>Run Deep Research</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
@@ -661,16 +1141,22 @@ export const CardModal: React.FC<CardModalProps> = ({
                 </button>
               ) : null}
 
-              {/* Research CTA */}
+              {/* Research CTA / Scroll Jump */}
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => onResearch(card.id)}
-                title="Run deep research"
-                style={{ padding: '4px 10px', fontSize: 11.5 }}
+                onClick={() => {
+                  if (research) {
+                    handleScrollToResearch();
+                  } else {
+                    onResearch(card.id);
+                  }
+                }}
+                title={research ? "Jump to Deep Research findings" : "Run autonomous deep research"}
+                style={{ padding: '4px 10px', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 5 }}
               >
                 <Sparkles size={13} color="#c084fc" />
-                <span>Research</span>
+                <span>{research ? 'Deep Research' : 'Research'}</span>
               </button>
 
               {/* Overflow Menu ⋯ */}
@@ -778,7 +1264,7 @@ export const CardModal: React.FC<CardModalProps> = ({
         {/* Drawer Body: Two-Column Layout */}
         <div className="drawer-body-layout">
           {/* Main Column (Stage-Ordered Content) */}
-          <div className="drawer-main-col">
+          <div className="drawer-main-col" ref={mainColRef}>
             {/* Active Research Progress Indicator */}
             {(card.research_state === 'running' || card.research_state === 'queued') && (
               <div style={{ marginBottom: 12 }}>
@@ -823,37 +1309,19 @@ export const CardModal: React.FC<CardModalProps> = ({
             {/* STAGE: INBOX */}
             {status === 'inbox' && (
               <>
-                {/* 1. TL;DR */}
-                <div className="briefing-section">
-                  <div className="briefing-heading heading-summary">
-                    <FileText size={13} strokeWidth={1.5} />
-                    <span>TL;DR Takeaway</span>
-                  </div>
-                  <textarea
-                    className="form-textarea"
-                    rows={2}
-                    value={tldr}
-                    onChange={(e) => handleTldrChange(e.target.value)}
-                    placeholder="Core takeaway and summary..."
-                  />
-                </div>
+                {/* 1. TL;DR Takeaway */}
+                {renderTldr()}
 
                 {/* 2. Why Care / Value Prop */}
-                <div className="briefing-section">
-                  <div className="briefing-heading heading-value">
-                    <Lightbulb size={13} strokeWidth={1.5} />
-                    <span>Why You Might Care</span>
-                  </div>
-                  <textarea
-                    className="form-textarea"
-                    rows={2}
-                    value={whyCare}
-                    onChange={(e) => handleWhyCareChange(e.target.value)}
-                    placeholder="Why this matters, practical implications..."
-                  />
-                </div>
+                {renderWhyCare()}
 
-                {/* 3. Key Claims */}
+                {/* 3. Next Actions Checklist */}
+                {renderNextActionsChecklist()}
+
+                {/* 4. Deep Research Section */}
+                {renderDeepResearchSection()}
+
+                {/* 5. Key Claims */}
                 <div className="briefing-section">
                   <div className="briefing-heading heading-claims">
                     <CheckCircle2 size={13} strokeWidth={1.5} />
@@ -897,7 +1365,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   </div>
                 </div>
 
-                {/* 4. Open Questions */}
+                {/* 6. Open Questions */}
                 <div className="briefing-section">
                   <div className="briefing-heading heading-questions">
                     <HelpCircle size={13} strokeWidth={1.5} />
@@ -940,109 +1408,25 @@ export const CardModal: React.FC<CardModalProps> = ({
                     </button>
                   </div>
                 </div>
-
-                {/* Research Call to Action */}
-                <div
-                  style={{
-                    background: 'rgba(99, 102, 241, 0.08)',
-                    border: '1px solid rgba(99, 102, 241, 0.3)',
-                    borderRadius: 8,
-                    padding: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#e0e7ff' }}>
-                      Ready to dig deeper?
-                    </div>
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                      Trigger autonomous multi-step research to verify claims, survey alternatives, and formulate next actions.
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => onResearch(card.id)}
-                    style={{ whiteSpace: 'nowrap' }}
-                  >
-                    <Sparkles size={13} />
-                    <span>Run Deep Research</span>
-                  </button>
-                </div>
               </>
             )}
 
             {/* STAGE: REVIEW */}
             {status === 'review' && (
               <>
-                {/* 1. Verdict Callout */}
-                <div className={`verdict-callout-card ${verdict}`}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className={`card-verdict-pill ${verdict || 'pursue'}`}>
-                        <span className="verdict-dot" />
-                        <strong>{(verdict || 'PURSUE').toUpperCase()}</strong>
-                        {confidence && <span>· Confidence: {confidence}</span>}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-                      Research Synthesis
-                    </div>
-                  </div>
+                {/* 1. TL;DR Takeaway */}
+                {renderTldr()}
 
-                  {research?.result?.verdict && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
-                      {research.result.verdict.for_whom && (
-                        <div>
-                          <strong style={{ color: '#f1f5f9' }}>For Whom: </strong>
-                          <span>{research.result.verdict.for_whom}</span>
-                        </div>
-                      )}
-                      {research.result.verdict.risks && research.result.verdict.risks.length > 0 && (
-                        <div>
-                          <strong style={{ color: '#fb7185' }}>Risks & Watch-outs: </strong>
-                          <span>{research.result.verdict.risks.join(' · ')}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                {/* 2. Why Care / Value Prop */}
+                {renderWhyCare()}
 
-                  {/* Accept / Decision Actions */}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={() => handleStatusTransition('to-do')}
-                      style={{ fontSize: 12, padding: '5px 12px' }}
-                    >
-                      <Check size={13} />
-                      <span>Accept Verdict → To Do</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => handleStatusTransition('shelved')}
-                      style={{ fontSize: 12, padding: '5px 12px' }}
-                    >
-                      <Clock size={13} />
-                      <span>Watch (Shelve)</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => handleStatusTransition('dismissed')}
-                      style={{ fontSize: 12, padding: '5px 12px', color: '#fb7185' }}
-                    >
-                      <X size={13} />
-                      <span>Skip (Dismiss)</span>
-                    </button>
-                  </div>
-                </div>
+                {/* 3. Next Actions Checklist */}
+                {renderNextActionsChecklist()}
 
-                {/* 2. Key Claims with Verification Badges */}
+                {/* 4. Deep Research Section (contains verdict callout & research findings) */}
+                {renderDeepResearchSection()}
+
+                {/* 5. Key Claims with Verification Badges */}
                 <div className="briefing-section">
                   <div className="briefing-heading heading-claims">
                     <CheckCircle2 size={13} strokeWidth={1.5} />
@@ -1081,299 +1465,109 @@ export const CardModal: React.FC<CardModalProps> = ({
                     })}
                   </div>
                 </div>
-
-                {/* 3. Next Actions Checklist */}
-                <div className="briefing-section">
-                  <div className="briefing-heading heading-actions">
-                    <CheckCircle2 size={13} strokeWidth={1.5} />
-                    <span>Next Actions Checklist</span>
-                  </div>
-                  <div className="actions-list">
-                    {actions.map((act, idx) => (
-                      <div key={idx} className="action-item" style={{ alignItems: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(completedActions[idx])}
-                          onChange={() => toggleAction(idx)}
-                        />
-                        <span style={{ flex: 1, fontSize: 13, textDecoration: completedActions[idx] ? 'line-through' : 'none' }}>
-                          {act}
-                        </span>
-                        <button type="button" className="close-btn" onClick={() => removeAction(idx)}>
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={newAction}
-                      placeholder="Add an action..."
-                      onChange={(e) => setNewAction(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          addAction();
-                        }
-                      }}
-                    />
-                    <button type="button" className="btn-secondary" onClick={addAction}>
-                      <Plus size={13} color="#34d399" />
-                      <span>Add</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 4. Full Report Accordion */}
-                <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => setIsReportOpen(!isReportOpen)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      background: 'var(--bg-surface-elevated)',
-                      border: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      color: 'var(--text-main)',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <FileSearch size={14} color="#38bdf8" />
-                      <span>Full Deep Research Report</span>
-                    </span>
-                    {isReportOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                  </button>
-                  {isReportOpen && (
-                    <div style={{ padding: 14 }}>
-                      <ResearchReportView
-                        card={card}
-                        initialResearch={research}
-                        onUpdateCard={async (id, updates) => onUpdate(id, updates)}
-                        onAddActions={(newActs) => {
-                          const fresh = newActs.filter((a) => !actions.includes(a));
-                          if (fresh.length > 0) {
-                            const updated = [...actions, ...fresh];
-                            setActions(updated);
-                            onUpdate(card.id, { proposed_actions: updated });
-                          }
-                        }}
-                        showToast={showToast}
-                      />
-                    </div>
-                  )}
-                </div>
               </>
             )}
 
             {/* STAGE: TO DO / IN PROGRESS */}
             {(status === 'to-do' || status === 'in-progress') && (
               <>
-                {/* Deep Research Findings Callout Banner (Prominent in To Do) */}
-                {research && (
-                  <div
-                    style={{
-                      background: 'rgba(99, 102, 241, 0.08)',
-                      border: '1px solid rgba(99, 102, 241, 0.3)',
-                      borderRadius: 8,
-                      padding: '12px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 6,
-                          background: 'rgba(192, 132, 252, 0.15)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Sparkles size={16} color="#c084fc" />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span>Deep Research Findings Ready</span>
-                          {research.result?.verdict?.recommendation && (
-                            <span className={`card-verdict-pill ${research.result.verdict.recommendation}`} style={{ fontSize: 10, padding: '1px 6px' }}>
-                              {research.result.verdict.recommendation.toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
-                          {research.result?.claims?.length
-                            ? `${research.result.claims.length} claims verified & synthesized`
-                            : 'Autonomous analysis and findings synthesized'}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => setIsReportOpen(!isReportOpen)}
-                      style={{ fontSize: 12, padding: '5px 12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}
-                    >
-                      <FileSearch size={13} color="#38bdf8" />
-                      <span>{isReportOpen ? 'Hide Report' : 'View Report'}</span>
-                      {isReportOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                    </button>
-                  </div>
-                )}
+                {/* 1. TL;DR Takeaway */}
+                {renderTldr()}
 
-                {/* 1. Proposed Actions Checklist at Top */}
-                <div className="briefing-section">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <div className="briefing-heading heading-actions" style={{ margin: 0 }}>
-                      <CheckCircle2 size={13} strokeWidth={1.5} />
-                      <span>Next Actions Checklist</span>
-                    </div>
-                    <span style={{ fontSize: 11.5, color: '#34d399', fontWeight: 600 }}>
-                      {totalActions > 0 ? `${completedCount}/${totalActions} completed (${progressPercent}%)` : 'No steps yet'}
-                    </span>
-                  </div>
+                {/* 2. Why Care / Value Prop */}
+                {renderWhyCare()}
 
-                  {totalActions > 0 && (
-                    <div className="card-progress-bar-track" style={{ height: 6, marginBottom: 12 }}>
-                      <div className="card-progress-bar-fill" style={{ width: `${Math.max(5, progressPercent)}%` }} />
-                    </div>
-                  )}
+                {/* 3. Next Actions Checklist */}
+                {renderNextActionsChecklist()}
 
-                  <div className="actions-list">
-                    {actions.map((act, idx) => (
-                      <div
-                        key={idx}
-                        className="action-item"
-                        style={{ alignItems: 'center', opacity: completedActions[idx] ? 0.6 : 1 }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(completedActions[idx])}
-                          onChange={() => toggleAction(idx)}
-                          style={{ cursor: 'pointer' }}
-                        />
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={act}
-                          onChange={(e) => editAction(idx, e.target.value)}
-                          style={{
-                            flex: 1,
-                            padding: '4px 8px',
-                            background: 'transparent',
-                            border: '1px solid transparent',
-                            textDecoration: completedActions[idx] ? 'line-through' : 'none',
-                          }}
-                        />
-                        <button type="button" className="close-btn" onClick={() => removeAction(idx)}>
-                          <Trash2 size={13} strokeWidth={1.5} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                {/* 4. Deep Research Section */}
+                {renderDeepResearchSection()}
 
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={newAction}
-                      placeholder="Add an action step..."
-                      onChange={(e) => setNewAction(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          addAction();
-                        }
-                      }}
-                    />
-                    <button type="button" className="btn-secondary" onClick={addAction}>
-                      <Plus size={13} color="#34d399" />
-                      <span>Add Step</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 2. TL;DR Takeaway */}
-                <div className="briefing-section">
-                  <div className="briefing-heading heading-summary">
-                    <FileText size={13} strokeWidth={1.5} />
-                    <span>TL;DR Takeaway</span>
-                  </div>
-                  <textarea
-                    className="form-textarea"
-                    rows={2}
-                    value={tldr}
-                    onChange={(e) => handleTldrChange(e.target.value)}
-                    placeholder="Core takeaway..."
-                  />
-                </div>
-
-                {/* 3. Why Care */}
+                {/* 5. In-Progress Notes / Scratchpad */}
                 <div className="briefing-section">
                   <div className="briefing-heading heading-value">
-                    <Lightbulb size={13} strokeWidth={1.5} />
-                    <span>Why You Might Care</span>
+                    <FileText size={13} strokeWidth={1.5} />
+                    <span>Working Notes / Scratchpad</span>
                   </div>
                   <textarea
                     className="form-textarea"
                     rows={2}
-                    value={whyCare}
-                    onChange={(e) => handleWhyCareChange(e.target.value)}
-                    placeholder="Why this matters..."
+                    value={note}
+                    onChange={(e) => handleNoteChange(e.target.value)}
+                    placeholder="Capture scratchpad thoughts, in-progress findings, blockers..."
                   />
                 </div>
 
-                {/* 4. Research Accordion */}
-                {research && (
-                  <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
-                    <button
-                      type="button"
-                      onClick={() => setIsReportOpen(!isReportOpen)}
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        background: 'var(--bg-surface-elevated)',
-                        border: 'none',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        color: 'var(--text-main)',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <FileSearch size={14} color="#38bdf8" />
-                        <span>Deep Research Findings</span>
-                      </span>
-                      {isReportOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                    </button>
-                    {isReportOpen && (
-                      <div style={{ padding: 14 }}>
-                        <ResearchReportView
-                          card={card}
-                          initialResearch={research}
-                          onUpdateCard={async (id, updates) => onUpdate(id, updates)}
-                          showToast={showToast}
-                        />
-                      </div>
-                    )}
+                {/* 6. Key Claims */}
+                {claims.length > 0 && (
+                  <div className="briefing-section">
+                    <div className="briefing-heading heading-claims">
+                      <CheckCircle2 size={13} strokeWidth={1.5} />
+                      <span>Key Claims</span>
+                    </div>
+                    <div className="actions-list">
+                      {claims.map((claim, idx) => (
+                        <div key={idx} className="action-item" style={{ alignItems: 'center' }}>
+                          <span style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>•</span>
+                          <span style={{ flex: 1, fontSize: 13, color: '#e2e8f0' }}>{claim}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+              </>
+            )}
+
+            {/* STAGE: SHELVED / DISMISSED */}
+            {(status === 'shelved' || status === 'dismissed') && (
+              <>
+                <div
+                  style={{
+                    background: status === 'shelved' ? 'rgba(245, 158, 11, 0.08)' : 'rgba(244, 63, 94, 0.08)',
+                    border: `1px solid ${status === 'shelved' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(244, 63, 94, 0.25)'}`,
+                    borderRadius: 8,
+                    padding: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {status === 'shelved' ? <Clock size={20} color="#fbbf24" /> : <X size={20} color="#fb7185" />}
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#e0e7ff', textTransform: 'capitalize' }}>
+                        Card is {status}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                        {status === 'shelved'
+                          ? 'This card is currently on hold or in watch status.'
+                          : 'This card was dismissed from the active flow.'}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleStatusTransition('to-do')}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    <RotateCcw size={12} />
+                    <span>Restore to To Do</span>
+                  </button>
+                </div>
+
+                {/* 1. TL;DR Takeaway */}
+                {renderTldr()}
+
+                {/* 2. Why Care / Value Prop */}
+                {renderWhyCare()}
+
+                {/* 3. Next Actions Checklist */}
+                {renderNextActionsChecklist()}
+
+                {/* 4. Deep Research Section */}
+                {renderDeepResearchSection()}
               </>
             )}
 
@@ -1411,7 +1605,19 @@ export const CardModal: React.FC<CardModalProps> = ({
                   </button>
                 </div>
 
-                {/* Outcome Note */}
+                {/* 1. TL;DR Takeaway */}
+                {renderTldr()}
+
+                {/* 2. Why Care / Value Prop */}
+                {renderWhyCare()}
+
+                {/* 3. Completed Actions Checklist */}
+                {renderNextActionsChecklist('Completed Actions')}
+
+                {/* 4. Deep Research Section */}
+                {renderDeepResearchSection()}
+
+                {/* 5. Outcome Note */}
                 <div className="briefing-section">
                   <div className="briefing-heading heading-value">
                     <FileText size={13} strokeWidth={1.5} />
@@ -1424,22 +1630,6 @@ export const CardModal: React.FC<CardModalProps> = ({
                     onChange={(e) => handleNoteChange(e.target.value)}
                     placeholder="What happened? What were the key outcomes or learnings?"
                   />
-                </div>
-
-                {/* Actions Completed (Read-only review) */}
-                <div className="briefing-section">
-                  <div className="briefing-heading heading-actions">
-                    <CheckCircle2 size={13} strokeWidth={1.5} />
-                    <span>Completed Actions</span>
-                  </div>
-                  <div className="actions-list">
-                    {actions.map((act, idx) => (
-                      <div key={idx} className="action-item" style={{ alignItems: 'center', opacity: 0.8 }}>
-                        <Check size={13} color="#34d399" strokeWidth={2.5} />
-                        <span style={{ fontSize: 13, textDecoration: 'line-through', color: '#94a3b8' }}>{act}</span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </>
             )}

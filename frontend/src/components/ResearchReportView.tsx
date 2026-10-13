@@ -449,9 +449,87 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
       {/* Main Report Content */}
       {selectedRun && !isActive && (
         <>
+          {/* Quick Section Anchor Pills */}
+          <div className="research-anchor-pills">
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', marginRight: 4 }}>Jump to:</span>
+            {verdict && (
+              <button
+                type="button"
+                className="research-anchor-pill-btn"
+                onClick={() => {
+                  const el = document.getElementById('report-section-verdict');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                Verdict
+              </button>
+            )}
+            {claims.length > 0 && (
+              <button
+                type="button"
+                className="research-anchor-pill-btn"
+                onClick={() => {
+                  const el = document.getElementById('report-section-claims');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                Claims ({claims.length})
+              </button>
+            )}
+            {landscape.length > 0 && (
+              <button
+                type="button"
+                className="research-anchor-pill-btn"
+                onClick={() => {
+                  const el = document.getElementById('report-section-landscape');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                Landscape ({landscape.length})
+              </button>
+            )}
+            {(risks.length > 0 || nextActions.length > 0) && (
+              <button
+                type="button"
+                className="research-anchor-pill-btn"
+                onClick={() => {
+                  const el = document.getElementById('report-section-risks-actions');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                Risks & Actions
+              </button>
+            )}
+            {selectedRun.findings && (
+              <button
+                type="button"
+                className="research-anchor-pill-btn"
+                onClick={() => {
+                  const el = document.getElementById('report-section-findings');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                Findings
+              </button>
+            )}
+            {sources.length > 0 && (
+              <button
+                type="button"
+                className="research-anchor-pill-btn"
+                onClick={() => {
+                  const el = document.getElementById('report-section-sources');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                Sources ({sources.length})
+              </button>
+            )}
+          </div>
+
           {/* Header & Verdict */}
           {verdict ? (
             <div
+              id="report-section-verdict"
               style={{
                 background: 'rgba(30, 41, 59, 0.5)',
                 border: '1px solid var(--border-subtle)',
@@ -581,6 +659,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
           {/* Claim Verification Table */}
           {claims.length > 0 && (
             <div
+              id="report-section-claims"
               style={{
                 background: 'rgba(30, 41, 59, 0.5)',
                 border: '1px solid var(--border-subtle)',
@@ -603,7 +682,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
               </h4>
 
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
                       <th style={{ padding: '8px 10px', color: '#94a3b8', width: '35%' }}>Claim</th>
@@ -683,6 +762,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
           {/* Competitive Landscape */}
           {landscape.length > 0 && (
             <div
+              id="report-section-landscape"
               style={{
                 background: 'rgba(30, 41, 59, 0.5)',
                 border: '1px solid var(--border-subtle)',
@@ -705,7 +785,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
               </h4>
 
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
                       <th style={{ padding: '8px 10px', color: '#94a3b8', width: '25%' }}>Name</th>
@@ -783,9 +863,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
 
           {/* Risks & Next Actions */}
           <div
+            id="report-section-risks-actions"
             style={{
               display: 'grid',
-              gridTemplateColumns: risks.length > 0 && nextActions.length > 0 ? '1fr 1fr' : '1fr',
+              gridTemplateColumns: risks.length > 0 && nextActions.length > 0 ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr',
               gap: 16,
             }}
           >
@@ -909,6 +990,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
           {/* Findings text (markdown report) */}
           {selectedRun.findings && (
             <div
+              id="report-section-findings"
               style={{
                 background: 'rgba(30, 41, 59, 0.5)',
                 border: '1px solid var(--border-subtle)',
@@ -936,6 +1018,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
           {/* Sources List */}
           {sources.length > 0 && (
             <div
+              id="report-section-sources"
               style={{
                 background: 'rgba(30, 41, 59, 0.5)',
                 border: '1px solid var(--border-subtle)',
