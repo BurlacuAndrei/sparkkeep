@@ -9,6 +9,14 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('lucide-react')) {
+              return 'lucide-react';
+            }
+            return 'vendor';
+          }
+        },
         entryFileNames: 'assets/app.js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name].[ext]',

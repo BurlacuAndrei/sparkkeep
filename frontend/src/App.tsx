@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { Card, Tag, DigestData, LicenseStatus } from './types';
 import * as api from './api';
 import { Header } from './components/Header';
@@ -6,14 +6,15 @@ import { Sidebar } from './components/Sidebar';
 import { KanbanBoard } from './components/KanbanBoard';
 import { TriageView } from './components/TriageView';
 import { DigestView } from './components/DigestView';
-import { CardModal } from './components/CardModal';
-import { NewCardModal } from './components/NewCardModal';
 import { SetupWizard } from './components/SetupWizard';
-import { LicenseModal } from './components/LicenseModal';
-import { SettingsModal } from './components/SettingsModal';
 import { Bell, Lock } from 'lucide-react';
 import { CardActionsProvider } from './context/CardActionsContext';
 import { ThemeProvider } from './context/ThemeContext';
+
+const SettingsModal = React.lazy(() => import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal })));
+const CardModal = React.lazy(() => import('./components/CardModal').then((m) => ({ default: m.CardModal })));
+const NewCardModal = React.lazy(() => import('./components/NewCardModal').then((m) => ({ default: m.NewCardModal })));
+const LicenseModal = React.lazy(() => import('./components/LicenseModal').then((m) => ({ default: m.LicenseModal })));
 
 function AppContent() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -381,27 +382,31 @@ function AppContent() {
 
       {/* Card Detail Modal */}
       {selectedCard && (
-        <CardModal
-          key={selectedCard.id}
-          card={selectedCard}
-          allCards={cards}
-          onSelectCard={setSelectedCard}
-          onClose={() => setSelectedCard(null)}
-          onUpdate={handleUpdateCard}
-          onDelete={handleDeleteCard}
-          onResearch={handleResearch}
-          onRetry={handleRetry}
-          showToast={showToast}
-        />
+        <Suspense fallback={null}>
+          <CardModal
+            key={selectedCard.id}
+            card={selectedCard}
+            allCards={cards}
+            onSelectCard={setSelectedCard}
+            onClose={() => setSelectedCard(null)}
+            onUpdate={handleUpdateCard}
+            onDelete={handleDeleteCard}
+            onResearch={handleResearch}
+            onRetry={handleRetry}
+            showToast={showToast}
+          />
+        </Suspense>
       )}
 
       {/* New Card Modal */}
       {isNewModalOpen && (
-        <NewCardModal
-          onClose={() => setIsNewModalOpen(false)}
-          onCapture={handleCaptureSpark}
-          onCreate={handleCreateCard}
-        />
+        <Suspense fallback={null}>
+          <NewCardModal
+            onClose={() => setIsNewModalOpen(false)}
+            onCapture={handleCaptureSpark}
+            onCreate={handleCreateCard}
+          />
+        </Suspense>
       )}
 
       {/* Auth Required — the server answers 401 until a valid token arrives. */}
@@ -459,23 +464,29 @@ function AppContent() {
       )}
 
       {/* Sparkkeep Pro License & Features Modal */}
-      <LicenseModal
-        isOpen={isLicenseModalOpen}
-        onClose={() => setIsLicenseModalOpen(false)}
-        licenseStatus={licenseStatus}
-        onLicenseUpdated={(newStatus) => setLicenseStatus(newStatus)}
-        onToast={showToast}
-      />
+      {isLicenseModalOpen && (
+        <Suspense fallback={null}>
+          <LicenseModal
+            isOpen={isLicenseModalOpen}
+            onClose={() => setIsLicenseModalOpen(false)}
+            licenseStatus={licenseStatus}
+            onLicenseUpdated={(newStatus) => setLicenseStatus(newStatus)}
+            onToast={showToast}
+          />
+        </Suspense>
+      )}
 
       {isSettingsModalOpen && (
-        <SettingsModal
-          onClose={() => {
-            setIsSettingsModalOpen(false);
-            reloadAll();
-          }}
-          onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
-          showToast={showToast}
-        />
+        <Suspense fallback={null}>
+          <SettingsModal
+            onClose={() => {
+              setIsSettingsModalOpen(false);
+              reloadAll();
+            }}
+            onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
+            showToast={showToast}
+          />
+        </Suspense>
       )}
 
       {/* Floating Toast Notification with Undo */}
