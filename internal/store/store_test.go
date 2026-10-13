@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1950,6 +1951,75 @@ func TestCardChannelProvenance(t *testing.T) {
 	}
 	if len(cards) == 0 || cards[0].SourceChannel != "openclaw:whatsapp" {
 		t.Fatalf("ListCards provenance mismatch: %+v", cards[0])
+	}
+}
+
+func TestConnectionPoolBounds(t *testing.T) {
+	s, _ := newTestStore(t)
+	stats := s.db.Stats()
+	if stats.MaxOpenConnections != 1 {
+		t.Fatalf("MaxOpenConnections = %d, want 1", stats.MaxOpenConnections)
+	}
+}
+
+func TestConcurrentAccessUnderLoad(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	const goroutines = 20
+	const opsPerWorker = 20
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, goroutines*opsPerWorker)
+
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for i := 0; i < opsPerWorker; i++ {
+				title := fmt.Sprintf("Worker %d Item %d", workerID, i)
+				c, err := s.CreateCard(ctx, port.Card{
+					Title:   title,
+					Summary: "Concurrent test item",
+					Horizon: port.HorizonShortTerm,
+					Tags:    []string{fmt.Sprintf("w%d", workerID)},
+				})
+				if err != nil {
+					errCh <- fmt.Errorf("worker %d create card %d: %w", workerID, i, err)
+					return
+				}
+
+				if _, err := s.GetCard(ctx, c.ID); err != nil {
+					errCh <- fmt.Errorf("worker %d get card %d: %w", workerID, i, err)
+					return
+				}
+
+				status := port.StatusDone
+				if _, err := s.UpdateCard(ctx, c.ID, port.CardPatch{Status: &status}); err != nil {
+					errCh <- fmt.Errorf("worker %d update card %d: %w", workerID, i, err)
+					return
+				}
+
+				if _, err := s.ListCards(ctx, port.CardFilter{Limit: 10}); err != nil {
+					errCh <- fmt.Errorf("worker %d list cards %d: %w", workerID, i, err)
+					return
+				}
+			}
+		}(g)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("concurrent error: %v", err)
+	}
+
+	cards, err := s.ListCards(ctx, port.CardFilter{Limit: goroutines * opsPerWorker * 2})
+	if err != nil {
+		t.Fatalf("ListCards after load: %v", err)
+	}
+	if len(cards) != goroutines*opsPerWorker {
+		t.Fatalf("got %d cards, want %d", len(cards), goroutines*opsPerWorker)
 	}
 }
 
