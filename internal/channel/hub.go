@@ -6,17 +6,21 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"sparkkeep/internal/port"
 )
 
 var _ port.ChannelHub = (*Hub)(nil)
 
+const defaultAdapterTimeout = 10 * time.Second
+
 // Hub manages multiple channel adapters and routes notifications.
 type Hub struct {
-	mu       sync.RWMutex
-	adapters map[string]port.ChannelAdapter
-	logf     func(format string, args ...any)
+	mu             sync.RWMutex
+	adapters       map[string]port.ChannelAdapter
+	logf           func(format string, args ...any)
+	adapterTimeout time.Duration
 }
 
 // NewHub constructs an empty channel hub.
@@ -25,9 +29,17 @@ func NewHub(logf func(format string, args ...any)) *Hub {
 		logf = func(string, ...any) {}
 	}
 	return &Hub{
-		adapters: make(map[string]port.ChannelAdapter),
-		logf:     logf,
+		adapters:       make(map[string]port.ChannelAdapter),
+		logf:           logf,
+		adapterTimeout: defaultAdapterTimeout,
 	}
+}
+
+// SetAdapterTimeout overrides the per-adapter timeout for broadcast notifications.
+func (h *Hub) SetAdapterTimeout(d time.Duration) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.adapterTimeout = d
 }
 
 // Register adds or replaces a channel adapter in the hub.
@@ -78,6 +90,10 @@ func (h *Hub) Notify(ctx context.Context, n port.Notification) error {
 	for k, v := range h.adapters {
 		adapters[k] = v
 	}
+	timeout := h.adapterTimeout
+	if timeout <= 0 {
+		timeout = defaultAdapterTimeout
+	}
 	h.mu.RUnlock()
 
 	if len(adapters) == 0 {
@@ -99,13 +115,30 @@ func (h *Hub) Notify(ctx context.Context, n port.Notification) error {
 		}
 	}
 
-	// Broadcast to all adapters
-	var errs []error
+	// Broadcast to all adapters concurrently
+	var (
+		wg    sync.WaitGroup
+		errMu sync.Mutex
+		errs  []error
+	)
+
+	wg.Add(len(adapters))
 	for id, a := range adapters {
-		if err := a.Notify(ctx, n); err != nil {
-			h.logf("channel: notify %s error: %v", id, err)
-			errs = append(errs, fmt.Errorf("%s: %w", id, err))
-		}
+		go func(id string, a port.ChannelAdapter) {
+			defer wg.Done()
+
+			actx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+
+			if err := a.Notify(actx, n); err != nil {
+				h.logf("channel: notify %s error: %v", id, err)
+				errMu.Lock()
+				errs = append(errs, fmt.Errorf("%s: %w", id, err))
+				errMu.Unlock()
+			}
+		}(id, a)
 	}
+	wg.Wait()
+
 	return errors.Join(errs...)
 }
