@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/assets/banner.png" alt="Sparkkeep Execution Boards Dashboard" width="100%" style="border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,0.4);" />
-</p>
-
 # Sparkkeep — Self-Hosted Capture & Action Engine
 
 <p align="center">
