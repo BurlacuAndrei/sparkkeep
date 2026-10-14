@@ -281,6 +281,60 @@
   opacity: 0.6;
 }
 
+/* Sidebar Footer & Support */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sidebar-support-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 94, 91, 0.08);
+  border: 1px solid rgba(255, 94, 91, 0.22);
+  color: #ff8b88;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+[data-theme="light"] .sidebar-support-link {
+  background: rgba(255, 94, 91, 0.08);
+  border-color: rgba(255, 94, 91, 0.28);
+  color: #d93835;
+}
+
+.sidebar-support-link:hover {
+  background: rgba(255, 94, 91, 0.16);
+  border-color: rgba(255, 94, 91, 0.45);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+[data-theme="light"] .sidebar-support-link:hover {
+  background: rgba(255, 94, 91, 0.15);
+  border-color: rgba(255, 94, 91, 0.5);
+  color: #b91c1c;
+}
+
+.sidebar-support-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff5e5b;
+}
+
+.sidebar-support-text {
+  flex: 1;
+  white-space: nowrap;
+}
+
 /* Content Area */
 .content-area {
   padding: 24px 32px;

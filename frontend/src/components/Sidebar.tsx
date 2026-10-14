@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tag } from '../types';
-import { Tag as TagIcon } from 'lucide-react';
+import { Tag as TagIcon, Coffee } from 'lucide-react';
 
 interface SidebarProps {
   selectedTag: string;
@@ -15,7 +15,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   return (
     <aside className="sidebar">
-
       <div className="filter-group">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span className="filter-title">
@@ -50,6 +49,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
       </div>
+
+      <div className="sidebar-footer">
+        <a
+          href="https://ko-fi.com/andreiburlacu"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="sidebar-support-link"
+          title="Buy me a coffee on Ko-fi"
+        >
+          <div className="sidebar-support-icon">
+            <Coffee size={14} strokeWidth={2} />
+          </div>
+          <span className="sidebar-support-text">Buy me a coffee</span>
+        </a>
+      </div>
     </aside>
   );
 };
+

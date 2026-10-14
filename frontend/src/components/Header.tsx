@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Sparkles, Calendar, Layers, Zap, Settings } from 'lucide-react';
+import { Sparkles, Calendar, Layers, Zap, Settings, Coffee } from 'lucide-react';
 import { Omnisearch } from './Omnisearch';
 import { Card, Tag } from '../types';
 
@@ -123,6 +123,18 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Zone 3: Actions & System */}
       <div className="topbar-right">
+        <a
+          href="https://ko-fi.com/andreiburlacu"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-secondary icon-only-btn header-support-btn"
+          title="Buy me a coffee on Ko-fi"
+          aria-label="Buy me a coffee on Ko-fi"
+          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Coffee size={14} strokeWidth={1.75} />
+        </a>
+
         <button
           type="button"
           className="btn-secondary icon-only-btn"

@@ -13,6 +13,8 @@ import {
   Clock,
   Plug,
   MessageSquare,
+  Coffee,
+  Heart,
 } from 'lucide-react';
 import * as api from '../api';
 import { LLMProfile } from '../types';
@@ -513,6 +515,33 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <Shield size={15} />
               <span>Security & Access</span>
             </button>
+
+            {/* Support Sparkkeep */}
+            <div className="settings-sidebar-footer">
+              <span className="settings-sidebar-footer-title">Support Project</span>
+              <div className="settings-sidebar-support-links">
+                <a
+                  href="https://ko-fi.com/andreiburlacu"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="settings-support-link"
+                  title="Buy me a coffee on Ko-fi"
+                >
+                  <Coffee size={13} color="#ff5e5b" />
+                  <span>Buy me a coffee</span>
+                </a>
+                <a
+                  href="https://github.com/sponsors/BurlacuAndrei"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="settings-support-link"
+                  title="Sponsor on GitHub"
+                >
+                  <Heart size={13} color="#ea4aaa" />
+                  <span>GitHub Sponsor</span>
+                </a>
+              </div>
+            </div>
           </div>
 
           {/* Main Content Area */}

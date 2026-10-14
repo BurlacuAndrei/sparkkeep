@@ -17,6 +17,8 @@
   <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/BurlacuAndrei/sparkkeep" alt="Go Version" /></a>
   <a href="https://github.com/BurlacuAndrei/sparkkeep/releases"><img src="https://img.shields.io/github/v/release/BurlacuAndrei/sparkkeep?include_prereleases&color=7928CA" alt="Release" /></a>
   <a href="https://hub.docker.com/"><img src="https://img.shields.io/badge/Container-ghcr.io-success" alt="Container" /></a>
+  <a href="https://ko-fi.com/andreiburlacu"><img src="https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-ff5e5b?logo=ko-fi&logoColor=white" alt="Ko-fi" /></a>
+  <a href="https://github.com/sponsors/BurlacuAndrei"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=github-sponsors&logoColor=white" alt="GitHub Sponsor" /></a>
 </p>
 
 ---
@@ -266,6 +268,17 @@ While all settings can be adjusted on the fly in the **Settings Modal**, you can
 - **Frontend:** React 19 + TypeScript + Vite. Assets are embedded directly into the Go executable via `//go:embed`.
 - **Search:** Embedded SQLite FTS5 with database triggers for zero-lag full-text indexing.
 - **Portability:** Builds into a single lightweight binary (<25MB) across Linux, macOS, and Windows.
+
+---
+
+## ☕ Support Sparkkeep
+
+Sparkkeep is 100% free and open-source software under the [MIT License](LICENSE). If Sparkkeep brings clarity to your thoughts, saves you time, or powers your daily workflow, consider buying a coffee or becoming a sponsor:
+
+- ☕ **[Buy me a coffee on Ko-fi](https://ko-fi.com/andreiburlacu)** (0% platform fee, one-off tips or monthly)
+- 💖 **[Sponsor on GitHub](https://github.com/sponsors/BurlacuAndrei)** (Direct GitHub sponsorship)
+
+Your support fuels active maintenance, continuous feature development, and keeps Sparkkeep independent!
 
 ---
 
