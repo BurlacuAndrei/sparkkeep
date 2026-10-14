@@ -163,7 +163,6 @@ flowchart TD
         TG["Telegram Bot"]
         DC["Discord Embeds"]
         SL["Slack Block Kit"]
-        OC["OpenClaw Gateway<br/>(WhatsApp / Signal / iMessage)"]
         WB["Web Extension & REST API"]
     end
 
@@ -222,7 +221,7 @@ flowchart TD
 | Capability | What It Does | Why It Matters |
 |---|---|---|
 | **Zero-DB Single Binary** | Pure Go SQLite (`modernc.org/sqlite`), no CGO, no PostgreSQL, no Redis. | Runs anywhere (Raspberry Pi, NAS, VPS, Mac) in <30MB RAM with zero maintenance. |
-| **Omni-Channel Capture** | Ingest links, notes, images, and voice memos from Telegram, Discord, Slack, and OpenClaw. | Never lose an idea on mobile. Capture from the apps you already live in. |
+| **Omni-Channel Capture** | Ingest links, notes, images, and voice memos from Telegram, Discord, and Slack. | Never lose an idea on mobile. Capture from the apps you already live in. |
 | **Interactive In-Place Triage** | Telegram inline keyboards & Discord ActionRows let you triage (`→ Doing`, `→ Done`, `Shelve`) directly in chat. | Triage from your notifications without ever opening the web app. |
 | **Dual-View Productivity** | Switch seamlessly between fluid Kanban Boards and a Tinder-style swipeable **Triage Deck**. | Rapidly burn through capture backlogs with zero cognitive friction. |
 | **Deterministic Deep Research** | Bounded, multi-step investigative playbooks (Ground → Plan → Search → Fact-Check → Verdict). | No hallucinating infinite loops; generates verified reports backed by citations. |
@@ -256,7 +255,6 @@ sequenceDiagram
 ```
 
 - **Telegram:** Built-in HTTP long-polling (`getUpdates`) with interactive inline keyboards (`→ Doing`, `→ Done`, `Research`, `Shelve`).
-- **OpenClaw Bridge:** Connects to [OpenClaw Gateway](https://github.com/openclaw) via `POST /hooks/agent`, unlocking **WhatsApp, Signal, iMessage, and Matrix** without bloated dependencies.
 - **Discord:** Rich Embeds with action color bars and interactive ActionRow button components.
 - **Slack:** Rich Block Kit formatting with header blocks, markdown sections, and interactive action buttons.
 - **Weekly Digest Broadcasts:** Automatic or on-demand digest broadcasts dispatched across all configured channels.

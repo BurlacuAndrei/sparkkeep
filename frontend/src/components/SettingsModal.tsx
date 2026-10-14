@@ -54,10 +54,6 @@ interface SettingsBaseline {
   profileInterests: string;
   profileConstraints: string;
   profileLanguage: string;
-  openclawUrl: string;
-  openclawChannel: string;
-  openclawTarget: string;
-  openclawEnabled: boolean;
   discordChannelId: string;
 }
 
@@ -234,10 +230,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
           profileInterests: loadedInterests,
           profileConstraints: loadedConstraints,
           profileLanguage: loadedLang,
-          openclawUrl: loadedOpenclawUrl,
-          openclawChannel: loadedOpenclawChannel,
-          openclawTarget: loadedOpenclawTarget,
-          openclawEnabled: loadedOpenclawEnabled,
           discordChannelId: loadedDiscordChannelId,
         });
 
@@ -254,7 +246,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     if (!baseline) return false;
     if (authToken.trim().length > 0 || confirmAuthToken.trim().length > 0) return true;
     if (tgToken.trim().length > 0) return true;
-    if (openclawToken.trim().length > 0) return true;
     if (discordToken.trim().length > 0) return true;
     if (slackWebhookUrl.trim().length > 0) return true;
     if (cardDensity !== baseline.cardDensity) return true;
@@ -265,10 +256,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     if (profileInterests !== baseline.profileInterests) return true;
     if (profileConstraints !== baseline.profileConstraints) return true;
     if (profileLanguage !== baseline.profileLanguage) return true;
-    if (openclawUrl !== baseline.openclawUrl) return true;
-    if (openclawChannel !== baseline.openclawChannel) return true;
-    if (openclawTarget !== baseline.openclawTarget) return true;
-    if (openclawEnabled !== baseline.openclawEnabled) return true;
     if (discordChannelId !== baseline.discordChannelId) return true;
     return false;
   }, [
@@ -276,7 +263,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     authToken,
     confirmAuthToken,
     tgToken,
-    openclawToken,
     discordToken,
     slackWebhookUrl,
     cardDensity,
@@ -287,10 +273,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     profileInterests,
     profileConstraints,
     profileLanguage,
-    openclawUrl,
-    openclawChannel,
-    openclawTarget,
-    openclawEnabled,
     discordChannelId,
   ]);
 
@@ -367,11 +349,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
       // Patch channels
       await api.patchSettings({
         ...(tgToken.trim() ? { tg_token: tgToken.trim() } : {}),
-        openclaw_url: openclawUrl.trim(),
-        ...(openclawToken.trim() ? { openclaw_token: openclawToken.trim() } : {}),
-        openclaw_channel: openclawChannel.trim(),
-        openclaw_target: openclawTarget.trim(),
-        openclaw_enabled: openclawEnabled,
         ...(discordToken.trim() ? { discord_token: discordToken.trim() } : {}),
         discord_channel_id: discordChannelId.trim(),
         ...(slackWebhookUrl.trim() ? { slack_webhook_url: slackWebhookUrl.trim() } : {}),
@@ -387,10 +364,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
         profileInterests,
         profileConstraints,
         profileLanguage,
-        openclawUrl,
-        openclawChannel,
-        openclawTarget,
-        openclawEnabled,
         discordChannelId,
       });
 
@@ -746,17 +719,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                       setTgToken={setTgToken}
                       hasTgToken={hasTgToken}
                       tgChatId={tgChatId}
-                      openclawUrl={openclawUrl}
-                      setOpenclawUrl={setOpenclawUrl}
-                      openclawToken={openclawToken}
-                      setOpenclawToken={setOpenclawToken}
-                      hasOpenclawToken={hasOpenclawToken}
-                      openclawChannel={openclawChannel}
-                      setOpenclawChannel={setOpenclawChannel}
-                      openclawTarget={openclawTarget}
-                      setOpenclawTarget={setOpenclawTarget}
-                      openclawEnabled={openclawEnabled}
-                      setOpenclawEnabled={setOpenclawEnabled}
                       discordToken={discordToken}
                       setDiscordToken={setDiscordToken}
                       hasDiscordToken={hasDiscordToken}
@@ -778,7 +740,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                     aria-labelledby="settings-tab-integrations"
                     style={{ minHeight: 0 }}
                   >
-                    <IntegrationsTab showToast={showToast} />
+                    <IntegrationsTab showToast={showToast} authToken={authToken} />
                   </div>
                 )}
 

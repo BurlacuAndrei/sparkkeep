@@ -18,17 +18,6 @@ describe('ChannelsTab Omnichannel Messenger Hub', () => {
     setTgToken: vi.fn(),
     hasTgToken: false,
     tgChatId: '',
-    openclawUrl: 'http://localhost:18789',
-    setOpenclawUrl: vi.fn(),
-    openclawToken: '',
-    setOpenclawToken: vi.fn(),
-    hasOpenclawToken: false,
-    openclawChannel: 'whatsapp',
-    setOpenclawChannel: vi.fn(),
-    openclawTarget: '+15550199',
-    setOpenclawTarget: vi.fn(),
-    openclawEnabled: false,
-    setOpenclawEnabled: vi.fn(),
     discordToken: '',
     setDiscordToken: vi.fn(),
     hasDiscordToken: false,
@@ -41,25 +30,67 @@ describe('ChannelsTab Omnichannel Messenger Hub', () => {
     onDirtyChange: vi.fn(),
   };
 
-  it('renders omnichannel overview with Telegram, WhatsApp, Signal, iMessage, Discord, and Slack', () => {
+  it('renders interactive channel selector deck for Telegram, Discord, Slack, and Inbound Webhook', () => {
     render(<ChannelsTab {...defaultProps} />);
 
     expect(screen.getByText(/Omnichannel Messenger Hub/i)).toBeDefined();
-    expect(screen.getAllByText(/Telegram Bot/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('WhatsApp, Signal, iMessage')).toBeDefined();
-    expect(screen.getAllByText(/Discord Bot/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/Slack Webhook/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('tab', { name: /Telegram Bot/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Discord Bot/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Slack Webhook/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Inbound Webhook/i })).toBeDefined();
+
+    // Verify OpenClaw and Unified Mobile Gateway are completely gone
+    expect(screen.queryByText(/Unified Mobile Gateway/i)).toBeNull();
+    expect(screen.queryByText(/OpenClaw/i)).toBeNull();
+    expect(screen.queryByText(/WhatsApp, Signal, iMessage/i)).toBeNull();
   });
 
-  it('renders first-class Unified Mobile Gateway branding and inputs', () => {
-    render(<ChannelsTab {...defaultProps} openclawEnabled={true} hasOpenclawToken={true} />);
+  it('switches to Inbound Webhook & WhatsApp Phase 1 workspace when clicked', async () => {
+    const showToast = vi.fn();
+    render(<ChannelsTab {...defaultProps} showToast={showToast} />);
 
-    expect(
-      screen.getAllByText(/Unified Mobile Gateway \(WhatsApp, Signal, iMessage\)/i).length
-    ).toBeGreaterThanOrEqual(1);
-    expect(screen.getByLabelText(/Gateway Service URL/i)).toBeDefined();
-    expect(screen.getByLabelText(/Preferred Outbound Messenger/i)).toBeDefined();
-    expect(screen.getByLabelText(/Default Recipient Phone \/ Chat ID/i)).toBeDefined();
+    const webhookTab = screen.getByRole('tab', { name: /Inbound Webhook/i });
+    fireEvent.click(webhookTab);
+
+    expect(screen.getByText(/Inbound Webhook & Mobile Capture/i)).toBeDefined();
+    expect(screen.getByText(/WhatsApp Integration \(Phase 1: Zero-Maintenance Share Sheet\)/i)).toBeDefined();
+    expect(screen.getByText(/Payload Specification & Custom Automation/i)).toBeDefined();
+
+    // Test sending inbound spark
+    const captureBtn = screen.getByRole('button', { name: /Send Test Inbound Spark/i });
+    fireEvent.click(captureBtn);
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalled();
+    });
+  });
+
+  it('defaults to Telegram Bot configuration workspace', () => {
+    render(<ChannelsTab {...defaultProps} />);
+
+    expect(screen.getByLabelText(/Telegram Bot Token/i)).toBeDefined();
+    expect(screen.getByText(/How to set up Telegram Bot in 4 easy steps/i)).toBeDefined();
+  });
+
+  it('switches to Discord Bot configuration when Discord card is clicked', () => {
+    render(<ChannelsTab {...defaultProps} />);
+
+    const discordTab = screen.getByRole('tab', { name: /Discord Bot/i });
+    fireEvent.click(discordTab);
+
+    expect(screen.getByLabelText(/Discord Bot Token/i)).toBeDefined();
+    expect(screen.getByLabelText(/Discord Target Channel ID/i)).toBeDefined();
+    expect(screen.getByText(/How to set up Discord Bot in 4 easy steps/i)).toBeDefined();
+  });
+
+  it('switches to Slack Webhook configuration when Slack card is clicked', () => {
+    render(<ChannelsTab {...defaultProps} />);
+
+    const slackTab = screen.getByRole('tab', { name: /Slack Webhook/i });
+    fireEvent.click(slackTab);
+
+    expect(screen.getByLabelText(/Slack Incoming Webhook URL/i)).toBeDefined();
+    expect(screen.getByText(/How to set up Slack Webhook in 3 easy steps/i)).toBeDefined();
   });
 
   it('triggers test channel API and toast on test button click', async () => {
@@ -79,4 +110,50 @@ describe('ChannelsTab Omnichannel Messenger Hub', () => {
       expect(api.testChannel).toHaveBeenCalledWith('telegram');
     });
   });
+
+  it('allows copying the Telegram pairing command when bot is active', () => {
+    const showToast = vi.fn();
+    // Mock navigator.clipboard
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    render(
+      <ChannelsTab
+        {...defaultProps}
+        hasTgToken={true}
+        tgChatId="12345678"
+        showToast={showToast}
+      />
+    );
+
+    expect(screen.getByText(/Currently paired to chat ID:/i)).toBeDefined();
+    expect(screen.getByText('12345678')).toBeDefined();
+
+    const copyBtn = screen.getByRole('button', { name: /Copy Command/i });
+    fireEvent.click(copyBtn);
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/start YOUR_MASTER_PASSPHRASE');
+  });
+
+  it('dispatches intelligence digest without OpenClaw in options', async () => {
+    const showToast = vi.fn();
+    render(<ChannelsTab {...defaultProps} showToast={showToast} />);
+
+    const select = screen.getByLabelText(/Select digest channel/i) as HTMLSelectElement;
+    const optionValues = Array.from(select.options).map((opt) => opt.value);
+
+    expect(optionValues).toEqual(['all', 'telegram', 'discord', 'slack']);
+    expect(optionValues).not.toContain('openclaw');
+
+    const pushBtn = screen.getByRole('button', { name: /Push Digest Now/i });
+    fireEvent.click(pushBtn);
+
+    await waitFor(() => {
+      expect(api.pushDigestToChannel).toHaveBeenCalledWith('all');
+    });
+  });
 });
+

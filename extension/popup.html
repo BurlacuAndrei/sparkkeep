@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sparkkeep Clipper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="brand">
+        <span class="brand-spark">⚡</span>
+        <span class="brand-title">Sparkkeep</span>
+      </div>
+      <div class="header-actions">
+        <span id="connection-status" class="status-pill disconnected" title="Connection Status">Offline</span>
+        <button id="toggle-settings-btn" class="icon-btn" title="Instance Settings" aria-label="Settings">⚙️</button>
+      </div>
+    </header>
+
+    <!-- Main Capture Screen -->
+    <main id="capture-view" class="view">
+      <div class="page-preview-card">
+        <div id="page-title" class="preview-title" title="Page Title">Loading active tab...</div>
+        <div id="page-url" class="preview-url" title="Page URL">...</div>
+      </div>
+
+      <div id="selection-box" class="selection-box hidden">
+        <span class="selection-label">Selected Text:</span>
+        <blockquote id="selection-text" class="selection-content"></blockquote>
+      </div>
+
+      <form id="capture-form">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="card-horizon">Horizon</label>
+            <select id="card-horizon" class="input-select">
+              <option value="short-term" selected>⚡ Short-term</option>
+              <option value="now">🔥 Now</option>
+              <option value="medium-term">🧭 Medium-term</option>
+              <option value="long-term">🏔️ Long-term</option>
+              <option value="someday">📦 Someday / Shelved</option>
+            </select>
+          </div>
+
+          <div class="form-group flex-2">
+            <label for="card-tags">Tags</label>
+            <input type="text" id="card-tags" class="input-text" placeholder="reading, ai, research">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="card-note">Personal Note (Optional)</label>
+          <textarea id="card-note" class="input-textarea" rows="2" placeholder="Why is this interesting? Key takeaways..."></textarea>
+        </div>
+
+        <button type="submit" id="submit-capture-btn" class="primary-btn">
+          <span>Capture Spark</span>
+          <span class="btn-kbd">↵ Enter</span>
+        </button>
+      </form>
+    </main>
+
+    <!-- Settings & Pairing Screen -->
+    <section id="settings-view" class="view hidden">
+      <div class="settings-header">
+        <h2 class="settings-title">Instance Connection</h2>
+        <span class="settings-desc">Connect the extension to your self-hosted Sparkkeep server</span>
+      </div>
+
+      <div class="form-group">
+        <label for="server-url">Sparkkeep Server URL</label>
+        <input type="url" id="server-url" class="input-text" placeholder="https://sparkkeep.my-nas.net or http://localhost:8080">
+        <span class="field-hint">Your private instance root address.</span>
+      </div>
+
+      <div class="form-group">
+        <label for="server-token">Master Passphrase / Token</label>
+        <input type="password" id="server-token" class="input-text" placeholder="Enter master passphrase">
+        <span class="field-hint">Used to authenticate API requests to your instance.</span>
+      </div>
+
+      <div class="settings-actions">
+        <button type="button" id="test-connection-btn" class="secondary-btn">Test Connection</button>
+        <button type="button" id="save-settings-btn" class="primary-btn">Save Settings</button>
+      </div>
+
+      <div class="auto-pair-hint">
+        💡 <strong>Magic Pair:</strong> Log into your Sparkkeep Web App, go to <em>Settings &rarr; Integrations</em>, and click <strong>"1-Click Pair Extension"</strong> to configure automatically!
+      </div>
+    </section>
+
+    <!-- Feedback Banner -->
+    <div id="toast-banner" class="toast-banner hidden"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -4663,3 +4663,286 @@
   }
 }
 
+/* ==========================================================================
+   Channels & Alerts - Interactive Omnichannel Hub
+   ========================================================================== */
+
+.channels-deck {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+@media (max-width: 768px) {
+  .channels-deck {
+    grid-template-columns: 1fr;
+  }
+}
+
+.channel-card-btn {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg, 12px);
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  gap: 10px;
+}
+
+.channel-card-btn:hover {
+  background: var(--bg-item-hover, rgba(255, 255, 255, 0.05));
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.channel-card-btn:focus-visible {
+  outline: 2px solid var(--border-input-focus, #6366f1);
+  outline-offset: 2px;
+}
+
+.channel-card-btn.active {
+  border-color: var(--channel-brand, var(--accent-indigo));
+  background: linear-gradient(145deg, var(--bg-surface-elevated), var(--channel-bg, rgba(99, 102, 241, 0.08)));
+  box-shadow: 0 0 0 1.5px var(--channel-brand, var(--accent-indigo)), 0 8px 20px -4px rgba(0, 0, 0, 0.25);
+  transform: translateY(-2px);
+}
+
+.channel-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.channel-card-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.channel-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--channel-icon-bg, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.channel-card-btn:hover .channel-card-icon,
+.channel-card-btn.active .channel-card-icon {
+  transform: scale(1.08);
+}
+
+.channel-card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.channel-card-desc {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.channel-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+}
+
+.channel-card-active-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--channel-brand, var(--accent-indigo));
+}
+
+.channel-card-inactive-label {
+  color: var(--text-dim);
+  transition: color 0.15s ease;
+}
+
+.channel-card-btn:hover .channel-card-inactive-label {
+  color: var(--text-main);
+}
+
+/* Detail Workspace Panel */
+.channel-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: setupFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 20px;
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 12px);
+  position: relative;
+}
+
+.channel-workspace-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.channel-workspace-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.channel-workspace-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.channel-workspace-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.channel-workspace-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.channel-workspace-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+.channel-workspace-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  max-width: 520px;
+  line-height: 1.45;
+}
+
+.channel-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.channel-input-wrapper input {
+  padding-right: 42px !important;
+}
+
+.channel-eye-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.channel-eye-btn:hover {
+  color: var(--text-main);
+}
+
+/* Step-by-Step Onboarding Guide */
+.channel-guide-box {
+  padding: 16px 18px;
+  background: var(--surface-sunken, rgba(0, 0, 0, 0.2));
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.channel-guide-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.channel-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.channel-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.channel-step-item strong {
+  color: var(--text-main);
+}
+
+.channel-step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-main);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Consolidated Manual Digest Push Bar */
+.digest-dispatch-bar {
+  padding: 16px 20px;
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+

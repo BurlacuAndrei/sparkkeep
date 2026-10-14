@@ -1,33 +1,30 @@
 import React, { useState } from 'react';
 import {
   MessageSquare,
-  Terminal,
-  Smartphone,
   MessageCircle,
   Send,
   CheckCircle2,
   Copy,
   Check,
   Radio,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  ChevronRight,
+  Sparkles,
+  Terminal,
+  Smartphone,
+  Share2,
 } from 'lucide-react';
 import * as api from '../../api';
+
+export type ChannelId = 'telegram' | 'discord' | 'slack' | 'webhook';
 
 export interface ChannelsTabProps {
   tgToken: string;
   setTgToken: (val: string) => void;
   hasTgToken: boolean;
   tgChatId: string;
-  openclawUrl: string;
-  setOpenclawUrl: (val: string) => void;
-  openclawToken: string;
-  setOpenclawToken: (val: string) => void;
-  hasOpenclawToken: boolean;
-  openclawChannel: string;
-  setOpenclawChannel: (val: string) => void;
-  openclawTarget: string;
-  setOpenclawTarget: (val: string) => void;
-  openclawEnabled: boolean;
-  setOpenclawEnabled: (val: boolean) => void;
   discordToken: string;
   setDiscordToken: (val: string) => void;
   hasDiscordToken: boolean;
@@ -38,6 +35,18 @@ export interface ChannelsTabProps {
   hasSlackWebhook: boolean;
   showToast: (msg: string) => void;
   onDirtyChange?: () => void;
+  // Optional backwards-compatibility props
+  openclawUrl?: string;
+  setOpenclawUrl?: (val: string) => void;
+  openclawToken?: string;
+  setOpenclawToken?: (val: string) => void;
+  hasOpenclawToken?: boolean;
+  openclawChannel?: string;
+  setOpenclawChannel?: (val: string) => void;
+  openclawTarget?: string;
+  setOpenclawTarget?: (val: string) => void;
+  openclawEnabled?: boolean;
+  setOpenclawEnabled?: (val: boolean) => void;
 }
 
 export const ChannelsTab: React.FC<ChannelsTabProps> = ({
@@ -45,17 +54,6 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
   setTgToken,
   hasTgToken,
   tgChatId,
-  openclawUrl,
-  setOpenclawUrl,
-  openclawToken,
-  setOpenclawToken,
-  hasOpenclawToken,
-  openclawChannel,
-  setOpenclawChannel,
-  openclawTarget,
-  setOpenclawTarget,
-  openclawEnabled,
-  setOpenclawEnabled,
   discordToken,
   setDiscordToken,
   hasDiscordToken,
@@ -67,10 +65,43 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
   showToast,
   onDirtyChange,
 }) => {
+  const [selectedChannel, setSelectedChannel] = useState<ChannelId>('telegram');
   const [channelTesting, setChannelTesting] = useState<string | null>(null);
   const [digestPushing, setDigestPushing] = useState(false);
   const [selectedDigestChannel, setSelectedDigestChannel] = useState('all');
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [copiedPassphrase, setCopiedPassphrase] = useState(false);
+  const [showTgToken, setShowTgToken] = useState(false);
+  const [showDiscordToken, setShowDiscordToken] = useState(false);
+  const [showSlackWebhook, setShowSlackWebhook] = useState(false);
+  const [testingInbound, setTestingInbound] = useState(false);
+  const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false);
+
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+  const inboundWebhookUrl = `${currentOrigin}/api/v1/capture`;
+
+  const handleTestInboundCapture = async () => {
+    setTestingInbound(true);
+    try {
+      await api.captureSpark({
+        url: currentOrigin,
+        text: 'Sparkkeep Inbound Webhook Test Spark #capture',
+      });
+      showToast('Test spark captured successfully! Check your inbox.');
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
+    } finally {
+      setTestingInbound(false);
+    }
+  };
+
+  const handleCopyWebhookUrl = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(inboundWebhookUrl);
+      setCopiedWebhookUrl(true);
+      showToast('Inbound Webhook URL copied to clipboard.');
+      setTimeout(() => setCopiedWebhookUrl(false), 2000);
+    }
+  };
 
   const handleTestChannel = async (channelId: string) => {
     setChannelTesting(channelId);
@@ -96,504 +127,697 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
     }
   };
 
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-  const webhookUrl = `${currentOrigin}/api/v1/channels/openclaw/webhook`;
-
-  const handleCopyWebhook = () => {
+  const handleCopyCommand = (command: string) => {
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(webhookUrl);
-      setCopiedWebhook(true);
-      showToast('Inbound webhook URL copied to clipboard.');
-      setTimeout(() => setCopiedWebhook(false), 2000);
+      navigator.clipboard.writeText(command);
+      setCopiedPassphrase(true);
+      showToast('Pairing command copied to clipboard.');
+      setTimeout(() => setCopiedPassphrase(false), 2000);
     }
   };
 
   const channelCards = [
     {
-      id: 'telegram',
+      id: 'telegram' as ChannelId,
       title: 'Telegram Bot',
-      status: hasTgToken ? 'Connected' : 'Standby',
-      active: hasTgToken,
+      subtitle: 'Instant capture & inline cards',
       icon: Send,
-      desc: 'Interactive inline cards & instant voice notes',
       color: '#38bdf8',
+      bgTint: 'rgba(56, 189, 248, 0.08)',
+      iconBg: 'rgba(56, 189, 248, 0.15)',
+      isConfigured: hasTgToken,
     },
     {
-      id: 'gateway',
-      title: 'WhatsApp, Signal, iMessage',
-      status: openclawEnabled || hasOpenclawToken ? 'Gateway Active' : 'Standby',
-      active: openclawEnabled || hasOpenclawToken,
-      icon: Smartphone,
-      desc: 'Unified mobile alerts & two-way capturing',
-      color: '#34d399',
-    },
-    {
-      id: 'discord',
+      id: 'discord' as ChannelId,
       title: 'Discord Bot',
-      status: hasDiscordToken ? 'Connected' : 'Standby',
-      active: hasDiscordToken,
+      subtitle: 'Rich embeds & server channels',
       icon: MessageCircle,
-      desc: 'Rich embed cards in your Discord server',
       color: '#818cf8',
+      bgTint: 'rgba(129, 140, 248, 0.08)',
+      iconBg: 'rgba(129, 140, 248, 0.15)',
+      isConfigured: hasDiscordToken,
     },
     {
-      id: 'slack',
+      id: 'slack' as ChannelId,
       title: 'Slack Webhook',
-      status: hasSlackWebhook ? 'Connected' : 'Standby',
-      active: hasSlackWebhook,
+      subtitle: 'Block Kit workspace alerts',
       icon: MessageSquare,
-      desc: 'Block Kit notifications in workspace channels',
       color: '#fbbf24',
+      bgTint: 'rgba(251, 191, 36, 0.08)',
+      iconBg: 'rgba(251, 191, 36, 0.15)',
+      isConfigured: hasSlackWebhook,
+    },
+    {
+      id: 'webhook' as ChannelId,
+      title: 'Inbound Webhook',
+      subtitle: 'WhatsApp, Shortcuts & API',
+      icon: Terminal,
+      color: '#a855f7',
+      bgTint: 'rgba(168, 85, 247, 0.08)',
+      iconBg: 'rgba(168, 85, 247, 0.15)',
+      isConfigured: true,
     },
   ];
 
   return (
     <div className="settings-panel" role="tabpanel">
-      {/* Omnichannel Overview Header Grid */}
-      <div className="settings-section" style={{ marginBottom: '20px' }}>
+      {/* 1. Omnichannel Selector Hub */}
+      <div className="settings-section">
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Radio size={18} style={{ color: 'var(--accent)' }} />
             <span className="settings-section-title">Omnichannel Messenger Hub</span>
           </div>
           <span className="settings-section-desc">
-            Capture links, audio, and documents anywhere. Sparkkeep delivers real-time briefings and triage alerts across all your everyday communication channels.
+            Select a channel below to configure its bot credentials, test connectivity, and view step-by-step setup guidance.
           </span>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '12px',
-            marginTop: '12px',
-          }}
-        >
+        {/* Interactive Channel Cards Deck */}
+        <div className="channels-deck" role="tablist" aria-label="Messenger channels">
           {channelCards.map((card) => {
             const Icon = card.icon;
+            const isSelected = selectedChannel === card.id;
+
             return (
-              <div
+              <button
                 key={card.id}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 'var(--radius-md, 8px)',
-                  background: 'var(--bg-input, rgba(255,255,255,0.03))',
-                  border: `1px solid ${card.active ? 'var(--border-focus, rgba(99,102,241,0.3))' : 'var(--border-subtle)'}`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                }}
+                id={`channel-tab-${card.id}`}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls={`channel-panel-${card.id}`}
+                className={`channel-card-btn ${isSelected ? 'active' : ''}`}
+                style={
+                  {
+                    '--channel-brand': card.color,
+                    '--channel-bg': card.bgTint,
+                    '--channel-icon-bg': card.iconBg,
+                  } as React.CSSProperties
+                }
+                onClick={() => setSelectedChannel(card.id)}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Icon size={16} style={{ color: card.color }} />
-                    <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-main)' }}>
-                      {card.title}
-                    </span>
+                <div className="channel-card-top">
+                  <div className="channel-card-brand">
+                    <div className="channel-card-icon">
+                      <Icon size={18} style={{ color: card.color }} />
+                    </div>
+                    <div>
+                      <div className="channel-card-title">{card.title}</div>
+                      <div className="channel-card-desc">{card.subtitle}</div>
+                    </div>
                   </div>
                   <span
-                    className={`settings-badge ${card.active ? 'success' : 'neutral'}`}
-                    style={{ fontSize: '10px', padding: '1px 6px' }}
+                    className={`settings-badge ${card.isConfigured ? 'success' : 'neutral'}`}
+                    style={{ fontSize: '10px', padding: '2px 7px' }}
                   >
-                    {card.status}
+                    {card.isConfigured ? 'Connected' : 'Standby'}
                   </span>
                 </div>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: 1.35 }}>
-                  {card.desc}
-                </span>
-              </div>
+
+                <div className="channel-card-footer">
+                  {isSelected ? (
+                    <span className="channel-card-active-label">
+                      <span>Configuring</span>
+                      <ChevronRight size={13} />
+                    </span>
+                  ) : (
+                    <span className="channel-card-inactive-label">Click to configure</span>
+                  )}
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                    {card.isConfigured ? 'Active' : 'Unset'}
+                  </span>
+                </div>
+              </button>
             );
           })}
         </div>
       </div>
 
-      {/* 1. Telegram Bot */}
-      <div className="settings-section">
-        <div
-          className="settings-section-header"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="settings-section-title">Telegram Bot</span>
-              <span className={`settings-badge ${hasTgToken ? 'success' : 'neutral'}`}>
-                {hasTgToken ? 'Active' : 'Optional'}
-              </span>
-            </div>
-            <span className="settings-section-desc">
-              Forward messages, links, and audio notes directly into Sparkkeep with inline interactive buttons
-            </span>
-          </div>
-          {hasTgToken && (
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ fontSize: '12px', padding: '4px 10px' }}
-              disabled={channelTesting === 'telegram'}
-              onClick={() => handleTestChannel('telegram')}
-            >
-              {channelTesting === 'telegram' ? 'Testing...' : 'Send Test Notification'}
-            </button>
-          )}
-        </div>
-
-        <div className="setup-form-group">
-          <label htmlFor="settings-tg-token">
-            Telegram Bot Token {hasTgToken ? '(Configured)' : ''}
-          </label>
-          <input
-            id="settings-tg-token"
-            type="password"
-            value={tgToken}
-            onChange={(e) => {
-              setTgToken(e.target.value);
-              onDirtyChange?.();
-            }}
-            className="setup-input"
-            placeholder={
-              hasTgToken
-                ? '••••••••••••••••'
-                : 'Enter BotFather Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)'
-            }
-          />
-          <span className="setup-hint">
-            Get this by creating a new bot with{' '}
-            <a
-              href="https://t.me/BotFather"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: 'var(--accent)' }}
-            >
-              @BotFather
-            </a>{' '}
-            on Telegram.
-          </span>
-        </div>
-
-        {hasTgToken && (
-          <div
-            className="setup-info-box"
-            style={{
-              background: 'rgba(16, 185, 129, 0.1)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
-            }}
-          >
-            <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
-            <div>
-              <strong style={{ color: 'var(--accent-emerald)' }}>
-                Bot is Active! Link your private chat:
-              </strong>
-              <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-dim)' }}>
-                Send this command to your Telegram bot to pair your account:
-              </div>
-              <code
-                style={{
-                  display: 'inline-block',
-                  marginTop: '8px',
-                  padding: '6px 10px',
-                  background: 'var(--surface-sunken, #090a0f)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '4px',
-                  color: 'var(--accent)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '13.5px',
-                  userSelect: 'all',
-                }}
-              >
-                /start YOUR_MASTER_PASSPHRASE
-              </code>
-              {tgChatId && (
-                <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                  ✓ Currently linked to chat ID: {tgChatId}
+      {/* 2. Active Channel Configuration Workspace */}
+      <div
+        id={`channel-panel-${selectedChannel}`}
+        role="tabpanel"
+        aria-labelledby={`channel-tab-${selectedChannel}`}
+        className="channel-workspace"
+      >
+        {/* TELEGRAM BOT WORKSPACE */}
+        {selectedChannel === 'telegram' && (
+          <>
+            <div className="channel-workspace-header">
+              <div className="channel-workspace-brand">
+                <div
+                  className="channel-workspace-icon"
+                  style={{ background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8' }}
+                >
+                  <Send size={22} />
                 </div>
+                <div className="channel-workspace-meta">
+                  <div className="channel-workspace-title-row">
+                    <span className="channel-workspace-title">Telegram Bot</span>
+                    <span className={`settings-badge ${hasTgToken ? 'success' : 'neutral'}`}>
+                      {hasTgToken ? 'Active' : 'Optional'}
+                    </span>
+                  </div>
+                  <span className="channel-workspace-desc">
+                    Forward messages, links, and audio notes directly into Sparkkeep with interactive inline buttons.
+                  </span>
+                </div>
+              </div>
+
+              {hasTgToken && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ fontSize: '12px', padding: '6px 12px' }}
+                  disabled={channelTesting === 'telegram'}
+                  onClick={() => handleTestChannel('telegram')}
+                >
+                  {channelTesting === 'telegram' ? 'Testing...' : 'Send Test Notification'}
+                </button>
               )}
             </div>
-          </div>
+
+            {/* Telegram Form Credentials */}
+            <div className="setup-form-group">
+              <label htmlFor="settings-tg-token">
+                Telegram Bot Token {hasTgToken ? '(Configured)' : ''}
+              </label>
+              <div className="channel-input-wrapper">
+                <input
+                  id="settings-tg-token"
+                  type={showTgToken ? 'text' : 'password'}
+                  value={tgToken}
+                  onChange={(e) => {
+                    setTgToken(e.target.value);
+                    onDirtyChange?.();
+                  }}
+                  className="setup-input"
+                  placeholder={
+                    hasTgToken
+                      ? '••••••••••••••••'
+                      : 'Enter BotFather Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)'
+                  }
+                />
+                <button
+                  type="button"
+                  className="channel-eye-btn"
+                  onClick={() => setShowTgToken(!showTgToken)}
+                  title={showTgToken ? 'Hide token' : 'Show token'}
+                  aria-label={showTgToken ? 'Hide token' : 'Show token'}
+                >
+                  {showTgToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+              <span className="setup-hint">
+                Created via @BotFather on Telegram. Controls message delivery and two-way inline triage buttons.
+              </span>
+            </div>
+
+            {/* Telegram Pairing Status Box */}
+            {hasTgToken && (
+              <div
+                className="setup-info-box"
+                style={{
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                }}
+              >
+                <CheckCircle2 size={18} style={{ color: 'var(--accent-emerald)', marginTop: '2px' }} />
+                <div style={{ flex: 1 }}>
+                  <strong style={{ color: 'var(--accent-emerald)', fontSize: '13px' }}>
+                    Bot is Active! Link your private chat:
+                  </strong>
+                  <div style={{ marginTop: '4px', fontSize: '12.5px', color: 'var(--text-dim)' }}>
+                    Send this command to your Telegram bot to pair your personal account:
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginTop: '8px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <code
+                      style={{
+                        padding: '6px 12px',
+                        background: 'var(--surface-sunken, #090a0f)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: '6px',
+                        color: 'var(--accent)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '13px',
+                        userSelect: 'all',
+                      }}
+                    >
+                      /start YOUR_MASTER_PASSPHRASE
+                    </code>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => handleCopyCommand('/start YOUR_MASTER_PASSPHRASE')}
+                      style={{ fontSize: '11px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      {copiedPassphrase ? <Check size={12} /> : <Copy size={12} />}
+                      <span>{copiedPassphrase ? 'Copied' : 'Copy Command'}</span>
+                    </button>
+                  </div>
+                  {tgChatId && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      ✓ Currently paired to chat ID: <strong>{tgChatId}</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Step-by-Step Onboarding Guide */}
+            <div className="channel-guide-box">
+              <span className="channel-guide-title">
+                <Sparkles size={15} style={{ color: '#38bdf8' }} />
+                <span>How to set up Telegram Bot in 4 easy steps</span>
+              </span>
+              <div className="channel-step-list">
+                <div className="channel-step-item">
+                  <span className="channel-step-num">1</span>
+                  <span>
+                    Open{' '}
+                    <a
+                      href="https://t.me/BotFather"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#38bdf8', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                    >
+                      @BotFather <ExternalLink size={11} />
+                    </a>{' '}
+                    in your Telegram application.
+                  </span>
+                </div>
+                <div className="channel-step-item">
+                  <span className="channel-step-num">2</span>
+                  <span>Send <code>/newbot</code> and follow the prompts to choose a friendly name and username.</span>
+                </div>
+                <div className="channel-step-item">
+                  <span className="channel-step-num">3</span>
+                  <span>Copy the <strong>HTTP API Token</strong> provided by BotFather and paste it into the field above.</span>
+                </div>
+                <div className="channel-step-item">
+                  <span className="channel-step-num">4</span>
+                  <span>Save changes, open your new bot on Telegram, and send <code>/start YOUR_MASTER_PASSPHRASE</code>.</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* DISCORD BOT WORKSPACE */}
+        {selectedChannel === 'discord' && (
+          <>
+            <div className="channel-workspace-header">
+              <div className="channel-workspace-brand">
+                <div
+                  className="channel-workspace-icon"
+                  style={{ background: 'rgba(129, 140, 248, 0.12)', color: '#818cf8' }}
+                >
+                  <MessageCircle size={22} />
+                </div>
+                <div className="channel-workspace-meta">
+                  <div className="channel-workspace-title-row">
+                    <span className="channel-workspace-title">Discord Bot</span>
+                    <span className={`settings-badge ${hasDiscordToken ? 'success' : 'neutral'}`}>
+                      {hasDiscordToken ? 'Active' : 'Optional'}
+                    </span>
+                  </div>
+                  <span className="channel-workspace-desc">
+                    Deliver Rich Embeds with action buttons into your private Discord server and triage incoming links.
+                  </span>
+                </div>
+              </div>
+
+              {hasDiscordToken && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ fontSize: '12px', padding: '6px 12px' }}
+                  disabled={channelTesting === 'discord'}
+                  onClick={() => handleTestChannel('discord')}
+                >
+                  {channelTesting === 'discord' ? 'Testing...' : 'Send Test Embed'}
+                </button>
+              )}
+            </div>
+
+            {/* Discord Form Credentials */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+              <div className="setup-form-group">
+                <label htmlFor="settings-discord-token">
+                  Discord Bot Token {hasDiscordToken ? '(Configured)' : ''}
+                </label>
+                <div className="channel-input-wrapper">
+                  <input
+                    id="settings-discord-token"
+                    type={showDiscordToken ? 'text' : 'password'}
+                    value={discordToken}
+                    onChange={(e) => {
+                      setDiscordToken(e.target.value);
+                      onDirtyChange?.();
+                    }}
+                    className="setup-input"
+                    placeholder={hasDiscordToken ? '••••••••••••••••' : 'Discord Bot Token'}
+                  />
+                  <button
+                    type="button"
+                    className="channel-eye-btn"
+                    onClick={() => setShowDiscordToken(!showDiscordToken)}
+                    title={showDiscordToken ? 'Hide token' : 'Show token'}
+                    aria-label={showDiscordToken ? 'Hide token' : 'Show token'}
+                  >
+                    {showDiscordToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <span className="setup-hint">Found under Bot &rarr; Token in the Discord Developer Portal.</span>
+              </div>
+
+              <div className="setup-form-group">
+                <label htmlFor="settings-discord-channel">Discord Target Channel ID</label>
+                <input
+                  id="settings-discord-channel"
+                  type="text"
+                  value={discordChannelId}
+                  onChange={(e) => {
+                    setDiscordChannelId(e.target.value);
+                    onDirtyChange?.();
+                  }}
+                  className="setup-input"
+                  placeholder="e.g. 112233445566778899"
+                />
+                <span className="setup-hint">Right-click the channel in Discord with Developer Mode on &rarr; Copy Channel ID.</span>
+              </div>
+            </div>
+
+            {/* Step-by-Step Discord Onboarding Guide */}
+            <div className="channel-guide-box">
+              <span className="channel-guide-title">
+                <Sparkles size={15} style={{ color: '#818cf8' }} />
+                <span>How to set up Discord Bot in 4 easy steps</span>
+              </span>
+              <div className="channel-step-list">
+                <div className="channel-step-item">
+                  <span className="channel-step-num">1</span>
+                  <span>
+                    Visit the{' '}
+                    <a
+                      href="https://discord.com/developers/applications"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#818cf8', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                    >
+                      Discord Developer Portal <ExternalLink size={11} />
+                    </a>{' '}
+                    and click <strong>New Application</strong>.
+                  </span>
+                </div>
+                <div className="channel-step-item">
+                  <span className="channel-step-num">2</span>
+                  <span>
+                    Navigate to <strong>Bot</strong>, click <strong>Reset Token</strong>, copy it, and paste it above. Under <em>Privileged Gateway Intents</em>, enable <strong>Message Content Intent</strong>.
+                  </span>
+                </div>
+                <div className="channel-step-item">
+                  <span className="channel-step-num">3</span>
+                  <span>
+                    Under <strong>OAuth2 &rarr; URL Generator</strong>, select the <code>bot</code> scope and check permissions <code>Send Messages</code> and <code>Embed Links</code>. Invite the bot to your server.
+                  </span>
+                </div>
+                <div className="channel-step-item">
+                  <span className="channel-step-num">4</span>
+                  <span>
+                    In Discord settings &rarr; Advanced, enable <strong>Developer Mode</strong>. Right-click your desired text channel, select <strong>Copy Channel ID</strong>, and paste it above.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* SLACK WEBHOOK WORKSPACE */}
+        {selectedChannel === 'slack' && (
+          <>
+            <div className="channel-workspace-header">
+              <div className="channel-workspace-brand">
+                <div
+                  className="channel-workspace-icon"
+                  style={{ background: 'rgba(251, 191, 36, 0.12)', color: '#fbbf24' }}
+                >
+                  <MessageSquare size={22} />
+                </div>
+                <div className="channel-workspace-meta">
+                  <div className="channel-workspace-title-row">
+                    <span className="channel-workspace-title">Slack Webhook</span>
+                    <span className={`settings-badge ${hasSlackWebhook ? 'success' : 'neutral'}`}>
+                      {hasSlackWebhook ? 'Active' : 'Optional'}
+                    </span>
+                  </div>
+                  <span className="channel-workspace-desc">
+                    Post Block Kit interactive cards and daily triage digests into your Slack workspace.
+                  </span>
+                </div>
+              </div>
+
+              {hasSlackWebhook && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ fontSize: '12px', padding: '6px 12px' }}
+                  disabled={channelTesting === 'slack'}
+                  onClick={() => handleTestChannel('slack')}
+                >
+                  {channelTesting === 'slack' ? 'Testing...' : 'Send Test Message'}
+                </button>
+              )}
+            </div>
+
+            {/* Slack Form Credentials */}
+            <div className="setup-form-group">
+              <label htmlFor="settings-slack-webhook">
+                Slack Incoming Webhook URL {hasSlackWebhook ? '(Configured)' : ''}
+              </label>
+              <div className="channel-input-wrapper">
+                <input
+                  id="settings-slack-webhook"
+                  type={showSlackWebhook ? 'text' : 'password'}
+                  value={slackWebhookUrl}
+                  onChange={(e) => {
+                    setSlackWebhookUrl(e.target.value);
+                    onDirtyChange?.();
+                  }}
+                  className="setup-input"
+                  placeholder={hasSlackWebhook ? '••••••••••••••••' : 'https://hooks.slack.com/services/T00/B00/XXXX'}
+                />
+                <button
+                  type="button"
+                  className="channel-eye-btn"
+                  onClick={() => setShowSlackWebhook(!showSlackWebhook)}
+                  title={showSlackWebhook ? 'Hide webhook' : 'Show webhook'}
+                  aria-label={showSlackWebhook ? 'Hide webhook' : 'Show webhook'}
+                >
+                  {showSlackWebhook ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+              <span className="setup-hint">
+                Incoming webhook generated by your custom Slack App or workflow integration.
+              </span>
+            </div>
+
+            {/* Step-by-Step Slack Onboarding Guide */}
+            <div className="channel-guide-box">
+              <span className="channel-guide-title">
+                <Sparkles size={15} style={{ color: '#fbbf24' }} />
+                <span>How to set up Slack Webhook in 3 easy steps</span>
+              </span>
+              <div className="channel-step-list">
+                <div className="channel-step-item">
+                  <span className="channel-step-num">1</span>
+                  <span>
+                    Visit{' '}
+                    <a
+                      href="https://api.slack.com/apps"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#fbbf24', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                    >
+                      Slack API Apps <ExternalLink size={11} />
+                    </a>{' '}
+                    and click <strong>Create New App</strong> &rarr; <em>From scratch</em>.
+                  </span>
+                </div>
+                <div className="channel-step-item">
+                  <span className="channel-step-num">2</span>
+                  <span>
+                    Under Features, click <strong>Incoming Webhooks</strong> and toggle <em>Activate Incoming Webhooks</em> to <strong>On</strong>.
+                  </span>
+                </div>
+                <div className="channel-step-item">
+                  <span className="channel-step-num">3</span>
+                  <span>
+                    Click <strong>Add New Webhook to Workspace</strong>, choose the channel you want alerts delivered to, and copy the Webhook URL above.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* INBOUND WEBHOOK & WHATSAPP PHASE 1 WORKSPACE */}
+        {selectedChannel === 'webhook' && (
+          <>
+            <div className="channel-workspace-header">
+              <div className="channel-workspace-brand">
+                <div
+                  className="channel-workspace-icon"
+                  style={{ background: 'rgba(168, 85, 247, 0.12)', color: '#a855f7' }}
+                >
+                  <Terminal size={22} />
+                </div>
+                <div className="channel-workspace-meta">
+                  <div className="channel-workspace-title-row">
+                    <span className="channel-workspace-title">Inbound Webhook & Mobile Capture</span>
+                    <span className="settings-badge success">Active</span>
+                  </div>
+                  <span className="channel-workspace-desc">
+                    Capture links, audio memos, and raw text from WhatsApp, iOS Shortcuts, Android, cURL, or automation platforms (n8n, Make, Zapier).
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                disabled={testingInbound}
+                onClick={handleTestInboundCapture}
+              >
+                {testingInbound ? 'Capturing...' : 'Send Test Inbound Spark'}
+              </button>
+            </div>
+
+            {/* Inbound Endpoint URL Box */}
+            <div className="setup-form-group">
+              <label htmlFor="settings-inbound-webhook-url">Inbound Capture Webhook Endpoint</label>
+              <div className="channel-input-wrapper">
+                <input
+                  id="settings-inbound-webhook-url"
+                  type="text"
+                  readOnly
+                  value={inboundWebhookUrl}
+                  className="setup-input"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                />
+                <button
+                  type="button"
+                  className="channel-eye-btn"
+                  onClick={handleCopyWebhookUrl}
+                  title="Copy Inbound URL"
+                  aria-label="Copy Inbound URL"
+                >
+                  {copiedWebhookUrl ? <Check size={15} style={{ color: 'var(--accent-emerald)' }} /> : <Copy size={15} />}
+                </button>
+              </div>
+              <span className="setup-hint">
+                Accepts HTTP <code>POST</code> with <code>Content-Type: application/json</code> and optional <code>Authorization: Bearer YOUR_MASTER_PASSPHRASE</code> header.
+              </span>
+            </div>
+
+            {/* WhatsApp Phase 1 Integration Box */}
+            <div
+              className="setup-info-box"
+              style={{
+                background: 'rgba(37, 211, 102, 0.08)',
+                border: '1px solid rgba(37, 211, 102, 0.25)',
+              }}
+            >
+              <Smartphone size={20} style={{ color: '#25d366', marginTop: '2px', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <strong style={{ color: '#25d366', fontSize: '13.5px' }}>
+                  WhatsApp Integration (Phase 1: Zero-Maintenance Share Sheet)
+                </strong>
+                <div style={{ marginTop: '4px', fontSize: '12.5px', color: 'var(--text-dim)', lineHeight: 1.45 }}>
+                  Capture any WhatsApp conversation, voice note, or link without brittle browser bridges or QR code dropouts:
+                </div>
+
+                <div className="channel-step-list" style={{ marginTop: '10px' }}>
+                  <div className="channel-step-item" style={{ color: 'var(--text-dim)' }}>
+                    <span className="channel-step-num" style={{ borderColor: 'rgba(37, 211, 102, 0.3)' }}>1</span>
+                    <span>
+                      In WhatsApp (iOS or Android), tap and hold any message, voice memo, or shared link and tap <strong>Share</strong>.
+                    </span>
+                  </div>
+                  <div className="channel-step-item" style={{ color: 'var(--text-dim)' }}>
+                    <span className="channel-step-num" style={{ borderColor: 'rgba(37, 211, 102, 0.3)' }}>2</span>
+                    <span>
+                      Select the <strong>Sparkkeep Capture</strong> shortcut from your mobile Share Sheet.
+                    </span>
+                  </div>
+                  <div className="channel-step-item" style={{ color: 'var(--text-dim)' }}>
+                    <span className="channel-step-num" style={{ borderColor: 'rgba(37, 211, 102, 0.3)' }}>3</span>
+                    <span>
+                      Sparkkeep ingests the URL or audio, creates an inbox card, and initiates AI triage automatically.
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: '11px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    onClick={() => handleCopyCommand(`curl -s -X POST "${inboundWebhookUrl}" -H "Content-Type: application/json" -d '{"url": "https://sparkkeep.local", "text": "WhatsApp Shared Note"}'`)}
+                  >
+                    {copiedPassphrase ? <Check size={12} /> : <Copy size={12} />}
+                    <span>Copy cURL Example</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Inbound Payload Schema Guide */}
+            <div className="channel-guide-box">
+              <span className="channel-guide-title">
+                <Sparkles size={15} style={{ color: '#a855f7' }} />
+                <span>Payload Specification & Custom Automation</span>
+              </span>
+              <div style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                Send a JSON body with any of the following fields to create a card programmatically:
+              </div>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: '10px 14px',
+                  background: 'var(--surface-sunken, #090a0f)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '6px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12px',
+                  color: 'var(--accent)',
+                  overflowX: 'auto',
+                }}
+              >
+{`{
+  "url": "https://example.com/article",
+  "text": "Shared note or raw snippet text",
+  "title": "Optional custom card title",
+  "tags": ["reading", "ideas"]
+}`}
+              </pre>
+            </div>
+          </>
         )}
       </div>
 
-      {/* 2. Unified Mobile Gateway (WhatsApp, Signal, iMessage) */}
-      <div className="settings-section" style={{ marginTop: '24px' }}>
-        <div
-          className="settings-section-header"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="settings-section-title">Unified Mobile Gateway (WhatsApp, Signal, iMessage)</span>
-              <span
-                className={`settings-badge ${openclawEnabled || hasOpenclawToken ? 'success' : 'neutral'}`}
-                style={{ fontSize: '11px', padding: '2px 8px' }}
-              >
-                {openclawEnabled || hasOpenclawToken ? 'Active' : 'Optional'}
-              </span>
-            </div>
-            <span className="settings-section-desc">
-              Connect to your local or hosted messaging gateway to deliver briefs and capture voice memos via WhatsApp, Signal, and Apple iMessage.
-            </span>
-          </div>
-          {(openclawEnabled || hasOpenclawToken) && (
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ fontSize: '12px', padding: '4px 10px' }}
-              disabled={channelTesting === 'openclaw'}
-              onClick={() => handleTestChannel('openclaw')}
-            >
-              {channelTesting === 'openclaw' ? 'Testing...' : 'Test Gateway Alert'}
-            </button>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-          <input
-            type="checkbox"
-            id="openclaw-enabled-toggle"
-            checked={openclawEnabled}
-            onChange={(e) => {
-              setOpenclawEnabled(e.target.checked);
-              onDirtyChange?.();
-            }}
-            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-          />
-          <label
-            htmlFor="openclaw-enabled-toggle"
-            style={{ cursor: 'pointer', fontSize: '13px', color: 'var(--text-main)', fontWeight: 500 }}
-          >
-            Enable Unified Mobile Gateway (WhatsApp, Signal, iMessage)
-          </label>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-          <div className="setup-form-group">
-            <label htmlFor="settings-openclaw-url">Gateway Service URL</label>
-            <input
-              id="settings-openclaw-url"
-              type="text"
-              value={openclawUrl}
-              onChange={(e) => {
-                setOpenclawUrl(e.target.value);
-                onDirtyChange?.();
-              }}
-              className="setup-input"
-              placeholder="http://localhost:18789"
-            />
-            <span className="setup-hint">
-              Default address for local gateway daemon or private remote bridge.
-            </span>
-          </div>
-
-          <div className="setup-form-group">
-            <label htmlFor="settings-openclaw-token">
-              Gateway Secret Hook Token {hasOpenclawToken ? '(Configured)' : ''}
-            </label>
-            <input
-              id="settings-openclaw-token"
-              type="password"
-              value={openclawToken}
-              onChange={(e) => {
-                setOpenclawToken(e.target.value);
-                onDirtyChange?.();
-              }}
-              className="setup-input"
-              placeholder={hasOpenclawToken ? '••••••••••••••••' : 'Secret hook token'}
-            />
-            <span className="setup-hint">
-              Used to sign outbound requests and verify inbound forwarder webhooks.
-            </span>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '10px' }}>
-          <div className="setup-form-group">
-            <label htmlFor="settings-openclaw-channel">Preferred Outbound Messenger</label>
-            <select
-              id="settings-openclaw-channel"
-              value={openclawChannel}
-              onChange={(e) => {
-                setOpenclawChannel(e.target.value);
-                onDirtyChange?.();
-              }}
-              className="setup-input"
-              style={{ background: 'var(--bg-input)', color: 'var(--text-main)' }}
-            >
-              <option value="whatsapp">WhatsApp</option>
-              <option value="signal">Signal</option>
-              <option value="imessage">Apple iMessage</option>
-              <option value="discord">Discord</option>
-              <option value="slack">Slack</option>
-              <option value="matrix">Matrix</option>
-            </select>
-            <span className="setup-hint">
-              Default protocol used when routing digest summaries and card notifications.
-            </span>
-          </div>
-
-          <div className="setup-form-group">
-            <label htmlFor="settings-openclaw-target">Default Recipient Phone / Chat ID</label>
-            <input
-              id="settings-openclaw-target"
-              type="text"
-              value={openclawTarget}
-              onChange={(e) => {
-                setOpenclawTarget(e.target.value);
-                onDirtyChange?.();
-              }}
-              className="setup-input"
-              placeholder="+15550199 or Chat ID"
-            />
-            <span className="setup-hint">
-              E.164 phone number with country code for WhatsApp/Signal, or iMessage handle.
-            </span>
-          </div>
-        </div>
-
-        {/* Inbound Webhook Guidance */}
-        <div
-          className="setup-info-box"
-          style={{
-            marginTop: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Terminal size={15} style={{ color: 'var(--accent)' }} />
-            <span style={{ fontSize: '12.5px' }}>
-              <strong>Inbound Forwarder Webhook:</strong> Point mobile shortcuts or bridge forwarders here:
-            </span>
-          </div>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleCopyWebhook}
-            style={{ fontSize: '11px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-          >
-            {copiedWebhook ? <Check size={12} /> : <Copy size={12} />}
-            <span>{copiedWebhook ? 'Copied' : 'Copy Webhook'}</span>
-          </button>
-        </div>
-        <div style={{ marginTop: '6px', fontSize: '11.5px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          {webhookUrl}
-        </div>
-      </div>
-
-      {/* 3. Discord Bot */}
-      <div className="settings-section" style={{ marginTop: '24px' }}>
-        <div
-          className="settings-section-header"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="settings-section-title">Discord Bot</span>
-              <span className={`settings-badge ${hasDiscordToken ? 'success' : 'neutral'}`}>
-                {hasDiscordToken ? 'Active' : 'Optional'}
-              </span>
-            </div>
-            <span className="settings-section-desc">
-              Deliver Rich Embeds with action buttons into your private Discord server
-            </span>
-          </div>
-          {hasDiscordToken && (
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ fontSize: '12px', padding: '4px 10px' }}
-              disabled={channelTesting === 'discord'}
-              onClick={() => handleTestChannel('discord')}
-            >
-              {channelTesting === 'discord' ? 'Testing...' : 'Send Test Embed'}
-            </button>
-          )}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-          <div className="setup-form-group">
-            <label htmlFor="settings-discord-token">
-              Discord Bot Token {hasDiscordToken ? '(Configured)' : ''}
-            </label>
-            <input
-              id="settings-discord-token"
-              type="password"
-              value={discordToken}
-              onChange={(e) => {
-                setDiscordToken(e.target.value);
-                onDirtyChange?.();
-              }}
-              className="setup-input"
-              placeholder={hasDiscordToken ? '••••••••••••••••' : 'Discord Bot Token'}
-            />
-          </div>
-          <div className="setup-form-group">
-            <label htmlFor="settings-discord-channel">Discord Channel ID</label>
-            <input
-              id="settings-discord-channel"
-              type="text"
-              value={discordChannelId}
-              onChange={(e) => {
-                setDiscordChannelId(e.target.value);
-                onDirtyChange?.();
-              }}
-              className="setup-input"
-              placeholder="e.g. 112233445566778899"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* 4. Slack */}
-      <div className="settings-section" style={{ marginTop: '24px' }}>
-        <div
-          className="settings-section-header"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="settings-section-title">Slack Webhook</span>
-              <span className={`settings-badge ${hasSlackWebhook ? 'success' : 'neutral'}`}>
-                {hasSlackWebhook ? 'Active' : 'Optional'}
-              </span>
-            </div>
-            <span className="settings-section-desc">
-              Post Block Kit interactive cards into your Slack workspace
-            </span>
-          </div>
-          {hasSlackWebhook && (
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ fontSize: '12px', padding: '4px 10px' }}
-              disabled={channelTesting === 'slack'}
-              onClick={() => handleTestChannel('slack')}
-            >
-              {channelTesting === 'slack' ? 'Testing...' : 'Send Test Message'}
-            </button>
-          )}
-        </div>
-
-        <div className="setup-form-group">
-          <label htmlFor="settings-slack-webhook">
-            Slack Incoming Webhook URL {hasSlackWebhook ? '(Configured)' : ''}
-          </label>
-          <input
-            id="settings-slack-webhook"
-            type="password"
-            value={slackWebhookUrl}
-            onChange={(e) => {
-              setSlackWebhookUrl(e.target.value);
-              onDirtyChange?.();
-            }}
-            className="setup-input"
-            placeholder={hasSlackWebhook ? '••••••••••••••••' : 'https://hooks.slack.com/services/...'}
-          />
-        </div>
-      </div>
-
-      {/* 5. Intelligence Digest Push */}
-      <div className="settings-section" style={{ marginTop: '24px' }}>
+      {/* 3. Manual Intelligence Digest Dispatch Dock */}
+      <div className="digest-dispatch-bar">
         <div className="settings-section-header">
           <span className="settings-section-title">Manual Digest Dispatch</span>
           <span className="settings-section-desc">
@@ -601,7 +825,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             value={selectedDigestChannel}
             onChange={(e) => setSelectedDigestChannel(e.target.value)}
@@ -611,7 +835,6 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
           >
             <option value="all">All Configured Channels</option>
             <option value="telegram">Telegram Bot</option>
-            <option value="openclaw">WhatsApp / Signal / iMessage (Gateway)</option>
             <option value="discord">Discord Bot</option>
             <option value="slack">Slack Webhook</option>
           </select>

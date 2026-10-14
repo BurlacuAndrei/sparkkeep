@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FolderSync,
   Send,
@@ -11,14 +11,23 @@ import {
   Cpu,
   Copy,
   Check,
+  Globe,
+  Sparkles,
+  ExternalLink,
 } from 'lucide-react';
 import * as api from '../../api';
 
 export interface IntegrationsTabProps {
   showToast: (msg: string) => void;
+  authToken?: string;
 }
 
-export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast }) => {
+export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast, authToken }) => {
+  // Extension State & Pairing
+  const [extensionInstalled, setExtensionInstalled] = useState(false);
+  const [showExtensionGuide, setShowExtensionGuide] = useState(false);
+  const [pairSuccess, setPairSuccess] = useState(false);
+
   // Obsidian Vault state
   const [vaultPath, setVaultPath] = useState('');
   const [syncingObsidian, setSyncingObsidian] = useState(false);
@@ -40,6 +49,42 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast }) =
       showToast(`${label} copied to clipboard!`);
       setTimeout(() => setCopiedId(null), 2000);
     }
+  };
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.source !== window || !e.data) return;
+      if (e.data.type === 'SPARKKEEP_EXTENSION_PONG' || e.data.type === 'SPARKKEEP_EXTENSION_READY') {
+        setExtensionInstalled(true);
+      }
+      if (e.data.type === 'SPARKKEEP_PAIR_ACK') {
+        if (e.data.ok) {
+          setPairSuccess(true);
+          showToast('⚡ Extension paired to this instance successfully!');
+          setTimeout(() => setPairSuccess(false), 4000);
+        } else {
+          showToast(`Pairing failed: ${e.data.error || 'Unknown error'}`);
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    window.postMessage({ type: 'SPARKKEEP_EXTENSION_PING' }, '*');
+    return () => window.removeEventListener('message', handleMessage);
+  }, [showToast]);
+
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+
+  const handlePairExtension = () => {
+    window.postMessage({
+      type: 'SPARKKEEP_PAIR_EXTENSION',
+      serverUrl: currentOrigin,
+      token: authToken || '',
+    }, '*');
+    setTimeout(() => {
+      if (!extensionInstalled) {
+        showToast('Pairing handshake sent! If extension is loaded, it is now paired.');
+      }
+    }, 500);
   };
 
   const handleSyncObsidian = async () => {
@@ -88,8 +133,6 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast }) =
     }
   };
 
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
-
   const bookmarkletCode = `javascript:(function(){const u=encodeURIComponent(window.location.href);const t=encodeURIComponent(document.title);fetch('${currentOrigin}/api/v1/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:window.location.href,text:document.title})}).then(r=>{if(r.ok){alert('⚡ Saved to Sparkkeep: '+document.title);}else{alert('Sparkkeep capture failed (HTTP '+r.status+')');}}).catch(e=>alert('Capture error: '+e));})();`;
 
   const raycastScript = `#!/bin/bash
@@ -127,8 +170,101 @@ echo "Saved to Sparkkeep"`;
 
   return (
     <div className="settings-panel" role="tabpanel">
-      {/* 1. Quick Ecosystem Capture Tools */}
+      {/* 0. Official Browser Extension */}
       <div className="settings-section">
+        <div className="settings-section-header">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Globe size={18} style={{ color: 'var(--accent)' }} />
+              <span className="settings-section-title">Official Browser Extension (Chrome &amp; Firefox)</span>
+            </div>
+            <span
+              className={`settings-badge ${extensionInstalled ? 'success' : 'neutral'}`}
+              style={{ fontSize: '10.5px' }}
+            >
+              {extensionInstalled ? 'Extension Detected (Active)' : 'Available for Chrome & Firefox'}
+            </span>
+          </div>
+          <span className="settings-section-desc">
+            1-Click web clipping, highlighted quote extraction, and automatic triage directly into your private Sparkkeep instance.
+          </span>
+        </div>
+
+        <div
+          className="setup-info-box"
+          style={{
+            background: 'var(--bg-surface-elevated, #161822)',
+            border: '1px solid var(--border-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+                {pairSuccess ? '✓ Paired with Instance!' : 'Magic Instance Pairing'}
+              </strong>
+              <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                Preconfigures the extension with this server address (<code style={{ color: 'var(--accent)' }}>{currentOrigin}</code>) and your authentication credentials.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="setup-btn-primary"
+                onClick={handlePairExtension}
+                style={{ fontSize: '12px', padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Sparkles size={14} />
+                <span>1-Click Pair Extension</span>
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowExtensionGuide(!showExtensionGuide)}
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+              >
+                {showExtensionGuide ? 'Hide Guide' : 'Setup Guide'}
+              </button>
+            </div>
+          </div>
+
+          {showExtensionGuide && (
+            <div
+              style={{
+                borderTop: '1px solid var(--border-subtle)',
+                paddingTop: '10px',
+                fontSize: '12px',
+                color: 'var(--text-dim)',
+                lineHeight: 1.5,
+              }}
+            >
+              <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                How to load the extension in your browser:
+              </div>
+              <ol style={{ paddingLeft: '18px', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <li>
+                  Open <code>chrome://extensions</code> (Chrome/Brave/Edge) or <code>about:debugging</code> (Firefox).
+                </li>
+                <li>
+                  Enable <strong>Developer Mode</strong>, click <strong>Load unpacked</strong>, and select the <code>extension/</code> directory inside this repo.
+                </li>
+                <li>
+                  Return to this page and click <strong>1-Click Pair Extension</strong> above to automatically connect!
+                </li>
+                <li>
+                  Use shortcut <code>Alt+Shift+S</code> on any page or right-click any highlighted text to clip.
+                </li>
+              </ol>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 1. Quick Ecosystem Capture Tools */}
+      <div className="settings-section" style={{ marginTop: '24px' }}>
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Bookmark size={18} style={{ color: 'var(--accent)' }} />

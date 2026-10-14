@@ -13,14 +13,46 @@ vi.mock('../../api', async () => {
 });
 
 describe('IntegrationsTab Ecosystem Tools', () => {
-  it('renders Browser Bookmarklet, iOS Shortcut, Raycast, and MCP sections', () => {
+  it('renders Official Browser Extension, Browser Bookmarklet, iOS Shortcut, Raycast, and MCP sections', () => {
     render(<IntegrationsTab showToast={vi.fn()} />);
 
+    expect(screen.getByText(/Official Browser Extension \(Chrome & Firefox\)/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /1-Click Pair Extension/i })).toBeDefined();
     expect(screen.getByText('Browser Bookmarklet')).toBeDefined();
     expect(screen.getByText(/⚡ Save to Sparkkeep/i)).toBeDefined();
     expect(screen.getByText(/Apple iOS Shortcut & Share Sheet/i)).toBeDefined();
     expect(screen.getByText(/Raycast Extension \/ Script Command/i)).toBeDefined();
     expect(screen.getByText(/Model Context Protocol \(MCP\)/i)).toBeDefined();
+  });
+
+  it('dispatches pairing handshake postMessage when clicking 1-Click Pair Extension', async () => {
+    const postMessageSpy = vi.spyOn(window, 'postMessage');
+    const showToast = vi.fn();
+    render(<IntegrationsTab showToast={showToast} authToken="test-master-token" />);
+
+    const pairBtn = screen.getByRole('button', { name: /1-Click Pair Extension/i });
+    fireEvent.click(pairBtn);
+
+    expect(postMessageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'SPARKKEEP_PAIR_EXTENSION',
+        token: 'test-master-token',
+      }),
+      '*'
+    );
+  });
+
+  it('toggles extension setup guide on button click', () => {
+    render(<IntegrationsTab showToast={vi.fn()} />);
+
+    const guideBtn = screen.getByRole('button', { name: /Setup Guide/i });
+    fireEvent.click(guideBtn);
+
+    expect(screen.getByText(/How to load the extension in your browser:/i)).toBeDefined();
+    expect(screen.getByText(/chrome:\/\/extensions/i)).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /Hide Guide/i }));
+    expect(screen.queryByText(/How to load the extension in your browser:/i)).toBeNull();
   });
 
   it('triggers obsidian sync API when clicked', async () => {
