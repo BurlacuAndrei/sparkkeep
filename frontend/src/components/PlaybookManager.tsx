@@ -49,12 +49,167 @@ const CORE_STEP_DESCRIPTIONS: Record<string, string> = {
   custom: 'User-configured custom research analysis step',
 };
 
+export interface PlaybookRecipe {
+  id: string;
+  name: string;
+  badge: string;
+  icon: string;
+  description: string;
+  card_types: string[];
+  steps: Array<{
+    position: number;
+    kind: string;
+    name: string;
+    enabled: boolean;
+    config?: CustomStepConfig;
+  }>;
+}
+
+// oxlint-disable-next-line react/only-export-components
+export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
+  {
+    id: 'competitor',
+    name: 'Competitor & Moat Teardown',
+    badge: '🎯 Competitor Teardown',
+    icon: '🎯',
+    description: 'Dissects direct competitors, pricing models, feature parity, and defensibility moats.',
+    card_types: ['tool', 'product', 'company'],
+    steps: [
+      { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
+      { position: 2, kind: 'search', name: 'Competitor Search', enabled: true, config: {} },
+      { position: 3, kind: 'read', name: 'Round-robin Reading', enabled: true, config: {} },
+      { position: 4, kind: 'landscape', name: 'Competitive Landscape', enabled: true, config: {} },
+      {
+        position: 5,
+        kind: 'custom',
+        name: 'Moat & Pricing Analysis',
+        enabled: true,
+        config: {
+          output_heading: 'Pricing & Defensibility Moat',
+          instruction: 'Evaluate competitor pricing models, switching costs, gross margins, and structural moats versus incumbents.',
+          tool_policy: 'search',
+          max_queries: 2,
+          role: 'research_synthesis',
+        },
+      },
+      { position: 6, kind: 'verdict', name: 'Synthesis & Verdict', enabled: true, config: {} },
+      { position: 7, kind: 'report', name: 'Report Generation', enabled: true, config: {} },
+    ],
+  },
+  {
+    id: 'due_diligence',
+    name: 'Investment & Risk Due Diligence',
+    badge: '📈 Investment Due Diligence',
+    icon: '📈',
+    description: 'Deep-dive into unit economics, downside risks, regulatory exposure, and bear case failure modes.',
+    card_types: ['company', 'product', 'idea'],
+    steps: [
+      { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
+      { position: 2, kind: 'resolve_refs', name: 'Resolve References', enabled: true, config: {} },
+      { position: 3, kind: 'search', name: 'Financial & Market Search', enabled: true, config: {} },
+      { position: 4, kind: 'read', name: 'Source Extraction', enabled: true, config: {} },
+      { position: 5, kind: 'verify_claims', name: 'Claim Verification', enabled: true, config: {} },
+      {
+        position: 6,
+        kind: 'custom',
+        name: 'Bear Case & Downside Risks',
+        enabled: true,
+        config: {
+          output_heading: 'Bear Case & Structural Risks',
+          instruction: 'Analyze major failure modes, regulatory headwinds, customer concentration, and downside liquidation scenarios.',
+          tool_policy: 'search',
+          max_queries: 2,
+          role: 'research_synthesis',
+        },
+      },
+      { position: 7, kind: 'verdict', name: 'Investment Verdict', enabled: true, config: {} },
+      { position: 8, kind: 'report', name: 'Briefing Report', enabled: true, config: {} },
+    ],
+  },
+  {
+    id: 'academic',
+    name: 'Academic & Literature Review',
+    badge: '🔬 Academic Review',
+    icon: '🔬',
+    description: 'Examines paper citations, empirical methodology, statistical validity, and reproducible results.',
+    card_types: ['article', 'research', 'reading'],
+    steps: [
+      { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
+      { position: 2, kind: 'resolve_refs', name: 'Resolve Citations', enabled: true, config: {} },
+      { position: 3, kind: 'plan', name: 'Hypothesis Planning', enabled: true, config: {} },
+      { position: 4, kind: 'search', name: 'Literature Search', enabled: true, config: {} },
+      { position: 5, kind: 'read', name: 'Paper Reading', enabled: true, config: {} },
+      { position: 6, kind: 'verify_claims', name: 'Empirical Verification', enabled: true, config: {} },
+      {
+        position: 7,
+        kind: 'custom',
+        name: 'Methodology & Rigor',
+        enabled: true,
+        config: {
+          output_heading: 'Methodological Rigor & Reproducibility',
+          instruction: 'Scrutinize research methodology, dataset sample sizes, potential p-hacking, and reproducibility risks.',
+          tool_policy: 'none',
+          role: 'research_synthesis',
+        },
+      },
+      { position: 8, kind: 'report', name: 'Academic Synthesis', enabled: true, config: {} },
+    ],
+  },
+  {
+    id: 'fact_check',
+    name: 'Fast Fact Check & Claim Verification',
+    badge: '⚡ Fast Fact Check',
+    icon: '⚡',
+    description: 'Rapid verification of specific claims and statistical assertions without heavy planning.',
+    card_types: ['article', 'idea', 'reading'],
+    steps: [
+      { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
+      { position: 2, kind: 'search', name: 'Evidence Search', enabled: true, config: {} },
+      { position: 3, kind: 'read', name: 'Evidence Reading', enabled: true, config: {} },
+      { position: 4, kind: 'verify_claims', name: 'Claim Verification', enabled: true, config: {} },
+      { position: 5, kind: 'report', name: 'Fact-Check Report', enabled: true, config: {} },
+    ],
+  },
+  {
+    id: 'deep_dive',
+    name: 'Flagship 8-Step Deep Dive',
+    badge: '🏛️ Comprehensive Pipeline',
+    icon: '🏛️',
+    description: 'The complete 8-step investigation covering references, planning, search, reading, claims, and verdict.',
+    card_types: [],
+    steps: [
+      { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
+      { position: 2, kind: 'resolve_refs', name: 'Resolve References', enabled: true, config: {} },
+      { position: 3, kind: 'plan', name: 'Question Planning', enabled: true, config: {} },
+      { position: 4, kind: 'search', name: 'Multi-query Search', enabled: true, config: {} },
+      { position: 5, kind: 'read', name: 'Round-robin Reading', enabled: true, config: {} },
+      { position: 6, kind: 'verify_claims', name: 'Claim Verification', enabled: true, config: {} },
+      { position: 7, kind: 'verdict', name: 'Synthesis & Verdict', enabled: true, config: {} },
+      { position: 8, kind: 'report', name: 'Report Generation', enabled: true, config: {} },
+    ],
+  },
+  {
+    id: 'blank',
+    name: 'Modular Blank Canvas',
+    badge: '🎨 Blank Canvas',
+    icon: '🎨',
+    description: 'Start lean with just Grounding and Report, adding custom analysis steps as needed.',
+    card_types: [],
+    steps: [
+      { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
+      { position: 2, kind: 'search', name: 'Targeted Search', enabled: true, config: {} },
+      { position: 3, kind: 'report', name: 'Final Report', enabled: true, config: {} },
+    ],
+  },
+];
+
 export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) => {
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [libraryTemplates, setLibraryTemplates] = useState<StepLibraryTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingPlaybook, setEditingPlaybook] = useState<Playbook | null>(null);
   const [expandedCustomSteps, setExpandedCustomSteps] = useState<Record<number, boolean>>({});
+  const [isRecipePickerOpen, setIsRecipePickerOpen] = useState(false);
   const [isAddStepOpen, setIsAddStepOpen] = useState(false);
   const [addStepTab, setAddStepTab] = useState<'library' | 'blank'>('library');
   const [saving, setSaving] = useState(false);
@@ -152,27 +307,24 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     setExpandedCustomSteps({});
   };
 
-  // Start creating a new blank/custom playbook
+  // Open recipe archetype picker
   const startCreateNew = () => {
+    setIsRecipePickerOpen(true);
+  };
+
+  // Instantiate a playbook from a selected recipe archetype
+  const handleSelectRecipe = (recipe: PlaybookRecipe) => {
     const newPb: Playbook = {
       id: 0,
-      name: 'New Custom Playbook',
-      description: 'Custom research workflow',
+      name: recipe.name,
+      description: recipe.description,
       is_builtin: false,
-      card_types: [],
+      card_types: [...recipe.card_types],
       version: 1,
-      steps: [
-        { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
-        { position: 2, kind: 'resolve_refs', name: 'Resolve References', enabled: true, config: {} },
-        { position: 3, kind: 'plan', name: 'Question Planning', enabled: true, config: {} },
-        { position: 4, kind: 'search', name: 'Multi-query Search', enabled: true, config: {} },
-        { position: 5, kind: 'read', name: 'Round-robin Reading', enabled: true, config: {} },
-        { position: 6, kind: 'verify_claims', name: 'Claim Verification', enabled: true, config: {} },
-        { position: 7, kind: 'verdict', name: 'Synthesis & Verdict', enabled: true, config: {} },
-        { position: 8, kind: 'report', name: 'Report Generation', enabled: true, config: {} },
-      ],
+      steps: JSON.parse(JSON.stringify(recipe.steps)),
     };
     setEditingPlaybook(newPb);
+    setIsRecipePickerOpen(false);
     setServerError(null);
     setExpandedCustomSteps({});
   };
@@ -810,6 +962,32 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                             {(step.config?.instruction || '').length} / 2,000
                           </span>
                         </div>
+
+                        {/* Quick Prompt Starters */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '6px 0', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Prompt Starters:</span>
+                          {[
+                            { label: 'SWOT Analysis', text: 'Conduct a structured SWOT (Strengths, Weaknesses, Opportunities, Threats) analysis based on extracted sources.' },
+                            { label: 'Pricing & Moat', text: 'Analyze pricing models, margins, customer acquisition unit economics, and competitive defensibility against incumbents.' },
+                            { label: 'Regulatory & Risk', text: 'Examine compliance requirements, regulatory headwinds, security vectors, and potential legal vulnerabilities.' },
+                            { label: 'Executive Brief', text: 'Synthesize 3-5 high-priority strategic recommendations with clear next steps and timeline.' },
+                          ].map((snip) => (
+                            <button
+                              key={snip.label}
+                              type="button"
+                              className="btn-secondary"
+                              style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 12 }}
+                              onClick={() => {
+                                const current = step.config?.instruction || '';
+                                const next = current ? `${current}\n\n${snip.text}` : snip.text;
+                                updateCustomConfig(idx, { instruction: next.slice(0, 2000) });
+                              }}
+                            >
+                              + {snip.label}
+                            </button>
+                          ))}
+                        </div>
+
                         <textarea
                           className="input-textarea"
                           rows={3}
@@ -877,6 +1055,79 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* RECIPE ARCHETYPE PICKER MODAL */}
+      {isRecipePickerOpen && (
+        <div className="pb-modal-backdrop" onClick={() => setIsRecipePickerOpen(false)}>
+          <div className="pb-modal-content" style={{ maxWidth: 740 }} onClick={(e) => e.stopPropagation()}>
+            <div className="pb-modal-header">
+              <div>
+                <h4 className="pb-modal-title">Choose Research Recipe Archetype</h4>
+                <p className="pb-modal-subtitle">
+                  Select a workflow recipe tailored to your domain or start from a modular blank canvas.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setIsRecipePickerOpen(false)}
+                aria-label="Close recipe picker"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="pb-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                {PLAYBOOK_RECIPES.map((recipe) => (
+                  <div
+                    key={recipe.id}
+                    className="pb-lib-item"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      padding: 14,
+                    }}
+                  >
+                    <div>
+                      <div className="pb-lib-top">
+                        <span className="pb-lib-icon">{recipe.icon}</span>
+                        <div className="pb-lib-title-box">
+                          <h5 className="pb-lib-name">{recipe.name}</h5>
+                          <span className="pb-lib-policy">{recipe.steps.length} Steps</span>
+                        </div>
+                      </div>
+                      <p className="pb-lib-desc" style={{ marginTop: 8 }}>
+                        {recipe.description}
+                      </p>
+                      <div className="pb-lib-preview" style={{ marginTop: 8, fontSize: 11.5 }}>
+                        <strong>Pipeline:</strong>{' '}
+                        {recipe.steps.map((s) => s.name).join(' → ')}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm pb-lib-btn"
+                      style={{ marginTop: 12 }}
+                      onClick={() => handleSelectRecipe(recipe)}
+                    >
+                      <Plus size={12} />
+                      <span>Use this Recipe</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
