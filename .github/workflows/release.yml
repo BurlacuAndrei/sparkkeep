@@ -63,17 +63,26 @@ jobs:
           go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/$BINARY_NAME" ./cmd/sparkkeep
 
       - name: Package Release Asset
+        shell: bash
         run: |
           cd dist
-          ARCHIVE_NAME="sparkkeep-${{ github.ref_name }}-${{ matrix.targetos }}-${{ matrix.arch }}.tar.gz"
-          tar -czvf "$ARCHIVE_NAME" sparkkeep-*
+          BINARY_NAME="sparkkeep-${{ matrix.targetos }}-${{ matrix.arch }}${{ matrix.ext }}"
+          if [ "${{ matrix.targetos }}" = "windows" ]; then
+            ARCHIVE_NAME="sparkkeep-${{ github.ref_name }}-${{ matrix.targetos }}-${{ matrix.arch }}.zip"
+            zip -j "$ARCHIVE_NAME" "$BINARY_NAME"
+          else
+            ARCHIVE_NAME="sparkkeep-${{ github.ref_name }}-${{ matrix.targetos }}-${{ matrix.arch }}.tar.gz"
+            tar -czvf "$ARCHIVE_NAME" "$BINARY_NAME"
+          fi
           echo "ASSET_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: sparkkeep-${{ matrix.targetos }}-${{ matrix.arch }}
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
 
   publish-github-release:
     name: Create GitHub Release
@@ -92,7 +101,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release-assets/*.tar.gz
+          files: |
+            release-assets/*.tar.gz
+            release-assets/*.zip
           generate_release_notes: true
           draft: false
           prerelease: false
