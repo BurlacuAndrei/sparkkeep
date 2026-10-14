@@ -105,11 +105,16 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if b.AuthToken != "" {
-		hashVal := b.AuthToken
-		if hash, err := bcrypt.GenerateFromPassword([]byte(b.AuthToken), bcrypt.DefaultCost); err == nil {
-			hashVal = string(hash)
+		if len(b.AuthToken) > 72 {
+			writeErr(w, http.StatusBadRequest, "passphrase too long (max 72 bytes)")
+			return
 		}
-		if err := a.store.SetSetting(ctx, "auth_token", hashVal); err != nil {
+		hash, err := bcrypt.GenerateFromPassword([]byte(b.AuthToken), bcrypt.DefaultCost)
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+		if err := a.store.SetSetting(ctx, "auth_token", string(hash)); err != nil {
 			a.fail(w, err)
 			return
 		}
@@ -165,14 +170,11 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Mint an opaque session for the cookie. The JSON token stays the durable
-	// credential (the caller-supplied passphrase, or the configured env token) —
+	// Mint an opaque session for the cookie. The JSON token is the durable
+	// env-configured credential only — never the stored passphrase hash and
 	// never the ephemeral session, which clients must not persist.
-	effectiveTok := b.AuthToken
-	if effectiveTok == "" {
-		effectiveTok = a.effectiveAuthToken(ctx)
-	}
-	if effectiveTok != "" {
+	effectiveTok := a.authToken
+	if effectiveTok != "" || a.hasAuth(ctx) {
 		if session, err := newSessionToken(); err == nil {
 			a.sessions.Store(session, true)
 			http.SetCookie(w, &http.Cookie{
@@ -448,9 +450,16 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	if b.AuthToken != nil {
 		hashVal := *b.AuthToken
 		if hashVal != "" {
-			if hash, err := bcrypt.GenerateFromPassword([]byte(hashVal), bcrypt.DefaultCost); err == nil {
-				hashVal = string(hash)
+			if len(hashVal) > 72 {
+				writeErr(w, http.StatusBadRequest, "passphrase too long (max 72 bytes)")
+				return
 			}
+			hash, err := bcrypt.GenerateFromPassword([]byte(hashVal), bcrypt.DefaultCost)
+			if err != nil {
+				a.fail(w, err)
+				return
+			}
+			hashVal = string(hash)
 		}
 		if err := a.store.SetSetting(ctx, "auth_token", hashVal); err != nil {
 			a.fail(w, err)

@@ -19,15 +19,17 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "temp dir:", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(dir)
 
 	binPath = filepath.Join(dir, "sparkkeep")
 	if out, err := exec.Command("go", "build", "-o", binPath, ".").CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "build sparkkeep: %v\n%s", err, out)
+		os.RemoveAll(dir)
 		os.Exit(1)
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // cliEnv returns the environment for the spawned binary with every SPARKKEEP_*

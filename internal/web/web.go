@@ -164,6 +164,7 @@ func (a *api) validateToken(ctx context.Context, got string) bool {
 	// Only minted session tokens are served from the cache. Credentials are
 	// re-verified every request so an out-of-band passphrase change revokes the
 	// old one without a restart.
+	// shortcut: raw credentials re-run bcrypt per request for prompt revocation; rate-limit at the proxy if exposed publicly.
 	if _, ok := a.sessions.Load(got); ok {
 		return true
 	}

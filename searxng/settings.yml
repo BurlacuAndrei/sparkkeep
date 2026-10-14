@@ -1,0 +1,10 @@
+# Minimal SearXNG config for Sparkkeep's JSON API.
+# SearXNG only exposes format=json when it is listed under search.formats.
+use_default_settings: true
+server:
+  # CHANGE ME: replace with a random value, e.g. `openssl rand -hex 32`.
+  secret_key: "sparkkeep-change-me"
+search:
+  formats:
+    - html
+    - json

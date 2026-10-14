@@ -3581,3 +3581,55 @@ func TestSetupReturnsDurableTokenNotSession(t *testing.T) {
 		t.Fatalf("setup cookie = %+v, want one non-empty session token distinct from the credential", cookies)
 	}
 }
+
+// TestSetupRejectsLongPassphrase covers bcrypt's 72-byte limit: a passphrase
+// that bcrypt would reject must be refused, never stored raw as auth_token.
+func TestSetupRejectsLongPassphrase(t *testing.T) {
+	ctx := context.Background()
+	st := newStubStore()
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25})
+
+	long := strings.Repeat("a", 73)
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/setup", fmt.Sprintf(`{"auth_token":%q}`, long))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("setup with 73-byte passphrase: status = %d, want 400 (body %s)", rr.Code, rr.Body.String())
+	}
+	val, _ := st.GetSetting(ctx, "auth_token")
+	if val != "" || strings.HasPrefix(val, "$2") {
+		t.Fatalf("auth_token changed on rejected setup: %q", val)
+	}
+}
+
+// TestSetupAccepts72BytePassphrase proves the boundary still succeeds.
+func TestSetupAccepts72BytePassphrase(t *testing.T) {
+	ctx := context.Background()
+	st := newStubStore()
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25})
+
+	pass := strings.Repeat("a", 72)
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/setup", fmt.Sprintf(`{"auth_token":%q}`, pass))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("setup with 72-byte passphrase: status = %d, want 200 (body %s)", rr.Code, rr.Body.String())
+	}
+	val, err := st.GetSetting(ctx, "auth_token")
+	if err != nil || !strings.HasPrefix(val, "$2") {
+		t.Fatalf("auth_token = %q (err %v), want a bcrypt hash", val, err)
+	}
+}
+
+// TestPatchSettingsRejectsLongPassphrase covers the same limit on PATCH.
+func TestPatchSettingsRejectsLongPassphrase(t *testing.T) {
+	ctx := context.Background()
+	st := newStubStore()
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25})
+
+	long := strings.Repeat("a", 73)
+	rr := doJSON(t, h, http.MethodPatch, "/api/v1/settings", fmt.Sprintf(`{"auth_token":%q}`, long))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("patch with 73-byte passphrase: status = %d, want 400 (body %s)", rr.Code, rr.Body.String())
+	}
+	val, _ := st.GetSetting(ctx, "auth_token")
+	if val != "" || strings.HasPrefix(val, "$2") {
+		t.Fatalf("auth_token changed on rejected patch: %q", val)
+	}
+}
