@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Inbox, LayoutList, Layers3, PartyPopper, Sparkles, Undo2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Inbox, LayoutList, Layers3, PartyPopper, Sparkles, X } from 'lucide-react';
 import { Card } from '../types';
 import * as api from '../api';
 import { SwipeCard, DeckExit, DeckIntent, DragSignal, DECK_EXIT_MS } from './triage/SwipeCard';
@@ -377,21 +377,36 @@ export const TriageView: React.FC<TriageViewProps> = ({
       if (document.querySelector('.modal-overlay, .modal-content, .drawer-overlay')) return;
       const onControl = Boolean(target?.closest('button, a'));
       const k = e.key.toLowerCase();
+      const code = e.code;
+
       if (k === 'z') {
         e.preventDefault();
         undoLast();
         return;
       }
       if (!current) return;
+
+      const is1 = k === '1' || k === '!' || k === '&' || code === 'Digit1' || code === 'Numpad1';
+      const is2 = k === '2' || k === '@' || k === 'é' || code === 'Digit2' || code === 'Numpad2';
+      const is3 = k === '3' || k === '#' || k === '"' || code === 'Digit3' || code === 'Numpad3';
+      const is0 = k === '0' || k === 'à' || code === 'Digit0' || code === 'Numpad0';
+      const isO = k === 'o' || code === 'KeyO';
+
       if (k === 'arrowleft' || k === 'x') {
         e.preventDefault();
         decide('dismiss');
       } else if (k === 'arrowright' || (k === 'enter' && !onControl)) {
         e.preventDefault();
         decide('keep');
-      } else if (k === '1' || k === '2' || k === '3') {
+      } else if (is1) {
         e.preventDefault();
-        decide('keep', HORIZONS[Number(k) - 1].id);
+        decide('keep', 'short-term');
+      } else if (is2) {
+        e.preventDefault();
+        decide('keep', 'medium-term');
+      } else if (is3) {
+        e.preventDefault();
+        decide('keep', 'long-term');
       } else if (k === 'arrowup' || k === 'r') {
         e.preventDefault();
         decide('research');
@@ -401,7 +416,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
       } else if (k === ' ' && !onControl) {
         e.preventDefault();
         setExpanded((v) => !v);
-      } else if (k === 'o') {
+      } else if (isO || is0) {
         e.preventDefault();
         onOpenCardDetail(current);
       }
@@ -587,10 +602,16 @@ export const TriageView: React.FC<TriageViewProps> = ({
                     zoneRefs.current[h.id] = el;
                   }}
                   role="button"
-                  tabIndex={-1}
+                  tabIndex={0}
                   id={`triage-zone-${h.id}`}
                   className={`deck-horizon ${h.id} ${activeHorizon === h.id ? 'is-target' : ''} ${suggested === h.id ? 'is-suggested' : ''}`}
                   onClick={() => decide('keep', h.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      decide('keep', h.id);
+                    }
+                  }}
                   title={`Keep in ${h.label} (${h.key})`}
                 >
                   <span className="deck-horizon-label">{h.label}</span>
@@ -623,14 +644,11 @@ export const TriageView: React.FC<TriageViewProps> = ({
               <span>Keep{suggested ? ` · ${horizonLabel(suggested)}` : ''}</span>
               <kbd>→</kbd>
             </button>
-            <button type="button" id="triage-btn-undo" className="deck-undo" onClick={undoLast} title="Undo last decision (Z)">
-              <Undo2 size={14} /> Undo <kbd>Z</kbd>
-            </button>
           </div>
           <p className="deck-hints">
             Drag the card · <kbd>1</kbd>
             <kbd>2</kbd>
-            <kbd>3</kbd> keep into a horizon · <kbd>Space</kbd> more · <kbd>O</kbd> open details
+            <kbd>3</kbd> keep into a horizon · <kbd>Space</kbd> more · <kbd>O</kbd> / <kbd>0</kbd> open details
           </p>
         </>
       )}
