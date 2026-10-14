@@ -13,7 +13,6 @@ import {
   Check,
   Globe,
   Sparkles,
-  ExternalLink,
 } from 'lucide-react';
 import * as api from '../../api';
 

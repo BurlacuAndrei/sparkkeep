@@ -349,6 +349,10 @@ const DEFAULT_PROMPT_STARTERS: PromptStarter[] = [
   },
 ];
 
+function generateStepTemplateId(): string {
+  return `user_step_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+}
+
 export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) => {
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [libraryTemplates, setLibraryTemplates] = useState<StepLibraryTemplate[]>([]);
@@ -611,7 +615,6 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     steps[idx] = step;
     setEditingPlaybook({ ...editingPlaybook, steps });
   };
-  const updateCustomConfig = updateStepConfig;
 
   // Add library template step
   const addLibraryStep = (tpl: StepLibraryTemplate | UserSavedStepTemplate) => {
@@ -650,7 +653,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
       const raw = localStorage.getItem('sparkkeep_user_step_library');
       const currentList: UserSavedStepTemplate[] = raw ? JSON.parse(raw) : [];
       const newTemplate: UserSavedStepTemplate = {
-        id: `user_step_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        id: generateStepTemplateId(),
         name: step.name || 'Custom Step',
         description: step.config?.instruction
           ? (step.config.instruction.length > 90 ? `${step.config.instruction.slice(0, 90)}…` : step.config.instruction)
@@ -670,24 +673,22 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     }
   };
 
-  // Sync user step templates when Add Step modal opens
-  useEffect(() => {
-    if (isAddStepOpen) {
-      try {
-        const raw = localStorage.getItem('sparkkeep_user_step_library');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            setUserStepTemplates(parsed);
-          }
-        } else {
-          setUserStepTemplates([]);
+  const handleOpenAddStepModal = () => {
+    try {
+      const raw = localStorage.getItem('sparkkeep_user_step_library');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setUserStepTemplates(parsed);
         }
-      } catch {
+      } else {
         setUserStepTemplates([]);
       }
+    } catch {
+      setUserStepTemplates([]);
     }
-  }, [isAddStepOpen]);
+    setIsAddStepOpen(true);
+  };
 
   // Add blank custom step
   const addBlankCustomStep = () => {
@@ -1024,7 +1025,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
             <button
               type="button"
               className="btn-secondary btn-sm"
-              onClick={() => setIsAddStepOpen(true)}
+              onClick={handleOpenAddStepModal}
               disabled={editingPlaybook.steps.length >= 12}
             >
               <Plus size={13} />

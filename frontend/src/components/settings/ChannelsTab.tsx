@@ -19,7 +19,6 @@ import {
   Code2,
   Globe,
   Clock,
-  ArrowRight,
   Share2,
 } from 'lucide-react';
 import * as api from '../../api';
