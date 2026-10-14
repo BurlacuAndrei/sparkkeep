@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.jpg" alt="Sparkkeep Banner" width="100%" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.3);" />
+  <img src="docs/assets/banner.png" alt="Sparkkeep Execution Boards Dashboard" width="100%" style="border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,0.4);" />
 </p>
 
 # Sparkkeep — Self-Hosted Capture & Action Engine
@@ -32,7 +32,7 @@ Most "read-it-later" and bookmarking apps are digital graveyards: you save inter
 When you share an idea, tweet, GitHub repository, audio memo, or screenshot from your mobile phone or web browser, Sparkkeep:
 1. **Captures it immutably** with full source provenance tracking.
 2. **Scrapes & transcribes** content automatically (headless Chrome, yt-dlp, Whisper ASR).
-3. **Synthesizes a structured Triage Brief** using your choice of LLM (local Ollama or cloud).
+3. **Synthesizes a structured Triage Brief** using your choice of LLM (local Ollama or cloud BYOK).
 4. **Decomposes complex items** into discrete, actionable cards routed to realistic horizons (**Now**, **Next**, **Later**).
 5. **Enables deep, hallucination-free research playbooks** with factual web groundings and citations.
 
@@ -40,6 +40,54 @@ When you share an idea, tweet, GitHub repository, audio memo, or screenshot from
  Traditional Bookmarkers:  Save Link ─────────────► Digital Graveyard 💀
  Sparkkeep Engine:         Capture ──► AI Triage ──► Horizon Routing ──► Deep Research ──► Shipped 🚀
 ```
+
+---
+
+## 🖥️ Platform Showcase
+
+Every view in Sparkkeep is crafted for keyboard speed, minimal cognitive load, and frictionless execution.
+
+### 1. Fluid Kanban & Horizon Boards
+Organize triage cards across **Now**, **Next**, **Later**, and **Shelved** horizons with real-time drag-and-drop, automated tag indexing, and live progress indicators.
+
+<p align="center">
+  <img src="docs/assets/dashboard-hero.png" alt="Sparkkeep Execution Boards" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
+
+### 2. Swipeable Triage Deck
+Burn through your incoming inbox backlogs with keyboard shortcuts (`1` Now, `2` Next, `3` Later, `Esc` Dismiss). Review instant AI synthesis, "Why You'd Care", and decomposed sub-actions before promoting to your active board.
+
+<p align="center">
+  <img src="docs/assets/triage-deck.png" alt="Swipeable Triage Deck" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
+
+### 3. Structured Card Dossier & Action Checklist
+Every card decomposes the captured source into a concrete TL;DR takeaway, why it matters, an interactive checklist of next actions, full source provenance, and direct deep research triggers.
+
+<p align="center">
+  <img src="docs/assets/card-modal.png" alt="Card Detail & Action Checklist" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
+
+### 4. Deterministic Deep Research Dossier
+Trigger autonomous, multi-step investigative playbooks that scrape the web, verify facts, assess risks, and issue an objective Pursue, Watch, or Skip verdict with high confidence scoring.
+
+<p align="center">
+  <img src="docs/assets/research-dossier.png" alt="Deep Research Dossier" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
+
+### 5. Omnisearch (Cmd+K)
+Instant, zero-latency full-text search powered by SQLite FTS5. Filter across card titles, summaries, tags, and research verdicts in milliseconds from anywhere in the app.
+
+<p align="center">
+  <img src="docs/assets/omnisearch.png" alt="Omnisearch Cmd+K" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
+
+### 6. Weekly Intelligence Digest
+Automated high-level syntheses identifying emergent themes across your captured cards, weekly win velocity, triage clearance rates, and horizon distribution balances.
+
+<p align="center">
+  <img src="docs/assets/weekly-digest.png" alt="Weekly Intelligence Digest" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
 
 ---
 
@@ -95,10 +143,10 @@ No editing `.env` files or mounting secret volumes before booting. On initial la
 
 ```mermaid
 flowchart LR
-    A[Launch Sparkkeep] --> B[Set Master Passphrase]
-    B --> C[Select AI Provider\nOllama / OpenAI / DeepSeek]
-    C --> D[Save to Private SQLite DB]
-    D --> E[Ready to Capture & Triage]
+    A["🚀 Launch Sparkkeep"] --> B["🔒 Set Master Passphrase"]
+    B --> C["🤖 Select AI Provider<br/>(Ollama / OpenAI / DeepSeek)"]
+    C --> D["💾 Save to Private SQLite DB"]
+    D --> E["✨ Ready to Capture & Triage"]
 ```
 
 1. **Master Passphrase:** Secure your personal dashboard with bcrypt-backed session auth.
@@ -114,55 +162,59 @@ flowchart LR
 Sparkkeep is compiled into a **single, self-contained, CGO-free binary** with zero external database dependencies.
 
 ```mermaid
-graph TD
-    subgraph Inputs [Inbound Capture Channels]
-        TG[Telegram Bot]
-        DC[Discord Embeds]
-        SL[Slack Block Kit]
-        OC[OpenClaw Gateway\nWhatsApp / Signal / iMessage]
-        WB[Web Extension & REST API]
+flowchart TD
+    subgraph Inputs ["Inbound Capture Channels"]
+        TG["Telegram Bot"]
+        DC["Discord Embeds"]
+        SL["Slack Block Kit"]
+        OC["OpenClaw Gateway<br/>(WhatsApp / Signal / iMessage)"]
+        WB["Web Extension & REST API"]
     end
 
-    subgraph Hub [Unified Channel Router & Provenance]
-        ROUTER[internal/channel/Hub]
+    subgraph Hub ["Unified Channel Hub"]
+        ROUTER["Router & Provenance Tracker<br/>(internal/channel)"]
     end
 
-    subgraph Pipeline [Capture & Triage Engine]
-        SCRAPE[Scraper & Fetcher\nHTTP / Headless Chrome / yt-dlp]
-        ASR[Whisper ASR Audio Engine]
-        LLM[LLM Synthesis & Card Splitter]
+    subgraph Pipeline ["Capture & Triage Pipeline"]
+        SCRAPE["Scraper & Fetcher<br/>(HTTP / Headless Chrome / yt-dlp)"]
+        ASR["Whisper ASR Audio Engine"]
+        LLM["LLM Synthesis & Card Splitter<br/>(OpenAI / Ollama / DeepSeek)"]
     end
 
-    subgraph Store [Embedded Local Store]
-        SQLITE[(SQLite + WAL Mode\nmodernc.org/sqlite)]
-        FTS[FTS5 Full-Text Search Engine]
+    subgraph Store ["Embedded Storage Engine"]
+        SQLITE[("SQLite WAL Mode<br/>(modernc.org/sqlite)")]
+        FTS["FTS5 Full-Text Search Engine"]
     end
 
-    subgraph UI [Embedded Modern Frontend]
-        REACT[React 19 + TypeScript SPA\nEmbedded via go:embed]
-        KANBAN[Kanban & Horizon Boards]
-        TRIAGE[Swipeable Triage Deck]
-        SEARCH[Omnisearch Cmd+K]
+    subgraph UI ["Embedded Web Application"]
+        REACT["React 19 + TypeScript SPA"]
+        KANBAN["Kanban & Horizon Boards"]
+        TRIAGE["Swipeable Triage Deck"]
+        SEARCH["Omnisearch (Cmd+K)"]
     end
 
-    subgraph Research [Deterministic Research Playbooks]
-        SEARX[SearXNG Search Engine]
-        VERIFY[Claim Verification & [S#] Citations]
-        REPORT[Markdown Intelligence Dossier]
+    subgraph Research ["Deterministic Research Playbooks"]
+        SEARX["SearXNG Search Engine"]
+        VERIFY["Claim Verification & Sources"]
+        REPORT["Markdown Intelligence Dossier"]
     end
 
-    Inputs --> ROUTER
+    TG --> ROUTER
+    DC --> ROUTER
+    SL --> ROUTER
+    OC --> ROUTER
+    WB --> ROUTER
+
     ROUTER --> SCRAPE
     SCRAPE --> ASR
     ASR --> LLM
     LLM --> SQLITE
-    SQLITE --> FTS
+    SQLITE <--> FTS
     SQLITE --> REACT
     REACT --> KANBAN
     REACT --> TRIAGE
     REACT --> SEARCH
-    KANBAN --> Research
-    Research --> SEARX
+    KANBAN --> SEARX
     SEARX --> VERIFY
     VERIFY --> REPORT
 ```
@@ -176,14 +228,14 @@ graph TD
 | **Zero-DB Single Binary** | Pure Go SQLite (`modernc.org/sqlite`), no CGO, no PostgreSQL, no Redis. | Runs anywhere (Raspberry Pi, NAS, VPS, Mac) in <30MB RAM with zero maintenance. |
 | **Omni-Channel Capture** | Ingest links, notes, images, and voice memos from Telegram, Discord, Slack, and OpenClaw. | Never lose an idea on mobile. Capture from the apps you already live in. |
 | **Interactive In-Place Triage** | Telegram inline keyboards & Discord ActionRows let you triage (`→ Doing`, `→ Done`, `Shelve`) directly in chat. | Triage from your notifications without ever opening the web app. |
-| **Dual-View Productivity** | Switch seamlessly between a fluid Kanban Board and a Tinder-style swipeable **Triage Deck**. | Rapidly burn through capture backlogs with zero cognitive friction. |
+| **Dual-View Productivity** | Switch seamlessly between fluid Kanban Boards and a Tinder-style swipeable **Triage Deck**. | Rapidly burn through capture backlogs with zero cognitive friction. |
 | **Deterministic Deep Research** | Bounded, multi-step investigative playbooks (Ground → Plan → Search → Fact-Check → Verdict). | No hallucinating infinite loops; generates verified reports backed by citations. |
 | **Omnisearch (Cmd+K)** | Instant, keyboard-first full-text search indexed in real-time via SQLite FTS5. | Find any card, snippet, tag, or note across years of captured data in milliseconds. |
 | **Privacy-First BYOK** | Connect local Ollama instances or custom OpenAI-compatible endpoints. | Your thoughts, notes, and research stay entirely on your private hardware. |
 
 ---
 
-## 📡 Multi-Channel Hub & OpenClaw Integration
+## 📡 Multi-Channel Hub & Mobile Ingestion
 
 Sparkkeep features an extensible Channel Hub with native long-polling adapters and external gateway bridges:
 
@@ -191,20 +243,20 @@ Sparkkeep features an extensible Channel Hub with native long-polling adapters a
 sequenceDiagram
     autonumber
     actor User as Mobile User
-    participant TG as Telegram / Discord / WhatsApp
+    participant Channels as Telegram / Discord / WhatsApp
     participant Hub as Sparkkeep Engine
     participant LLM as LLM Analysis (BYOK)
-    participant DB as SQLite (Local)
+    participant DB as SQLite WAL (Local)
 
-    User->>TG: Shares URL, Tweet, Note, or Audio Memo
-    TG->>Hub: Inbound Webhook / Long-Poll (Provenance Preserved)
+    User->>Channels: Shares URL, Tweet, Note, or Audio Memo
+    Channels->>Hub: Inbound Webhook / Long-Poll (Provenance Preserved)
     Hub->>Hub: Fetch URL Body / Transcribe Audio
-    Hub->>LLM: Generate Triage Brief & Action Items
-    LLM-->>Hub: Structured JSON Brief & Cards
+    Hub->>LLM: Generate Structured Triage Brief & Action Items
+    LLM-->>Hub: Return JSON Brief & Cards
     Hub->>DB: Persist Cards & Index via FTS5
-    Hub->>TG: Edits message with interactive Triage buttons
-    User->>TG: Clicks "→ Doing" or "Deep Research"
-    TG->>Hub: Card status updated in real-time
+    Hub->>Channels: Update message with interactive Triage buttons
+    User->>Channels: Tap '→ Doing' or 'Deep Research'
+    Channels->>Hub: Card status updated in real-time
 ```
 
 - **Telegram:** Built-in HTTP long-polling (`getUpdates`) with interactive inline keyboards (`→ Doing`, `→ Done`, `Research`, `Shelve`).
