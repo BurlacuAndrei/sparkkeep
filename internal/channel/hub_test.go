@@ -20,9 +20,9 @@ type mockAdapter struct {
 	delay  time.Duration
 }
 
-func (m *mockAdapter) ID() string                        { return m.id }
-func (m *mockAdapter) Name() string                      { return m.name }
-func (m *mockAdapter) Start(ctx context.Context) error   { return nil }
+func (m *mockAdapter) ID() string                      { return m.id }
+func (m *mockAdapter) Name() string                    { return m.name }
+func (m *mockAdapter) Start(ctx context.Context) error { return nil }
 func (m *mockAdapter) Capabilities() port.ChannelCapabilities {
 	return port.ChannelCapabilities{SupportsInlineButtons: true, MarkdownFlavor: "standard"}
 }

@@ -25,8 +25,7 @@ var ValidStepKinds = map[string]bool{
 // - at least 1 step, max 12 steps
 // - known step kinds only
 // - ordering: read requires search or resolve_refs before it
-// - ordering: verdict/report must be at the end
-// - custom step instruction <= 2000 chars, output_heading required, max_queries <= 5
+// - custom step instruction <= 8000 chars, output_heading required, max_queries <= 5
 func ValidatePlaybook(pb port.Playbook) error {
 	if strings.TrimSpace(pb.Name) == "" {
 		return fmt.Errorf("playbook name is required: %w", port.ErrInvalidPlaybook)
@@ -39,7 +38,6 @@ func ValidatePlaybook(pb port.Playbook) error {
 	}
 
 	hasSearchOrRefs := false
-	verdictOrReportSeen := false
 
 	for i, step := range pb.Steps {
 		if !ValidStepKinds[step.Kind] {
@@ -47,14 +45,6 @@ func ValidatePlaybook(pb port.Playbook) error {
 		}
 
 		if step.Enabled {
-			// Once verdict or report is seen, only verdict or report can follow
-			if verdictOrReportSeen && step.Kind != port.StepKindVerdict && step.Kind != port.StepKindReport {
-				return fmt.Errorf("step %d (%s): verdict and report must be at the end of the playbook: %w", i+1, step.Kind, port.ErrInvalidPlaybook)
-			}
-			if step.Kind == port.StepKindVerdict || step.Kind == port.StepKindReport {
-				verdictOrReportSeen = true
-			}
-
 			// read requires search or resolve_refs before it
 			if step.Kind == port.StepKindRead && !hasSearchOrRefs {
 				return fmt.Errorf("step %d (read): requires search or resolve_refs before it: %w", i+1, port.ErrInvalidPlaybook)
@@ -68,8 +58,8 @@ func ValidatePlaybook(pb port.Playbook) error {
 			if strings.TrimSpace(step.Config.OutputHeading) == "" {
 				return fmt.Errorf("step %d (custom): output_heading is required: %w", i+1, port.ErrInvalidPlaybook)
 			}
-			if len(step.Config.Instruction) > 2000 {
-				return fmt.Errorf("step %d (custom): instruction exceeds 2,000 characters (got %d): %w", i+1, len(step.Config.Instruction), port.ErrInvalidPlaybook)
+			if len(step.Config.Instruction) > 8000 {
+				return fmt.Errorf("step %d (custom): instruction exceeds 8,000 characters (got %d): %w", i+1, len(step.Config.Instruction), port.ErrInvalidPlaybook)
 			}
 			if step.Config.MaxQueries > 5 {
 				return fmt.Errorf("step %d (custom): max_queries exceeds cap of 5 (got %d): %w", i+1, step.Config.MaxQueries, port.ErrInvalidPlaybook)

@@ -4040,6 +4040,16 @@
   background: rgba(99, 102, 241, 0.04);
 }
 
+.pb-lib-item.custom-template {
+  border-color: rgba(168, 85, 247, 0.35);
+  background: rgba(168, 85, 247, 0.04);
+}
+
+.pb-lib-item.custom-template:hover {
+  border-color: rgba(168, 85, 247, 0.6);
+  background: rgba(168, 85, 247, 0.08);
+}
+
 .pb-lib-top {
   display: flex;
   align-items: flex-start;

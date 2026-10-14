@@ -63,6 +63,8 @@ func newStubStore() *stubStore {
 }
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if c.SourceURL != "" {
 		for _, existing := range s.cards {
 			if existing.SourceURL == c.SourceURL {
@@ -82,6 +84,8 @@ func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error
 }
 
 func (s *stubStore) GetCard(_ context.Context, id int64) (port.Card, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	c, ok := s.cards[id]
 	if !ok {
 		return port.Card{}, port.ErrNotFound
@@ -90,6 +94,8 @@ func (s *stubStore) GetCard(_ context.Context, id int64) (port.Card, error) {
 }
 
 func (s *stubStore) GetCardBySourceURL(_ context.Context, url string) (port.Card, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	url = strings.TrimSpace(url)
 	if url == "" {
 		return port.Card{}, port.ErrNotFound
@@ -155,6 +161,8 @@ func (s *stubStore) UpdateCapture(_ context.Context, c port.Capture) (port.Captu
 }
 
 func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.lastFilter = f
 	var out []port.Card
 	for _, c := range s.cards {
@@ -194,6 +202,8 @@ func (s *stubStore) ListCards(_ context.Context, f port.CardFilter) ([]port.Card
 // ShelveStale mirrors the store: inbox/doing cards untouched for more than
 // days become shelved.
 func (s *stubStore) ShelveStale(_ context.Context, days int) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	cutoff := time.Now().UTC().AddDate(0, 0, -days)
 	var n int64
 	for id, c := range s.cards {
@@ -207,6 +217,8 @@ func (s *stubStore) ShelveStale(_ context.Context, days int) (int64, error) {
 }
 
 func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (port.Card, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.lastPatch = p
 	c, ok := s.cards[id]
 	if !ok {
@@ -275,6 +287,8 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 }
 
 func (s *stubStore) DeleteCard(_ context.Context, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.cards[id]; !ok {
 		return port.ErrNotFound
 	}
@@ -283,6 +297,8 @@ func (s *stubStore) DeleteCard(_ context.Context, id int64) error {
 }
 
 func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	c, ok := s.cards[id]
 	if !ok {
 		return port.ErrNotFound
@@ -293,6 +309,8 @@ func (s *stubStore) SetCardTags(_ context.Context, id int64, tags []string) erro
 }
 
 func (s *stubStore) SetCardReferences(_ context.Context, id int64, refs []port.Reference) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	c, ok := s.cards[id]
 	if !ok {
 		return port.ErrNotFound
@@ -303,7 +321,11 @@ func (s *stubStore) SetCardReferences(_ context.Context, id int64, refs []port.R
 }
 
 func (s *stubStore) ListTags(context.Context) ([]port.Tag, error) {
-	return s.tags, nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]port.Tag, len(s.tags))
+	copy(out, s.tags)
+	return out, nil
 }
 
 func (s *stubStore) CreateResearch(_ context.Context, cardID int64, query string, playbookID ...*int64) (port.Research, error) {
@@ -746,10 +768,14 @@ func (s *stubStore) ListCompletedResearchSince(_ context.Context, since time.Tim
 }
 
 func (s *stubStore) AddCardComment(_ context.Context, cardID int64, content string) (port.CardComment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return port.CardComment{ID: 1, CardID: cardID, Content: content, CreatedAt: time.Now().UTC()}, nil
 }
 
 func (s *stubStore) ListCardComments(_ context.Context, cardID int64) ([]port.CardComment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return nil, nil
 }
 
@@ -2822,8 +2848,8 @@ func TestPlaybookAPI(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &libResp); err != nil {
 		t.Fatalf("unmarshal library templates: %v", err)
 	}
-	if len(libResp.Templates) != 3 {
-		t.Fatalf("expected 3 library templates, got %d", len(libResp.Templates))
+	if len(libResp.Templates) != 7 {
+		t.Fatalf("expected 7 library templates, got %d", len(libResp.Templates))
 	}
 	// Verify general_analysis template is present
 	foundGeneral := false

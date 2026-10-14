@@ -182,6 +182,11 @@ func (r *Runner) RunWithPlaybook(ctx context.Context, card port.Card, researchID
 	}
 
 	state := NewRunState(card, researchID, r.Store, perSource, total)
+	if len(pb.Steps) > 0 {
+		state.PlaybookSteps = pb.Steps
+	} else {
+		state.PlaybookSteps = DefaultPlaybook().Steps
+	}
 	if r.UserProfile != nil {
 		state.Profile = r.UserProfile
 	} else if r.Store != nil {
@@ -252,12 +257,18 @@ func (r *Runner) buildPipelineFromPlaybook(pb port.Playbook) []Step {
 		return []Step{
 			{ID: "ground", Name: "Ground context", Run: r.stepGround},
 			{ID: "resolve_refs", Name: "Resolve URL references", Run: r.stepResolveRefs},
-			{ID: "plan", Name: "Plan research questions", Run: r.stepPlan},
+			{ID: "plan", Name: "Plan research questions", Run: func(ctx context.Context, state *RunState) error {
+				return r.stepPlan(ctx, state, port.CustomStepConfig{})
+			}},
 			{ID: "search", Name: "Search per question", Run: r.stepSearch},
 			{ID: "read", Name: "Fetch search results", Run: r.stepRead},
 			{ID: "verify_claims", Name: "Verify claims", Run: r.stepVerifyClaims},
-			{ID: "landscape", Name: "Analyze landscape", Run: r.stepLandscape},
-			{ID: "verdict", Name: "Verdict & structured results", Run: r.stepVerdict},
+			{ID: "landscape", Name: "Analyze landscape", Run: func(ctx context.Context, state *RunState) error {
+				return r.stepLandscape(ctx, state, port.CustomStepConfig{})
+			}},
+			{ID: "verdict", Name: "Verdict & structured results", Run: func(ctx context.Context, state *RunState) error {
+				return r.stepVerdict(ctx, state, port.CustomStepConfig{})
+			}},
 			{ID: "report", Name: "Synthesize report", Run: r.stepReport},
 		}
 	}
@@ -266,6 +277,7 @@ func (r *Runner) buildPipelineFromPlaybook(pb port.Playbook) []Step {
 		if !s.Enabled {
 			continue
 		}
+		cfg := s.Config
 		switch s.Kind {
 		case port.StepKindGround:
 			name := s.Name
@@ -284,7 +296,13 @@ func (r *Runner) buildPipelineFromPlaybook(pb port.Playbook) []Step {
 			if name == "" {
 				name = "Plan research questions"
 			}
-			steps = append(steps, Step{ID: "plan", Name: name, Run: r.stepPlan})
+			steps = append(steps, Step{
+				ID:   "plan",
+				Name: name,
+				Run: func(ctx context.Context, state *RunState) error {
+					return r.stepPlan(ctx, state, cfg)
+				},
+			})
 		case port.StepKindSearch:
 			name := s.Name
 			if name == "" {
@@ -308,13 +326,25 @@ func (r *Runner) buildPipelineFromPlaybook(pb port.Playbook) []Step {
 			if name == "" {
 				name = "Analyze landscape"
 			}
-			steps = append(steps, Step{ID: "landscape", Name: name, Run: r.stepLandscape})
+			steps = append(steps, Step{
+				ID:   "landscape",
+				Name: name,
+				Run: func(ctx context.Context, state *RunState) error {
+					return r.stepLandscape(ctx, state, cfg)
+				},
+			})
 		case port.StepKindVerdict:
 			name := s.Name
 			if name == "" {
 				name = "Verdict & structured results"
 			}
-			steps = append(steps, Step{ID: "verdict", Name: name, Run: r.stepVerdict})
+			steps = append(steps, Step{
+				ID:   "verdict",
+				Name: name,
+				Run: func(ctx context.Context, state *RunState) error {
+					return r.stepVerdict(ctx, state, cfg)
+				},
+			})
 		case port.StepKindReport:
 			name := s.Name
 			if name == "" {
@@ -322,7 +352,6 @@ func (r *Runner) buildPipelineFromPlaybook(pb port.Playbook) []Step {
 			}
 			steps = append(steps, Step{ID: "report", Name: name, Run: r.stepReport})
 		case port.StepKindCustom:
-			cfg := s.Config
 			name := s.Name
 			if name == "" {
 				name = cfg.OutputHeading
@@ -341,6 +370,7 @@ func (r *Runner) buildPipelineFromPlaybook(pb port.Playbook) []Step {
 }
 
 type CustomSection struct {
+	StepID  string
 	Heading string
 	Content string
 }
@@ -494,7 +524,7 @@ func (r *Runner) stepCustom(ctx context.Context, state *RunState, cfg port.Custo
 	if existing, ok := state.StepOutputs["custom_sections"].([]CustomSection); ok {
 		sections = existing
 	}
-	sections = append(sections, CustomSection{Heading: heading, Content: trimmed})
+	sections = append(sections, CustomSection{StepID: stepID, Heading: heading, Content: trimmed})
 	state.StepOutputs["custom_sections"] = sections
 
 	state.SetNote(stepID, noteMsg)
@@ -575,7 +605,7 @@ func (r *Runner) stepResolveRefs(ctx context.Context, state *RunState) error {
 }
 
 // 3. plan — decompose into 3-5 sub-questions using research_plan model.
-func (r *Runner) stepPlan(ctx context.Context, state *RunState) error {
+func (r *Runner) stepPlan(ctx context.Context, state *RunState, cfg port.CustomStepConfig) error {
 	var b strings.Builder
 	b.WriteString(`You are a research planning assistant. Decompose this research topic into 3 to 5 targeted sub-questions to investigate key claims, technical details, alternatives, pricing/open-source viability, and maintenance.
 Reply with ONLY a strict JSON object with this exact structure:
@@ -654,6 +684,9 @@ Reply with ONLY a strict JSON object with this exact structure:
 		for _, s := range existingSources {
 			b.WriteString("- " + s.Title + " (" + s.URL + ")\n")
 		}
+	}
+	if strings.TrimSpace(cfg.Instruction) != "" {
+		b.WriteString("\n### Custom Planning Directives:\n" + cfg.Instruction + "\n")
 	}
 
 	client := r.planClient()
@@ -948,7 +981,7 @@ Claims to verify:
 }
 
 // 7. landscape — up to 5 alternatives/prior art.
-func (r *Runner) stepLandscape(ctx context.Context, state *RunState) error {
+func (r *Runner) stepLandscape(ctx context.Context, state *RunState, cfg port.CustomStepConfig) error {
 	client := r.synthesisClient()
 	if client == nil {
 		return errors.New("research: no LLM client configured for landscape")
@@ -964,6 +997,9 @@ Topic: ` + state.Card.Title + "\n")
 	}
 	b.WriteString("\nAvailable Sources:\n")
 	b.WriteString(state.Sources.FormatForSynthesis())
+	if strings.TrimSpace(cfg.Instruction) != "" {
+		b.WriteString("\n### Custom Landscape Guidelines:\n" + cfg.Instruction + "\n")
+	}
 	b.WriteString("\nReply with ONLY a strict JSON object with this exact structure:\n" + schemaLandscape + "\n")
 
 	var resp struct {
@@ -1003,7 +1039,7 @@ Topic: ` + state.Card.Title + "\n")
 }
 
 // 8. verdict — strategic recommendation, risks, confidence, next actions (research_synthesis).
-func (r *Runner) stepVerdict(ctx context.Context, state *RunState) error {
+func (r *Runner) stepVerdict(ctx context.Context, state *RunState, cfg port.CustomStepConfig) error {
 	client := r.synthesisClient()
 	if client == nil {
 		return errors.New("research: no LLM client configured for verdict")
@@ -1035,6 +1071,9 @@ Title: ` + state.Card.Title + "\n")
 	}
 	b.WriteString("\nSources:\n")
 	b.WriteString(state.Sources.FormatForSynthesis())
+	if strings.TrimSpace(cfg.Instruction) != "" {
+		b.WriteString("\n### Custom Decision Rubric & Focus:\n" + cfg.Instruction + "\n")
+	}
 	if state.Profile != nil && !state.Profile.IsEmpty() {
 		if block := analyze.FormatProfileBlock(state.Profile); block != "" {
 			b.WriteString("\n\n" + block)
@@ -1092,99 +1131,173 @@ Title: ` + state.Card.Title + "\n")
 	return nil
 }
 
+func renderVerdict(b *strings.Builder, state *RunState) {
+	if state.Result == nil || state.Result.Verdict == nil {
+		return
+	}
+	v := state.Result.Verdict
+	b.WriteString("## Executive Verdict\n\n")
+	b.WriteString(fmt.Sprintf("- **Recommendation:** `%s` (Confidence: `%s`)\n", strings.ToUpper(v.Recommendation), strings.ToUpper(v.Confidence)))
+	if v.ForWhom != "" {
+		b.WriteString(fmt.Sprintf("- **For Whom:** %s\n", v.ForWhom))
+	}
+	if len(v.Risks) > 0 {
+		b.WriteString("\n### Key Risks\n")
+		for _, rk := range v.Risks {
+			b.WriteString(fmt.Sprintf("- %s\n", rk))
+		}
+	}
+	if len(v.NextActions) > 0 {
+		b.WriteString("\n### Recommended Next Actions\n")
+		for i, act := range v.NextActions {
+			b.WriteString(fmt.Sprintf("%d. %s\n", i+1, act))
+		}
+	}
+	b.WriteString("\n")
+}
+
+func renderClaims(b *strings.Builder, state *RunState) {
+	if state.Result == nil || len(state.Result.Claims) == 0 {
+		return
+	}
+	b.WriteString("## Claim Verification\n\n")
+	for _, cv := range state.Result.Claims {
+		badge := strings.ToUpper(cv.Status)
+		citations := ""
+		if len(cv.Sources) > 0 {
+			var citeParts []string
+			for _, sid := range cv.Sources {
+				citeParts = append(citeParts, fmt.Sprintf("[%s]", sid))
+			}
+			citations = " " + strings.Join(citeParts, " ")
+		}
+		b.WriteString(fmt.Sprintf("- **%s** — `[%s]`%s\n", cv.Claim, badge, citations))
+		if cv.Rationale != "" {
+			b.WriteString(fmt.Sprintf("  %s\n", cv.Rationale))
+		}
+	}
+	b.WriteString("\n")
+}
+
+func renderLandscape(b *strings.Builder, state *RunState) {
+	if state.Result == nil || len(state.Result.Landscape) == 0 {
+		return
+	}
+	b.WriteString("## Competitive Landscape & Alternatives\n\n")
+	for _, li := range state.Result.Landscape {
+		citations := ""
+		if len(li.Sources) > 0 {
+			var citeParts []string
+			for _, sid := range li.Sources {
+				citeParts = append(citeParts, fmt.Sprintf("[%s]", sid))
+			}
+			citations = " " + strings.Join(citeParts, " ")
+		}
+		nameHeader := li.Name
+		if li.URL != "" {
+			nameHeader = fmt.Sprintf("[%s](%s)", li.Name, li.URL)
+		}
+		b.WriteString(fmt.Sprintf("### %s%s\n", nameHeader, citations))
+		if li.OneLiner != "" {
+			b.WriteString(fmt.Sprintf("%s\n\n", li.OneLiner))
+		}
+		if li.HowItDiffers != "" {
+			b.WriteString(fmt.Sprintf("**How it differs:** %s\n\n", li.HowItDiffers))
+		}
+	}
+}
+
+func renderPlan(b *strings.Builder, state *RunState) {
+	if state.Plan == nil || len(state.Plan.Questions) == 0 {
+		return
+	}
+	b.WriteString("## Questions & Findings\n\n")
+	for _, q := range state.Plan.Questions {
+		b.WriteString(fmt.Sprintf("### %s: %s\n", q.ID, q.Question))
+		b.WriteString(fmt.Sprintf("Search query: `%s`\n\n", q.Query))
+	}
+}
+
 // 9. report — renders deterministic markdown report from structured outputs.
 func (r *Runner) stepReport(ctx context.Context, state *RunState) error {
 	var b strings.Builder
 
 	b.WriteString(fmt.Sprintf("# Research: %s\n\n", state.Card.Title))
 
-	// Verdict section
-	if state.Result != nil && state.Result.Verdict != nil {
-		v := state.Result.Verdict
-		b.WriteString("## Executive Verdict\n\n")
-		b.WriteString(fmt.Sprintf("- **Recommendation:** `%s` (Confidence: `%s`)\n", strings.ToUpper(v.Recommendation), strings.ToUpper(v.Confidence)))
-		if v.ForWhom != "" {
-			b.WriteString(fmt.Sprintf("- **For Whom:** %s\n", v.ForWhom))
-		}
-		if len(v.Risks) > 0 {
-			b.WriteString("\n### Key Risks\n")
-			for _, rk := range v.Risks {
-				b.WriteString(fmt.Sprintf("- %s\n", rk))
-			}
-		}
-		if len(v.NextActions) > 0 {
-			b.WriteString("\n### Recommended Next Actions\n")
-			for i, act := range v.NextActions {
-				b.WriteString(fmt.Sprintf("%d. %s\n", i+1, act))
-			}
-		}
-		b.WriteString("\n")
-	}
+	renderedCustomStepIDs := make(map[string]bool)
 
-	// Claim Verification section
-	if state.Result != nil && len(state.Result.Claims) > 0 {
-		b.WriteString("## Claim Verification\n\n")
-		for _, cv := range state.Result.Claims {
-			badge := strings.ToUpper(cv.Status)
-			citations := ""
-			if len(cv.Sources) > 0 {
-				var citeParts []string
-				for _, sid := range cv.Sources {
-					citeParts = append(citeParts, fmt.Sprintf("[%s]", sid))
+	if len(state.PlaybookSteps) > 0 {
+		renderedKinds := make(map[string]bool)
+		for _, step := range state.PlaybookSteps {
+			if !step.Enabled {
+				continue
+			}
+			switch step.Kind {
+			case port.StepKindPlan:
+				if !renderedKinds[port.StepKindPlan] {
+					renderPlan(&b, state)
+					renderedKinds[port.StepKindPlan] = true
 				}
-				citations = " " + strings.Join(citeParts, " ")
-			}
-			b.WriteString(fmt.Sprintf("- **%s** — `[%s]`%s\n", cv.Claim, badge, citations))
-			if cv.Rationale != "" {
-				b.WriteString(fmt.Sprintf("  %s\n", cv.Rationale))
-			}
-		}
-		b.WriteString("\n")
-	}
-
-	// Competitive Landscape & Alternatives
-	if state.Result != nil && len(state.Result.Landscape) > 0 {
-		b.WriteString("## Competitive Landscape & Alternatives\n\n")
-		for _, li := range state.Result.Landscape {
-			citations := ""
-			if len(li.Sources) > 0 {
-				var citeParts []string
-				for _, sid := range li.Sources {
-					citeParts = append(citeParts, fmt.Sprintf("[%s]", sid))
+			case port.StepKindVerifyClaims:
+				if !renderedKinds[port.StepKindVerifyClaims] {
+					renderClaims(&b, state)
+					renderedKinds[port.StepKindVerifyClaims] = true
 				}
-				citations = " " + strings.Join(citeParts, " ")
-			}
-			nameHeader := li.Name
-			if li.URL != "" {
-				nameHeader = fmt.Sprintf("[%s](%s)", li.Name, li.URL)
-			}
-			b.WriteString(fmt.Sprintf("### %s%s\n", nameHeader, citations))
-			if li.OneLiner != "" {
-				b.WriteString(fmt.Sprintf("%s\n\n", li.OneLiner))
-			}
-			if li.HowItDiffers != "" {
-				b.WriteString(fmt.Sprintf("**How it differs:** %s\n\n", li.HowItDiffers))
+			case port.StepKindLandscape:
+				if !renderedKinds[port.StepKindLandscape] {
+					renderLandscape(&b, state)
+					renderedKinds[port.StepKindLandscape] = true
+				}
+			case port.StepKindVerdict:
+				if !renderedKinds[port.StepKindVerdict] {
+					renderVerdict(&b, state)
+					renderedKinds[port.StepKindVerdict] = true
+				}
+			case port.StepKindCustom:
+				stepID := fmt.Sprintf("custom_%d", step.Position)
+				var content string
+				if c, ok := state.StepOutputs[stepID].(string); ok && strings.TrimSpace(c) != "" {
+					content = c
+				} else if customSecs, ok := state.StepOutputs["custom_sections"].([]CustomSection); ok {
+					for _, cs := range customSecs {
+						if cs.StepID == stepID && strings.TrimSpace(cs.Content) != "" {
+							content = cs.Content
+							break
+						}
+					}
+				}
+				if strings.TrimSpace(content) != "" && !renderedCustomStepIDs[stepID] {
+					heading := step.Config.OutputHeading
+					if heading == "" {
+						heading = step.Name
+					}
+					if heading == "" {
+						heading = "Analysis"
+					}
+					b.WriteString(fmt.Sprintf("## %s\n\n%s\n\n", heading, strings.TrimSpace(content)))
+					renderedCustomStepIDs[stepID] = true
+				}
 			}
 		}
+	} else {
+		// Fallback when no playbook steps are set in state
+		renderVerdict(&b, state)
+		renderClaims(&b, state)
+		renderLandscape(&b, state)
+		renderPlan(&b, state)
 	}
 
-	// Questions & Findings
-	if state.Plan != nil && len(state.Plan.Questions) > 0 {
-		b.WriteString("## Questions & Findings\n\n")
-		for _, q := range state.Plan.Questions {
-			b.WriteString(fmt.Sprintf("### %s: %s\n", q.ID, q.Question))
-			b.WriteString(fmt.Sprintf("Search query: `%s`\n\n", q.Query))
-		}
-	}
-
-	// Custom Playbook Sections
+	// Custom Playbook Sections (any unrendered)
 	if customSecs, ok := state.StepOutputs["custom_sections"].([]CustomSection); ok && len(customSecs) > 0 {
 		for _, cs := range customSecs {
+			if cs.StepID != "" && renderedCustomStepIDs[cs.StepID] {
+				continue
+			}
 			b.WriteString(fmt.Sprintf("## %s\n\n%s\n\n", cs.Heading, strings.TrimSpace(cs.Content)))
 		}
 	}
 
-	// Sources section
+	// Sources section always at the end
 	b.WriteString("## Sources & Citations\n\n")
 	b.WriteString(state.Sources.FormatCitations())
 	b.WriteString("\n")

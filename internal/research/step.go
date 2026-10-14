@@ -15,20 +15,21 @@ type Step struct {
 
 // RunState holds contextual state, sources, outputs, and budgets across steps.
 type RunState struct {
-	Card        port.Card
-	Capture     *port.Capture
-	References  []port.Reference
-	Sources     *Registry
-	StepOutputs map[string]any
-	Steps       []port.ResearchStep
-	Plan        *port.ResearchPlan
-	Result      *port.ResearchResult
-	Query       string
-	Tokens      int
-	ResearchID  int64
-	Store       port.Store
-	Notes       map[string]string // stepID -> note
-	Profile     *port.UserProfile
+	Card          port.Card
+	Capture       *port.Capture
+	References    []port.Reference
+	Sources       *Registry
+	StepOutputs   map[string]any
+	Steps         []port.ResearchStep
+	Plan          *port.ResearchPlan
+	Result        *port.ResearchResult
+	Query         string
+	Tokens        int
+	ResearchID    int64
+	Store         port.Store
+	Notes         map[string]string // stepID -> note
+	Profile       *port.UserProfile
+	PlaybookSteps []port.PlaybookStep
 }
 
 func NewRunState(card port.Card, researchID int64, store port.Store, perSourceBudget, totalBudget int) *RunState {

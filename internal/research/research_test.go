@@ -911,17 +911,17 @@ func TestValidatePlaybook(t *testing.T) {
 		t.Error("expected error when read appears before search or resolve_refs")
 	}
 
-	// 7. Verdict not at the end
+	// 7. Steps after verdict or report are allowed
 	verdictMiddle := port.Playbook{
 		Name: "Verdict Middle",
 		Steps: []port.PlaybookStep{
 			{Kind: port.StepKindGround, Name: "Ground", Enabled: true},
 			{Kind: port.StepKindVerdict, Name: "Verdict", Enabled: true},
-			{Kind: port.StepKindSearch, Name: "Search", Enabled: true},
+			{Kind: port.StepKindCustom, Name: "Action Plan", Enabled: true, Config: port.CustomStepConfig{OutputHeading: "Action Plan"}},
 		},
 	}
-	if err := ValidatePlaybook(verdictMiddle); err == nil {
-		t.Error("expected error when steps follow verdict")
+	if err := ValidatePlaybook(verdictMiddle); err != nil {
+		t.Errorf("expected steps after verdict to be allowed, got error: %v", err)
 	}
 
 	// 8. Custom step validation
@@ -935,6 +935,24 @@ func TestValidatePlaybook(t *testing.T) {
 		t.Error("expected error when custom step output_heading is empty")
 	}
 
+	customInstruction3000 := port.Playbook{
+		Name: "Custom 3000 chars Instruction",
+		Steps: []port.PlaybookStep{
+			{
+				Kind:    port.StepKindCustom,
+				Name:    "Custom",
+				Enabled: true,
+				Config: port.CustomStepConfig{
+					OutputHeading: "Heading",
+					Instruction:   strings.Repeat("a", 3000),
+				},
+			},
+		},
+	}
+	if err := ValidatePlaybook(customInstruction3000); err != nil {
+		t.Errorf("expected 3000 chars instruction to be valid, got: %v", err)
+	}
+
 	customLongInstruction := port.Playbook{
 		Name: "Custom Long Instruction",
 		Steps: []port.PlaybookStep{
@@ -944,13 +962,13 @@ func TestValidatePlaybook(t *testing.T) {
 				Enabled: true,
 				Config: port.CustomStepConfig{
 					OutputHeading: "Heading",
-					Instruction:   strings.Repeat("a", 2001),
+					Instruction:   strings.Repeat("a", 8001),
 				},
 			},
 		},
 	}
 	if err := ValidatePlaybook(customLongInstruction); err == nil {
-		t.Error("expected error when custom instruction exceeds 2000 chars")
+		t.Error("expected error when custom instruction exceeds 8000 chars")
 	}
 
 	customMaxQueries := port.Playbook{
@@ -1066,15 +1084,15 @@ func TestCuratedBuiltinPlaybooks(t *testing.T) {
 
 func TestLibraryTemplates_ValidateAndRun(t *testing.T) {
 	templates := BuiltinStepTemplates()
-	if len(templates) != 3 {
-		t.Fatalf("expected 3 templates, got %d", len(templates))
+	if len(templates) != 7 {
+		t.Fatalf("expected 7 templates, got %d", len(templates))
 	}
 
 	for _, tpl := range templates {
 		if tpl.Heading == "" {
 			t.Errorf("template %s has empty heading", tpl.ID)
 		}
-		if len(tpl.Instruction) == 0 || len(tpl.Instruction) > 2000 {
+		if len(tpl.Instruction) == 0 || len(tpl.Instruction) > 8000 {
 			t.Errorf("template %s instruction invalid length %d", tpl.ID, len(tpl.Instruction))
 		}
 		if tpl.ToolPolicy != "none" && tpl.ToolPolicy != "search" {
@@ -1133,7 +1151,7 @@ func TestVerdictPrompt_UserProfileInjection(t *testing.T) {
 
 	// 1. Without profile -> prompt has no USER PROFILE block
 	stateNoProf := NewRunState(card, 0, nil, 1000, 5000)
-	err := runner.stepVerdict(context.Background(), stateNoProf)
+	err := runner.stepVerdict(context.Background(), stateNoProf, port.CustomStepConfig{})
 	if err != nil {
 		t.Fatalf("stepVerdict failed: %v", err)
 	}
@@ -1149,7 +1167,7 @@ func TestVerdictPrompt_UserProfileInjection(t *testing.T) {
 		Stack:    []string{"Synology NAS", "Postgres"},
 		Language: "German",
 	}
-	err = runner.stepVerdict(context.Background(), stateWithProf)
+	err = runner.stepVerdict(context.Background(), stateWithProf, port.CustomStepConfig{})
 	if err != nil {
 		t.Fatalf("stepVerdict with profile failed: %v", err)
 	}
@@ -1318,5 +1336,140 @@ func TestGeneralAnalysisStep_ProducesAnalysisAndReferencesProfile(t *testing.T) 
 	}
 	if !strings.Contains(report, "Postgres + n8n") {
 		t.Errorf("report missing references to user profile items (Postgres + n8n): %s", report)
+	}
+}
+
+func TestStepPrompt_CustomInstructionInjection(t *testing.T) {
+	var capturedPrompts []string
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.Unmarshal(body, &req)
+		if len(req.Messages) > 0 {
+			capturedPrompts = append(capturedPrompts, req.Messages[len(req.Messages)-1].Content)
+		}
+		resp := `{"questions":[{"id":"Q1","question":"test?","query":"test query"}],"landscape":[],"recommendation":"pursue","confidence":"high","next_actions":["act1","act2","act3"]}`
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(resp))
+	}))
+	defer llm.Close()
+
+	runner := stubRunner(llm, "")
+	card := port.Card{ID: 1, Title: "Test Target"}
+
+	// 1. stepPlan includes cfg.Instruction
+	statePlan := NewRunState(card, 0, nil, 1000, 5000)
+	planCfg := port.CustomStepConfig{Instruction: "Directives: focus heavily on SQLite concurrency."}
+	capturedPrompts = nil
+	if err := runner.stepPlan(context.Background(), statePlan, planCfg); err != nil {
+		t.Fatalf("stepPlan failed: %v", err)
+	}
+	if len(capturedPrompts) == 0 {
+		t.Fatalf("stepPlan did not capture any LLM prompts")
+	}
+	expectedPlanSection := "\n### Custom Planning Directives:\nDirectives: focus heavily on SQLite concurrency.\n"
+	if !strings.Contains(capturedPrompts[0], expectedPlanSection) {
+		t.Errorf("stepPlan prompt missing expected directive, got:\n%s", capturedPrompts[0])
+	}
+
+	// 2. stepLandscape includes cfg.Instruction
+	stateLandscape := NewRunState(card, 0, nil, 1000, 5000)
+	landscapeCfg := port.CustomStepConfig{Instruction: "Compare rigorously against DuckDB and RocksDB."}
+	capturedPrompts = nil
+	if err := runner.stepLandscape(context.Background(), stateLandscape, landscapeCfg); err != nil {
+		t.Fatalf("stepLandscape failed: %v", err)
+	}
+	if len(capturedPrompts) == 0 {
+		t.Fatalf("stepLandscape did not capture any LLM prompts")
+	}
+	expectedLandscapeSection := "\n### Custom Landscape Guidelines:\nCompare rigorously against DuckDB and RocksDB.\n"
+	if !strings.Contains(capturedPrompts[0], expectedLandscapeSection) {
+		t.Errorf("stepLandscape prompt missing expected guidelines, got:\n%s", capturedPrompts[0])
+	}
+
+	// 3. stepVerdict includes cfg.Instruction
+	stateVerdict := NewRunState(card, 0, nil, 1000, 5000)
+	verdictCfg := port.CustomStepConfig{Instruction: "Evaluate strictly from an enterprise procurement lens."}
+	capturedPrompts = nil
+	if err := runner.stepVerdict(context.Background(), stateVerdict, verdictCfg); err != nil {
+		t.Fatalf("stepVerdict failed: %v", err)
+	}
+	if len(capturedPrompts) == 0 {
+		t.Fatalf("stepVerdict did not capture any LLM prompts")
+	}
+	expectedVerdictSection := "\n### Custom Decision Rubric & Focus:\nEvaluate strictly from an enterprise procurement lens.\n"
+	if !strings.Contains(capturedPrompts[0], expectedVerdictSection) {
+		t.Errorf("stepVerdict prompt missing expected rubric, got:\n%s", capturedPrompts[0])
+	}
+}
+
+func TestRunWithPlaybook_ReportSequentialAssembly(t *testing.T) {
+	customLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+		if strings.Contains(str, "Decompose this research topic") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+				strconv.Quote(`{"questions":[{"id":"Q1","question":"Key architecture?","query":"architecture query"}]}`))
+			return
+		}
+		if strings.Contains(str, "research synthesis and executive decision assistant") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+				strconv.Quote(`{"recommendation":"pursue","confidence":"high","next_actions":["Action 1","Action 2","Action 3"]}`))
+			return
+		}
+		if strings.Contains(str, "Action Plan") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":"Custom post-verdict memo content."}}]}`)
+			return
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":"Default LLM response"}}]}`)
+	}))
+	defer customLLM.Close()
+
+	runner := stubRunner(customLLM, "")
+	runner.Fetcher = newTraceFetcher()
+
+	pb := port.Playbook{
+		Name: "Post-Verdict Synthesis Playbook",
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Position: 2, Kind: port.StepKindPlan, Name: "Planning", Enabled: true},
+			{Position: 3, Kind: port.StepKindVerdict, Name: "Verdict", Enabled: true},
+			{
+				Position: 4,
+				Kind:     port.StepKindCustom,
+				Name:     "Action Plan",
+				Enabled:  true,
+				Config: port.CustomStepConfig{
+					Instruction:   "Draft action plan",
+					OutputHeading: "Executive Action Plan",
+					ToolPolicy:    "none",
+				},
+			},
+			{Position: 5, Kind: port.StepKindReport, Name: "Report", Enabled: true},
+		},
+	}
+
+	card := port.Card{ID: 42, Title: "Sequencing Card", TLDR: "Test sequential assembly"}
+	report, err := runner.RunWithPlaybook(context.Background(), card, 0, pb)
+	if err != nil {
+		t.Fatalf("RunWithPlaybook failed: %v", err)
+	}
+
+	posPlan := strings.Index(report, "## Questions & Findings")
+	posVerdict := strings.Index(report, "## Executive Verdict")
+	posActionPlan := strings.Index(report, "## Executive Action Plan")
+	posSources := strings.Index(report, "## Sources & Citations")
+
+	if posPlan == -1 || posVerdict == -1 || posActionPlan == -1 || posSources == -1 {
+		t.Fatalf("report missing expected sections:\n%s", report)
+	}
+
+	if !(posPlan < posVerdict && posVerdict < posActionPlan && posActionPlan < posSources) {
+		t.Errorf("sections not in expected sequential order (Plan < Verdict < ActionPlan < Sources):\nPlan=%d, Verdict=%d, ActionPlan=%d, Sources=%d\nReport:\n%s",
+			posPlan, posVerdict, posActionPlan, posSources, report)
 	}
 }

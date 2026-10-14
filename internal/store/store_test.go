@@ -2384,4 +2384,3 @@ func TestCardsFTSMigrationPopulate(t *testing.T) {
 		t.Fatalf("ListCards LegacyActionItem: got %d cards, want 1 with ID %d", len(actionCards), legacyCardID)
 	}
 }
-

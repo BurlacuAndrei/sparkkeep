@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,9 +55,9 @@ func (m *memoryStore) ListSettings(_ context.Context) (map[string]string, error)
 }
 
 func TestWebhook_DispatchedByDefault(t *testing.T) {
-	called := false
+	var called atomic.Bool
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
+		called.Store(true)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -70,7 +71,7 @@ func TestWebhook_DispatchedByDefault(t *testing.T) {
 	d.Dispatch(context.Background(), EventCardCreated, map[string]string{"title": "Test"})
 	time.Sleep(50 * time.Millisecond)
 
-	if !called {
+	if !called.Load() {
 		t.Fatalf("webhook should be dispatched by default under MIT open source")
 	}
 }

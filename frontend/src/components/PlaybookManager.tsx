@@ -203,12 +203,168 @@ export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
   },
 ];
 
+export interface UserSavedStepTemplate {
+  id: string;
+  name: string;
+  description: string;
+  heading: string;
+  instruction: string;
+  tool_policy: 'none' | 'search';
+  role: 'research_plan' | 'research_synthesis';
+  max_queries: number;
+}
+
+interface PromptStarter {
+  label: string;
+  text: string;
+}
+
+const STEP_PROMPT_STARTERS: Record<string, PromptStarter[]> = {
+  plan: [
+    {
+      label: 'Architecture Vectors',
+      text: 'Analyze core architectural components, scalability vectors, data flow, and infrastructure trade-offs.',
+    },
+    {
+      label: 'Moat & Economics',
+      text: 'Investigate unit economics, pricing dynamics, defensibility moats, and supplier/customer power.',
+    },
+    {
+      label: 'Risk & Compliance',
+      text: 'Map out regulatory hurdles, security boundaries, compliance requirements, and potential failure points.',
+    },
+  ],
+  search: [
+    {
+      label: 'Competitor Pricing',
+      text: 'Identify published pricing tiers, volume discounts, hidden costs, and billing model structures.',
+    },
+    {
+      label: 'Benchmarks & Whitepapers',
+      text: 'Find technical whitepapers, empirical benchmark datasets, and reproducible evaluation methodologies.',
+    },
+  ],
+  landscape: [
+    {
+      label: '2x2 Feature Matrix',
+      text: 'Construct a 2x2 competitive positioning matrix comparing feature depth against implementation complexity.',
+    },
+    {
+      label: 'Open-Source vs SaaS',
+      text: 'Compare open-source self-hosted alternatives versus commercial managed SaaS solutions.',
+    },
+  ],
+  verdict: [
+    {
+      label: 'Buy / Build / Partner',
+      text: 'Deliver a definitive Buy, Build, or Partner strategic recommendation with cost and speed rationale.',
+    },
+    {
+      label: '10-Point Scorecard',
+      text: 'Evaluate across a 10-point scorecard covering technical feasibility, defensibility, and ROI.',
+    },
+    {
+      label: 'Bear Case Stress-Test',
+      text: 'Stress-test the bear case scenario, key vulnerabilities, adoption inertia, and execution risks.',
+    },
+  ],
+  custom: [
+    {
+      label: 'SWOT Analysis',
+      text: 'Conduct a structured SWOT (Strengths, Weaknesses, Opportunities, Threats) analysis based on extracted sources.',
+    },
+    {
+      label: 'Pricing & Moat',
+      text: 'Analyze pricing models, margins, customer acquisition unit economics, and competitive defensibility against incumbents.',
+    },
+    {
+      label: 'Regulatory & Risk',
+      text: 'Examine compliance requirements, regulatory headwinds, security vectors, and potential legal vulnerabilities.',
+    },
+    {
+      label: 'Executive Brief',
+      text: 'Synthesize 3-5 high-priority strategic recommendations with clear next steps and timeline.',
+    },
+  ],
+  ground: [
+    {
+      label: 'Context Extraction',
+      text: 'Anchor primary entities, core problem statements, and key hypotheses from capture input.',
+    },
+    {
+      label: 'Key Entities',
+      text: 'Extract key stakeholders, technology stacks, target domains, and operational constraints.',
+    },
+  ],
+  resolve_refs: [
+    {
+      label: 'Primary Sources',
+      text: 'Prioritize official documentation, GitHub repositories, and direct primary sources.',
+    },
+    {
+      label: 'Benchmark Citations',
+      text: 'Trace academic references, peer reviews, and foundational citations.',
+    },
+  ],
+  read: [
+    {
+      label: 'Deep Extraction',
+      text: 'Extract high-signal technical specifications, benchmarks, and critical architecture details.',
+    },
+    {
+      label: 'Evidence Quotes',
+      text: 'Extract concrete quantitative data points, quotes, and verifiable metrics.',
+    },
+  ],
+  verify_claims: [
+    {
+      label: 'Source Fact-Check',
+      text: 'Cross-verify factual assertions across sources and flag unsupported or contradictory claims.',
+    },
+    {
+      label: 'Discrepancy Audit',
+      text: 'Scrutinize numerical disparities, date discrepancies, and promotional bias.',
+    },
+  ],
+  report: [
+    {
+      label: 'Executive Briefing',
+      text: 'Synthesize high-level executive findings with structured headings and citation links.',
+    },
+    {
+      label: 'Action Roadmap',
+      text: 'Provide concrete sequential action items, prioritized milestones, and decision gates.',
+    },
+  ],
+};
+
+const DEFAULT_PROMPT_STARTERS: PromptStarter[] = [
+  {
+    label: 'Deep Dive Analysis',
+    text: 'Conduct an in-depth critical analysis focusing on primary evidence and domain trade-offs.',
+  },
+  {
+    label: 'Key Findings',
+    text: 'Synthesize key takeaways, implications, and actionable recommendations.',
+  },
+];
+
 export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) => {
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [libraryTemplates, setLibraryTemplates] = useState<StepLibraryTemplate[]>([]);
+  const [userStepTemplates, setUserStepTemplates] = useState<UserSavedStepTemplate[]>(() => {
+    try {
+      const raw = localStorage.getItem('sparkkeep_user_step_library');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [editingPlaybook, setEditingPlaybook] = useState<Playbook | null>(null);
-  const [expandedCustomSteps, setExpandedCustomSteps] = useState<Record<number, boolean>>({});
+  const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({});
   const [isRecipePickerOpen, setIsRecipePickerOpen] = useState(false);
   const [isAddStepOpen, setIsAddStepOpen] = useState(false);
   const [addStepTab, setAddStepTab] = useState<'library' | 'blank'>('library');
@@ -304,7 +460,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
   const startEdit = (pb: Playbook) => {
     setEditingPlaybook(JSON.parse(JSON.stringify(pb)));
     setServerError(null);
-    setExpandedCustomSteps({});
+    setExpandedSteps({});
   };
 
   // Open recipe archetype picker
@@ -326,7 +482,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     setEditingPlaybook(newPb);
     setIsRecipePickerOpen(false);
     setServerError(null);
-    setExpandedCustomSteps({});
+    setExpandedSteps({});
   };
 
   // Validation mirroring server rules
@@ -345,16 +501,9 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     }
 
     let hasSearchOrRefs = false;
-    let verdictOrReportSeen = false;
 
     editingPlaybook.steps.forEach((step, idx) => {
       if (step.enabled) {
-        if (verdictOrReportSeen && step.kind !== 'verdict' && step.kind !== 'report') {
-          errors.push(`Step ${idx + 1} (${step.name}): Verdict and Report steps must be placed at the end.`);
-        }
-        if (step.kind === 'verdict' || step.kind === 'report') {
-          verdictOrReportSeen = true;
-        }
         if (step.kind === 'read' && !hasSearchOrRefs) {
           errors.push(`Step ${idx + 1} (${step.name}): "Read" requires "Search" or "Resolve References" before it.`);
         }
@@ -363,12 +512,13 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
         }
       }
 
+      if ((step.config?.instruction || '').length > 8000) {
+        errors.push(`Step ${idx + 1} (${step.name}): Instruction exceeds 8,000 characters limit.`);
+      }
+
       if (step.kind === 'custom') {
         if (!step.config?.output_heading?.trim()) {
           errors.push(`Step ${idx + 1} (${step.name}): Output Heading is required.`);
-        }
-        if ((step.config?.instruction || '').length > 2000) {
-          errors.push(`Step ${idx + 1} (${step.name}): Instruction exceeds 2,000 characters limit.`);
         }
       }
     });
@@ -451,19 +601,20 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     setEditingPlaybook({ ...editingPlaybook, steps });
   };
 
-  // Update custom step config
-  const updateCustomConfig = (idx: number, patch: Partial<CustomStepConfig>, newName?: string) => {
+  // Update step config
+  const updateStepConfig = (idx: number, patch: Partial<CustomStepConfig>, newName?: string) => {
     if (!editingPlaybook) return;
     const steps = [...editingPlaybook.steps];
     const step = { ...steps[idx] };
     if (newName !== undefined) step.name = newName;
-    step.config = { ...step.config, ...patch };
+    step.config = { ...(step.config || {}), ...patch };
     steps[idx] = step;
     setEditingPlaybook({ ...editingPlaybook, steps });
   };
+  const updateCustomConfig = updateStepConfig;
 
   // Add library template step
-  const addLibraryStep = (tpl: StepLibraryTemplate) => {
+  const addLibraryStep = (tpl: StepLibraryTemplate | UserSavedStepTemplate) => {
     if (!editingPlaybook) return;
     const newStep: PlaybookStep = {
       position: editingPlaybook.steps.length + 1,
@@ -475,7 +626,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
         instruction: tpl.instruction,
         tool_policy: tpl.tool_policy,
         role: tpl.role,
-        inputs: tpl.inputs || ['capture', 'sources', 'previous_steps'],
+        inputs: ('inputs' in tpl && tpl.inputs) ? tpl.inputs : ['capture', 'sources', 'previous_steps'],
         max_queries: tpl.max_queries || 2,
       },
     };
@@ -492,6 +643,51 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     setIsAddStepOpen(false);
     showToast(`Added step "${tpl.name}" from library`);
   };
+
+  // Save step to local library
+  const handleSaveStepToLibrary = (step: PlaybookStep) => {
+    try {
+      const raw = localStorage.getItem('sparkkeep_user_step_library');
+      const currentList: UserSavedStepTemplate[] = raw ? JSON.parse(raw) : [];
+      const newTemplate: UserSavedStepTemplate = {
+        id: `user_step_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: step.name || 'Custom Step',
+        description: step.config?.instruction
+          ? (step.config.instruction.length > 90 ? `${step.config.instruction.slice(0, 90)}…` : step.config.instruction)
+          : (CORE_STEP_DESCRIPTIONS[step.kind] || 'Custom saved step'),
+        heading: step.config?.output_heading || step.name || 'Analysis',
+        instruction: step.config?.instruction || '',
+        tool_policy: (step.config?.tool_policy as 'none' | 'search') || 'none',
+        role: (step.config?.role as 'research_plan' | 'research_synthesis') || (step.kind === 'plan' ? 'research_plan' : 'research_synthesis'),
+        max_queries: step.config?.max_queries ?? 2,
+      };
+      const updated = [...currentList, newTemplate];
+      localStorage.setItem('sparkkeep_user_step_library', JSON.stringify(updated));
+      setUserStepTemplates(updated);
+      showToast(`Saved "${newTemplate.name}" to step library`);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
+    }
+  };
+
+  // Sync user step templates when Add Step modal opens
+  useEffect(() => {
+    if (isAddStepOpen) {
+      try {
+        const raw = localStorage.getItem('sparkkeep_user_step_library');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            setUserStepTemplates(parsed);
+          }
+        } else {
+          setUserStepTemplates([]);
+        }
+      } catch {
+        setUserStepTemplates([]);
+      }
+    }
+  }, [isAddStepOpen]);
 
   // Add blank custom step
   const addBlankCustomStep = () => {
@@ -839,7 +1035,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
           <div className="pb-steps-list">
             {editingPlaybook.steps.map((step, idx) => {
               const isCustom = step.kind === 'custom';
-              const isExpanded = !!expandedCustomSteps[idx];
+              const isExpanded = !!expandedSteps[idx];
 
               return (
                 <div key={idx} className={`pb-step-row ${!step.enabled ? 'disabled' : ''}`}>
@@ -852,6 +1048,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                         disabled={idx === 0}
                         onClick={() => moveStep(idx, idx - 1)}
                         title="Move Up"
+                        aria-label={`Move ${step.name} up`}
                       >
                         <ArrowUp size={12} />
                       </button>
@@ -862,6 +1059,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                         disabled={idx === editingPlaybook.steps.length - 1}
                         onClick={() => moveStep(idx, idx + 1)}
                         title="Move Down"
+                        aria-label={`Move ${step.name} down`}
                       >
                         <ArrowDown size={12} />
                       </button>
@@ -890,42 +1088,42 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                         )}
                       </div>
                       <p className="pb-step-desc">
-                        {isCustom
-                          ? (step.config?.instruction || '').slice(0, 90) + ((step.config?.instruction || '').length > 90 ? '…' : '')
+                        {step.config?.instruction
+                          ? step.config.instruction.slice(0, 90) + (step.config.instruction.length > 90 ? '…' : '')
                           : CORE_STEP_DESCRIPTIONS[step.kind] || ''}
                       </p>
                     </div>
 
                     {/* Actions */}
                     <div className="pb-step-actions">
-                      {isCustom && (
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          onClick={() =>
-                            setExpandedCustomSteps({
-                              ...expandedCustomSteps,
-                              [idx]: !isExpanded,
-                            })
-                          }
-                          title={isExpanded ? 'Collapse config' : 'Edit config'}
-                        >
-                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        onClick={() =>
+                          setExpandedSteps({
+                            ...expandedSteps,
+                            [idx]: !isExpanded,
+                          })
+                        }
+                        title={isExpanded ? 'Collapse config' : 'Edit config'}
+                        aria-label={isExpanded ? `Collapse ${step.name} config` : `Edit ${step.name} config`}
+                      >
+                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </button>
                       <button
                         type="button"
                         className="btn-icon btn-danger"
                         onClick={() => removeStep(idx)}
                         title="Delete step"
+                        aria-label={`Delete ${step.name}`}
                       >
                         <Trash2 size={13} />
                       </button>
                     </div>
                   </div>
 
-                  {/* Expanded Custom Step Configuration */}
-                  {isCustom && isExpanded && (
+                  {/* Expanded Step Configuration Drawer */}
+                  {isExpanded && (
                     <div className="pb-custom-config-drawer">
                       <div className="pb-cfg-row">
                         <div className="pb-form-field">
@@ -933,8 +1131,9 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                           <input
                             type="text"
                             className="input-text"
+                            aria-label="Step Display Name"
                             value={step.name}
-                            onChange={(e) => updateCustomConfig(idx, {}, e.target.value)}
+                            onChange={(e) => updateStepConfig(idx, {}, e.target.value)}
                           />
                         </div>
                         <div className="pb-form-field">
@@ -942,10 +1141,11 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                           <input
                             type="text"
                             className="input-text"
-                            placeholder="e.g. Monetization Angle"
+                            aria-label="Report Section Heading"
+                            placeholder={step.kind === 'custom' ? 'e.g. Monetization Angle' : (step.name || 'Section Heading')}
                             value={step.config?.output_heading || ''}
                             onChange={(e) =>
-                              updateCustomConfig(idx, { output_heading: e.target.value })
+                              updateStepConfig(idx, { output_heading: e.target.value })
                             }
                           />
                         </div>
@@ -956,22 +1156,17 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                           <label>Instruction / Prompt</label>
                           <span
                             className={`pb-char-counter ${
-                              (step.config?.instruction || '').length > 2000 ? 'overflow' : ''
+                              (step.config?.instruction || '').length > 8000 ? 'overflow' : ''
                             }`}
                           >
-                            {(step.config?.instruction || '').length} / 2,000
+                            {(step.config?.instruction || '').length} / 8,000
                           </span>
                         </div>
 
                         {/* Quick Prompt Starters */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '6px 0', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Prompt Starters:</span>
-                          {[
-                            { label: 'SWOT Analysis', text: 'Conduct a structured SWOT (Strengths, Weaknesses, Opportunities, Threats) analysis based on extracted sources.' },
-                            { label: 'Pricing & Moat', text: 'Analyze pricing models, margins, customer acquisition unit economics, and competitive defensibility against incumbents.' },
-                            { label: 'Regulatory & Risk', text: 'Examine compliance requirements, regulatory headwinds, security vectors, and potential legal vulnerabilities.' },
-                            { label: 'Executive Brief', text: 'Synthesize 3-5 high-priority strategic recommendations with clear next steps and timeline.' },
-                          ].map((snip) => (
+                          {(STEP_PROMPT_STARTERS[step.kind] || DEFAULT_PROMPT_STARTERS).map((snip) => (
                             <button
                               key={snip.label}
                               type="button"
@@ -980,7 +1175,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                               onClick={() => {
                                 const current = step.config?.instruction || '';
                                 const next = current ? `${current}\n\n${snip.text}` : snip.text;
-                                updateCustomConfig(idx, { instruction: next.slice(0, 2000) });
+                                updateStepConfig(idx, { instruction: next.slice(0, 8000) });
                               }}
                             >
                               + {snip.label}
@@ -991,64 +1186,81 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                         <textarea
                           className="input-textarea"
                           rows={3}
+                          aria-label="Instruction / Prompt"
                           placeholder="Prompt instructions for this analysis step…"
                           value={step.config?.instruction || ''}
                           onChange={(e) =>
-                            updateCustomConfig(idx, { instruction: e.target.value })
+                            updateStepConfig(idx, { instruction: e.target.value })
                           }
                         />
                       </div>
 
-                      <div className="pb-cfg-row" style={{ marginTop: 10 }}>
-                        <div className="pb-form-field">
-                          <label>Tool Policy</label>
-                          <select
-                            className="input-select"
-                            value={step.config?.tool_policy || 'none'}
-                            onChange={(e) =>
-                              updateCustomConfig(idx, {
-                                tool_policy: e.target.value as 'none' | 'search',
-                              })
-                            }
-                          >
-                            <option value="none">None (Reason over existing sources only)</option>
-                            <option value="search">Search (Execute live web queries)</option>
-                          </select>
-                        </div>
-
-                        {step.config?.tool_policy === 'search' && (
+                      {/* Tool Policy, Max Queries, LLM Role */}
+                      {(step.kind === 'custom' || step.config?.tool_policy !== undefined) && (
+                        <div className="pb-cfg-row" style={{ marginTop: 10 }}>
                           <div className="pb-form-field">
-                            <label>Max Search Queries (1–5)</label>
-                            <input
-                              type="number"
-                              className="input-text"
-                              min={1}
-                              max={5}
-                              value={step.config?.max_queries ?? 2}
+                            <label>Tool Policy</label>
+                            <select
+                              className="input-select"
+                              value={step.config?.tool_policy || 'none'}
                               onChange={(e) =>
-                                updateCustomConfig(idx, {
-                                  max_queries: Math.min(5, Math.max(1, parseInt(e.target.value, 10) || 1)),
+                                updateStepConfig(idx, {
+                                  tool_policy: e.target.value as 'none' | 'search',
                                 })
                               }
-                            />
+                            >
+                              <option value="none">None (Reason over existing sources only)</option>
+                              <option value="search">Search (Execute live web queries)</option>
+                            </select>
                           </div>
-                        )}
 
-                        <div className="pb-form-field">
-                          <label>LLM Role</label>
-                          <select
-                            className="input-select"
-                            value={step.config?.role || 'research_synthesis'}
-                            onChange={(e) =>
-                              updateCustomConfig(idx, {
-                                role: e.target.value as 'research_plan' | 'research_synthesis',
-                              })
-                            }
-                          >
-                            <option value="research_synthesis">Synthesis & Reasoning (Strong model)</option>
-                            <option value="research_plan">Planning & Fast (Cheaper model)</option>
-                          </select>
+                          {step.config?.tool_policy === 'search' && (
+                            <div className="pb-form-field">
+                              <label>Max Search Queries (1–5)</label>
+                              <input
+                                type="number"
+                                className="input-text"
+                                min={1}
+                                max={5}
+                                value={step.config?.max_queries ?? 2}
+                                onChange={(e) =>
+                                  updateStepConfig(idx, {
+                                    max_queries: Math.min(5, Math.max(1, parseInt(e.target.value, 10) || 1)),
+                                  })
+                                }
+                              />
+                            </div>
+                          )}
+
+                          <div className="pb-form-field">
+                            <label>LLM Role</label>
+                            <select
+                              className="input-select"
+                              value={step.config?.role || 'research_synthesis'}
+                              onChange={(e) =>
+                                updateStepConfig(idx, {
+                                  role: e.target.value as 'research_plan' | 'research_synthesis',
+                                })
+                              }
+                            >
+                              <option value="research_synthesis">Synthesis & Reasoning (Strong model)</option>
+                              <option value="research_plan">Planning & Fast (Cheaper model)</option>
+                            </select>
+                          </div>
                         </div>
+                      )}
+
+                      {/* Drawer Footer: Save Step to Library */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-subtle)' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => handleSaveStepToLibrary(step)}
+                          title="Save this step configuration to your custom template library"
+                        >
+                          <Sparkles size={13} />
+                          <span>Save to Library</span>
+                        </button>
                       </div>
                     </div>
                   )}
@@ -1160,7 +1372,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                 onClick={() => setAddStepTab('library')}
               >
                 <Sparkles size={13} />
-                <span>Step Library ({libraryTemplates.length})</span>
+                <span>Step Library ({libraryTemplates.length + userStepTemplates.length})</span>
               </button>
               <button
                 type="button"
@@ -1174,32 +1386,106 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
 
             <div className="pb-modal-body">
               {addStepTab === 'library' ? (
-                <div className="pb-library-grid">
-                  {libraryTemplates.map((tpl) => (
-                    <div key={tpl.id} className="pb-lib-item">
-                      <div className="pb-lib-top">
-                        <span className="pb-lib-icon">{tpl.icon}</span>
-                        <div className="pb-lib-title-box">
-                          <h5 className="pb-lib-name">{tpl.name}</h5>
-                          <span className="pb-lib-policy">
-                            {tpl.tool_policy === 'search' ? '🔍 Live Web Search' : '🧠 Source Reasoning'}
+                <div>
+                  {/* User Saved Custom Templates */}
+                  {userStepTemplates.length > 0 && (
+                    <div className="pb-user-templates-section" style={{ marginBottom: 20 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="pb-card-badge custom" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Sparkles size={11} />
+                            <span>Custom Templates</span>
+                          </span>
+                          <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                            ({userStepTemplates.length})
                           </span>
                         </div>
                       </div>
-                      <p className="pb-lib-desc">{tpl.description}</p>
-                      <div className="pb-lib-preview">
-                        <strong>Heading:</strong> {tpl.heading}
+
+                      <div className="pb-library-grid">
+                        {userStepTemplates.map((tpl) => (
+                          <div
+                            key={tpl.id}
+                            className="pb-lib-item custom-template"
+                          >
+                            <div className="pb-lib-top">
+                              <span className="pb-lib-icon">✨</span>
+                              <div className="pb-lib-title-box">
+                                <h5 className="pb-lib-name">{tpl.name}</h5>
+                                <span className="pb-lib-policy">
+                                  {tpl.tool_policy === 'search' ? '🔍 Live Web Search' : '🧠 Source Reasoning'}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn-icon btn-danger"
+                                style={{ marginLeft: 'auto', padding: 2 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const updated = userStepTemplates.filter((t) => t.id !== tpl.id);
+                                  localStorage.setItem('sparkkeep_user_step_library', JSON.stringify(updated));
+                                  setUserStepTemplates(updated);
+                                  showToast(`Removed "${tpl.name}" from library`);
+                                }}
+                                title="Remove template"
+                                aria-label={`Delete ${tpl.name} template`}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                            <p className="pb-lib-desc">{tpl.description}</p>
+                            <div className="pb-lib-preview">
+                              <strong>Heading:</strong> {tpl.heading}
+                            </div>
+                            <button
+                              type="button"
+                              className="btn-primary btn-sm pb-lib-btn"
+                              onClick={() => addLibraryStep(tpl)}
+                            >
+                              <Plus size={12} />
+                              <span>Add to Playbook</span>
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                      <button
-                        type="button"
-                        className="btn-primary btn-sm pb-lib-btn"
-                        onClick={() => addLibraryStep(tpl)}
-                      >
-                        <Plus size={12} />
-                        <span>Add to Playbook</span>
-                      </button>
                     </div>
-                  ))}
+                  )}
+
+                  {/* Standard Step Library */}
+                  {userStepTemplates.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Standard Step Library ({libraryTemplates.length})
+                      </span>
+                    </div>
+                  )}
+                  <div className="pb-library-grid">
+                    {libraryTemplates.map((tpl) => (
+                      <div key={tpl.id} className="pb-lib-item">
+                        <div className="pb-lib-top">
+                          <span className="pb-lib-icon">{tpl.icon}</span>
+                          <div className="pb-lib-title-box">
+                            <h5 className="pb-lib-name">{tpl.name}</h5>
+                            <span className="pb-lib-policy">
+                              {tpl.tool_policy === 'search' ? '🔍 Live Web Search' : '🧠 Source Reasoning'}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="pb-lib-desc">{tpl.description}</p>
+                        <div className="pb-lib-preview">
+                          <strong>Heading:</strong> {tpl.heading}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm pb-lib-btn"
+                          onClick={() => addLibraryStep(tpl)}
+                        >
+                          <Plus size={12} />
+                          <span>Add to Playbook</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div className="pb-blank-box">

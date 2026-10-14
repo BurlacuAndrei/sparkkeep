@@ -86,40 +86,40 @@ type Worthiness struct {
 }
 
 type Card struct {
-	ID                 int64         `json:"id"`
-	CaptureID          *int64        `json:"capture_id,omitempty"`
-	Title              string        `json:"title"`
-	Summary            string        `json:"summary"`
-	Horizon            string        `json:"horizon"`
-	Status             string        `json:"status"`
-	SourceURL          string        `json:"source_url"`
-	SourceNote         string        `json:"source_note"`
-	Tags               []string      `json:"tags"`
-	References         []Reference   `json:"references"`
-	Type               string        `json:"type"`
-	TLDR               string        `json:"tldr"`
-	WhyCare            string        `json:"why_care"`
-	Claims             []string      `json:"claims"`
-	OpenQuestions      []string      `json:"open_questions"`
-	Signals            Signals       `json:"signals"`
-	Worthiness         Worthiness    `json:"worthiness"`
-	ExecutiveSummary   string        `json:"executive_summary"`
-	ValueProposition   string        `json:"value_proposition"`
-	ProposedActions    []string      `json:"proposed_actions"`
-	CompletedActions   []string      `json:"completed_actions"` // texts of ProposedActions checked off by the user
-	ActionsSource      string        `json:"actions_source"`
-	AnalysisFailed     bool          `json:"analysis_failed"`
-	ResearchVerdict    string        `json:"research_verdict,omitempty"`
-	ResearchConfidence string        `json:"research_confidence,omitempty"`
-	SuggestedHorizon   string        `json:"suggested_horizon,omitempty"`
-	SuggestedTags      []string      `json:"suggested_tags,omitempty"`
-	ResearchState      string        `json:"research_state,omitempty"`
+	ID                  int64         `json:"id"`
+	CaptureID           *int64        `json:"capture_id,omitempty"`
+	Title               string        `json:"title"`
+	Summary             string        `json:"summary"`
+	Horizon             string        `json:"horizon"`
+	Status              string        `json:"status"`
+	SourceURL           string        `json:"source_url"`
+	SourceNote          string        `json:"source_note"`
+	Tags                []string      `json:"tags"`
+	References          []Reference   `json:"references"`
+	Type                string        `json:"type"`
+	TLDR                string        `json:"tldr"`
+	WhyCare             string        `json:"why_care"`
+	Claims              []string      `json:"claims"`
+	OpenQuestions       []string      `json:"open_questions"`
+	Signals             Signals       `json:"signals"`
+	Worthiness          Worthiness    `json:"worthiness"`
+	ExecutiveSummary    string        `json:"executive_summary"`
+	ValueProposition    string        `json:"value_proposition"`
+	ProposedActions     []string      `json:"proposed_actions"`
+	CompletedActions    []string      `json:"completed_actions"` // texts of ProposedActions checked off by the user
+	ActionsSource       string        `json:"actions_source"`
+	AnalysisFailed      bool          `json:"analysis_failed"`
+	ResearchVerdict     string        `json:"research_verdict,omitempty"`
+	ResearchConfidence  string        `json:"research_confidence,omitempty"`
+	SuggestedHorizon    string        `json:"suggested_horizon,omitempty"`
+	SuggestedTags       []string      `json:"suggested_tags,omitempty"`
+	ResearchState       string        `json:"research_state,omitempty"`
 	SourceChannel       string        `json:"source_channel,omitempty"`
 	SourceChannelChatID string        `json:"source_channel_chat_id,omitempty"`
 	SourceChannelMsgID  string        `json:"source_channel_msg_id,omitempty"`
-	CreatedAt          time.Time     `json:"created_at"`
-	UpdatedAt          time.Time     `json:"updated_at"`
-	Comments           []CardComment `json:"comments,omitempty"`
+	CreatedAt           time.Time     `json:"created_at"`
+	UpdatedAt           time.Time     `json:"updated_at"`
+	Comments            []CardComment `json:"comments,omitempty"`
 }
 
 type CardComment struct {
@@ -393,31 +393,31 @@ type CardFilter struct {
 }
 
 type CardPatch struct {
-	Title              *string
-	Status             *string
-	Horizon            *string
-	Note               *string
-	ExecutiveSummary   *string
-	ValueProposition   *string
-	ProposedActions    *[]string
-	CompletedActions   *[]string
-	AnalysisFailed     *bool
-	SourceURL          *string
-	CaptureID          *int64
-	References         *[]Reference
-	Type               *string
-	TLDR               *string
-	WhyCare            *string
-	Claims             *[]string
-	OpenQuestions      *[]string
-	Signals            *Signals
-	Worthiness         *Worthiness
-	ActionsSource      *string
-	ResearchVerdict    *string
-	ResearchConfidence *string
-	SuggestedHorizon   *string
-	SuggestedTags      *[]string
-	ResearchState      *string
+	Title               *string
+	Status              *string
+	Horizon             *string
+	Note                *string
+	ExecutiveSummary    *string
+	ValueProposition    *string
+	ProposedActions     *[]string
+	CompletedActions    *[]string
+	AnalysisFailed      *bool
+	SourceURL           *string
+	CaptureID           *int64
+	References          *[]Reference
+	Type                *string
+	TLDR                *string
+	WhyCare             *string
+	Claims              *[]string
+	OpenQuestions       *[]string
+	Signals             *Signals
+	Worthiness          *Worthiness
+	ActionsSource       *string
+	ResearchVerdict     *string
+	ResearchConfidence  *string
+	SuggestedHorizon    *string
+	SuggestedTags       *[]string
+	ResearchState       *string
 	SourceChannel       *string
 	SourceChannelChatID *string
 	SourceChannelMsgID  *string

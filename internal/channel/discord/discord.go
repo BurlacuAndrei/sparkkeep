@@ -162,7 +162,7 @@ type discordActionRow struct {
 }
 
 type discordButton struct {
-	Type     int    `json:"type"` // 2 = Button
+	Type     int    `json:"type"`  // 2 = Button
 	Style    int    `json:"style"` // 1=Primary, 2=Secondary, 3=Success, 4=Danger
 	Label    string `json:"label"`
 	CustomID string `json:"custom_id"`
