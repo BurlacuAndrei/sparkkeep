@@ -116,7 +116,7 @@
   --bg-topbar: rgba(255, 255, 255, 0.9);
   --bg-surface: #ffffff;
   --bg-surface-elevated: #f1f5f9;
-  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-card: #ffffff;
   --bg-card-hover: #ffffff;
 
   /* Form Elements & Inputs */
@@ -144,7 +144,7 @@
 
   /* Typography */
   --text-main: #0f172a;
-  --text-dim: #475569;
+  --text-dim: #334155;
   --text-faint: #94a3b8;
   --text-muted: #64748b;
 

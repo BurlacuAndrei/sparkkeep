@@ -294,9 +294,9 @@ export const DigestView: React.FC<DigestViewProps> = ({
   if (!digest || !digest.days || digest.days.length === 0) {
     return (
       <div className="digest-container" style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <Calendar size={48} color="#64748b" style={{ margin: '0 auto 16px' }} />
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#f8fafc' }}>No captures in this window</h2>
-        <p style={{ color: '#94a3b8', fontSize: 14 }}>
+        <Calendar size={48} color="var(--text-muted)" style={{ margin: '0 auto 16px' }} />
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-main)' }}>No captures in this window</h2>
+        <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>
           Sparks captured during the selected {windowDays} days will be analyzed and organized here.
         </p>
         <div style={{ marginTop: 20 }}>
@@ -386,7 +386,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
         </div>
 
         {synthesis?.briefing ? (
-          <div style={{ whiteSpace: 'pre-line', fontSize: 13.5, lineHeight: 1.6, color: '#e2e8f0' }}>
+          <div style={{ whiteSpace: 'pre-line', fontSize: 13.5, lineHeight: 1.6, color: 'var(--text-main)' }}>
             {synthesis.briefing}
           </div>
         ) : (
@@ -394,8 +394,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
             <li className="digest-hero-bullet-item">
               <span className="digest-hero-bullet-dot">•</span>
               <span>
-                Ingested <strong style={{ color: '#f8fafc' }}>{totalSparks} sparks</strong> across{' '}
-                <strong style={{ color: '#818cf8' }}>{themes.length} emergent themes</strong> this window.
+                Ingested <strong style={{ color: 'var(--text-main)' }}>{totalSparks} sparks</strong> across{' '}
+                <strong style={{ color: 'var(--accent-indigo)' }}>{themes.length} emergent themes</strong> this window.
               </span>
             </li>
             <li className="digest-hero-bullet-item">
@@ -659,13 +659,13 @@ export const DigestView: React.FC<DigestViewProps> = ({
                     onClick={() => toggleDayExpanded(day.date, isDefaultExpanded)}
                   >
                   <div className="digest-accordion-title">
-                    <Calendar size={14} color="#38bdf8" />
+                    <Calendar size={14} color="var(--accent-cyan)" />
                     <span>{day.date}</span>
-                    <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8' }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>
                       ({day.cards.length} card{day.cards.length > 1 ? 's' : ''})
                     </span>
                   </div>
-                  {isExpanded ? <ChevronUp size={15} color="#94a3b8" /> : <ChevronDown size={15} color="#94a3b8" />}
+                  {isExpanded ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
                 </div>
 
                 {isExpanded && (
