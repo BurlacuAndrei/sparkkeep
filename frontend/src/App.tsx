@@ -7,7 +7,8 @@ import { KanbanBoard } from './components/KanbanBoard';
 import { TriageView } from './components/TriageView';
 import { DigestView } from './components/DigestView';
 import { SetupWizard } from './components/SetupWizard';
-import { Bell, Lock } from 'lucide-react';
+import { LockScreen } from './components/LockScreen';
+import { Bell } from 'lucide-react';
 import { CardActionsProvider } from './context/CardActionsContext';
 import { ThemeProvider } from './context/ThemeContext';
 
@@ -37,9 +38,8 @@ function AppContent() {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; onUndo?: () => void } | null>(null);
 
-  // Auth (SPARKKEEP_AUTH_TOKEN): a 401 anywhere raises the unlock modal.
+  // Auth (SPARKKEEP_AUTH_TOKEN): a 401 anywhere raises the lock screen.
   const [isAuthRequired, setIsAuthRequired] = useState(false);
-  const [tokenInput, setTokenInput] = useState('');
   const [isSetupNeeded, setIsSetupNeeded] = useState(false);
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -252,30 +252,32 @@ function AppContent() {
   };
 
   // Unlock: exchange the typed token for the server's cookie, then reload.
-  const handleUnlock = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUnlock = async (token: string): Promise<boolean> => {
     try {
       const res = await fetch('/api/v1/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: tokenInput }),
+        body: JSON.stringify({ token }),
       });
       if (!res.ok) {
-        showToast('Invalid token');
-        return;
+        return false;
       }
-      localStorage.setItem(api.TOKEN_KEY, tokenInput);
-      setTokenInput('');
+      localStorage.setItem(api.TOKEN_KEY, token);
       setIsAuthRequired(false);
       reloadAll();
-    } catch (err: unknown) {
-      showToast(api.getErrorMessage(err));
+      return true;
+    } catch {
+      return false;
     }
   };
 
   const triageCount = cards.filter(
     (c) => c.status === 'inbox' || c.status === 'researching' || c.status === 'review'
   ).length;
+
+  if (isAuthRequired) {
+    return <LockScreen onUnlock={handleUnlock} />;
+  }
 
   return (
     <CardActionsProvider
@@ -384,50 +386,6 @@ function AppContent() {
             onCreate={handleCreateCard}
           />
         </Suspense>
-      )}
-
-      {/* Auth Required — the server answers 401 until a valid token arrives. */}
-      {isAuthRequired && (
-        <div className="modal-overlay">
-          <form
-            className="modal-content"
-            style={{ maxWidth: 420 }}
-            onSubmit={handleUnlock}
-          >
-            <div className="modal-header">
-              <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Lock size={18} strokeWidth={1.5} color="#818cf8" />
-                <span>Authentication Required</span>
-              </h2>
-            </div>
-
-            <p style={{ color: 'var(--text-dim)', margin: 0, fontSize: 13.5, lineHeight: 1.5 }}>
-              This Sparkkeep instance is locked. Enter the access token
-              (<code>SPARKKEEP_AUTH_TOKEN</code>) to continue.
-            </p>
-
-            <div className="form-group">
-              <label>Access Token</label>
-              <input
-                name="auth_token"
-                className="form-input"
-                type="password"
-                autoFocus
-                placeholder="••••••••"
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                required
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button type="submit" className="btn-primary" disabled={!tokenInput.trim()}>
-                <Lock size={14} strokeWidth={1.5} />
-                <span>Unlock Sparkkeep</span>
-              </button>
-            </div>
-          </form>
-        </div>
       )}
 
       {/* First-Run Setup Wizard */}
