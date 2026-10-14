@@ -1810,11 +1810,19 @@ func TestAuthMiddleware(t *testing.T) {
 		t.Fatalf("verify: status = %d, want 200 (body %s)", rr.Code, rr.Body.String())
 	}
 	cookies := rr.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].Name != authCookie || cookies[0].Value != "secret123" {
+	if len(cookies) != 1 || cookies[0].Name != authCookie {
 		t.Fatalf("verify cookies = %+v, want a single %s cookie", cookies, authCookie)
 	}
-	if cookies[0].Path != "/" || cookies[0].MaxAge != 31536000 || cookies[0].SameSite != http.SameSiteLaxMode {
-		t.Errorf("cookie attrs = %+v, want Path=/ Max-Age=31536000 SameSite=Lax", cookies[0])
+	// The cookie must carry an opaque session token, never the passphrase.
+	if cookies[0].Value == "secret123" || cookies[0].Value == "" {
+		t.Fatalf("cookie value = %q, want a random session token (not the passphrase)", cookies[0].Value)
+	}
+	if cookies[0].Path != "/" || cookies[0].MaxAge != 31536000 || cookies[0].SameSite != http.SameSiteLaxMode || !cookies[0].HttpOnly {
+		t.Errorf("cookie attrs = %+v, want Path=/ Max-Age=31536000 SameSite=Lax HttpOnly", cookies[0])
+	}
+	// That session token authorizes later private requests.
+	if rr := do(http.MethodGet, "/api/v1/cards", "", cookies[0].Value); rr.Code != http.StatusOK {
+		t.Errorf("session cookie: status = %d, want 200", rr.Code)
 	}
 
 	// A wrong token is refused without a cookie.
@@ -2136,8 +2144,20 @@ func TestSetupFlowAndSettings(t *testing.T) {
 		t.Fatalf("setup post code = %d, want 200, body = %s", rr.Code, rr.Body.String())
 	}
 	cookies := rr.Result().Cookies()
-	if len(cookies) == 0 || cookies[0].Value != "my-master-token" {
-		t.Fatalf("expected auth cookie to be set, got %+v", cookies)
+	if len(cookies) == 0 || cookies[0].Name != authCookie || !cookies[0].HttpOnly {
+		t.Fatalf("expected an HttpOnly auth cookie to be set, got %+v", cookies)
+	}
+	// The setup cookie is an opaque session token, not the passphrase.
+	if cookies[0].Value == "my-master-token" || cookies[0].Value == "" {
+		t.Fatalf("setup cookie must be an opaque session token, got %q", cookies[0].Value)
+	}
+	// The issued session cookie authorizes later private requests.
+	cookieReq, _ := http.NewRequest(http.MethodGet, "/api/v1/cards", nil)
+	cookieReq.AddCookie(&http.Cookie{Name: authCookie, Value: cookies[0].Value})
+	cookieRR := httptest.NewRecorder()
+	h.ServeHTTP(cookieRR, cookieReq)
+	if cookieRR.Code != http.StatusOK {
+		t.Fatalf("setup session cookie auth: status = %d, want 200", cookieRR.Code)
 	}
 
 	// 3. Status is now configured
@@ -3373,5 +3393,86 @@ func TestPatchSettings_HotReloadsChannels(t *testing.T) {
 	}
 	if _, ok := hub.Get("slack"); !ok {
 		t.Fatalf("expected slack adapter to remain registered in svc.Hub")
+	}
+}
+
+func TestAuthBcryptZeroLockoutAndAPIToken(t *testing.T) {
+	ctx := context.Background()
+	st := newStubStore()
+	// Seed existing legacy plaintext passphrase
+	if err := st.SetSetting(ctx, "auth_token", "my-legacy-passphrase"); err != nil {
+		t.Fatalf("set setting: %v", err)
+	}
+
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25})
+
+	// 1. Unauthenticated request to private endpoint fails
+	rUnauth := httptest.NewRequest(http.MethodGet, "/api/v1/cards", nil)
+	rrUnauth := httptest.NewRecorder()
+	h.ServeHTTP(rrUnauth, rUnauth)
+	if rrUnauth.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated: status = %d, want 401", rrUnauth.Code)
+	}
+
+	// 2. Verify with legacy passphrase: works and sets HttpOnly cookie
+	rrVerify := doJSON(t, h, http.MethodPost, "/api/v1/auth/verify", `{"token":"my-legacy-passphrase"}`)
+	if rrVerify.Code != http.StatusOK {
+		t.Fatalf("verify status = %d, want 200 (body: %s)", rrVerify.Code, rrVerify.Body.String())
+	}
+	cookies := rrVerify.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != authCookie || !cookies[0].HttpOnly {
+		t.Fatalf("expected 1 HttpOnly auth cookie, got %+v", cookies)
+	}
+	// The cookie must be an opaque session token, not the passphrase itself.
+	if cookies[0].Value == "my-legacy-passphrase" || cookies[0].Value == "" {
+		t.Fatalf("cookie value = %q, want a random session token (not the passphrase)", cookies[0].Value)
+	}
+
+	// 2b. The issued session cookie authorizes a subsequent private request.
+	rCookie := httptest.NewRequest(http.MethodGet, "/api/v1/cards", nil)
+	rCookie.AddCookie(&http.Cookie{Name: authCookie, Value: cookies[0].Value})
+	rrCookie := httptest.NewRecorder()
+	h.ServeHTTP(rrCookie, rCookie)
+	if rrCookie.Code != http.StatusOK {
+		t.Fatalf("session cookie auth: status = %d, want 200 (body: %s)", rrCookie.Code, rrCookie.Body.String())
+	}
+
+	// 3. Verify that DB automatically upgraded to bcrypt hash (zero lockout)
+	newHash, err := st.GetSetting(ctx, "auth_token")
+	if err != nil {
+		t.Fatalf("get auth_token: %v", err)
+	}
+	if !strings.HasPrefix(newHash, "$2a$") && !strings.HasPrefix(newHash, "$2b$") {
+		t.Fatalf("expected auth_token to be auto-upgraded to bcrypt hash, got %q", newHash)
+	}
+
+	// 4. Authenticated request with the passphrase succeeds against bcrypt hash
+	rAuth := httptest.NewRequest(http.MethodGet, "/api/v1/cards", nil)
+	rAuth.Header.Set("Authorization", "Bearer my-legacy-passphrase")
+	rrAuth := httptest.NewRecorder()
+	h.ServeHTTP(rrAuth, rAuth)
+	if rrAuth.Code != http.StatusOK {
+		t.Fatalf("bearer auth with passphrase: status = %d, want 200", rrAuth.Code)
+	}
+
+	// 5. Test static API token (for external tools / CLI)
+	if err := st.SetSetting(ctx, "api_token", "sk_live_test_12345"); err != nil {
+		t.Fatalf("set api_token: %v", err)
+	}
+	rAPI := httptest.NewRequest(http.MethodGet, "/api/v1/cards", nil)
+	rAPI.Header.Set("Authorization", "Bearer sk_live_test_12345")
+	rrAPI := httptest.NewRecorder()
+	h.ServeHTTP(rrAPI, rAPI)
+	if rrAPI.Code != http.StatusOK {
+		t.Fatalf("bearer auth with api_token: status = %d, want 200", rrAPI.Code)
+	}
+
+	// 6. Invalid token is refused
+	rBad := httptest.NewRequest(http.MethodGet, "/api/v1/cards", nil)
+	rBad.Header.Set("Authorization", "Bearer invalid-token")
+	rrBad := httptest.NewRecorder()
+	h.ServeHTTP(rrBad, rBad)
+	if rrBad.Code != http.StatusUnauthorized {
+		t.Fatalf("bad token: status = %d, want 401", rrBad.Code)
 	}
 }

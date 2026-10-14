@@ -41,17 +41,13 @@ func handleAuthCommand(args []string) {
 		fmt.Println("Usage: sparkkeep auth <status|set-passphrase|generate-token>")
 		os.Exit(1)
 	}
-	dbPath := os.Getenv("SPARKKEEP_DB")
-	if dbPath == "" {
-		if _, err := os.Stat("/data"); err == nil {
-			dbPath = "/data/sparkkeep.db"
-		} else {
-			dbPath = "./sparkkeep.db"
-		}
-	}
-	st, err := store.New(dbPath)
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("store: open %s: %v", dbPath, err)
+		log.Fatalf("config: %v", err)
+	}
+	st, err := store.New(cfg.DB)
+	if err != nil {
+		log.Fatalf("store: open %s: %v", cfg.DB, err)
 	}
 	defer st.Close()
 	ctx := context.Background()

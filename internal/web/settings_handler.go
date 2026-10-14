@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
@@ -29,27 +31,29 @@ func (a *api) verifyToken(w http.ResponseWriter, r *http.Request) {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		tok = strings.TrimPrefix(h, "Bearer ")
 	}
-	required := a.effectiveAuthToken(r.Context())
-	if !tokenMatches(tok, required) {
+	if !a.validateToken(r.Context(), tok) {
 		writeErr(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
+	session, err := newSessionToken()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "session error")
+		return
+	}
+	a.authCache.Store(session, true)
 	http.SetCookie(w, &http.Cookie{
-		Name: authCookie, Value: tok, Path: "/",
-		SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
+		Name: authCookie, Value: session, Path: "/",
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (a *api) isConfigured(ctx context.Context) bool {
-	if a.authToken != "" {
+	if a.hasAuth(ctx) {
 		return true
 	}
 	if a.store != nil {
 		if val, err := a.store.GetSetting(ctx, "setup_completed"); err == nil && val == "true" {
-			return true
-		}
-		if val, err := a.store.GetSetting(ctx, "auth_token"); err == nil && val != "" {
 			return true
 		}
 	}
@@ -81,8 +85,8 @@ func (a *api) setupStatus(w http.ResponseWriter, r *http.Request) {
 func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if a.isConfigured(ctx) {
-		token := a.effectiveAuthToken(ctx)
-		if !tokenMatches(presentedToken(r), token) {
+		token := presentedToken(r)
+		if !a.validateToken(ctx, token) {
 			writeErr(w, http.StatusForbidden, "forbidden: setup already completed")
 			return
 		}
@@ -101,10 +105,15 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if b.AuthToken != "" {
-		if err := a.store.SetSetting(ctx, "auth_token", b.AuthToken); err != nil {
+		hashVal := b.AuthToken
+		if hash, err := bcrypt.GenerateFromPassword([]byte(b.AuthToken), bcrypt.DefaultCost); err == nil {
+			hashVal = string(hash)
+		}
+		if err := a.store.SetSetting(ctx, "auth_token", hashVal); err != nil {
 			a.fail(w, err)
 			return
 		}
+		a.clearAuthCache()
 	}
 	if b.LLMBase != "" {
 		if err := a.store.SetSetting(ctx, "llm_base", b.LLMBase); err != nil {
@@ -156,12 +165,24 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	effectiveTok := a.effectiveAuthToken(ctx)
+	effectiveTok := b.AuthToken
+	if effectiveTok == "" {
+		effectiveTok = a.effectiveAuthToken(ctx)
+	}
 	if effectiveTok != "" {
-		http.SetCookie(w, &http.Cookie{
-			Name: authCookie, Value: effectiveTok, Path: "/",
-			SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
-		})
+		// The cookie carries an opaque session token, never the passphrase or its
+		// bcrypt hash. A user-supplied passphrase is still echoed in the response
+		// so the dashboard can persist it across restarts.
+		if session, err := newSessionToken(); err == nil {
+			a.authCache.Store(session, true)
+			http.SetCookie(w, &http.Cookie{
+				Name: authCookie, Value: session, Path: "/",
+				HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
+			})
+			if b.AuthToken == "" {
+				effectiveTok = session
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": effectiveTok})
@@ -428,10 +449,17 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if b.AuthToken != nil {
-		if err := a.store.SetSetting(ctx, "auth_token", *b.AuthToken); err != nil {
+		hashVal := *b.AuthToken
+		if hashVal != "" {
+			if hash, err := bcrypt.GenerateFromPassword([]byte(hashVal), bcrypt.DefaultCost); err == nil {
+				hashVal = string(hash)
+			}
+		}
+		if err := a.store.SetSetting(ctx, "auth_token", hashVal); err != nil {
 			a.fail(w, err)
 			return
 		}
+		a.clearAuthCache()
 	}
 
 	if b.TGToken != nil {

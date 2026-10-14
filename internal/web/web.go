@@ -5,12 +5,17 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
@@ -25,6 +30,7 @@ type api struct {
 	maxUpload int64
 	authToken string
 	tgToken   string
+	authCache sync.Map
 }
 
 // authCookie holds a token the client has already verified, so the dashboard
@@ -136,6 +142,79 @@ func isPublicPath(r *http.Request) bool {
 	return html && strings.HasPrefix(p, "/api/v1/research/")
 }
 
+func (a *api) hasAuth(ctx context.Context) bool {
+	if a.authToken != "" {
+		return true
+	}
+	if a.store != nil {
+		if tok, err := a.store.GetSetting(ctx, "auth_token"); err == nil && tok != "" {
+			return true
+		}
+		if apiTok, err := a.store.GetSetting(ctx, "api_token"); err == nil && apiTok != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *api) validateToken(ctx context.Context, got string) bool {
+	if got == "" {
+		return false
+	}
+	if _, ok := a.authCache.Load(got); ok {
+		return true
+	}
+	if a.authToken != "" {
+		if subtle.ConstantTimeCompare([]byte(got), []byte(a.authToken)) == 1 {
+			a.authCache.Store(got, true)
+			return true
+		}
+	}
+	if a.store != nil {
+		if apiTok, err := a.store.GetSetting(ctx, "api_token"); err == nil && apiTok != "" {
+			if subtle.ConstantTimeCompare([]byte(got), []byte(apiTok)) == 1 {
+				a.authCache.Store(got, true)
+				return true
+			}
+		}
+		if stored, err := a.store.GetSetting(ctx, "auth_token"); err == nil && stored != "" {
+			if strings.HasPrefix(stored, "$2a$") || strings.HasPrefix(stored, "$2b$") {
+				if bcrypt.CompareHashAndPassword([]byte(stored), []byte(got)) == nil {
+					a.authCache.Store(got, true)
+					return true
+				}
+			} else {
+				if subtle.ConstantTimeCompare([]byte(got), []byte(stored)) == 1 {
+					// Auto-upgrade legacy plaintext passphrase to salted bcrypt hash
+					if hash, err := bcrypt.GenerateFromPassword([]byte(got), bcrypt.DefaultCost); err == nil {
+						_ = a.store.SetSetting(ctx, "auth_token", string(hash))
+					}
+					a.authCache.Store(got, true)
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (a *api) clearAuthCache() {
+	a.authCache.Range(func(key, value any) bool {
+		a.authCache.Delete(key)
+		return true
+	})
+}
+
+// newSessionToken mints an opaque cookie value so the auth cookie never carries
+// the passphrase or its hash.
+func newSessionToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
 func (a *api) effectiveAuthToken(ctx context.Context) string {
 	if a.authToken != "" {
 		return a.authToken
@@ -160,18 +239,13 @@ func presentedToken(r *http.Request) string {
 	return r.URL.Query().Get("token")
 }
 
-func tokenMatches(got, want string) bool {
-	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
-}
-
 // authMiddleware rejects requests without the configured token. An empty
 // token leaves everything open, which is the default. An HTML request without
 // a token still gets the SPA shell so the dashboard can ask for one; the API
 // gets a 401 and the client shows the unlock modal.
 func (a *api) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := a.effectiveAuthToken(r.Context())
-		if token == "" || isPublicPath(r) || tokenMatches(presentedToken(r), token) {
+		if !a.hasAuth(r.Context()) || isPublicPath(r) || a.validateToken(r.Context(), presentedToken(r)) {
 			next.ServeHTTP(w, r)
 			return
 		}
