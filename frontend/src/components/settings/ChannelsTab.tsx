@@ -14,6 +14,12 @@ import {
   Sparkles,
   Terminal,
   Smartphone,
+  Zap,
+  Bell,
+  Code2,
+  Globe,
+  Clock,
+  ArrowRight,
   Share2,
 } from 'lucide-react';
 import * as api from '../../api';
@@ -69,26 +75,39 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
   const [channelTesting, setChannelTesting] = useState<string | null>(null);
   const [digestPushing, setDigestPushing] = useState(false);
   const [selectedDigestChannel, setSelectedDigestChannel] = useState('all');
+  const [selectedDigestDays, setSelectedDigestDays] = useState(7);
   const [copiedPassphrase, setCopiedPassphrase] = useState(false);
   const [showTgToken, setShowTgToken] = useState(false);
   const [showDiscordToken, setShowDiscordToken] = useState(false);
   const [showSlackWebhook, setShowSlackWebhook] = useState(false);
+
+  // Generic Inbound Webhook State
   const [testingInbound, setTestingInbound] = useState(false);
+  const [testInboundText, setTestInboundText] = useState('Sparkkeep Inbound Webhook Test Spark #capture');
+  const [inboundTestResult, setInboundTestResult] = useState<string | null>(null);
   const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false);
+  const [activeSnippetTab, setActiveSnippetTab] = useState<'curl' | 'js' | 'python' | 'schema'>('curl');
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
 
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
   const inboundWebhookUrl = `${currentOrigin}/api/v1/capture`;
 
   const handleTestInboundCapture = async () => {
     setTestingInbound(true);
+    setInboundTestResult(null);
     try {
-      await api.captureSpark({
+      const payloadText = testInboundText.trim() || 'Sparkkeep Inbound Webhook Test Spark #capture';
+      const res = await api.captureSpark({
         url: currentOrigin,
-        text: 'Sparkkeep Inbound Webhook Test Spark #capture',
+        text: payloadText,
       });
+      const cardId = res.card_ids?.[0] || res.cards?.[0] || 'created';
+      setInboundTestResult(`HTTP 200 OK — Ingested spark (Card ID: ${cardId})`);
       showToast('Test spark captured successfully! Check your inbox.');
     } catch (err: unknown) {
-      showToast(api.getErrorMessage(err));
+      const errMsg = api.getErrorMessage(err);
+      setInboundTestResult(`Error: ${errMsg}`);
+      showToast(errMsg);
     } finally {
       setTestingInbound(false);
     }
@@ -136,46 +155,131 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
     }
   };
 
+  const snippetCurl = `curl -s -X POST "${inboundWebhookUrl}" \\
+  -H "Authorization: Bearer YOUR_MASTER_PASSPHRASE" \\
+  -H "Content-Type: application/json" \\
+  -d '{"url": "https://example.com/article", "text": "Quick note or thought to capture"}'`;
+
+  const snippetFetch = `// Generic capture from any web app, Node.js script, or browser automation
+await fetch("${inboundWebhookUrl}", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer YOUR_MASTER_PASSPHRASE",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    url: "https://example.com/article",
+    text: "Quick note or thought to capture",
+    caption: "Optional context note"
+  })
+});`;
+
+  const snippetPython = `# Generic capture using Python requests
+import requests
+
+response = requests.post(
+    "${inboundWebhookUrl}",
+    headers={
+        "Authorization": "Bearer YOUR_MASTER_PASSPHRASE",
+        "Content-Type": "application/json"
+    },
+    json={
+        "url": "https://example.com/article",
+        "text": "Quick note or thought to capture"
+    }
+)
+print(response.json())`;
+
+  const snippetSchema = `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SparkkeepInboundCapturePayload",
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "Web URL to scrape, ingest, and synthesize"
+    },
+    "text": {
+      "type": "string",
+      "description": "Raw markdown notes, quotes, or fleeting thoughts"
+    },
+    "caption": {
+      "type": "string",
+      "description": "Personal context note or triage instruction"
+    }
+  },
+  "oneOf": [
+    { "required": ["url"] },
+    { "required": ["text"] }
+  ]
+}`;
+
+  const currentSnippetCode =
+    activeSnippetTab === 'curl'
+      ? snippetCurl
+      : activeSnippetTab === 'js'
+      ? snippetFetch
+      : activeSnippetTab === 'python'
+      ? snippetPython
+      : snippetSchema;
+
+  const handleCopySnippet = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(currentSnippetCode);
+      setCopiedSnippet(true);
+      showToast('Code snippet copied to clipboard.');
+      setTimeout(() => setCopiedSnippet(false), 2000);
+    }
+  };
+
   const channelCards = [
     {
       id: 'telegram' as ChannelId,
       title: 'Telegram Bot',
-      subtitle: 'Instant capture & inline cards',
+      subtitle: 'Two-way capture, inline triage buttons & bot alerts',
+      typeTag: 'Two-Way Bot',
       icon: Send,
       color: '#38bdf8',
       bgTint: 'rgba(56, 189, 248, 0.08)',
       iconBg: 'rgba(56, 189, 248, 0.15)',
       isConfigured: hasTgToken,
+      statusLabel: hasTgToken ? 'Connected' : 'Not Configured',
     },
     {
       id: 'discord' as ChannelId,
       title: 'Discord Bot',
-      subtitle: 'Rich embeds & server channels',
+      subtitle: 'Rich embeds, server text channels & triage links',
+      typeTag: 'Server Embeds',
       icon: MessageCircle,
       color: '#818cf8',
       bgTint: 'rgba(129, 140, 248, 0.08)',
       iconBg: 'rgba(129, 140, 248, 0.15)',
       isConfigured: hasDiscordToken,
+      statusLabel: hasDiscordToken ? 'Connected' : 'Not Configured',
     },
     {
       id: 'slack' as ChannelId,
       title: 'Slack Webhook',
-      subtitle: 'Block Kit workspace alerts',
+      subtitle: 'Block Kit team notifications & weekly digest summaries',
+      typeTag: 'Team Webhook',
       icon: MessageSquare,
       color: '#fbbf24',
       bgTint: 'rgba(251, 191, 36, 0.08)',
       iconBg: 'rgba(251, 191, 36, 0.15)',
       isConfigured: hasSlackWebhook,
+      statusLabel: hasSlackWebhook ? 'Connected' : 'Not Configured',
     },
     {
       id: 'webhook' as ChannelId,
       title: 'Inbound Webhook',
-      subtitle: 'WhatsApp, Shortcuts & API',
+      subtitle: 'Universal HTTP POST API, cURL, Mobile & Custom Tools',
+      typeTag: 'Generic Endpoint',
       icon: Terminal,
       color: '#a855f7',
       bgTint: 'rgba(168, 85, 247, 0.08)',
       iconBg: 'rgba(168, 85, 247, 0.15)',
       isConfigured: true,
+      statusLabel: 'Active & Ready',
     },
   ];
 
@@ -189,11 +293,11 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
             <span className="settings-section-title">Omnichannel Messenger Hub</span>
           </div>
           <span className="settings-section-desc">
-            Select a channel below to configure its bot credentials, test connectivity, and view step-by-step setup guidance.
+            Select a channel below to configure credentials, test live connectivity, and access integration guides.
           </span>
         </div>
 
-        {/* Interactive Channel Cards Deck */}
+        {/* Balanced 2x2 Channel Cards Deck */}
         <div className="channels-deck" role="tablist" aria-label="Messenger channels">
           {channelCards.map((card) => {
             const Icon = card.icon;
@@ -222,16 +326,16 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
                     <div className="channel-card-icon">
                       <Icon size={18} style={{ color: card.color }} />
                     </div>
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div className="channel-card-title">{card.title}</div>
                       <div className="channel-card-desc">{card.subtitle}</div>
                     </div>
                   </div>
                   <span
-                    className={`settings-badge ${card.isConfigured ? 'success' : 'neutral'}`}
-                    style={{ fontSize: '10px', padding: '2px 7px' }}
+                    className={`channel-status-pill ${card.isConfigured ? 'connected' : 'unconfigured'}`}
                   >
-                    {card.isConfigured ? 'Connected' : 'Standby'}
+                    <span className="channel-status-dot" />
+                    <span>{card.statusLabel}</span>
                   </span>
                 </div>
 
@@ -244,9 +348,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
                   ) : (
                     <span className="channel-card-inactive-label">Click to configure</span>
                   )}
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                    {card.isConfigured ? 'Active' : 'Unset'}
-                  </span>
+                  <span className="channel-card-tag">{card.typeTag}</span>
                 </div>
               </button>
             );
@@ -280,7 +382,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
                     </span>
                   </div>
                   <span className="channel-workspace-desc">
-                    Forward messages, links, and audio notes directly into Sparkkeep with interactive inline buttons.
+                    Forward messages, links, and audio notes directly into Sparkkeep with interactive inline triage buttons.
                   </span>
                 </div>
               </div>
@@ -343,7 +445,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
                   border: '1px solid rgba(16, 185, 129, 0.25)',
                 }}
               >
-                <CheckCircle2 size={18} style={{ color: 'var(--accent-emerald)', marginTop: '2px' }} />
+                <CheckCircle2 size={18} style={{ color: 'var(--accent-emerald)', marginTop: '2px', flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
                   <strong style={{ color: 'var(--accent-emerald)', fontSize: '13px' }}>
                     Bot is Active! Link your private chat:
@@ -425,7 +527,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
                 </div>
                 <div className="channel-step-item">
                   <span className="channel-step-num">4</span>
-                  <span>Save changes, open your new bot on Telegram, and send <code>/start YOUR_MASTER_PASSPHRASE</code>.</span>
+                  <span>Save platform preferences, open your new bot on Telegram, and send <code>/start YOUR_MASTER_PASSPHRASE</code>.</span>
                 </div>
               </div>
             </div>
@@ -670,7 +772,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
           </>
         )}
 
-        {/* INBOUND WEBHOOK & WHATSAPP PHASE 1 WORKSPACE */}
+        {/* UNIVERSAL INBOUND WEBHOOK & MOBILE CAPTURE WORKSPACE */}
         {selectedChannel === 'webhook' && (
           <>
             <div className="channel-workspace-header">
@@ -683,11 +785,11 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
                 </div>
                 <div className="channel-workspace-meta">
                   <div className="channel-workspace-title-row">
-                    <span className="channel-workspace-title">Inbound Webhook & Mobile Capture</span>
+                    <span className="channel-workspace-title">Inbound Webhook &amp; Mobile Capture</span>
                     <span className="settings-badge success">Active</span>
                   </div>
                   <span className="channel-workspace-desc">
-                    Capture links, audio memos, and raw text from WhatsApp, iOS Shortcuts, Android, cURL, or automation platforms (n8n, Make, Zapier).
+                    Universal HTTP REST endpoint. Ingest links, markdown notes, quotes, or media from generic webhooks, cURL, automation platforms (n8n, Make, Zapier), iOS Shortcuts, or WhatsApp share sheets.
                   </span>
                 </div>
               </div>
@@ -705,7 +807,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
 
             {/* Inbound Endpoint URL Box */}
             <div className="setup-form-group">
-              <label htmlFor="settings-inbound-webhook-url">Inbound Capture Webhook Endpoint</label>
+              <label htmlFor="settings-inbound-webhook-url">Inbound Capture Webhook Endpoint (Universal)</label>
               <div className="channel-input-wrapper">
                 <input
                   id="settings-inbound-webhook-url"
@@ -726,126 +828,239 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
                 </button>
               </div>
               <span className="setup-hint">
-                Accepts HTTP <code>POST</code> with <code>Content-Type: application/json</code> and optional <code>Authorization: Bearer YOUR_MASTER_PASSPHRASE</code> header.
+                Accepts HTTP <code>POST</code> with <code>Content-Type: application/json</code> and optional <code>Authorization: Bearer YOUR_MASTER_PASSPHRASE</code>.
               </span>
             </div>
 
-            {/* WhatsApp Phase 1 Integration Box */}
-            <div
-              className="setup-info-box"
-              style={{
-                background: 'rgba(37, 211, 102, 0.08)',
-                border: '1px solid rgba(37, 211, 102, 0.25)',
-              }}
-            >
-              <Smartphone size={20} style={{ color: '#25d366', marginTop: '2px', flexShrink: 0 }} />
-              <div style={{ flex: 1 }}>
-                <strong style={{ color: '#25d366', fontSize: '13.5px' }}>
-                  WhatsApp Integration (Phase 1: Zero-Maintenance Share Sheet)
-                </strong>
-                <div style={{ marginTop: '4px', fontSize: '12.5px', color: 'var(--text-dim)', lineHeight: 1.45 }}>
-                  Capture any WhatsApp conversation, voice note, or link without brittle browser bridges or QR code dropouts:
+            {/* Live Webhook Test Simulator */}
+            <div className="channel-tester-box">
+              <div className="channel-tester-header">
+                <div className="channel-tester-title">
+                  <Zap size={14} style={{ color: 'var(--accent)' }} />
+                  <span>Interactive Inbound Webhook Simulator</span>
                 </div>
+                {inboundTestResult && (
+                  <span className={`channel-tester-result ${inboundTestResult.startsWith('Error') ? 'error' : ''}`}>
+                    {inboundTestResult}
+                  </span>
+                )}
+              </div>
+              <div className="channel-tester-row">
+                <input
+                  type="text"
+                  value={testInboundText}
+                  onChange={(e) => setTestInboundText(e.target.value)}
+                  placeholder="Enter a test URL (https://...) or personal note..."
+                  className="setup-input channel-tester-input"
+                  style={{ fontSize: '12px' }}
+                  aria-label="Test inbound spark text"
+                />
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={testingInbound}
+                  onClick={handleTestInboundCapture}
+                  style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                >
+                  {testingInbound ? 'Ingesting...' : 'Simulate Inbound Capture'}
+                </button>
+              </div>
+            </div>
 
-                <div className="channel-step-list" style={{ marginTop: '10px' }}>
-                  <div className="channel-step-item" style={{ color: 'var(--text-dim)' }}>
-                    <span className="channel-step-num" style={{ borderColor: 'rgba(37, 211, 102, 0.3)' }}>1</span>
-                    <span>
-                      In WhatsApp (iOS or Android), tap and hold any message, voice memo, or shared link and tap <strong>Share</strong>.
-                    </span>
-                  </div>
-                  <div className="channel-step-item" style={{ color: 'var(--text-dim)' }}>
-                    <span className="channel-step-num" style={{ borderColor: 'rgba(37, 211, 102, 0.3)' }}>2</span>
-                    <span>
-                      Select the <strong>Sparkkeep Capture</strong> shortcut from your mobile Share Sheet.
-                    </span>
-                  </div>
-                  <div className="channel-step-item" style={{ color: 'var(--text-dim)' }}>
-                    <span className="channel-step-num" style={{ borderColor: 'rgba(37, 211, 102, 0.3)' }}>3</span>
-                    <span>
-                      Sparkkeep ingests the URL or audio, creates an inbox card, and initiates AI triage automatically.
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Code Snippets & Payload Specification */}
+            <div className="channel-guide-box">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <span className="channel-guide-title">
+                  <Code2 size={15} style={{ color: '#a855f7' }} />
+                  <span>Payload Specification &amp; Custom Automation</span>
+                </span>
+                <div className="channel-code-tabs">
                   <button
                     type="button"
-                    className="btn-secondary"
-                    style={{ fontSize: '11px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    onClick={() => handleCopyCommand(`curl -s -X POST "${inboundWebhookUrl}" -H "Content-Type: application/json" -d '{"url": "https://sparkkeep.local", "text": "WhatsApp Shared Note"}'`)}
+                    className={`channel-code-tab-btn ${activeSnippetTab === 'curl' ? 'active' : ''}`}
+                    onClick={() => setActiveSnippetTab('curl')}
                   >
-                    {copiedPassphrase ? <Check size={12} /> : <Copy size={12} />}
-                    <span>Copy cURL Example</span>
+                    cURL
+                  </button>
+                  <button
+                    type="button"
+                    className={`channel-code-tab-btn ${activeSnippetTab === 'js' ? 'active' : ''}`}
+                    onClick={() => setActiveSnippetTab('js')}
+                  >
+                    Fetch / JS
+                  </button>
+                  <button
+                    type="button"
+                    className={`channel-code-tab-btn ${activeSnippetTab === 'python' ? 'active' : ''}`}
+                    onClick={() => setActiveSnippetTab('python')}
+                  >
+                    Python
+                  </button>
+                  <button
+                    type="button"
+                    className={`channel-code-tab-btn ${activeSnippetTab === 'schema' ? 'active' : ''}`}
+                    onClick={() => setActiveSnippetTab('schema')}
+                  >
+                    JSON Schema
                   </button>
                 </div>
               </div>
+
+              <div className="channel-code-box">
+                <pre className="channel-code-pre">
+                  <code>{currentSnippetCode}</code>
+                </pre>
+                <button
+                  type="button"
+                  className="channel-code-copy-btn"
+                  onClick={handleCopySnippet}
+                  title="Copy snippet"
+                >
+                  {copiedSnippet ? <Check size={12} /> : <Copy size={12} />}
+                  <span>{copiedSnippet ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
             </div>
 
-            {/* Inbound Payload Schema Guide */}
-            <div className="channel-guide-box">
-              <span className="channel-guide-title">
-                <Sparkles size={15} style={{ color: '#a855f7' }} />
-                <span>Payload Specification & Custom Automation</span>
-              </span>
-              <div style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                Send a JSON body with any of the following fields to create a card programmatically:
+            {/* Mobile & Automation Integration Recipes */}
+            <div className="setup-info-box" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <Globe size={16} style={{ color: 'var(--accent)' }} />
+                <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+                  Generic Webhook Versatility &amp; Mobile Recipes
+                </strong>
               </div>
-              <pre
-                style={{
-                  margin: 0,
-                  padding: '10px 14px',
-                  background: 'var(--surface-sunken, #090a0f)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '6px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '12px',
-                  color: 'var(--accent)',
-                  overflowX: 'auto',
-                }}
-              >
-{`{
-  "url": "https://example.com/article",
-  "text": "Shared note or raw snippet text",
-  "title": "Optional custom card title",
-  "tags": ["reading", "ideas"]
-}`}
-              </pre>
+              <span style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.45 }}>
+                Because this endpoint adheres to standard REST specifications, you can connect it to any custom tool, messaging client, or automated pipeline:
+              </span>
+
+              <div className="channel-recipes-grid">
+                {/* Recipe 1: Generic Automation */}
+                <div className="channel-recipe-card">
+                  <div className="channel-recipe-title">
+                    <Zap size={14} style={{ color: '#f59e0b' }} />
+                    <span>n8n, Zapier &amp; Make</span>
+                  </div>
+                  <span className="channel-recipe-desc">
+                    Point any generic HTTP Webhook action to this URL. Pass <code>url</code> or <code>text</code> in the JSON body to capture articles from RSS feeds or bookmarks automatically.
+                  </span>
+                </div>
+
+                {/* Recipe 2: iOS Shortcuts & Android */}
+                <div className="channel-recipe-card">
+                  <div className="channel-recipe-title">
+                    <Smartphone size={14} style={{ color: '#38bdf8' }} />
+                    <span>iOS &amp; Android Share Sheet</span>
+                  </div>
+                  <span className="channel-recipe-desc">
+                    Create a 1-action Shortcut on iPhone or Android that accepts input from the system Share Sheet and makes an HTTP POST with <code>url: ShortcutInput</code>.
+                  </span>
+                </div>
+
+                {/* Recipe 3: WhatsApp Share Sheet */}
+                <div className="channel-recipe-card" style={{ borderColor: 'rgba(37, 211, 102, 0.3)' }}>
+                  <div className="channel-recipe-title">
+                    <Share2 size={14} style={{ color: '#25d366' }} />
+                    <span>WhatsApp Integration (Phase 1: Zero-Maintenance Share Sheet)</span>
+                  </div>
+                  <span className="channel-recipe-desc">
+                    In WhatsApp (iOS/Android), tap and hold any message, voice memo, or link &rarr; tap <strong>Share</strong> &rarr; choose your Sparkkeep shortcut to ingest content without fragile browser bridges.
+                  </span>
+                </div>
+              </div>
             </div>
           </>
         )}
       </div>
 
-      {/* 3. Manual Intelligence Digest Dispatch Dock */}
-      <div className="digest-dispatch-bar">
+      {/* 3. Alerts & Intelligence Digest Dispatch Hub */}
+      <div className="alerts-hub-card">
         <div className="settings-section-header">
-          <span className="settings-section-title">Manual Digest Dispatch</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Bell size={18} style={{ color: 'var(--accent)' }} />
+            <span className="settings-section-title">Digest &amp; Alert Notifications</span>
+          </div>
           <span className="settings-section-desc">
-            Push your weekly sparks summary to any active channel on demand
+            Push intelligence summaries on-demand or configure event-driven notifications across your active channels.
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <select
-            value={selectedDigestChannel}
-            onChange={(e) => setSelectedDigestChannel(e.target.value)}
-            className="setup-input"
-            style={{ maxWidth: '280px', background: 'var(--bg-input)', color: 'var(--text-main)' }}
-            aria-label="Select digest channel"
-          >
-            <option value="all">All Configured Channels</option>
-            <option value="telegram">Telegram Bot</option>
-            <option value="discord">Discord Bot</option>
-            <option value="slack">Slack Webhook</option>
-          </select>
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={digestPushing}
-            onClick={handlePushDigest}
-          >
-            {digestPushing ? 'Pushing Digest...' : 'Push Digest Now'}
-          </button>
+        {/* Digest Dispatch Controls Row */}
+        <div className="digest-controls-row">
+          <div className="setup-form-group" style={{ flex: '1 1 200px', marginBottom: 0 }}>
+            <label htmlFor="settings-digest-channel" style={{ fontSize: '11.5px', marginBottom: '4px' }}>
+              Target Channel
+            </label>
+            <select
+              id="settings-digest-channel"
+              value={selectedDigestChannel}
+              onChange={(e) => setSelectedDigestChannel(e.target.value)}
+              className="setup-input"
+              style={{ background: 'var(--bg-input)', color: 'var(--text-main)', height: '36px', fontSize: '12.5px' }}
+              aria-label="Select digest channel"
+            >
+              <option value="all">All Configured Channels</option>
+              <option value="telegram">Telegram Bot</option>
+              <option value="discord">Discord Bot</option>
+              <option value="slack">Slack Webhook</option>
+            </select>
+          </div>
+
+          <div className="setup-form-group" style={{ flex: '1 1 160px', marginBottom: 0 }}>
+            <label htmlFor="settings-digest-days" style={{ fontSize: '11.5px', marginBottom: '4px' }}>
+              Summary Window
+            </label>
+            <select
+              id="settings-digest-days"
+              value={selectedDigestDays}
+              onChange={(e) => setSelectedDigestDays(Number(e.target.value))}
+              className="setup-input"
+              style={{ background: 'var(--bg-input)', color: 'var(--text-main)', height: '36px', fontSize: '12.5px' }}
+              aria-label="Select digest window"
+            >
+              <option value={7}>Last 7 Days (Weekly)</option>
+              <option value={14}>Last 14 Days (Bi-weekly)</option>
+              <option value={30}>Last 30 Days (Monthly)</option>
+            </select>
+          </div>
+
+          <div style={{ alignSelf: 'flex-end', paddingTop: '16px' }}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={digestPushing}
+              onClick={handlePushDigest}
+              style={{ height: '36px', padding: '0 16px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12.5px' }}
+            >
+              <Zap size={14} />
+              <span>{digestPushing ? 'Pushing Digest...' : 'Push Digest Now'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Automated Channel Triggers Overview */}
+        <div className="alerts-triggers-overview">
+          <div className="alerts-trigger-pill">
+            <Zap size={13} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '2px' }} />
+            <div>
+              <strong>Instant Ingest Alerts</strong>
+              <span>Immediate delivery confirmation with inline triage buttons sent to connected bots</span>
+            </div>
+          </div>
+          <div className="alerts-trigger-pill">
+            <Sparkles size={13} style={{ color: '#38bdf8', flexShrink: 0, marginTop: '2px' }} />
+            <div>
+              <strong>AI Synthesis Briefs</strong>
+              <span>Key findings, executive summaries, and action steps dispatched upon completion</span>
+            </div>
+          </div>
+          <div className="alerts-trigger-pill">
+            <Clock size={13} style={{ color: '#a855f7', flexShrink: 0, marginTop: '2px' }} />
+            <div>
+              <strong>Automated Digest Schedule</strong>
+              <span>Scheduled summaries delivered according to your weekly active hours settings</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

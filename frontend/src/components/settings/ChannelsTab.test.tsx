@@ -155,5 +155,50 @@ describe('ChannelsTab Omnichannel Messenger Hub', () => {
       expect(api.pushDigestToChannel).toHaveBeenCalledWith('all');
     });
   });
+
+  it('supports generic webhook code snippet switching and simulator testing', async () => {
+    const showToast = vi.fn();
+    render(<ChannelsTab {...defaultProps} showToast={showToast} />);
+
+    const webhookTab = screen.getByRole('tab', { name: /Inbound Webhook/i });
+    fireEvent.click(webhookTab);
+
+    // Verify Generic Webhook title & copy endpoint
+    expect(screen.getByLabelText(/Inbound Capture Webhook Endpoint/i)).toBeDefined();
+
+    // Verify snippet tabs exist
+    const fetchTab = screen.getByRole('button', { name: /Fetch \/ JS/i });
+    const pythonTab = screen.getByRole('button', { name: /Python/i });
+    const schemaTab = screen.getByRole('button', { name: /JSON Schema/i });
+
+    expect(fetchTab).toBeDefined();
+    expect(pythonTab).toBeDefined();
+    expect(schemaTab).toBeDefined();
+
+    // Click Python snippet tab
+    fireEvent.click(pythonTab);
+    expect(screen.getByText(/import requests/i)).toBeDefined();
+
+    // Click JSON Schema snippet tab
+    fireEvent.click(schemaTab);
+    expect(screen.getByText(/SparkkeepInboundCapturePayload/i)).toBeDefined();
+
+    // Test the simulator input and simulate button
+    const simInput = screen.getByLabelText(/Test inbound spark text/i) as HTMLInputElement;
+    fireEvent.change(simInput, { target: { value: 'Custom Generic Webhook Test Idea #research' } });
+    expect(simInput.value).toBe('Custom Generic Webhook Test Idea #research');
+
+    const simBtn = screen.getByRole('button', { name: /Simulate Inbound Capture/i });
+    fireEvent.click(simBtn);
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalled();
+    });
+
+    // Verify Alert triggers overview
+    expect(screen.getByText(/Instant Ingest Alerts/i)).toBeDefined();
+    expect(screen.getByText(/AI Synthesis Briefs/i)).toBeDefined();
+    expect(screen.getByText(/Automated Digest Schedule/i)).toBeDefined();
+  });
 });
 
