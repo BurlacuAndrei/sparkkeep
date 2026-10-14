@@ -222,3 +222,15 @@
   --shadow-modal: 0 20px 40px -10px rgba(0, 0, 0, 0.9);
   --modal-backdrop: rgba(0, 0, 0, 0.85);
 }
+
+/* Reduced Motion & Low-Power Visuals */
+[data-reduce-motion="reduced"] *,
+[data-reduce-motion="reduced"] *::before,
+[data-reduce-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+

@@ -212,6 +212,35 @@
   box-shadow: var(--shadow-card-hover);
 }
 
+.action-card.is-compact {
+  padding: 8px 10px;
+  gap: 5px;
+}
+
+.action-card.is-compact .card-title {
+  font-size: 13px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.action-card.is-compact .card-summary {
+  font-size: 12px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.action-card.is-compact .card-stage-slot {
+  margin-top: 2px;
+}
+
 .card-top {
   display: flex;
   align-items: center;

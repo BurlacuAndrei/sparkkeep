@@ -21,16 +21,23 @@ function AppContent() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [digest, setDigest] = useState<DigestData | null>(null);
 
-  // Filters & Navigation
-  const [viewMode, setViewMode] = useState<'triage' | 'boards' | 'digest'>(() => {
+  // Filters & Navigation: sticky last-active view
+  const [viewMode, setViewModeState] = useState<'triage' | 'boards' | 'digest'>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sparkkeep_default_view');
+      const saved = localStorage.getItem('sparkkeep_active_view') || localStorage.getItem('sparkkeep_default_view');
       if (saved === 'triage' || saved === 'boards' || saved === 'digest') {
         return saved;
       }
     }
     return 'boards';
   });
+
+  const setViewMode = useCallback((mode: 'triage' | 'boards' | 'digest') => {
+    setViewModeState(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sparkkeep_active_view', mode);
+    }
+  }, []);
   const [horizon, setHorizon] = useState('short-term');
   const [selectedTag, setSelectedTag] = useState('');
   // Modals & Feedback
@@ -110,6 +117,16 @@ function AppContent() {
         }
       })
       .catch(() => {});
+
+    // Hydrate reduce-motion preference
+    if (typeof window !== 'undefined') {
+      const motion = localStorage.getItem('sparkkeep_reduce_motion');
+      if (motion === 'reduced') {
+        document.documentElement.setAttribute('data-reduce-motion', 'reduced');
+      } else {
+        document.documentElement.removeAttribute('data-reduce-motion');
+      }
+    }
   }, []);
 
   useEffect(() => {

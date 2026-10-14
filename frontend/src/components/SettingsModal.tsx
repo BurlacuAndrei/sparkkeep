@@ -44,7 +44,6 @@ export type SettingsTab =
   | 'security';
 
 interface SettingsBaseline {
-  defaultView: 'kanban' | 'digest';
   cardDensity: 'comfortable' | 'compact';
   reduceMotion: 'default' | 'reduced';
   profileGoals: string;
@@ -93,13 +92,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
   const [hasSlackWebhook, setHasSlackWebhook] = useState(false);
 
   // Appearance preferences state
-  const [defaultView, setDefaultView] = useState<'kanban' | 'digest'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sparkkeep_default_view');
-      if (saved === 'kanban' || saved === 'digest') return saved;
-    }
-    return 'kanban';
-  });
 
   const [cardDensity, setCardDensity] = useState<'comfortable' | 'compact'>(() => {
     if (typeof window !== 'undefined') {
@@ -214,10 +206,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
         setHasSlackWebhook(Boolean(res.settings.has_slack_webhook));
 
         // Establish clean baseline for dirty tracking
-        const savedView =
-          typeof window !== 'undefined'
-            ? ((localStorage.getItem('sparkkeep_default_view') as 'kanban' | 'digest') || 'kanban')
-            : 'kanban';
         const savedDensity =
           typeof window !== 'undefined'
             ? ((localStorage.getItem('sparkkeep_card_density') as 'comfortable' | 'compact') || 'comfortable')
@@ -228,7 +216,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
             : 'default';
 
         setBaseline({
-          defaultView: savedView,
           cardDensity: savedDensity,
           reduceMotion: savedMotion,
           profileGoals: loadedGoals,
@@ -260,7 +247,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     if (openclawToken.trim().length > 0) return true;
     if (discordToken.trim().length > 0) return true;
     if (slackWebhookUrl.trim().length > 0) return true;
-    if (defaultView !== baseline.defaultView) return true;
     if (cardDensity !== baseline.cardDensity) return true;
     if (reduceMotion !== baseline.reduceMotion) return true;
     if (profileGoals !== baseline.profileGoals) return true;
@@ -283,7 +269,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     openclawToken,
     discordToken,
     slackWebhookUrl,
-    defaultView,
     cardDensity,
     reduceMotion,
     profileGoals,
@@ -341,9 +326,13 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     try {
       // Save display preferences locally
       if (typeof window !== 'undefined') {
-        localStorage.setItem('sparkkeep_default_view', defaultView);
         localStorage.setItem('sparkkeep_card_density', cardDensity);
         localStorage.setItem('sparkkeep_reduce_motion', reduceMotion);
+        if (reduceMotion === 'reduced') {
+          document.documentElement.setAttribute('data-reduce-motion', 'reduced');
+        } else {
+          document.documentElement.removeAttribute('data-reduce-motion');
+        }
       }
 
       // Save user profile
@@ -380,7 +369,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
 
       // Reset dirty tracking baseline to current values
       setBaseline({
-        defaultView,
         cardDensity,
         reduceMotion,
         profileGoals,
@@ -561,26 +549,8 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                       <div className="settings-section-header">
                         <span className="settings-section-title">Layout & Usability</span>
                         <span className="settings-section-desc">
-                          Configure default workspace view and item spacing
+                          Configure workspace spacing and interface motion
                         </span>
-                      </div>
-
-                      <div className="pref-item-card" style={{ marginBottom: '10px' }}>
-                        <div className="pref-item-text">
-                          <span className="pref-item-title">Default Dashboard View</span>
-                          <span className="pref-item-desc">
-                            Initial view shown when opening the dashboard
-                          </span>
-                        </div>
-                        <select
-                          value={defaultView}
-                          onChange={(e) => setDefaultView(e.target.value as 'kanban' | 'digest')}
-                          className="pref-select"
-                          aria-label="Default dashboard view"
-                        >
-                          <option value="kanban">Kanban Board &amp; Pipeline</option>
-                          <option value="digest">Weekly Digest</option>
-                        </select>
                       </div>
 
                       <div className="pref-item-card" style={{ marginBottom: '10px' }}>

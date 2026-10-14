@@ -24,6 +24,7 @@ export interface CardItemProps {
   card: Card;
   siblingCount?: number;
   siblingIndex?: number;
+  density?: 'comfortable' | 'compact';
   onSelect?: (card: Card) => void;
   onStatusChange?: (id: number, status: string) => void;
   onResearch?: (id: number) => void;
@@ -37,6 +38,7 @@ export const CardItem: React.FC<CardItemProps> = ({
   card,
   siblingCount,
   siblingIndex,
+  density = 'comfortable',
   onSelect: propOnSelect,
   onStatusChange: propOnStatusChange,
   onResearch: propOnResearch,
@@ -160,7 +162,7 @@ export const CardItem: React.FC<CardItemProps> = ({
 
   return (
     <article
-      className={`card action-card ${selected ? 'is-selected' : ''} ${menuOpen ? 'menu-active' : ''} ${isDragging ? 'is-dragging' : ''}`}
+      className={`card action-card ${density === 'compact' ? 'is-compact' : ''} ${selected ? 'is-selected' : ''} ${menuOpen ? 'menu-active' : ''} ${isDragging ? 'is-dragging' : ''}`}
       data-id={card.id}
       onClick={handleClick}
       draggable={!menuOpen}

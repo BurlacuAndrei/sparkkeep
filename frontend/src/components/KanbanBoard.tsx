@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card } from '../types';
 import { CardItem } from './CardItem';
-import { Zap, CheckCircle2, ListTodo, Archive, XCircle, LayoutGrid } from 'lucide-react';
+import { Zap, CheckCircle2, ListTodo, Archive, XCircle, LayoutGrid, Rows3 } from 'lucide-react';
 import * as api from '../api';
 
 interface KanbanBoardProps {
@@ -32,6 +32,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 }) => {
   const [boardMode, setBoardMode] = useState<'active' | 'shelved' | 'dismissed'>('active');
   const [showArchivedDone, setShowArchivedDone] = useState(false);
+
+  const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sparkkeep_card_density');
+      if (saved === 'comfortable' || saved === 'compact') return saved;
+    }
+    return 'comfortable';
+  });
+
+  const toggleDensity = () => {
+    const next = density === 'comfortable' ? 'compact' : 'comfortable';
+    setDensity(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sparkkeep_card_density', next);
+    }
+  };
 
   const boardCards = cards.filter(
     (c) => c.status === 'to-do' || c.status === 'in-progress' || c.status === 'done'
@@ -120,6 +136,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     <CardItem
       key={card.id}
       card={card}
+      density={density}
       onSelect={onSelectCard}
       onStatusChange={handleStatusChange}
       onResearch={onResearch}
@@ -233,6 +250,33 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             })}
           </div>
         )}
+
+        {/* Card Density Live Toggle */}
+        <button
+          type="button"
+          className="board-density-toggle-btn"
+          onClick={toggleDensity}
+          title={`Card Spacing: currently ${density}. Click to switch.`}
+          aria-label={`Switch card density, currently ${density}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '4px 10px',
+            fontSize: 11.5,
+            fontWeight: 600,
+            borderRadius: 6,
+            border: '1px solid var(--border-subtle)',
+            background: density === 'compact' ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-input)',
+            color: density === 'compact' ? 'var(--accent-indigo)' : 'var(--text-dim)',
+            cursor: 'pointer',
+            marginLeft: 'auto',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <Rows3 size={13} />
+          <span>{density === 'compact' ? 'Compact' : 'Comfortable'}</span>
+        </button>
       </div>
 
       {/* Info Notice when in Active Mode and Triage has matching items */}

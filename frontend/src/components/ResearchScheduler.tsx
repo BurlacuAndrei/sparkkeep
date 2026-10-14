@@ -1,15 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Clock,
   Moon,
-  Sparkles,
   Plus,
   Trash2,
   Play,
   Save,
-  Lock,
   Calendar,
-  Filter,
   X,
 } from 'lucide-react';
 import * as api from '../api';
