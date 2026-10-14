@@ -197,7 +197,6 @@ flowchart TD
     TG --> ROUTER
     DC --> ROUTER
     SL --> ROUTER
-    OC --> ROUTER
     WB --> ROUTER
 
     ROUTER --> SCRAPE
@@ -232,13 +231,13 @@ flowchart TD
 
 ## 📡 Multi-Channel Hub & Mobile Ingestion
 
-Sparkkeep features an extensible Channel Hub with native long-polling adapters and external gateway bridges:
+Sparkkeep features an extensible Channel Hub with native long-polling adapters plus a **Universal Inbound Webhook (iOS Shortcuts, Android Share Sheet, cURL, automation platforms)** for mobile capture:
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as Mobile User
-    participant Channels as Telegram / Discord / WhatsApp
+    participant Channels as Telegram / Discord / Webhook
     participant Hub as Sparkkeep Engine
     participant LLM as LLM Analysis (BYOK)
     participant DB as SQLite WAL (Local)
@@ -299,8 +298,6 @@ While all settings can be adjusted on the fly in the **Settings Modal**, you can
 | `SPARKKEEP_LLM_MODEL` | *(Dynamic DB)* | Model identifier (`llama3.2`, `gpt-4o`, `deepseek-chat`) |
 | `SPARKKEEP_TG_TOKEN` | `""` | Telegram Bot API token |
 | `SPARKKEEP_TG_CHAT_ID` | `0` | Authorized Telegram user/chat ID |
-| `SPARKKEEP_OPENCLAW_URL` | `http://localhost:18789` | OpenClaw Gateway bridge endpoint |
-| `SPARKKEEP_OPENCLAW_TOKEN`| `""` | Bearer token for OpenClaw Gateway |
 | `SPARKKEEP_DISCORD_TOKEN` | `""` | Discord bot token |
 | `SPARKKEEP_SLACK_BOT_TOKEN`| `""` | Slack bot token |
 | `SPARKKEEP_SEARCH_URL` | `https://searx.be` | SearXNG instance for deep research |

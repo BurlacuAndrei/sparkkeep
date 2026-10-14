@@ -76,13 +76,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
   const [hasTgToken, setHasTgToken] = useState(false);
   const [tgChatId, setTgChatId] = useState('');
 
-  const [openclawUrl, setOpenclawUrl] = useState('http://localhost:18789');
-  const [openclawToken, setOpenclawToken] = useState('');
-  const [hasOpenclawToken, setHasOpenclawToken] = useState(false);
-  const [openclawChannel, setOpenclawChannel] = useState('whatsapp');
-  const [openclawTarget, setOpenclawTarget] = useState('');
-  const [openclawEnabled, setOpenclawEnabled] = useState(false);
-
   const [discordToken, setDiscordToken] = useState('');
   const [hasDiscordToken, setHasDiscordToken] = useState(false);
   const [discordChannelId, setDiscordChannelId] = useState('');
@@ -193,17 +186,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
 
         setHasTgToken(Boolean(res.settings.has_tg_token));
         if (res.settings.tg_chat_id) setTgChatId(res.settings.tg_chat_id);
-
-        const loadedOpenclawUrl = res.settings.openclaw_url || 'http://localhost:18789';
-        const loadedOpenclawChannel = res.settings.openclaw_channel || 'whatsapp';
-        const loadedOpenclawTarget = res.settings.openclaw_target || '';
-        const loadedOpenclawEnabled = Boolean(res.settings.openclaw_enabled);
-
-        setOpenclawUrl(loadedOpenclawUrl);
-        setOpenclawChannel(loadedOpenclawChannel);
-        setOpenclawTarget(loadedOpenclawTarget);
-        setHasOpenclawToken(Boolean(res.settings.has_openclaw_token));
-        setOpenclawEnabled(loadedOpenclawEnabled);
 
         setHasDiscordToken(Boolean(res.settings.has_discord_token));
         const loadedDiscordChannelId = res.settings.discord_channel_id || '';
