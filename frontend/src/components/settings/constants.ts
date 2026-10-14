@@ -127,3 +127,63 @@ export const LANGUAGE_OPTIONS: string[] = [
   'Chinese',
   'Romanian',
 ];
+
+export interface ProfileArchetype {
+  id: string;
+  label: string;
+  badge: string;
+  description: string;
+  goals: string;
+  skills: string;
+  stack: string;
+  interests: string;
+  constraints: string;
+}
+
+export const PROFILE_ARCHETYPES: ProfileArchetype[] = [
+  {
+    id: 'founder',
+    label: 'Founder & Operator',
+    badge: '🚀 Founder / Operator',
+    description: 'Scaling products, go-to-market traction, hiring, and capital allocation',
+    goals: 'Early-stage founder scaling a high-growth company. Focused on product-market fit, enterprise go-to-market, customer acquisition, hiring leaders, and seed/Series A fundraising.',
+    skills: 'B2B Sales, Product Strategy, Financial Modeling, Executive Hiring, Unit Economics, GTM',
+    stack: 'HubSpot, Stripe, Notion, Linear, QuickBooks, Carta, Google Workspace',
+    interests: 'Enterprise PLG, Pricing Models, Venture Capital, Customer Retention, Operational Leverage',
+    constraints: 'High ROI initiatives only; lean team budget; prioritize rapid execution and tangible customer outcomes over perfection.',
+  },
+  {
+    id: 'finance',
+    label: 'Finance & Investing',
+    badge: '📈 Finance & Markets',
+    description: 'Macro analysis, valuation, risk hedging, fintech, and asset allocation',
+    goals: 'Independent investor and financial analyst tracking global macroeconomic shifts, market liquidity, fintech disruptors, and asymmetrical investment opportunities.',
+    skills: 'Fundamental Analysis, DCF Valuation, Macroeconomics, Portfolio Risk Management, Financial Statement Auditing',
+    stack: 'Bloomberg Terminal, Koyfin, TradingView, SEC EDGAR, Excel / Google Sheets, Substack',
+    interests: 'Macro Liquidity, Energy Transition, Crypto Infrastructure, Earnings Trends, High-Yield Debt, FinTech',
+    constraints: 'Rely on primary filings (10-K, 10-Q) and verified data; ignore unvetted social media speculation; flag balance sheet vulnerabilities.',
+  },
+  {
+    id: 'agriculture',
+    label: 'Agriculture & AgTech',
+    badge: '🌾 AgTech & Bioeconomy',
+    description: 'Precision agriculture, soil microbiome, sustainable yields, and commodity logistics',
+    goals: 'AgTech innovator and agribusiness operator focused on sustainable food systems, farm robotics, soil regeneration, and resilient supply chains.',
+    skills: 'Agronomy, Precision Agriculture, Soil Science, Supply Chain Logistics, Farm Management, GIS Analysis',
+    stack: 'John Deere Operations Center, Climate FieldView, DroneDeploy, FarmOS, QGIS, Weather APIs',
+    interests: 'Regenerative Agriculture, Crop Yield Optimization, Autonomous Farm Machinery, Soil Microbiome, Grain Commodities',
+    constraints: 'Must support offline / low-connectivity field environments; ruggedized hardware; realistic CAPEX for commercial acreage.',
+  },
+  {
+    id: 'systems',
+    label: 'Systems & AI Engineer',
+    badge: '⚡ Systems & AI',
+    description: 'Local AI pipelines, distributed backend services, homelabs, and privacy-first tooling',
+    goals: 'Software engineer and homelab enthusiast architecting local AI agent workflows, resilient microservices, and self-hosted privacy infrastructure.',
+    skills: 'TypeScript, Python, Go, Distributed Systems, Containerization, Local LLM Inference, Security Hardening',
+    stack: 'Linux, Docker, Kubernetes, PostgreSQL, Ollama, Obsidian, Neovim, WireGuard',
+    interests: 'Local AI Agents, High-Performance Computing, Edge Inference, Microservices, PKM, Open-Source Tools',
+    constraints: 'Open-source and self-hosted solutions prioritized; constrained hardware (32GB RAM homelab limit); zero telemetry or vendor lock-in.',
+  },
+];
+

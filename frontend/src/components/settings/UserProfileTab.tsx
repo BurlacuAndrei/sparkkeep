@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Shield, Sparkles, Save, User } from 'lucide-react';
 import * as api from '../../api';
-import { LANGUAGE_OPTIONS } from './constants';
+import { LANGUAGE_OPTIONS, PROFILE_ARCHETYPES, ProfileArchetype } from './constants';
 
 export interface UserProfileTabProps {
   goals: string;
@@ -54,6 +54,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
     parseTags(stack).join('').length +
     parseTags(interests).join('').length;
 
+  const handleApplyArchetype = (archetype: ProfileArchetype) => {
+    setGoals(archetype.goals);
+    setSkills(archetype.skills);
+    setStack(archetype.stack);
+    setInterests(archetype.interests);
+    setConstraints(archetype.constraints);
+    onDirtyChange?.();
+    showToast(`Loaded ${archetype.label} starter profile.`);
+  };
+
   const handleSaveProfile = async () => {
     if (profileCharCount > 1500) {
       if (onError) {
@@ -96,7 +106,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
             <span className="settings-section-title">Personal Fit & About Me</span>
           </div>
           <span className="settings-section-desc">
-            Tailor Triage's value proposition and Research's personal-fit verdict specifically to your background, tech stack, and goals.
+            Tailor Triage's value proposition and Research's personal-fit verdict specifically to your domain, professional background, tools, and objectives.
           </span>
         </div>
 
@@ -106,6 +116,45 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
           <span>
             <strong>Privacy note:</strong> Your profile is stored locally in your database and sent only to your configured LLM providers during triage and research.
           </span>
+        </div>
+
+        {/* Archetype Quick Selectors */}
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Starter Archetypes / Domain Presets
+            </span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Click to prefill and tailor to your domain
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {PROFILE_ARCHETYPES.map((arch) => (
+              <button
+                key={arch.id}
+                type="button"
+                className="archetype-preset-chip"
+                onClick={() => handleApplyArchetype(arch)}
+                title={arch.description}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 500,
+                  borderRadius: '20px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-input, rgba(255,255,255,0.04))',
+                  color: 'var(--text-main)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>{arch.badge}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Character Counter Meter */}
@@ -153,10 +202,10 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setGoals(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. I am a student trying to learn about software engineering, or I am a hobbyist building homelabs and AI agents..."
+            placeholder="e.g. Founder scaling a B2B business, investor analyzing macro trends, agronomist researching sustainable farming, or engineer building AI systems..."
           />
           <span className="setup-hint">
-            Free text: Give the AI context on who you are, what your core objectives are, and what makes a project relevant to you.
+            Free text: Give the AI context on who you are, what your core objectives are, and what makes an insight or project relevant to you.
           </span>
         </div>
 
@@ -172,16 +221,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setSkills(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. TypeScript, React, Python, Go, Docker, Systems Engineering"
+            placeholder="e.g. B2B Sales, Financial Modeling, Agronomy, Systems Engineering, Data Analysis, GTM Strategy"
           />
           <span className="setup-hint">
-            Comma-separated skills you already possess or are actively developing.
+            Comma-separated competencies you already possess or are actively developing.
           </span>
         </div>
 
         {/* Stack & Tools */}
         <div className="setup-form-group">
-          <label htmlFor="profile-stack">Tech Stack & Tools</label>
+          <label htmlFor="profile-stack">Tools, Platforms & Systems</label>
           <input
             id="profile-stack"
             type="text"
@@ -191,16 +240,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setStack(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. Next.js, PostgreSQL, Tailwind CSS, Kubernetes, Linux, Neovim"
+            placeholder="e.g. Notion, Bloomberg Terminal, FarmOS, Docker, Linear, QuickBooks, PostgreSQL, GIS"
           />
           <span className="setup-hint">
-            Comma-separated frameworks, databases, and environments you use daily.
+            Comma-separated software, equipment, or daily operational platforms you utilize.
           </span>
         </div>
 
         {/* Interests */}
         <div className="setup-form-group">
-          <label htmlFor="profile-interests">Domains & Research Interests</label>
+          <label htmlFor="profile-interests">Domains & Focus Interests</label>
           <input
             id="profile-interests"
             type="text"
@@ -210,16 +259,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setInterests(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. AI Agents, Homelab, High Performance Computing, WebRTC, Obsidian PKM"
+            placeholder="e.g. Regenerative agriculture, local LLMs, seed fundraising, commodity markets, robotics, macro liquidity"
           />
           <span className="setup-hint">
-            Comma-separated subjects and trends that should receive priority attention during triage.
+            Comma-separated subjects and trends that should receive priority attention during triage and briefings.
           </span>
         </div>
 
         {/* Constraints */}
         <div className="setup-form-group">
-          <label htmlFor="profile-constraints">Constraints & Preferences</label>
+          <label htmlFor="profile-constraints">Constraints & Operating Guidelines</label>
           <textarea
             id="profile-constraints"
             className="setup-textarea"
@@ -229,7 +278,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setConstraints(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. Prefer open-source self-hosted solutions; low RAM servers (4GB max); avoid heavy enterprise subscriptions."
+            placeholder="e.g. Self-hosted only; budget <$500/mo; field-ready / offline capability; prioritize primary sources and audited metrics."
           />
           <span className="setup-hint">
             Hardware limits, budget restrictions, or preferences that influence feasibility ratings.
