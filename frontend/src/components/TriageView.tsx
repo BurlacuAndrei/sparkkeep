@@ -648,7 +648,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
           <p className="deck-hints">
             Drag the card · <kbd>1</kbd>
             <kbd>2</kbd>
-            <kbd>3</kbd> keep into a horizon · <kbd>Space</kbd> more · <kbd>O</kbd> / <kbd>0</kbd> open details
+            <kbd>3</kbd> keep into a horizon · <kbd>Space</kbd> more · <kbd>0</kbd> open details
           </p>
         </>
       )}
