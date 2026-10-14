@@ -2643,7 +2643,10 @@
 /* --- Settings Modal Layout --- */
 .settings-modal-card {
   width: 100%;
-  max-width: 860px;
+  max-width: 900px;
+  height: 700px;
+  max-height: calc(100vh - 48px);
+  min-height: min(600px, calc(100vh - 48px));
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
@@ -2661,6 +2664,7 @@
   justify-content: space-between;
   align-items: center;
   background: var(--bg-surface);
+  flex-shrink: 0;
 }
 
 .settings-title-group {
@@ -2697,25 +2701,32 @@
 
 .settings-modal-layout {
   display: flex;
-  min-height: 400px;
-  max-height: calc(88vh - 100px);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .settings-sidebar {
   width: 240px;
+  flex-shrink: 0;
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-surface-elevated);
   display: flex;
   flex-direction: column;
   padding: 16px 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-subtle) transparent;
 }
 
 .settings-main-content {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--bg-surface);
 }
 
 .settings-tab-btn {
@@ -2817,7 +2828,33 @@
   flex-direction: column;
   gap: 20px;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-subtle) transparent;
+}
+
+.settings-modal-body::-webkit-scrollbar,
+.settings-sidebar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.settings-modal-body::-webkit-scrollbar-track,
+.settings-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-modal-body::-webkit-scrollbar-thumb,
+.settings-sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 999px;
+}
+
+.settings-modal-body::-webkit-scrollbar-thumb:hover,
+.settings-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
 }
 
 .settings-panel {
@@ -2825,6 +2862,7 @@
   flex-direction: column;
   gap: 20px;
   animation: setupFadeIn 0.15s ease-out;
+  min-height: 0;
 }
 
 .settings-section {
@@ -3337,6 +3375,32 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
+  min-height: 65px;
+}
+
+/* Settings Modal Dirty Tracking Indicators */
+.settings-dirty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-amber, #eab308);
+  letter-spacing: 0.02em;
+}
+
+.settings-dirty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-amber, #eab308);
+  display: inline-block;
+  box-shadow: 0 0 6px rgba(234, 179, 8, 0.6);
 }
 
 /* Reference kind chips */
@@ -3426,7 +3490,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 16px 20px 24px;
+  padding: 0;
   width: 100%;
 }
 
@@ -4551,5 +4615,51 @@
   margin-top: 20px;
   font-size: 11.5px;
   color: var(--text-faint);
+}
+
+/* Settings Modal Responsive Breakpoints */
+@media (max-width: 768px) {
+  .settings-modal-card {
+    height: calc(100vh - 24px);
+    max-height: calc(100vh - 24px);
+    border-radius: 12px;
+  }
+
+  .settings-modal-layout {
+    flex-direction: column;
+  }
+
+  .settings-sidebar {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .settings-tab-btn {
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    padding: 8px 12px;
+    width: auto;
+    font-size: 12px;
+  }
+
+  .settings-tab-btn.active {
+    border-bottom-color: var(--accent-indigo);
+    border-left-color: transparent;
+  }
+
+  .settings-sidebar-footer {
+    display: none;
+  }
+
+  .settings-modal-body {
+    padding: 16px;
+  }
 }
 

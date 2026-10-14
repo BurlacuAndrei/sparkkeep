@@ -63,6 +63,7 @@ interface SettingsBaseline {
 
 export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
+  const bodyRef = React.useRef<HTMLDivElement>(null);
 
   // AI & Profiles state
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
@@ -126,6 +127,13 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Automatically scroll content body to top when switching menu tabs
+  useEffect(() => {
+    if (bodyRef.current) {
+      bodyRef.current.scrollTop = 0;
+    }
+  }, [activeTab]);
 
   // Escape key handler
   useEffect(() => {
@@ -413,9 +421,20 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <Sliders size={20} strokeWidth={2} />
             </div>
             <div>
-              <h2 id="settings-modal-title" className="settings-title">
-                Platform Preferences
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 id="settings-modal-title" className="settings-title">
+                  Platform Preferences
+                </h2>
+                {isDirty && (
+                  <span
+                    className="settings-dirty-badge"
+                    title="You have unsaved platform preferences"
+                  >
+                    <span className="settings-dirty-dot" />
+                    Unsaved
+                  </span>
+                )}
+              </div>
               <span className="settings-subtitle">
                 Customize workspace appearance, AI models, channels, and access security
               </span>
@@ -436,9 +455,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
           {/* Sidebar Navigation Rail */}
           <div className="settings-sidebar" role="tablist" aria-label="Settings categories">
             <button
+              id="settings-tab-appearance"
               type="button"
               role="tab"
               aria-selected={activeTab === 'appearance'}
+              aria-controls="settings-panel-appearance"
               className={`settings-tab-btn ${activeTab === 'appearance' ? 'active' : ''}`}
               onClick={() => setActiveTab('appearance')}
             >
@@ -446,9 +467,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <span>Appearance & Preferences</span>
             </button>
             <button
+              id="settings-tab-profile"
               type="button"
               role="tab"
               aria-selected={activeTab === 'profile'}
+              aria-controls="settings-panel-profile"
               className={`settings-tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
               onClick={() => setActiveTab('profile')}
             >
@@ -456,9 +479,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <span>About me</span>
             </button>
             <button
+              id="settings-tab-ai"
               type="button"
               role="tab"
               aria-selected={activeTab === 'ai'}
+              aria-controls="settings-panel-ai"
               className={`settings-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
               onClick={() => setActiveTab('ai')}
             >
@@ -466,9 +491,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <span>AI Engine</span>
             </button>
             <button
+              id="settings-tab-playbooks"
               type="button"
               role="tab"
               aria-selected={activeTab === 'playbooks'}
+              aria-controls="settings-panel-playbooks"
               className={`settings-tab-btn ${activeTab === 'playbooks' ? 'active' : ''}`}
               onClick={() => setActiveTab('playbooks')}
             >
@@ -476,9 +503,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <span>Research Playbooks</span>
             </button>
             <button
+              id="settings-tab-schedule"
               type="button"
               role="tab"
               aria-selected={activeTab === 'schedule'}
+              aria-controls="settings-panel-schedule"
               className={`settings-tab-btn ${activeTab === 'schedule' ? 'active' : ''}`}
               onClick={() => setActiveTab('schedule')}
             >
@@ -486,9 +515,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <span>Scheduled Research</span>
             </button>
             <button
+              id="settings-tab-channels"
               type="button"
               role="tab"
               aria-selected={activeTab === 'channels'}
+              aria-controls="settings-panel-channels"
               className={`settings-tab-btn ${activeTab === 'channels' ? 'active' : ''}`}
               onClick={() => setActiveTab('channels')}
             >
@@ -496,9 +527,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <span>Channels & Alerts</span>
             </button>
             <button
+              id="settings-tab-integrations"
               type="button"
               role="tab"
               aria-selected={activeTab === 'integrations'}
+              aria-controls="settings-panel-integrations"
               className={`settings-tab-btn ${activeTab === 'integrations' ? 'active' : ''}`}
               onClick={() => setActiveTab('integrations')}
             >
@@ -506,9 +539,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <span>Integrations & API</span>
             </button>
             <button
+              id="settings-tab-security"
               type="button"
               role="tab"
               aria-selected={activeTab === 'security'}
+              aria-controls="settings-panel-security"
               className={`settings-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
               onClick={() => setActiveTab('security')}
             >
@@ -560,10 +595,15 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                 Loading platform configuration...
               </div>
             ) : (
-              <div className="settings-modal-body">
+              <div className="settings-modal-body" ref={bodyRef}>
                 {/* TAB 1: Appearance & Preferences */}
                 {activeTab === 'appearance' && (
-                  <div className="settings-panel" role="tabpanel">
+                  <div
+                    id="settings-panel-appearance"
+                    className="settings-panel"
+                    role="tabpanel"
+                    aria-labelledby="settings-tab-appearance"
+                  >
                     <div className="settings-section">
                       <div className="settings-section-header">
                         <span className="settings-section-title">Color Palette & Contrast</span>
@@ -623,97 +663,142 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
 
                 {/* TAB 2: User Profile (About Me) */}
                 {activeTab === 'profile' && (
-                  <UserProfileTab
-                    goals={profileGoals}
-                    setGoals={setProfileGoals}
-                    skills={profileSkills}
-                    setSkills={setProfileSkills}
-                    stack={profileStack}
-                    setStack={setProfileStack}
-                    interests={profileInterests}
-                    setInterests={setProfileInterests}
-                    constraints={profileConstraints}
-                    setConstraints={setProfileConstraints}
-                    language={profileLanguage}
-                    setLanguage={setProfileLanguage}
-                    showToast={showToast}
-                    onError={setError}
-                  />
+                  <div
+                    id="settings-panel-profile"
+                    role="tabpanel"
+                    aria-labelledby="settings-tab-profile"
+                    style={{ minHeight: 0 }}
+                  >
+                    <UserProfileTab
+                      goals={profileGoals}
+                      setGoals={setProfileGoals}
+                      skills={profileSkills}
+                      setSkills={setProfileSkills}
+                      stack={profileStack}
+                      setStack={setProfileStack}
+                      interests={profileInterests}
+                      setInterests={setProfileInterests}
+                      constraints={profileConstraints}
+                      setConstraints={setProfileConstraints}
+                      language={profileLanguage}
+                      setLanguage={setProfileLanguage}
+                      showToast={showToast}
+                      onError={setError}
+                    />
+                  </div>
                 )}
 
                 {/* TAB 3: AI Engine */}
                 {activeTab === 'ai' && (
-                  <AIProfileTab
-                    profiles={profiles}
-                    setProfiles={setProfiles}
-                    llmRoles={llmRoles}
-                    setLlmRoles={setLlmRoles}
-                    tokenCaps={tokenCaps}
-                    setTokenCaps={setTokenCaps}
-                    showToast={showToast}
-                    onError={setError}
-                  />
+                  <div
+                    id="settings-panel-ai"
+                    role="tabpanel"
+                    aria-labelledby="settings-tab-ai"
+                    style={{ minHeight: 0 }}
+                  >
+                    <AIProfileTab
+                      profiles={profiles}
+                      setProfiles={setProfiles}
+                      llmRoles={llmRoles}
+                      setLlmRoles={setLlmRoles}
+                      tokenCaps={tokenCaps}
+                      setTokenCaps={setTokenCaps}
+                      showToast={showToast}
+                      onError={setError}
+                    />
+                  </div>
                 )}
 
                 {/* TAB 4: Research Playbooks */}
                 {activeTab === 'playbooks' && (
-                  <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
+                  <div
+                    id="settings-panel-playbooks"
+                    className="settings-panel"
+                    role="tabpanel"
+                    aria-labelledby="settings-tab-playbooks"
+                  >
                     <PlaybookManager showToast={showToast} />
                   </div>
                 )}
 
                 {/* TAB 5: Scheduled Research */}
                 {activeTab === 'schedule' && (
-                  <div className="settings-panel" role="tabpanel" style={{ padding: 0 }}>
+                  <div
+                    id="settings-panel-schedule"
+                    role="tabpanel"
+                    aria-labelledby="settings-tab-schedule"
+                    style={{ minHeight: 0 }}
+                  >
                     <ResearchScheduler showToast={showToast} />
                   </div>
                 )}
 
                 {/* TAB 6: Channels */}
                 {activeTab === 'channels' && (
-                  <ChannelsTab
-                    tgToken={tgToken}
-                    setTgToken={setTgToken}
-                    hasTgToken={hasTgToken}
-                    tgChatId={tgChatId}
-                    openclawUrl={openclawUrl}
-                    setOpenclawUrl={setOpenclawUrl}
-                    openclawToken={openclawToken}
-                    setOpenclawToken={setOpenclawToken}
-                    hasOpenclawToken={hasOpenclawToken}
-                    openclawChannel={openclawChannel}
-                    setOpenclawChannel={setOpenclawChannel}
-                    openclawTarget={openclawTarget}
-                    setOpenclawTarget={setOpenclawTarget}
-                    openclawEnabled={openclawEnabled}
-                    setOpenclawEnabled={setOpenclawEnabled}
-                    discordToken={discordToken}
-                    setDiscordToken={setDiscordToken}
-                    hasDiscordToken={hasDiscordToken}
-                    discordChannelId={discordChannelId}
-                    setDiscordChannelId={setDiscordChannelId}
-                    slackWebhookUrl={slackWebhookUrl}
-                    setSlackWebhookUrl={setSlackWebhookUrl}
-                    hasSlackWebhook={hasSlackWebhook}
-                    showToast={showToast}
-                  />
+                  <div
+                    id="settings-panel-channels"
+                    role="tabpanel"
+                    aria-labelledby="settings-tab-channels"
+                    style={{ minHeight: 0 }}
+                  >
+                    <ChannelsTab
+                      tgToken={tgToken}
+                      setTgToken={setTgToken}
+                      hasTgToken={hasTgToken}
+                      tgChatId={tgChatId}
+                      openclawUrl={openclawUrl}
+                      setOpenclawUrl={setOpenclawUrl}
+                      openclawToken={openclawToken}
+                      setOpenclawToken={setOpenclawToken}
+                      hasOpenclawToken={hasOpenclawToken}
+                      openclawChannel={openclawChannel}
+                      setOpenclawChannel={setOpenclawChannel}
+                      openclawTarget={openclawTarget}
+                      setOpenclawTarget={setOpenclawTarget}
+                      openclawEnabled={openclawEnabled}
+                      setOpenclawEnabled={setOpenclawEnabled}
+                      discordToken={discordToken}
+                      setDiscordToken={setDiscordToken}
+                      hasDiscordToken={hasDiscordToken}
+                      discordChannelId={discordChannelId}
+                      setDiscordChannelId={setDiscordChannelId}
+                      slackWebhookUrl={slackWebhookUrl}
+                      setSlackWebhookUrl={setSlackWebhookUrl}
+                      hasSlackWebhook={hasSlackWebhook}
+                      showToast={showToast}
+                    />
+                  </div>
                 )}
 
                 {/* TAB 7: Integrations & API */}
                 {activeTab === 'integrations' && (
-                  <IntegrationsTab showToast={showToast} />
+                  <div
+                    id="settings-panel-integrations"
+                    role="tabpanel"
+                    aria-labelledby="settings-tab-integrations"
+                    style={{ minHeight: 0 }}
+                  >
+                    <IntegrationsTab showToast={showToast} />
+                  </div>
                 )}
 
                 {/* TAB 8: Security & Access */}
                 {activeTab === 'security' && (
-                  <SecurityTab
-                    authToken={authToken}
-                    setAuthToken={setAuthToken}
-                    confirmAuthToken={confirmAuthToken}
-                    setConfirmAuthToken={setConfirmAuthToken}
-                    hasAuthToken={hasAuthToken}
-                    showToast={showToast}
-                  />
+                  <div
+                    id="settings-panel-security"
+                    role="tabpanel"
+                    aria-labelledby="settings-tab-security"
+                    style={{ minHeight: 0 }}
+                  >
+                    <SecurityTab
+                      authToken={authToken}
+                      setAuthToken={setAuthToken}
+                      confirmAuthToken={confirmAuthToken}
+                      setConfirmAuthToken={setConfirmAuthToken}
+                      hasAuthToken={hasAuthToken}
+                      showToast={showToast}
+                    />
+                  </div>
                 )}
               </div>
             )}
