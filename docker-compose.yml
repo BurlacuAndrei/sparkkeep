@@ -12,3 +12,12 @@ services:
       - ./data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"   # reach host Ollama or local LLMs
+
+  # (Optional) Private SearXNG instance for deep research playbooks.
+  # To enable, uncomment and set SPARKKEEP_SEARCH_URL=http://searxng:8080 in .env
+  # searxng:
+  #   image: docker.io/searxng/searxng:latest
+  #   container_name: sparkkeep_searxng
+  #   restart: unless-stopped
+  #   environment:
+  #     - SEARXNG_BASE_URL=http://searxng:8080/

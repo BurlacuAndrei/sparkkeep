@@ -1470,7 +1470,7 @@ func (r *Runner) search(ctx context.Context, query, fallbackURL string) ([]strin
 		}
 		resp, err := r.Client.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("research: search provider at %s unreachable: %w (check SPARKKEEP_SEARCH_URL)", r.SearchURL, err)
 		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
@@ -1478,7 +1478,7 @@ func (r *Runner) search(ctx context.Context, query, fallbackURL string) ([]strin
 			return nil, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("search status %d", resp.StatusCode)
+			return nil, fmt.Errorf("research: search provider at %s returned status %d (check SPARKKEEP_SEARCH_URL)", r.SearchURL, resp.StatusCode)
 		}
 		urls, err = parseSearch(body)
 		if err != nil {
