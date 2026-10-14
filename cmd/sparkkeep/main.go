@@ -41,13 +41,10 @@ func handleAuthCommand(args []string) {
 		fmt.Println("Usage: sparkkeep auth <status|set-passphrase|generate-token>")
 		os.Exit(1)
 	}
-	cfg, err := config.Load()
+	dbPath := config.DBPath()
+	st, err := store.New(dbPath)
 	if err != nil {
-		log.Fatalf("config: %v", err)
-	}
-	st, err := store.New(cfg.DB)
-	if err != nil {
-		log.Fatalf("store: open %s: %v", cfg.DB, err)
+		log.Fatalf("store: open %s: %v", dbPath, err)
 	}
 	defer st.Close()
 	ctx := context.Background()

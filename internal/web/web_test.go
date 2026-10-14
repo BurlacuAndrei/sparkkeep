@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/channel"
 	"sparkkeep/internal/config"
@@ -1817,6 +1819,10 @@ func TestAuthMiddleware(t *testing.T) {
 	if cookies[0].Value == "secret123" || cookies[0].Value == "" {
 		t.Fatalf("cookie value = %q, want a random session token (not the passphrase)", cookies[0].Value)
 	}
+	// Cookie name is spec-mandated (brief §2).
+	if cookies[0].Name != "sparkkeep_auth" {
+		t.Fatalf("cookie name = %q, want sparkkeep_auth", cookies[0].Name)
+	}
 	if cookies[0].Path != "/" || cookies[0].MaxAge != 31536000 || cookies[0].SameSite != http.SameSiteLaxMode || !cookies[0].HttpOnly {
 		t.Errorf("cookie attrs = %+v, want Path=/ Max-Age=31536000 SameSite=Lax HttpOnly", cookies[0])
 	}
@@ -3474,5 +3480,104 @@ func TestAuthBcryptZeroLockoutAndAPIToken(t *testing.T) {
 	h.ServeHTTP(rrBad, rBad)
 	if rrBad.Code != http.StatusUnauthorized {
 		t.Fatalf("bad token: status = %d, want 401", rrBad.Code)
+	}
+}
+
+// TestValidateTokenRechecksCredential proves successful credentials are not
+// cached: an out-of-band passphrase change revokes the old one on the next
+// request without recreating the api struct.
+func TestValidateTokenRechecksCredential(t *testing.T) {
+	ctx := context.Background()
+	st := newStubStore()
+	if err := st.SetSetting(ctx, "auth_token", "pass-A"); err != nil {
+		t.Fatalf("set auth_token: %v", err)
+	}
+
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25})
+
+	auth := func(pass string) int {
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/cards", nil)
+		r.Header.Set("Authorization", "Bearer "+pass)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, r)
+		return rr.Code
+	}
+
+	if code := auth("pass-A"); code != http.StatusOK {
+		t.Fatalf("pass-A before change: status = %d, want 200", code)
+	}
+
+	// Simulate `sparkkeep auth set-passphrase pass-B` running in another process.
+	hash, err := bcrypt.GenerateFromPassword([]byte("pass-B"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("bcrypt: %v", err)
+	}
+	if err := st.SetSetting(ctx, "auth_token", string(hash)); err != nil {
+		t.Fatalf("update auth_token: %v", err)
+	}
+
+	if code := auth("pass-A"); code != http.StatusUnauthorized {
+		t.Fatalf("pass-A after out-of-band change: status = %d, want 401 (credential must be re-verified)", code)
+	}
+	if code := auth("pass-B"); code != http.StatusOK {
+		t.Fatalf("pass-B after change: status = %d, want 200", code)
+	}
+}
+
+// TestSetupStatusHasAuthWithAPITokenOnly covers an api_token-only deployment,
+// which must report has_auth (not just a stored auth_token).
+func TestSetupStatusHasAuthWithAPITokenOnly(t *testing.T) {
+	ctx := context.Background()
+	st := newStubStore()
+	if err := st.SetSetting(ctx, "api_token", "sk_live_only"); err != nil {
+		t.Fatalf("set api_token: %v", err)
+	}
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25})
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/setup/status", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("setup/status code = %d, want 200", rr.Code)
+	}
+	var status struct {
+		HasAuth bool `json:"has_auth"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &status); err != nil {
+		t.Fatalf("unmarshal status: %v", err)
+	}
+	if !status.HasAuth {
+		t.Fatalf("has_auth = false, want true for an api_token-only deployment")
+	}
+}
+
+// TestSetupReturnsDurableTokenNotSession proves the setup response never echoes
+// the ephemeral session token as the JSON credential.
+func TestSetupReturnsDurableTokenNotSession(t *testing.T) {
+	st := newStubStore()
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25, AuthToken: "env-tok"})
+
+	// Setup is reachable with a valid credential once auth is configured.
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/setup", strings.NewReader(`{}`))
+	r.Header.Set("Authorization", "Bearer env-tok")
+	r.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, r)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("setup: status = %d, want 200 (body %s)", rr.Code, rr.Body.String())
+	}
+
+	var body struct {
+		OK    bool   `json:"ok"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if body.Token != "env-tok" {
+		t.Fatalf("setup token = %q, want the durable env token %q", body.Token, "env-tok")
+	}
+
+	cookies := rr.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != authCookie || cookies[0].Value == "env-tok" || cookies[0].Value == "" {
+		t.Fatalf("setup cookie = %+v, want one non-empty session token distinct from the credential", cookies)
 	}
 }

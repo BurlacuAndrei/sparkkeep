@@ -65,6 +65,10 @@ const DefaultSearchURL = "https://searx.be"
 // Empty by default to disable ASR unless explicitly configured.
 const DefaultASRURL = ""
 
+// DBPath resolves the SQLite path exactly as Load does, without requiring
+// the daemon's other configuration.
+func DBPath() string { return getenv("SPARKKEEP_DB", "./sparkkeep.db") }
+
 func Load() (Config, error) {
 	cfg := Config{
 		DB:               getenv("SPARKKEEP_DB", "./sparkkeep.db"),

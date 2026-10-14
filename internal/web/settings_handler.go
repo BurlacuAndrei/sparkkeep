@@ -40,7 +40,7 @@ func (a *api) verifyToken(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "session error")
 		return
 	}
-	a.authCache.Store(session, true)
+	a.sessions.Store(session, true)
 	http.SetCookie(w, &http.Cookie{
 		Name: authCookie, Value: session, Path: "/",
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
@@ -67,7 +67,7 @@ func (a *api) setupStatus(w http.ResponseWriter, r *http.Request) {
 		settings = map[string]string{}
 	}
 	configured := a.isConfigured(ctx)
-	hasAuth := a.effectiveAuthToken(ctx) != ""
+	hasAuth := a.hasAuth(ctx)
 	hasLLMKey := settings["llm_key"] != ""
 	llmBase := settings["llm_base"]
 	llmModel := settings["llm_model"]
@@ -113,7 +113,7 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, err)
 			return
 		}
-		a.clearAuthCache()
+		a.clearSessions()
 	}
 	if b.LLMBase != "" {
 		if err := a.store.SetSetting(ctx, "llm_base", b.LLMBase); err != nil {
@@ -165,23 +165,20 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Mint an opaque session for the cookie. The JSON token stays the durable
+	// credential (the caller-supplied passphrase, or the configured env token) —
+	// never the ephemeral session, which clients must not persist.
 	effectiveTok := b.AuthToken
 	if effectiveTok == "" {
 		effectiveTok = a.effectiveAuthToken(ctx)
 	}
 	if effectiveTok != "" {
-		// The cookie carries an opaque session token, never the passphrase or its
-		// bcrypt hash. A user-supplied passphrase is still echoed in the response
-		// so the dashboard can persist it across restarts.
 		if session, err := newSessionToken(); err == nil {
-			a.authCache.Store(session, true)
+			a.sessions.Store(session, true)
 			http.SetCookie(w, &http.Cookie{
 				Name: authCookie, Value: session, Path: "/",
 				HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
 			})
-			if b.AuthToken == "" {
-				effectiveTok = session
-			}
 		}
 	}
 
@@ -459,7 +456,7 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, err)
 			return
 		}
-		a.clearAuthCache()
+		a.clearSessions()
 	}
 
 	if b.TGToken != nil {

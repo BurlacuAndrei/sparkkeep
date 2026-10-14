@@ -30,12 +30,12 @@ type api struct {
 	maxUpload int64
 	authToken string
 	tgToken   string
-	authCache sync.Map
+	sessions  sync.Map
 }
 
-// authCookie holds a token the client has already verified, so the dashboard
-// survives a reload without re-sending the Authorization header.
-const authCookie = "sparkkeep_token"
+// authCookie holds an opaque session token minted by verifyToken/setup, so the
+// dashboard survives a reload without re-sending the Authorization header.
+const authCookie = "sparkkeep_auth"
 
 // New returns a http.Handler routing /api/v1/* and the /assets static files
 // (/ serves index.html). When cfg.AuthToken is set every request must carry a
@@ -161,26 +161,26 @@ func (a *api) validateToken(ctx context.Context, got string) bool {
 	if got == "" {
 		return false
 	}
-	if _, ok := a.authCache.Load(got); ok {
+	// Only minted session tokens are served from the cache. Credentials are
+	// re-verified every request so an out-of-band passphrase change revokes the
+	// old one without a restart.
+	if _, ok := a.sessions.Load(got); ok {
 		return true
 	}
 	if a.authToken != "" {
 		if subtle.ConstantTimeCompare([]byte(got), []byte(a.authToken)) == 1 {
-			a.authCache.Store(got, true)
 			return true
 		}
 	}
 	if a.store != nil {
 		if apiTok, err := a.store.GetSetting(ctx, "api_token"); err == nil && apiTok != "" {
 			if subtle.ConstantTimeCompare([]byte(got), []byte(apiTok)) == 1 {
-				a.authCache.Store(got, true)
 				return true
 			}
 		}
 		if stored, err := a.store.GetSetting(ctx, "auth_token"); err == nil && stored != "" {
 			if strings.HasPrefix(stored, "$2a$") || strings.HasPrefix(stored, "$2b$") {
 				if bcrypt.CompareHashAndPassword([]byte(stored), []byte(got)) == nil {
-					a.authCache.Store(got, true)
 					return true
 				}
 			} else {
@@ -189,7 +189,6 @@ func (a *api) validateToken(ctx context.Context, got string) bool {
 					if hash, err := bcrypt.GenerateFromPassword([]byte(got), bcrypt.DefaultCost); err == nil {
 						_ = a.store.SetSetting(ctx, "auth_token", string(hash))
 					}
-					a.authCache.Store(got, true)
 					return true
 				}
 			}
@@ -198,9 +197,11 @@ func (a *api) validateToken(ctx context.Context, got string) bool {
 	return false
 }
 
-func (a *api) clearAuthCache() {
-	a.authCache.Range(func(key, value any) bool {
-		a.authCache.Delete(key)
+// clearSessions drops every minted session, revoking cookies without touching
+// verified credentials.
+func (a *api) clearSessions() {
+	a.sessions.Range(func(key, value any) bool {
+		a.sessions.Delete(key)
 		return true
 	})
 }
