@@ -352,14 +352,14 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    WhatsApp &amp; Signal
+                    Universal Inbound Webhook
                   </span>
                   <span className="settings-badge neutral" style={{ fontSize: '10px', padding: '1px 6px' }}>
-                    Via Gateway
+                    Mobile Capture
                   </span>
                 </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                  Two-way messaging on WhatsApp, Signal, and Apple iMessage
+                  iOS Shortcuts, Android Share Sheet, cURL &amp; automation platforms
                 </span>
               </div>
 
@@ -418,7 +418,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 placeholder="Enter BotFather Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)"
               />
               <span className="setup-hint">
-                To capture via Telegram, create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{color: 'var(--accent)'}}>@BotFather</a>. You can also skip this and configure it or WhatsApp/Signal later.
+                To capture via Telegram, create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{color: 'var(--accent)'}}>@BotFather</a>. You can also skip this and configure Telegram or the Universal Inbound Webhook later.
               </span>
             </div>
 
