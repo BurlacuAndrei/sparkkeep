@@ -299,17 +299,114 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           </div>
         )}
 
-        {/* Step 3: Integrations (Optional) */}
+        {/* Step 3: Omnichannel Messengers (Optional) */}
         {step === 3 && (
           <div className="setup-body">
             <div className="setup-section-intro">
               <Sparkles className="section-icon" size={20} />
               <div>
-                <h3>Integrations (Optional)</h3>
-                <p>Configure Telegram for frictionless capturing on the go.</p>
+                <h3>Capture Channels & Messengers (Optional)</h3>
+                <p>Capture links, audio notes, and receive briefings across your favorite chat apps.</p>
               </div>
             </div>
 
+            {/* Visual Multi-Channel Selector */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '10px',
+                marginBottom: '16px',
+              }}
+            >
+              <div
+                style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-input, rgba(255,255,255,0.03))',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Telegram Bot
+                  </span>
+                  <span className={`settings-badge ${tgToken.trim() ? 'success' : 'neutral'}`} style={{ fontSize: '10px', padding: '1px 6px' }}>
+                    {tgToken.trim() ? 'Token Entered' : 'Direct Bot'}
+                  </span>
+                </div>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                  Interactive inline buttons and instant voice note transcription
+                </span>
+              </div>
+
+              <div
+                style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-input, rgba(255,255,255,0.03))',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    WhatsApp &amp; Signal
+                  </span>
+                  <span className="settings-badge neutral" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                    Via Gateway
+                  </span>
+                </div>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                  Two-way messaging on WhatsApp, Signal, and Apple iMessage
+                </span>
+              </div>
+
+              <div
+                style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-input, rgba(255,255,255,0.03))',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Discord &amp; Slack
+                  </span>
+                  <span className="settings-badge neutral" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                    Team Webhook
+                  </span>
+                </div>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                  Server embeds and Block Kit cards in dedicated channels
+                </span>
+              </div>
+
+              <div
+                style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-input, rgba(255,255,255,0.03))',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Configure Later
+                  </span>
+                  <span className="settings-badge success" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                    Quick Start
+                  </span>
+                </div>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                  Setup any messenger anytime under Settings → Channels &amp; Alerts
+                </span>
+              </div>
+            </div>
+
+            {/* Telegram Bot Input */}
             <div className="setup-form-group">
               <label htmlFor="tg-token-input">Telegram Bot Token (Optional)</label>
               <input
@@ -321,7 +418,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 placeholder="Enter BotFather Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)"
               />
               <span className="setup-hint">
-                Get this by creating a new bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{color: 'var(--accent)'}}>@BotFather</a> on Telegram. You can always configure this later in Settings.
+                To capture via Telegram, create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{color: 'var(--accent)'}}>@BotFather</a>. You can also skip this and configure it or WhatsApp/Signal later.
               </span>
             </div>
 
@@ -330,7 +427,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 Back
               </button>
               <button type="button" className="setup-btn-primary" onClick={handleStep3Next}>
-                Review & Launch <ArrowRight size={16} />
+                {tgToken.trim() ? 'Continue with Telegram' : 'Skip & Continue'} <ArrowRight size={16} />
               </button>
             </div>
           </div>
