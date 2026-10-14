@@ -1,5 +1,17 @@
 import React, { useState } from 'react';
-import { FolderSync, Send, Terminal, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  FolderSync,
+  Send,
+  Terminal,
+  AlertCircle,
+  CheckCircle2,
+  Bookmark,
+  Smartphone,
+  Command,
+  Cpu,
+  Copy,
+  Check,
+} from 'lucide-react';
 import * as api from '../../api';
 
 export interface IntegrationsTabProps {
@@ -17,6 +29,18 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast }) =
   const [webhookSecret, setWebhookSecret] = useState('');
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookResult, setWebhookResult] = useState<string | null>(null);
+
+  // Copy feedback state
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, id: string, label: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      showToast(`${label} copied to clipboard!`);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
 
   const handleSyncObsidian = async () => {
     setSyncingObsidian(true);
@@ -64,12 +88,226 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast }) =
     }
   };
 
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+
+  const bookmarkletCode = `javascript:(function(){const u=encodeURIComponent(window.location.href);const t=encodeURIComponent(document.title);fetch('${currentOrigin}/api/v1/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:window.location.href,text:document.title})}).then(r=>{if(r.ok){alert('⚡ Saved to Sparkkeep: '+document.title);}else{alert('Sparkkeep capture failed (HTTP '+r.status+')');}}).catch(e=>alert('Capture error: '+e));})();`;
+
+  const raycastScript = `#!/bin/bash
+
+# Required parameters:
+# @raycast.schemaVersion 1
+# @raycast.title Capture Spark
+# @raycast.mode silent
+# @raycast.packageName Sparkkeep
+
+# Optional parameters:
+# @raycast.icon ⚡
+# @raycast.argument1 { "type": "text", "placeholder": "URL or note" }
+
+URL="\${1}"
+curl -s -X POST "${currentOrigin}/api/v1/capture" \\
+  -H "Authorization: Bearer YOUR_MASTER_PASSPHRASE" \\
+  -H "Content-Type: application/json" \\
+  -d "{\\"url\\": \\"$URL\\"}"
+
+echo "Saved to Sparkkeep"`;
+
+  const mcpConfig = `{
+  "mcpServers": {
+    "sparkkeep": {
+      "command": "curl",
+      "args": [
+        "-s",
+        "-H", "Authorization: Bearer YOUR_MASTER_PASSPHRASE",
+        "${currentOrigin}/api/v1/cards"
+      ]
+    }
+  }
+}`;
 
   return (
     <div className="settings-panel" role="tabpanel">
-      {/* 1. Obsidian Vault Synchronization */}
+      {/* 1. Quick Ecosystem Capture Tools */}
       <div className="settings-section">
+        <div className="settings-section-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Bookmark size={18} style={{ color: 'var(--accent)' }} />
+            <span className="settings-section-title">Browser Bookmarklet</span>
+          </div>
+          <span className="settings-section-desc">
+            Instantly capture any webpage or article directly into Sparkkeep from Chrome, Safari, Firefox, or Edge.
+          </span>
+        </div>
+
+        <div className="setup-info-box" style={{ marginBottom: '14px' }}>
+          <span>
+            Drag the button below directly to your browser's bookmarks bar, or copy the code snippet into a manual bookmark URL.
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <a
+            href={bookmarkletCode}
+            onClick={(e) => {
+              e.preventDefault();
+              showToast('Drag this button directly to your browser Bookmarks Bar!');
+            }}
+            className="setup-btn-primary"
+            style={{
+              cursor: 'grab',
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+            title="Drag to your Bookmarks Toolbar"
+          >
+            <Bookmark size={15} />
+            <span>⚡ Save to Sparkkeep</span>
+          </a>
+
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => copyToClipboard(bookmarkletCode, 'bookmarklet', 'Bookmarklet code')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            {copiedId === 'bookmarklet' ? <Check size={14} /> : <Copy size={14} />}
+            <span>{copiedId === 'bookmarklet' ? 'Copied' : 'Copy Bookmarklet Code'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Apple iOS Shortcut */}
+      <div className="settings-section" style={{ marginTop: '28px' }}>
+        <div className="settings-section-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Smartphone size={18} style={{ color: 'var(--accent)' }} />
+            <span className="settings-section-title">Apple iOS Shortcut &amp; Share Sheet</span>
+          </div>
+          <span className="settings-section-desc">
+            Share articles, tweets, and links from Safari or any iOS app directly into Sparkkeep using Apple Shortcuts.
+          </span>
+        </div>
+
+        <div
+          style={{
+            background: 'var(--surface-sunken, #090a0f)',
+            padding: '14px',
+            borderRadius: 'var(--radius-md, 8px)',
+            border: '1px solid var(--border-subtle)',
+            fontSize: '12.5px',
+            color: 'var(--text-dim)',
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>
+            Shortcut Steps in Apple Shortcuts app:
+          </div>
+          <ol style={{ paddingLeft: '18px', margin: 0 }}>
+            <li>Create a new shortcut named <strong>"Send to Sparkkeep"</strong> and enable <em>Show in Share Sheet</em>.</li>
+            <li>Add action: <strong>Get Contents of URL</strong> with address: <code style={{ color: 'var(--accent)' }}>{currentOrigin}/api/v1/capture</code></li>
+            <li>Set Method to <strong>POST</strong> and Headers:
+              <br />
+              • <code style={{ color: 'var(--accent)' }}>Authorization</code>: <code style={{ color: 'var(--accent)' }}>Bearer YOUR_MASTER_PASSPHRASE</code>
+              <br />
+              • <code style={{ color: 'var(--accent)' }}>Content-Type</code>: <code style={{ color: 'var(--accent)' }}>application/json</code>
+            </li>
+            <li>Set Request Body (JSON): <code style={{ color: 'var(--accent)' }}>{`{"url": Shortcut Input, "text": "Captured via iOS"}`}</code></li>
+          </ol>
+        </div>
+      </div>
+
+      {/* 3. Raycast Script Command */}
+      <div className="settings-section" style={{ marginTop: '28px' }}>
+        <div
+          className="settings-section-header"
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Command size={18} style={{ color: 'var(--accent)' }} />
+              <span className="settings-section-title">Raycast Extension / Script Command</span>
+            </div>
+            <span className="settings-section-desc">
+              Trigger instant captures straight from your Mac keystrokes using a Raycast Script Command.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => copyToClipboard(raycastScript, 'raycast', 'Raycast script')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 10px' }}
+          >
+            {copiedId === 'raycast' ? <Check size={13} /> : <Copy size={13} />}
+            <span>{copiedId === 'raycast' ? 'Copied' : 'Copy Script'}</span>
+          </button>
+        </div>
+
+        <pre
+          style={{
+            background: 'var(--surface-sunken, #090a0f)',
+            padding: '12px',
+            borderRadius: '8px',
+            border: '1px solid var(--border-subtle)',
+            fontSize: '12px',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-dim)',
+            overflowX: 'auto',
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          {raycastScript}
+        </pre>
+      </div>
+
+      {/* 4. Model Context Protocol (MCP) */}
+      <div className="settings-section" style={{ marginTop: '28px' }}>
+        <div
+          className="settings-section-header"
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Cpu size={18} style={{ color: 'var(--accent)' }} />
+              <span className="settings-section-title">Model Context Protocol (MCP)</span>
+            </div>
+            <span className="settings-section-desc">
+              Empower Claude Desktop, Cursor, and Zed AI agents to query your Sparkkeep library as an active knowledge context.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => copyToClipboard(mcpConfig, 'mcp', 'MCP server config')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 10px' }}
+          >
+            {copiedId === 'mcp' ? <Check size={13} /> : <Copy size={13} />}
+            <span>{copiedId === 'mcp' ? 'Copied' : 'Copy MCP Config'}</span>
+          </button>
+        </div>
+
+        <pre
+          style={{
+            background: 'var(--surface-sunken, #090a0f)',
+            padding: '12px',
+            borderRadius: '8px',
+            border: '1px solid var(--border-subtle)',
+            fontSize: '12px',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-dim)',
+            overflowX: 'auto',
+          }}
+        >
+          {mcpConfig}
+        </pre>
+        <span className="setup-hint">
+          Paste into your <code>claude_desktop_config.json</code> under <code>mcpServers</code> to expose Sparkkeep search directly to your AI conversations.
+        </span>
+      </div>
+
+      {/* 5. Obsidian Vault Synchronization */}
+      <div className="settings-section" style={{ marginTop: '28px' }}>
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FolderSync size={18} style={{ color: 'var(--accent)' }} />
@@ -131,7 +369,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast }) =
         )}
       </div>
 
-      {/* 2. Webhooks & Test Triggers */}
+      {/* 6. Webhooks & Test Triggers */}
       <div className="settings-section" style={{ marginTop: '28px' }}>
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -195,7 +433,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast }) =
         </div>
       </div>
 
-      {/* 3. Universal Inbound Webhook API (cURL) */}
+      {/* 7. Universal Inbound Webhook API (cURL) */}
       <div className="settings-section" style={{ marginTop: '28px' }}>
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -203,7 +441,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast }) =
             <span className="settings-section-title">Universal Inbound Capture API</span>
           </div>
           <span className="settings-section-desc">
-            Send raw URLs and ideas into Sparkkeep from Apple Shortcuts, Raycast, Python scripts, or browser bookmarks.
+            Send raw URLs and ideas into Sparkkeep from custom scripts, cron jobs, or command lines.
           </span>
         </div>
 
@@ -218,7 +456,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast }) =
           <label>Example cURL Request</label>
           <pre
             style={{
-              background: '#090a0f',
+              background: 'var(--surface-sunken, #090a0f)',
               padding: '12px',
               borderRadius: '8px',
               border: '1px solid var(--border-subtle)',

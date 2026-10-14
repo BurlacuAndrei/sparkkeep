@@ -2995,7 +2995,8 @@ func TestPlaybookLicenseMatrix(t *testing.T) {
 	}
 
 	// Trigger research without playbook -> 200 and uses Default (lite) variant
-	runDefPayload := fmt.Sprintf(`{"card_id": %d}`, card.ID)
+	cardDef, _ := st.CreateCard(ctx, port.Card{Title: "AI Default Paper"})
+	runDefPayload := fmt.Sprintf(`{"card_id": %d}`, cardDef.ID)
 	rrRunDef := doJSON(t, commH, http.MethodPost, "/api/v1/research", runDefPayload)
 	if rrRunDef.Code != http.StatusOK {
 		t.Fatalf("expected 200 for running default research, got %d: %s", rrRunDef.Code, rrRunDef.Body.String())
