@@ -6,9 +6,9 @@ Relax rigid ordering validation in `internal/research/playbook.go` so ordering r
 **Blocked by:**
 None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** complete
 
-- [ ] Relax `ValidatePlaybook` in `internal/research/playbook.go` to enforce only structural invariants (name required, 1-12 steps, valid kinds, char caps). Remove hard block on `read` without `search`.
-- [ ] Add `FallbackReportSynthesizer` in `internal/research/research.go` that runs if no step produced output for `"report"`, stitching all step findings into a valid Markdown briefing.
-- [ ] Ensure `ErrEmptyReport` is only returned if genuinely no content was produced.
-- [ ] Add unit tests in `internal/research/research_test.go` and `internal/research/playbook_test.go` confirming execution without explicit report step produces valid report.
+- [x] Relax `ValidatePlaybook` in `internal/research/playbook.go` to enforce only structural invariants (name required, 1-12 steps, valid kinds, char caps). Remove hard block on `read` without `search`.
+- [x] Add `FallbackReportSynthesizer` in `internal/research/research.go` that runs if no step produced output for `"report"`, stitching all step findings into a valid Markdown briefing.
+- [x] Ensure `ErrEmptyReport` is only returned if genuinely no content was produced.
+- [x] Add unit tests in `internal/research/research_test.go` and `internal/research/playbook_test.go` confirming execution without explicit report step produces valid report.

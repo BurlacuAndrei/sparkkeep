@@ -20,11 +20,10 @@ var ValidStepKinds = map[string]bool{
 	port.StepKindCustom:       true,
 }
 
-// ValidatePlaybook enforces Prompt 12 validation rules:
+// ValidatePlaybook enforces playbook structural invariants:
 // - name required
 // - at least 1 step, max 12 steps
 // - known step kinds only
-// - ordering: read requires search or resolve_refs before it
 // - custom step instruction <= 8000 chars, output_heading required, max_queries <= 5
 func ValidatePlaybook(pb port.Playbook) error {
 	if strings.TrimSpace(pb.Name) == "" {
@@ -37,21 +36,9 @@ func ValidatePlaybook(pb port.Playbook) error {
 		return fmt.Errorf("playbook exceeds maximum of 12 steps (got %d): %w", len(pb.Steps), port.ErrInvalidPlaybook)
 	}
 
-	hasSearchOrRefs := false
-
 	for i, step := range pb.Steps {
 		if !ValidStepKinds[step.Kind] {
 			return fmt.Errorf("step %d: unknown step kind %q: %w", i+1, step.Kind, port.ErrInvalidPlaybook)
-		}
-
-		if step.Enabled {
-			// read requires search or resolve_refs before it
-			if step.Kind == port.StepKindRead && !hasSearchOrRefs {
-				return fmt.Errorf("step %d (read): requires search or resolve_refs before it: %w", i+1, port.ErrInvalidPlaybook)
-			}
-			if step.Kind == port.StepKindSearch || step.Kind == port.StepKindResolveRefs {
-				hasSearchOrRefs = true
-			}
 		}
 
 		if step.Kind == port.StepKindCustom {

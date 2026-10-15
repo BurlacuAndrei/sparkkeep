@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -243,8 +244,11 @@ func (r *Runner) RunWithPlaybook(ctx context.Context, card port.Card, researchID
 	}
 
 	report, _ := state.StepOutputs["report"].(string)
-	if report == "" {
-		return "", ErrEmptyReport
+	if strings.TrimSpace(report) == "" {
+		report = FallbackReportSynthesizer(state)
+		if report == "" {
+			return "", ErrEmptyReport
+		}
 	}
 	r.writeBackCard(ctx, state)
 	return report, nil
@@ -1315,6 +1319,150 @@ func (r *Runner) stepReport(ctx context.Context, state *RunState) error {
 	state.StepOutputs["report"] = rendered
 	state.SetNote("report", "Report compiled successfully")
 	return nil
+}
+
+// FallbackReportSynthesizer compiles executed step outputs into a structured Markdown
+// briefing report when an explicit report step is omitted from the playbook.
+// It formats:
+// - Card title heading '# Research: <Title>'
+// - Render Plan if present (renderPlan)
+// - Render Claims if present (renderClaims)
+// - Render Landscape if present (renderLandscape)
+// - Render Verdict if present (renderVerdict)
+// - Render all custom step outputs from state.StepOutputs
+// - Render registered sources if present
+// Stores this synthesized markdown report in state.StepOutputs["report"].
+// Returns empty string if no sections or content could be synthesized.
+func FallbackReportSynthesizer(state *RunState) string {
+	if state == nil {
+		return ""
+	}
+
+	var sections strings.Builder
+
+	// 1. Render Plan if present
+	renderPlan(&sections, state)
+
+	// 2. Render Claims if present
+	renderClaims(&sections, state)
+
+	// 3. Render Landscape if present
+	renderLandscape(&sections, state)
+
+	// 4. Render Verdict if present
+	renderVerdict(&sections, state)
+
+	// 5. Render all custom step outputs from state.StepOutputs
+	renderedCustom := make(map[string]bool)
+
+	// Check playbook steps first to preserve declared custom step order and headings
+	for _, step := range state.PlaybookSteps {
+		if step.Kind != port.StepKindCustom {
+			continue
+		}
+		stepID := fmt.Sprintf("custom_%d", step.Position)
+		var content string
+		if c, ok := state.StepOutputs[stepID].(string); ok && strings.TrimSpace(c) != "" {
+			content = c
+		} else if customSecs, ok := state.StepOutputs["custom_sections"].([]CustomSection); ok {
+			for _, cs := range customSecs {
+				if cs.StepID == stepID && strings.TrimSpace(cs.Content) != "" {
+					content = cs.Content
+					break
+				}
+			}
+		}
+		if strings.TrimSpace(content) != "" && !renderedCustom[stepID] {
+			heading := step.Config.OutputHeading
+			if heading == "" {
+				heading = step.Name
+			}
+			if heading == "" {
+				heading = "Analysis"
+			}
+			sections.WriteString(fmt.Sprintf("## %s\n\n%s\n\n", heading, strings.TrimSpace(content)))
+			renderedCustom[stepID] = true
+			if step.Config.OutputHeading != "" {
+				renderedCustom[step.Config.OutputHeading] = true
+			}
+		}
+	}
+
+	// Render any custom sections from state.StepOutputs["custom_sections"] not yet rendered
+	if customSecs, ok := state.StepOutputs["custom_sections"].([]CustomSection); ok {
+		for _, cs := range customSecs {
+			if cs.StepID != "" && renderedCustom[cs.StepID] {
+				continue
+			}
+			if renderedCustom[cs.Heading] {
+				continue
+			}
+			if strings.TrimSpace(cs.Content) != "" {
+				heading := cs.Heading
+				if heading == "" {
+					heading = "Analysis"
+				}
+				sections.WriteString(fmt.Sprintf("## %s\n\n%s\n\n", heading, strings.TrimSpace(cs.Content)))
+				if cs.StepID != "" {
+					renderedCustom[cs.StepID] = true
+				}
+				renderedCustom[cs.Heading] = true
+			}
+		}
+	}
+
+	// Render any remaining custom step outputs stored directly in StepOutputs
+	if len(state.StepOutputs) > 0 {
+		var otherKeys []string
+		for k := range state.StepOutputs {
+			switch k {
+			case "ground", "question_urls", "verify_claims", "landscape", "verdict", "report", "custom_sections", "personal_fit_score":
+				continue
+			default:
+				if !renderedCustom[k] {
+					otherKeys = append(otherKeys, k)
+				}
+			}
+		}
+		sort.Strings(otherKeys)
+		for _, k := range otherKeys {
+			if s, ok := state.StepOutputs[k].(string); ok && strings.TrimSpace(s) != "" {
+				heading := strings.Title(strings.ReplaceAll(k, "_", " "))
+				sections.WriteString(fmt.Sprintf("## %s\n\n%s\n\n", heading, strings.TrimSpace(s)))
+				renderedCustom[k] = true
+			}
+		}
+	}
+
+	// 6. Render registered sources if present
+	if state.Sources != nil && len(state.Sources.All()) > 0 {
+		cites := strings.TrimSpace(state.Sources.FormatCitations())
+		if cites != "" {
+			sections.WriteString("## Sources & Citations\n\n")
+			sections.WriteString(cites)
+			sections.WriteString("\n\n")
+		}
+	}
+
+	// Only return report if sections or content could be synthesized
+	if strings.TrimSpace(sections.String()) == "" {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("# Research: %s\n\n", state.Card.Title))
+	b.WriteString(sections.String())
+
+	report := strings.TrimSpace(b.String())
+	if report != "" && state.StepOutputs != nil {
+		state.StepOutputs["report"] = report
+	}
+	return report
+}
+
+// FallbackReportSynthesizer compiles executed step outputs into a structured Markdown briefing report.
+func (r *Runner) FallbackReportSynthesizer(state *RunState) string {
+	return FallbackReportSynthesizer(state)
 }
 
 func (r *Runner) writeBackCard(ctx context.Context, state *RunState) {

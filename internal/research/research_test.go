@@ -899,7 +899,7 @@ func TestValidatePlaybook(t *testing.T) {
 		t.Error("expected error for unknown step kind")
 	}
 
-	// 6. Read without search or resolve_refs before it
+	// 6. Read without search or resolve_refs before it is now allowed (soft advisory in UI)
 	readFirst := port.Playbook{
 		Name: "Read First",
 		Steps: []port.PlaybookStep{
@@ -907,8 +907,8 @@ func TestValidatePlaybook(t *testing.T) {
 			{Kind: port.StepKindSearch, Name: "Search", Enabled: true},
 		},
 	}
-	if err := ValidatePlaybook(readFirst); err == nil {
-		t.Error("expected error when read appears before search or resolve_refs")
+	if err := ValidatePlaybook(readFirst); err != nil {
+		t.Errorf("expected read without search to be allowed, got error: %v", err)
 	}
 
 	// 7. Steps after verdict or report are allowed
@@ -1471,5 +1471,78 @@ func TestRunWithPlaybook_ReportSequentialAssembly(t *testing.T) {
 	if !(posPlan < posVerdict && posVerdict < posActionPlan && posActionPlan < posSources) {
 		t.Errorf("sections not in expected sequential order (Plan < Verdict < ActionPlan < Sources):\nPlan=%d, Verdict=%d, ActionPlan=%d, Sources=%d\nReport:\n%s",
 			posPlan, posVerdict, posActionPlan, posSources, report)
+	}
+}
+
+func TestRunWithPlaybook_NoReportStep_FallbackReportSynthesizer(t *testing.T) {
+	customLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+		if strings.Contains(str, "Deep architectural review") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":"Architectural review: Modular hexagonal pattern with decoupled ports."}}]}`)
+			return
+		}
+		if strings.Contains(str, "research synthesis and executive decision assistant") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+				strconv.Quote(`{"recommendation":"pursue","for_whom":"team","confidence":"high","risks":[],"next_actions":["Prototype","Review","Deploy"]}`))
+			return
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":"Default LLM response"}}]}`)
+	}))
+	defer customLLM.Close()
+
+	runner := stubRunner(customLLM, "")
+	runner.Fetcher = newTraceFetcher()
+
+	// 1. Playbook with Ground + Custom analysis (no report step)
+	pbCustom := port.Playbook{
+		Name: "Ground + Custom No Report",
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{
+				Position: 2,
+				Kind:     port.StepKindCustom,
+				Name:     "Architecture Review",
+				Enabled:  true,
+				Config: port.CustomStepConfig{
+					Instruction:   "Deep architectural review",
+					OutputHeading: "Architecture Review",
+					ToolPolicy:    "none",
+				},
+			},
+		},
+	}
+
+	card1 := port.Card{ID: 101, Title: "Hexagonal Architecture"}
+	report1, err := runner.RunWithPlaybook(context.Background(), card1, 0, pbCustom)
+	if err != nil {
+		t.Fatalf("expected fallback synthesis to succeed without ErrEmptyReport, got: %v", err)
+	}
+	if !strings.Contains(report1, "# Research: Hexagonal Architecture") {
+		t.Errorf("expected title in synthesized report, got:\n%s", report1)
+	}
+	if !strings.Contains(report1, "## Architecture Review") {
+		t.Errorf("expected custom section in synthesized report, got:\n%s", report1)
+	}
+
+	// 2. Playbook with Ground + Verdict (no report step)
+	pbVerdict := port.Playbook{
+		Name: "Ground + Verdict No Report",
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Position: 2, Kind: port.StepKindVerdict, Name: "Verdict", Enabled: true},
+		},
+	}
+
+	card2 := port.Card{ID: 102, Title: "Deployment Strategy"}
+	report2, err := runner.RunWithPlaybook(context.Background(), card2, 0, pbVerdict)
+	if err != nil {
+		t.Fatalf("expected fallback synthesis to succeed without ErrEmptyReport, got: %v", err)
+	}
+	if !strings.Contains(report2, "# Research: Deployment Strategy") {
+		t.Errorf("expected title in synthesized report, got:\n%s", report2)
+	}
+	if !strings.Contains(report2, "## Executive Verdict") {
+		t.Errorf("expected verdict section in synthesized report, got:\n%s", report2)
 	}
 }
