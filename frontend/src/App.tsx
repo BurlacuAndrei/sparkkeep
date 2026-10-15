@@ -40,6 +40,7 @@ function AppContent() {
   }, []);
   const [horizon, setHorizon] = useState('short-term');
   const [selectedTag, setSelectedTag] = useState('');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   // Modals & Feedback
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -325,12 +326,14 @@ function AppContent() {
           }}
         />
 
-      <div className={`main-layout ${viewMode === 'digest' ? 'no-sidebar' : ''}`}>
+      <div className={`main-layout ${viewMode === 'digest' ? 'no-sidebar' : ''} ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         {viewMode !== 'digest' && (
           <Sidebar
             selectedTag={selectedTag}
             onTagSelect={setSelectedTag}
             tags={tags}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           />
         )}
 
