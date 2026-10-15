@@ -1744,6 +1744,108 @@ func TestStore_ResolvePlaybook(t *testing.T) {
 	if !errors.Is(err, port.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for non-existent explicit playbook, got: %v", err)
 	}
+
+	// 7. Built-in playbook matching card type vs Custom playbook matching card type
+	// Seed a built-in playbook with card type "company"
+	_, err = s.db.ExecContext(ctx, `UPDATE playbooks SET card_types = '["company"]' WHERE id = 4`)
+	if err != nil {
+		t.Fatalf("failed to update builtin playbook card_types: %v", err)
+	}
+	cCompany, err := s.CreateCard(ctx, port.Card{Title: "Acme Corp", Type: "company"})
+	if err != nil {
+		t.Fatalf("CreateCard company: %v", err)
+	}
+
+	// When only built-in matches "company", built-in is resolved (Tier 3)
+	pbBuiltinResolved, err := s.ResolvePlaybook(ctx, cCompany.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook builtin matching company: %v", err)
+	}
+	if pbBuiltinResolved.ID != 4 {
+		t.Fatalf("expected builtin playbook 4, got: %d", pbBuiltinResolved.ID)
+	}
+
+	// When a custom/user playbook ALSO matches "company", custom playbook wins over built-in (Tier 2 over Tier 3)!
+	pbCustomCompany, err := s.CreatePlaybook(ctx, port.Playbook{
+		Name:      "Custom Company Teardown",
+		CardTypes: []string{"company"},
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Position: 2, Kind: port.StepKindReport, Name: "Report", Enabled: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlaybook custom company: %v", err)
+	}
+
+	pbCompanyResolved, err := s.ResolvePlaybook(ctx, cCompany.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook custom matching company: %v", err)
+	}
+	if pbCompanyResolved.ID != pbCustomCompany.ID {
+		t.Fatalf("expected custom playbook %d over builtin 4, got: %d", pbCustomCompany.ID, pbCompanyResolved.ID)
+	}
+
+	// Deleting the custom playbook falls back to the built-in playbook matching "company"
+	if err := s.DeletePlaybook(ctx, pbCustomCompany.ID); err != nil {
+		t.Fatalf("DeletePlaybook custom company: %v", err)
+	}
+	pbCompanyFallbackBuiltin, err := s.ResolvePlaybook(ctx, cCompany.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook company fallback to builtin: %v", err)
+	}
+	if pbCompanyFallbackBuiltin.ID != 4 {
+		t.Fatalf("expected fallback to builtin company playbook 4 after deleting custom, got: %d", pbCompanyFallbackBuiltin.ID)
+	}
+
+	// 8. Custom user taxonomy types (e.g. "paper" or "patent") with whitespace & case normalization
+	cPaper, err := s.CreateCard(ctx, port.Card{Title: "Attention Is All You Need", Type: "  Paper  "})
+	if err != nil {
+		t.Fatalf("CreateCard paper: %v", err)
+	}
+	pbCustomPaper, err := s.CreatePlaybook(ctx, port.Playbook{
+		Name:      "Academic Paper Deep Dive",
+		CardTypes: []string{"paper"},
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Position: 2, Kind: port.StepKindReport, Name: "Report", Enabled: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlaybook custom paper: %v", err)
+	}
+
+	pbPaperResolved, err := s.ResolvePlaybook(ctx, cPaper.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook custom paper: %v", err)
+	}
+	if pbPaperResolved.ID != pbCustomPaper.ID {
+		t.Fatalf("expected custom paper playbook %d, got: %d", pbCustomPaper.ID, pbPaperResolved.ID)
+	}
+
+	// 9. Unmatched custom taxonomy type falls back to default_playbook_id setting
+	cPatent, err := s.CreateCard(ctx, port.Card{Title: "Quantum Encryption Patent", Type: "patent"})
+	if err != nil {
+		t.Fatalf("CreateCard patent: %v", err)
+	}
+	// default_playbook_id setting was set to "2" earlier
+	pbPatentResolved, err := s.ResolvePlaybook(ctx, cPatent.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook patent fallback: %v", err)
+	}
+	if pbPatentResolved.ID != 2 {
+		t.Fatalf("expected fallback to default_playbook_id (2), got: %d", pbPatentResolved.ID)
+	}
+
+	// When default_playbook_id setting is cleared, falls back to Default playbook (id=1)
+	_ = s.SetSetting(ctx, "default_playbook_id", "")
+	pbPatentDefault, err := s.ResolvePlaybook(ctx, cPatent.ID)
+	if err != nil {
+		t.Fatalf("ResolvePlaybook patent default fallback: %v", err)
+	}
+	if pbPatentDefault.ID != 1 {
+		t.Fatalf("expected fallback to default playbook 1, got: %d", pbPatentDefault.ID)
+	}
 }
 
 func TestStore_ScheduledAndBatchResearch(t *testing.T) {

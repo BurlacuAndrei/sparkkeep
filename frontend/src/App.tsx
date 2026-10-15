@@ -40,7 +40,25 @@ function AppContent() {
   }, []);
   const [horizon, setHorizon] = useState('short-term');
   const [selectedTag, setSelectedTag] = useState('');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sparkkeep_sidebar_collapsed');
+      if (saved !== null) {
+        return saved === 'true';
+      }
+    }
+    return true;
+  });
+
+  const handleToggleSidebarCollapse = useCallback(() => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sparkkeep_sidebar_collapsed', String(next));
+      }
+      return next;
+    });
+  }, []);
   // Modals & Feedback
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -333,7 +351,7 @@ function AppContent() {
             onTagSelect={setSelectedTag}
             tags={tags}
             isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            onToggleCollapse={handleToggleSidebarCollapse}
           />
         )}
 

@@ -6,9 +6,9 @@ Verify end-to-end integration: Card Type taxonomy persistence -> Card triage cla
 **Blocked by:**
 04-research-health-inspector-and-linter.md
 
-**Status:** ready-for-agent
+**Status:** ready-for-review
 
-- [ ] Verify `ResolvePlaybook` correctly routes cards to matching custom playbooks by Card Type and falls back to Platform Default.
-- [ ] Run full Go test suite (`go test ./...`) and ensure all pass green.
-- [ ] Run frontend test suite (`npm test -- --run`) and ensure all pass green.
-- [ ] Verify frontend build (`npm run build`).
+- [x] Verify `ResolvePlaybook` correctly routes cards to matching custom playbooks by Card Type and falls back to Platform Default.
+- [x] Run full Go test suite (`go test ./...`) and ensure all pass green.
+- [x] Run frontend test suite (`npm test -- --run`) and ensure all pass green.
+- [x] Verify frontend build (`npm run build`).
