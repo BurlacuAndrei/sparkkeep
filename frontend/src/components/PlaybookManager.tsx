@@ -8,6 +8,8 @@ import {
   Plus,
   ArrowUp,
   ArrowDown,
+  Download,
+  Upload,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
@@ -34,7 +36,94 @@ const AVAILABLE_CARD_TYPES = [
   'article',
   'product',
   'research',
+  'other',
 ];
+
+const INPUT_BINDING_OPTIONS = [
+  { key: 'capture', label: 'Capture Context' },
+  { key: 'references', label: 'References' },
+  { key: 'sources', label: 'Sources' },
+  { key: 'previous_steps', label: 'Previous Steps' },
+];
+
+const DEFAULT_LEAN_STARTER_STEPS: PlaybookStep[] = [
+  {
+    position: 1,
+    kind: 'ground',
+    name: 'Grounding',
+    enabled: true,
+    config: {
+      output_heading: 'Grounding & Context',
+      instruction: 'Anchor card context, source URL, note, and metadata into run memory.',
+      tool_policy: 'none',
+      role: 'research_synthesis',
+      inputs: ['capture'],
+    },
+  },
+  {
+    position: 2,
+    kind: 'search',
+    name: 'Targeted Search',
+    enabled: true,
+    config: {
+      output_heading: 'Search Discoveries',
+      instruction: 'Execute targeted web queries to locate primary sources and authoritative data.',
+      tool_policy: 'search',
+      max_queries: 2,
+      role: 'research_plan',
+      inputs: ['capture'],
+    },
+  },
+  {
+    position: 3,
+    kind: 'custom',
+    name: 'Custom Analysis',
+    enabled: true,
+    config: {
+      output_heading: 'Custom Analysis',
+      instruction: 'Analyze the card context and extracted sources.',
+      tool_policy: 'none',
+      role: 'research_synthesis',
+      inputs: ['capture', 'sources', 'previous_steps'],
+      max_queries: 2,
+    },
+  },
+  {
+    position: 4,
+    kind: 'report',
+    name: 'Briefing Report',
+    enabled: true,
+    config: {
+      output_heading: 'Executive Briefing',
+      instruction: 'Compile finalized Markdown briefing report synthesizing all insights with citations.',
+      tool_policy: 'none',
+      role: 'research_synthesis',
+      inputs: ['capture', 'sources', 'previous_steps'],
+    },
+  },
+];
+
+function getDefaultInputsForStep(step: PlaybookStep): string[] {
+  if (step.config?.inputs && Array.isArray(step.config.inputs)) {
+    return step.config.inputs;
+  }
+  switch (step.kind) {
+    case 'ground':
+      return ['capture'];
+    case 'resolve_refs':
+      return ['capture', 'references'];
+    case 'plan':
+    case 'search':
+    case 'read':
+    case 'verify_claims':
+    case 'landscape':
+    case 'verdict':
+    case 'report':
+    case 'custom':
+    default:
+      return ['capture', 'sources', 'previous_steps'];
+  }
+}
 
 const CORE_STEP_DESCRIPTIONS: Record<string, string> = {
   ground: 'Anchor card context, source URL, note, and metadata into run memory',
@@ -375,6 +464,11 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [defaultPlaybookId, setDefaultPlaybookId] = useState<number | null>(null);
+  const [activeCardTypes, setActiveCardTypes] = useState<string[]>(AVAILABLE_CARD_TYPES);
+  const [isPlatformDefault, setIsPlatformDefault] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importJsonText, setImportJsonText] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Load playbooks & library
   const loadData = useCallback(async () => {
@@ -386,6 +480,9 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
       ]);
       setPlaybooks(pbs);
       setLibraryTemplates(lib);
+      if (st.settings?.card_types && Array.isArray(st.settings.card_types) && st.settings.card_types.length > 0) {
+        setActiveCardTypes(st.settings.card_types);
+      }
       if (st.settings?.default_playbook_id) {
         setDefaultPlaybookId(st.settings.default_playbook_id);
       }
@@ -417,6 +514,9 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
         if (!alive) return;
         setPlaybooks(pbs);
         setLibraryTemplates(lib);
+        if (st.settings?.card_types && Array.isArray(st.settings.card_types) && st.settings.card_types.length > 0) {
+          setActiveCardTypes(st.settings.card_types);
+        }
         if (st.settings?.default_playbook_id) {
           setDefaultPlaybookId(st.settings.default_playbook_id);
         }
@@ -441,6 +541,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
       showToast(`Duplicated playbook: "${dup.name}"`);
       await loadData();
       setEditingPlaybook(dup);
+      setIsPlatformDefault(false);
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
@@ -463,30 +564,47 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
   // Start editing a playbook
   const startEdit = (pb: Playbook) => {
     setEditingPlaybook(JSON.parse(JSON.stringify(pb)));
+    setIsPlatformDefault(pb.id > 0 && pb.id === defaultPlaybookId);
     setServerError(null);
     setExpandedSteps({});
   };
 
-  // Open recipe archetype picker
+  // Open builder canvas directly with default lean starter
   const startCreateNew = () => {
-    setIsRecipePickerOpen(true);
-  };
-
-  // Instantiate a playbook from a selected recipe archetype
-  const handleSelectRecipe = (recipe: PlaybookRecipe) => {
     const newPb: Playbook = {
       id: 0,
+      name: 'New Custom Playbook',
+      description: '',
+      is_builtin: false,
+      card_types: [],
+      version: 1,
+      steps: DEFAULT_LEAN_STARTER_STEPS.map((s, idx) => ({
+        ...s,
+        position: idx + 1,
+        config: { ...s.config },
+      })),
+    };
+    setEditingPlaybook(newPb);
+    setIsPlatformDefault(false);
+    setServerError(null);
+    setExpandedSteps({});
+  };
+
+  // Instantiate or load steps into canvas from a selected recipe archetype
+  const handleSelectRecipe = (recipe: PlaybookRecipe) => {
+    setEditingPlaybook((prev) => ({
+      id: prev?.id || 0,
       name: recipe.name,
       description: recipe.description,
       is_builtin: false,
       card_types: [...recipe.card_types],
-      version: 1,
+      version: prev?.version || 1,
       steps: JSON.parse(JSON.stringify(recipe.steps)),
-    };
-    setEditingPlaybook(newPb);
+    }));
     setIsRecipePickerOpen(false);
     setServerError(null);
     setExpandedSteps({});
+    showToast(`Loaded "${recipe.name}" template`);
   };
 
   // Validation mirroring server rules
@@ -719,6 +837,103 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     setIsAddStepOpen(false);
   };
 
+  // Export playbook JSON
+  const handleExportJSON = () => {
+    if (!editingPlaybook) return;
+    const exportData = {
+      name: editingPlaybook.name,
+      description: editingPlaybook.description,
+      card_types: editingPlaybook.card_types || [],
+      version: editingPlaybook.version || 1,
+      steps: (editingPlaybook.steps || []).map((s, idx) => ({
+        position: idx + 1,
+        kind: s.kind,
+        name: s.name,
+        enabled: s.enabled,
+        config: s.config || {},
+      })),
+    };
+    const jsonStr = JSON.stringify(exportData, null, 2);
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(jsonStr);
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const sanitized = (editingPlaybook.name || 'playbook')
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, '_');
+        a.download = `${sanitized}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      // ignore
+    }
+
+    showToast('Playbook JSON exported');
+  };
+
+  // Import playbook JSON
+  const handleApplyImport = () => {
+    setImportError(null);
+    if (!importJsonText.trim()) {
+      setImportError('Please paste valid JSON.');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(importJsonText);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        setImportError('Invalid JSON structure: expected an object.');
+        return;
+      }
+      if (!parsed.name || typeof parsed.name !== 'string' || !parsed.name.trim()) {
+        setImportError('Playbook name is required in JSON.');
+        return;
+      }
+      if (!Array.isArray(parsed.steps) || parsed.steps.length === 0) {
+        setImportError('Playbook must contain a non-empty "steps" array.');
+        return;
+      }
+
+      const normalizedSteps: PlaybookStep[] = parsed.steps.map((st: any, idx: number) => ({
+        id: st.id,
+        position: idx + 1,
+        kind: typeof st.kind === 'string' && st.kind.trim() ? st.kind : 'custom',
+        name: typeof st.name === 'string' && st.name.trim() ? st.name : `Step ${idx + 1}`,
+        enabled: st.enabled !== false,
+        config: typeof st.config === 'object' && st.config !== null ? st.config : {},
+      }));
+
+      setEditingPlaybook((prev) => ({
+        id: prev?.id || 0,
+        name: parsed.name.trim(),
+        description: typeof parsed.description === 'string' ? parsed.description : '',
+        is_builtin: false,
+        card_types: Array.isArray(parsed.card_types) ? parsed.card_types : [],
+        version: typeof parsed.version === 'number' ? parsed.version : 1,
+        steps: normalizedSteps,
+      }));
+
+      setIsImportModalOpen(false);
+      setImportJsonText('');
+      showToast(`Successfully imported "${parsed.name.trim()}"`);
+    } catch (err: unknown) {
+      setImportError(`JSON parse error: ${api.getErrorMessage(err)}`);
+    }
+  };
+
   // Save playbook
   const handleSave = async () => {
     if (!editingPlaybook) return;
@@ -729,13 +944,21 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     setSaving(true);
     setServerError(null);
     try {
+      let savedPlaybook: Playbook;
       if (editingPlaybook.id > 0) {
-        await api.updatePlaybook(editingPlaybook.id, editingPlaybook);
-        showToast(`Saved playbook "${editingPlaybook.name}"`);
+        savedPlaybook = await api.updatePlaybook(editingPlaybook.id, editingPlaybook);
+        showToast(`Saved playbook "${savedPlaybook.name}"`);
       } else {
-        const created = await api.createPlaybook(editingPlaybook);
-        showToast(`Created playbook "${created.name}"`);
+        savedPlaybook = await api.createPlaybook(editingPlaybook);
+        showToast(`Created playbook "${savedPlaybook.name}"`);
       }
+
+      const targetId = editingPlaybook.id > 0 ? editingPlaybook.id : savedPlaybook.id;
+      if (isPlatformDefault) {
+        await api.patchSettings({ default_playbook_id: targetId });
+        setDefaultPlaybookId(targetId);
+      }
+
       setEditingPlaybook(null);
       await loadData();
     } catch (err: unknown) {
@@ -777,6 +1000,37 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
             </p>
           </div>
           <div className="pb-actions-group">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setIsRecipePickerOpen(true)}
+              title="Load steps from an archetype recipe or built-in playbook"
+            >
+              <Layers size={14} />
+              <span>Load Template</span>
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleExportJSON}
+              title="Export playbook as JSON file or copy to clipboard"
+            >
+              <Download size={14} />
+              <span>Export JSON</span>
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setImportError(null);
+                setImportJsonText('');
+                setIsImportModalOpen(true);
+              }}
+              title="Import playbook from JSON"
+            >
+              <Upload size={14} />
+              <span>Import JSON</span>
+            </button>
             <button
               type="button"
               className="btn-secondary"
@@ -934,20 +1188,24 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
           {/* Top Form Fields */}
           <div className="pb-meta-grid">
             <div className="pb-form-field">
-              <label>Playbook Name</label>
+              <label htmlFor="pb-name-input">Playbook Name</label>
               <input
+                id="pb-name-input"
                 type="text"
                 className="input-text"
+                aria-label="Playbook Name"
                 placeholder="e.g. Monetization & Feasibility Deep Dive"
                 value={editingPlaybook.name}
                 onChange={(e) => setEditingPlaybook({ ...editingPlaybook, name: e.target.value })}
               />
             </div>
             <div className="pb-form-field">
-              <label>Description</label>
+              <label htmlFor="pb-desc-input">Description</label>
               <input
+                id="pb-desc-input"
                 type="text"
                 className="input-text"
+                aria-label="Description"
                 placeholder="Brief summary of what this research pipeline focuses on"
                 value={editingPlaybook.description}
                 onChange={(e) => setEditingPlaybook({ ...editingPlaybook, description: e.target.value })}
@@ -959,13 +1217,14 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
           <div className="pb-form-field" style={{ marginTop: 12 }}>
             <label>Applicable Card Types (Auto-select hints)</label>
             <div className="pb-card-types-chips">
-              {AVAILABLE_CARD_TYPES.map((type) => {
+              {activeCardTypes.map((type) => {
                 const active = (editingPlaybook.card_types || []).includes(type);
                 return (
                   <button
                     key={type}
                     type="button"
                     className={`pb-type-chip ${active ? 'active' : ''}`}
+                    aria-pressed={active}
                     onClick={() => {
                       const cur = editingPlaybook.card_types || [];
                       const next = active ? cur.filter((t) => t !== type) : [...cur, type];
@@ -977,6 +1236,24 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                 );
               })}
             </div>
+          </div>
+
+          {/* Platform Default Toggle & Badge */}
+          <div className="pb-platform-default-row" style={{ marginTop: 12 }}>
+            <label className="pb-platform-default-label">
+              <input
+                type="checkbox"
+                aria-label="Set as Platform Default"
+                checked={isPlatformDefault}
+                onChange={(e) => setIsPlatformDefault(e.target.checked)}
+              />
+              <span>Set as Platform Default</span>
+            </label>
+            {isPlatformDefault && (
+              <span className="pb-platform-default-badge">
+                ★ Platform Default
+              </span>
+            )}
           </div>
 
           {/* Resource & Time Estimate Strip */}
@@ -1188,7 +1465,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                           className="input-textarea"
                           rows={3}
                           aria-label="Instruction / Prompt"
-                          placeholder="Prompt instructions for this analysis step…"
+                          placeholder="Prompt instructions for this step…"
                           value={step.config?.instruction || ''}
                           onChange={(e) =>
                             updateStepConfig(idx, { instruction: e.target.value })
@@ -1197,59 +1474,87 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                       </div>
 
                       {/* Tool Policy, Max Queries, LLM Role */}
-                      {(step.kind === 'custom' || step.config?.tool_policy !== undefined) && (
-                        <div className="pb-cfg-row" style={{ marginTop: 10 }}>
-                          <div className="pb-form-field">
-                            <label>Tool Policy</label>
-                            <select
-                              className="input-select"
-                              value={step.config?.tool_policy || 'none'}
-                              onChange={(e) =>
-                                updateStepConfig(idx, {
-                                  tool_policy: e.target.value as 'none' | 'search',
-                                })
-                              }
-                            >
-                              <option value="none">None (Reason over existing sources only)</option>
-                              <option value="search">Search (Execute live web queries)</option>
-                            </select>
-                          </div>
-
-                          {step.config?.tool_policy === 'search' && (
-                            <div className="pb-form-field">
-                              <label>Max Search Queries (1–5)</label>
-                              <input
-                                type="number"
-                                className="input-text"
-                                min={1}
-                                max={5}
-                                value={step.config?.max_queries ?? 2}
-                                onChange={(e) =>
-                                  updateStepConfig(idx, {
-                                    max_queries: Math.min(5, Math.max(1, parseInt(e.target.value, 10) || 1)),
-                                  })
-                                }
-                              />
-                            </div>
-                          )}
-
-                          <div className="pb-form-field">
-                            <label>LLM Role</label>
-                            <select
-                              className="input-select"
-                              value={step.config?.role || 'research_synthesis'}
-                              onChange={(e) =>
-                                updateStepConfig(idx, {
-                                  role: e.target.value as 'research_plan' | 'research_synthesis',
-                                })
-                              }
-                            >
-                              <option value="research_synthesis">Synthesis & Reasoning (Strong model)</option>
-                              <option value="research_plan">Planning & Fast (Cheaper model)</option>
-                            </select>
-                          </div>
+                      <div className="pb-cfg-row" style={{ marginTop: 10 }}>
+                        <div className="pb-form-field">
+                          <label>Tool Policy</label>
+                          <select
+                            className="input-select"
+                            aria-label="Tool Policy"
+                            value={step.config?.tool_policy || (step.kind === 'search' ? 'search' : 'none')}
+                            onChange={(e) =>
+                              updateStepConfig(idx, {
+                                tool_policy: e.target.value as 'none' | 'search',
+                              })
+                            }
+                          >
+                            <option value="none">None (Reason over existing sources only)</option>
+                            <option value="search">Search (Execute live web queries)</option>
+                          </select>
                         </div>
-                      )}
+
+                        {(step.config?.tool_policy === 'search' || (!step.config?.tool_policy && step.kind === 'search')) && (
+                          <div className="pb-form-field">
+                            <label>Max Search Queries (1–5)</label>
+                            <input
+                              type="number"
+                              className="input-text"
+                              aria-label="Max Search Queries"
+                              min={1}
+                              max={5}
+                              value={step.config?.max_queries ?? 2}
+                              onChange={(e) =>
+                                updateStepConfig(idx, {
+                                  max_queries: Math.min(5, Math.max(1, parseInt(e.target.value, 10) || 1)),
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        <div className="pb-form-field">
+                          <label>LLM Role</label>
+                          <select
+                            className="input-select"
+                            aria-label="LLM Role"
+                            value={step.config?.role || (step.kind === 'plan' ? 'research_plan' : 'research_synthesis')}
+                            onChange={(e) =>
+                              updateStepConfig(idx, {
+                                role: e.target.value as 'research_plan' | 'research_synthesis',
+                              })
+                            }
+                          >
+                            <option value="research_synthesis">Synthesis & Reasoning (Strong model)</option>
+                            <option value="research_plan">Planning & Fast (Cheaper model)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Input Bindings Checkboxes */}
+                      <div className="pb-form-field" style={{ marginTop: 10 }}>
+                        <label>Input Bindings</label>
+                        <div className="pb-input-bindings">
+                          {INPUT_BINDING_OPTIONS.map(({ key, label }) => {
+                            const activeInputs = getDefaultInputsForStep(step);
+                            const checked = activeInputs.includes(key);
+                            return (
+                              <label key={key} className="pb-binding-checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  aria-label={`Input binding ${key}`}
+                                  onChange={() => {
+                                    const next = checked
+                                      ? activeInputs.filter((k) => k !== key)
+                                      : [...activeInputs, key];
+                                    updateStepConfig(idx, { inputs: next });
+                                  }}
+                                />
+                                <span>{label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
 
                       {/* Drawer Footer: Save Step to Library */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-subtle)' }}>
@@ -1272,33 +1577,37 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
         </div>
       )}
 
-      {/* RECIPE ARCHETYPE PICKER MODAL */}
+      {/* RECIPE ARCHETYPE & STARTER PICKER MODAL */}
       {isRecipePickerOpen && (
         <div className="pb-modal-backdrop" onClick={() => setIsRecipePickerOpen(false)}>
           <div className="pb-modal-content" style={{ maxWidth: 740 }} onClick={(e) => e.stopPropagation()}>
             <div className="pb-modal-header">
               <div>
-                <h4 className="pb-modal-title">Choose Research Recipe Archetype</h4>
+                <h4 className="pb-modal-title">Load Starter Template or Recipe</h4>
                 <p className="pb-modal-subtitle">
-                  Select a workflow recipe tailored to your domain or start from a modular blank canvas.
+                  Select a workflow recipe tailored to your domain or clone a built-in playbook into your builder canvas.
                 </p>
               </div>
               <button
                 type="button"
                 className="btn-icon"
                 onClick={() => setIsRecipePickerOpen(false)}
-                aria-label="Close recipe picker"
+                aria-label="Close template picker"
               >
                 <X size={16} />
               </button>
             </div>
 
             <div className="pb-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div style={{ marginBottom: 10, fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Curated Recipe Archetypes
+              </div>
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
                   gap: 12,
+                  marginBottom: 20,
                 }}
               >
                 {PLAYBOOK_RECIPES.map((recipe) => (
@@ -1339,6 +1648,138 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
                     </button>
                   </div>
                 ))}
+              </div>
+
+              {playbooks.filter((p) => p.is_builtin).length > 0 && (
+                <>
+                  <div style={{ marginBottom: 10, fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Built-in Playbooks
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                      gap: 12,
+                    }}
+                  >
+                    {playbooks
+                      .filter((p) => p.is_builtin)
+                      .map((pb) => (
+                        <div
+                          key={pb.id}
+                          className="pb-lib-item"
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            padding: 14,
+                          }}
+                        >
+                          <div>
+                            <div className="pb-lib-top">
+                              <span className="pb-lib-icon">🏛️</span>
+                              <div className="pb-lib-title-box">
+                                <h5 className="pb-lib-name">{pb.name}</h5>
+                                <span className="pb-lib-policy">{pb.steps?.length || 0} Steps</span>
+                              </div>
+                            </div>
+                            <p className="pb-lib-desc" style={{ marginTop: 8 }}>
+                              {pb.description || 'System built-in research pipeline.'}
+                            </p>
+                            <div className="pb-lib-preview" style={{ marginTop: 8, fontSize: 11.5 }}>
+                              <strong>Pipeline:</strong>{' '}
+                              {pb.steps?.map((s) => s.name).join(' → ') || 'No steps'}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm pb-lib-btn"
+                            style={{ marginTop: 12 }}
+                            onClick={() => {
+                              setEditingPlaybook((prev) => ({
+                                id: prev?.id || 0,
+                                name: `${pb.name} (Clone)`,
+                                description: pb.description,
+                                is_builtin: false,
+                                card_types: [...(pb.card_types || [])],
+                                version: prev?.version || 1,
+                                steps: JSON.parse(JSON.stringify(pb.steps || [])),
+                              }));
+                              setIsRecipePickerOpen(false);
+                              setServerError(null);
+                              setExpandedSteps({});
+                              showToast(`Loaded "${pb.name}" built-in steps`);
+                            }}
+                          >
+                            <Copy size={12} />
+                            <span>Clone Built-in Steps</span>
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT JSON MODAL */}
+      {isImportModalOpen && (
+        <div className="pb-modal-backdrop" onClick={() => setIsImportModalOpen(false)}>
+          <div className="pb-modal-content" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+            <div className="pb-modal-header">
+              <div>
+                <h4 className="pb-modal-title">Import Playbook JSON</h4>
+                <p className="pb-modal-subtitle">
+                  Paste a valid playbook JSON definition to load it into the builder.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setIsImportModalOpen(false)}
+                aria-label="Close import modal"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="pb-modal-body">
+              {importError && (
+                <div className="pb-error-banner" style={{ marginBottom: 12 }}>
+                  <AlertCircle size={16} />
+                  <span>{importError}</span>
+                </div>
+              )}
+              <div className="pb-form-field">
+                <label htmlFor="import-json-textarea">Playbook JSON</label>
+                <textarea
+                  id="import-json-textarea"
+                  className="input-textarea"
+                  rows={10}
+                  style={{ fontFamily: 'monospace', fontSize: 12 }}
+                  placeholder={`{\n  "name": "Exported Pipeline",\n  "description": "...",\n  "card_types": ["tool"],\n  "steps": [\n    {\n      "kind": "custom",\n      "name": "Analysis",\n      "config": { "output_heading": "Analysis" }\n    }\n  ]\n}`}
+                  value={importJsonText}
+                  onChange={(e) => setImportJsonText(e.target.value)}
+                  aria-label="Playbook JSON input"
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsImportModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleApplyImport}
+                >
+                  Import and Load
+                </button>
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PlaybookManager, PLAYBOOK_RECIPES } from './PlaybookManager';
+import * as api from '../api';
 
 vi.mock('../api', async () => {
   const actual = await vi.importActual<typeof import('../api')>('../api');
@@ -21,8 +22,15 @@ vi.mock('../api', async () => {
       },
     ]),
     fetchStepLibrary: vi.fn().mockResolvedValue([]),
-    getSettings: vi.fn().mockResolvedValue({ settings: { default_playbook_id: 1 } }),
+    getSettings: vi.fn().mockResolvedValue({
+      settings: {
+        default_playbook_id: 1,
+        card_types: ['idea', 'tool', 'reading', 'architecture', 'company'],
+      },
+    }),
     createPlaybook: vi.fn().mockResolvedValue({ id: 99, name: 'Saved Playbook' }),
+    updatePlaybook: vi.fn().mockResolvedValue({ id: 1, name: 'Updated Playbook' }),
+    patchSettings: vi.fn().mockResolvedValue({ ok: true }),
   };
 });
 
@@ -32,7 +40,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     localStorage.clear();
   });
 
-  it('opens recipe archetype picker modal when clicking New Playbook', async () => {
+  it('opens builder canvas directly with default lean starter when clicking New Playbook', async () => {
     render(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
@@ -42,13 +50,28 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     const newBtn = screen.getByRole('button', { name: /New Playbook/i });
     fireEvent.click(newBtn);
 
-    expect(screen.getByText('Choose Research Recipe Archetype')).toBeDefined();
-    for (const recipe of PLAYBOOK_RECIPES) {
-      expect(screen.getByText(recipe.name)).toBeDefined();
-    }
+    // Modal should NOT open immediately
+    expect(screen.queryByText('Load Starter Template or Recipe')).toBeNull();
+
+    // Canvas input fields & default lean starter steps should be displayed
+    expect(screen.getByLabelText(/Playbook Name/i)).toBeDefined();
+    expect(screen.getByDisplayValue('New Custom Playbook')).toBeDefined();
+    expect(screen.getByLabelText(/Description/i)).toBeDefined();
+
+    // Lean starter steps: Grounding + Targeted Search + Custom Analysis + Briefing Report
+    expect(screen.getByText('Grounding')).toBeDefined();
+    expect(screen.getByText('Targeted Search')).toBeDefined();
+    expect(screen.getByText('Custom Analysis')).toBeDefined();
+    expect(screen.getByText('Briefing Report')).toBeDefined();
+
+    // Builder header controls
+    expect(screen.getByRole('button', { name: /Load Template/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Export JSON/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Import JSON/i })).toBeDefined();
+    expect(screen.getByLabelText(/Set as Platform Default/i)).toBeDefined();
   });
 
-  it('selects a recipe archetype and loads its steps into the editor', async () => {
+  it('selects a recipe archetype and loads its steps into the editor via Load Template', async () => {
     render(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
@@ -57,12 +80,19 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
+    // Click 'Load Template' inside the builder canvas
+    const loadTplBtn = screen.getByRole('button', { name: /Load Template/i });
+    fireEvent.click(loadTplBtn);
+
+    // Modal should now be open
+    expect(screen.getByText('Load Starter Template or Recipe')).toBeDefined();
+
     // Choose Competitor Teardown
     const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
     expect(useBtns.length).toBe(PLAYBOOK_RECIPES.length);
     fireEvent.click(useBtns[0]); // Competitor Teardown
 
-    // Should switch to edit mode with the recipe's title
+    // Should load the recipe's title and steps
     expect(screen.getByDisplayValue('Competitor & Moat Teardown')).toBeDefined();
     expect(screen.getByText(/Moat & Pricing Analysis/i)).toBeDefined();
   });
@@ -76,19 +106,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    // Choose Blank Canvas (the last recipe)
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
-    fireEvent.click(useBtns[useBtns.length - 1]);
-
-    // Open Add Step modal
-    const addStepBtn = screen.getByRole('button', { name: /Add Step/i });
-    fireEvent.click(addStepBtn);
-
-    // Switch to blank step tab
-    fireEvent.click(screen.getByRole('button', { name: /Blank Custom Step/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Create Blank Custom Step/i }));
-
-    // Expand custom step drawer
+    // Step 3 in lean starter is already 'Custom Analysis'
     const expandBtn = screen.getByRole('button', { name: /Edit Custom Analysis config/i });
     fireEvent.click(expandBtn);
 
@@ -96,11 +114,11 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     const swotBtn = screen.getByRole('button', { name: /\+ SWOT Analysis/i });
     fireEvent.click(swotBtn);
 
-    const textarea = screen.getByPlaceholderText(/Prompt instructions for this analysis step…/i) as HTMLTextAreaElement;
+    const textarea = screen.getByPlaceholderText(/Prompt instructions for this step…/i) as HTMLTextAreaElement;
     expect(textarea.value).toContain('SWOT (Strengths, Weaknesses, Opportunities, Threats)');
   });
 
-  it('allows standard steps (Planning, Landscape, Verdict) to be expanded and edited', async () => {
+  it('allows standard steps (Planning, Landscape, Verdict) to be expanded and edited with all transparent step primitives', async () => {
     render(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
@@ -109,7 +127,8 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    // Choose Flagship 8-Step Deep Dive (recipe index 4)
+    // Open template picker and choose Flagship 8-Step Deep Dive (recipe index 4)
+    fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
     const deepDiveRecipe = PLAYBOOK_RECIPES.find((r) => r.id === 'deep_dive')!;
     const recipeIndex = PLAYBOOK_RECIPES.indexOf(deepDiveRecipe);
     const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
@@ -131,11 +150,28 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     fireEvent.change(planTextarea, { target: { value: 'Focus on distributed consensus protocols.' } });
     expect(planTextarea.value).toBe('Focus on distributed consensus protocols.');
 
-    // 2. Expand and edit Landscape standard step (from Competitor recipe or add landscape)
+    // Edit tool policy and max queries on standard step
+    const toolPolicySelect = screen.getByLabelText(/Tool Policy/i) as HTMLSelectElement;
+    fireEvent.change(toolPolicySelect, { target: { value: 'search' } });
+    expect(toolPolicySelect.value).toBe('search');
+
+    const maxQueriesInput = screen.getByLabelText(/Max Search Queries/i) as HTMLInputElement;
+    fireEvent.change(maxQueriesInput, { target: { value: '3' } });
+    expect(maxQueriesInput.value).toBe('3');
+
+    // Toggle Input Binding checkbox
+    const refsBindingCheckbox = screen.getByLabelText(/Input binding references/i) as HTMLInputElement;
+    fireEvent.click(refsBindingCheckbox);
+
+    // Edit LLM Role
+    const roleSelect = screen.getByLabelText(/LLM Role/i) as HTMLSelectElement;
+    fireEvent.change(roleSelect, { target: { value: 'research_plan' } });
+    expect(roleSelect.value).toBe('research_plan');
+
     // Collapse plan
     fireEvent.click(screen.getByRole('button', { name: /Collapse Advanced Architecture Planning config/i }));
 
-    // 3. Expand and edit Verdict standard step
+    // 2. Expand and edit Verdict standard step
     const editVerdictBtn = screen.getByRole('button', { name: /Edit Synthesis & Verdict config/i });
     fireEvent.click(editVerdictBtn);
 
@@ -161,7 +197,8 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    // Choose Competitor & Moat Teardown (index 0) which has Landscape, Custom, and Verdict
+    // Load Competitor Teardown recipe
+    fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
     const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
     fireEvent.click(useBtns[0]);
 
@@ -172,7 +209,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     const matrixChip = screen.getByRole('button', { name: /\+ 2x2 Feature Matrix/i });
     fireEvent.click(matrixChip);
 
-    let textarea = screen.getByPlaceholderText(/Prompt instructions for this analysis step…/i) as HTMLTextAreaElement;
+    let textarea = screen.getByPlaceholderText(/Prompt instructions for this step…/i) as HTMLTextAreaElement;
     expect(textarea.value).toContain('Construct a 2x2 competitive positioning matrix');
 
     const saasChip = screen.getByRole('button', { name: /\+ Open-Source vs SaaS/i });
@@ -188,7 +225,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     const scorecardChip = screen.getByRole('button', { name: /\+ 10-Point Scorecard/i });
     fireEvent.click(scorecardChip);
 
-    textarea = screen.getByPlaceholderText(/Prompt instructions for this analysis step…/i) as HTMLTextAreaElement;
+    textarea = screen.getByPlaceholderText(/Prompt instructions for this step…/i) as HTMLTextAreaElement;
     expect(textarea.value).toContain('Evaluate across a 10-point scorecard');
 
     const bearChip = screen.getByRole('button', { name: /\+ Bear Case Stress-Test/i });
@@ -204,7 +241,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     const execBriefChip = screen.getByRole('button', { name: /\+ Executive Brief/i });
     fireEvent.click(execBriefChip);
 
-    textarea = screen.getByPlaceholderText(/Prompt instructions for this analysis step…/i) as HTMLTextAreaElement;
+    textarea = screen.getByPlaceholderText(/Prompt instructions for this step…/i) as HTMLTextAreaElement;
     expect(textarea.value).toContain('Synthesize 3-5 high-priority strategic recommendations');
   });
 
@@ -217,7 +254,8 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    // Choose Competitor Teardown
+    // Load Competitor Teardown
+    fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
     const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
     fireEvent.click(useBtns[0]);
 
@@ -246,7 +284,8 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    // Choose Competitor Teardown
+    // Load Competitor Teardown
+    fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
     const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
     fireEvent.click(useBtns[0]);
 
@@ -294,14 +333,11 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
-    fireEvent.click(useBtns[0]);
-
-    // Expand Moat & Pricing Analysis
-    const editBtn = screen.getByRole('button', { name: /Edit Moat & Pricing Analysis config/i });
+    // Expand Custom Analysis
+    const editBtn = screen.getByRole('button', { name: /Edit Custom Analysis config/i });
     fireEvent.click(editBtn);
 
-    const textarea = screen.getByPlaceholderText(/Prompt instructions for this analysis step…/i) as HTMLTextAreaElement;
+    const textarea = screen.getByPlaceholderText(/Prompt instructions for this step…/i) as HTMLTextAreaElement;
 
     // Set instruction to 8,001 chars
     fireEvent.change(textarea, { target: { value: 'X'.repeat(8001) } });
@@ -310,5 +346,148 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     // Set instruction to 8,000 chars
     fireEvent.change(textarea, { target: { value: 'X'.repeat(8000) } });
     expect(screen.queryByText(/Instruction exceeds 8,000 characters limit/i)).toBeNull();
+  });
+
+  it('populates card types chips dynamically from settings', async () => {
+    vi.mocked(api.getSettings).mockResolvedValueOnce({
+      ok: true,
+      settings: {
+        has_llm_key: true,
+        has_auth_token: true,
+        default_playbook_id: 1,
+        card_types: ['hardware', 'firmware', 'biotech'],
+      },
+    });
+
+    render(<PlaybookManager showToast={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+    // Chips should reflect settings card_types
+    expect(screen.getByRole('button', { name: 'hardware' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'firmware' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'biotech' })).toBeDefined();
+
+    // Clicking a chip toggles it active
+    const hwChip = screen.getByRole('button', { name: 'hardware' });
+    expect(hwChip.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(hwChip);
+    expect(hwChip.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('handles Set as Platform Default toggle when saving playbook', async () => {
+    render(<PlaybookManager showToast={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+    const defaultToggle = screen.getByLabelText(/Set as Platform Default/i) as HTMLInputElement;
+    expect(defaultToggle.checked).toBe(false);
+
+    // Toggle on
+    fireEvent.click(defaultToggle);
+    expect(defaultToggle.checked).toBe(true);
+    expect(screen.getByText('★ Platform Default')).toBeDefined();
+
+    // Save playbook
+    const saveBtn = screen.getByRole('button', { name: /Save Playbook/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(api.createPlaybook).toHaveBeenCalled();
+      expect(api.patchSettings).toHaveBeenCalledWith({ default_playbook_id: 99 });
+    });
+  });
+
+  it('supports Export JSON and Import JSON workflow with validation', async () => {
+    const mockToast = vi.fn();
+    render(<PlaybookManager showToast={mockToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+    // Test Export JSON
+    const exportBtn = screen.getByRole('button', { name: /Export JSON/i });
+    fireEvent.click(exportBtn);
+    expect(mockToast).toHaveBeenCalledWith('Playbook JSON exported');
+
+    // Test Import JSON
+    const importBtn = screen.getByRole('button', { name: /Import JSON/i });
+    fireEvent.click(importBtn);
+
+    expect(screen.getByText('Import Playbook JSON')).toBeDefined();
+
+    const importTextarea = screen.getByLabelText(/Playbook JSON input/i) as HTMLTextAreaElement;
+    const loadBtn = screen.getByRole('button', { name: /Import and Load/i });
+
+    // 1. Empty JSON validation
+    fireEvent.click(loadBtn);
+    expect(screen.getByText('Please paste valid JSON.')).toBeDefined();
+
+    // 2. Syntax error validation
+    fireEvent.change(importTextarea, { target: { value: '{ invalid: json' } });
+    fireEvent.click(loadBtn);
+    expect(screen.getByText(/JSON parse error/i)).toBeDefined();
+
+    // 3. Missing name validation
+    fireEvent.change(importTextarea, { target: { value: JSON.stringify({ description: 'No name', steps: [{ name: 'Step 1' }] }) } });
+    fireEvent.click(loadBtn);
+    expect(screen.getByText('Playbook name is required in JSON.')).toBeDefined();
+
+    // 4. Missing steps validation
+    fireEvent.change(importTextarea, { target: { value: JSON.stringify({ name: 'Empty Steps', steps: [] }) } });
+    fireEvent.click(loadBtn);
+    expect(screen.getByText('Playbook must contain a non-empty "steps" array.')).toBeDefined();
+
+    // 5. Valid import
+    const validPlaybookJSON = {
+      name: 'Imported Quantum Pipeline',
+      description: 'Pipeline evaluating quantum computing architectures',
+      card_types: ['tool', 'article'],
+      steps: [
+        {
+          position: 1,
+          kind: 'ground',
+          name: 'Quantum Grounding',
+          enabled: true,
+          config: { output_heading: 'Quantum Context' },
+        },
+        {
+          position: 2,
+          kind: 'custom',
+          name: 'QPU Benchmark Analysis',
+          enabled: true,
+          config: {
+            output_heading: 'QPU Benchmarks',
+            instruction: 'Evaluate circuit depth and gate fidelities.',
+            tool_policy: 'search',
+            max_queries: 3,
+            role: 'research_synthesis',
+          },
+        },
+      ],
+    };
+
+    fireEvent.change(importTextarea, { target: { value: JSON.stringify(validPlaybookJSON) } });
+    fireEvent.click(loadBtn);
+
+    // Modal should close and imported content should appear on canvas
+    expect(screen.queryByText('Import Playbook JSON')).toBeNull();
+    expect(mockToast).toHaveBeenCalledWith('Successfully imported "Imported Quantum Pipeline"');
+
+    expect(screen.getByDisplayValue('Imported Quantum Pipeline')).toBeDefined();
+    expect(screen.getByDisplayValue('Pipeline evaluating quantum computing architectures')).toBeDefined();
+    expect(screen.getByText('Quantum Grounding')).toBeDefined();
+    expect(screen.getByText('QPU Benchmark Analysis')).toBeDefined();
   });
 });
