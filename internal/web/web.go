@@ -145,7 +145,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 // csp is the Content-Security-Policy sent on every response. 'unsafe-inline'
 // styles are required: React injects inline styles and the standalone research
 // report template carries an inline <style>.
-const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
 
 // securityHeaders sets hardening headers on every response. It wraps the whole
 // handler so static assets and public paths get them too. HSTS is only sent
@@ -186,9 +186,18 @@ func isPublicPath(r *http.Request) bool {
 	}
 	html := !strings.Contains(r.Header.Get("Accept"), "application/json") &&
 		r.URL.Query().Get("format") != "json"
-	return html && strings.HasPrefix(p, "/api/v1/research/")
+	if strings.HasPrefix(p, "/api/v1/research/") {
+		rest := strings.TrimPrefix(p, "/api/v1/research/")
+		if rest == "" || strings.Contains(rest, "/") {
+			return false
+		}
+		if _, err := strconv.ParseInt(rest, 10, 64); err != nil {
+			return false
+		}
+		return html
+	}
+	return false
 }
-
 func (a *api) hasAuth(ctx context.Context) bool {
 	if a.authToken != "" {
 		return true

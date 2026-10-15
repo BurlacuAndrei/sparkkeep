@@ -118,9 +118,11 @@ func New(cfg config.Config, llm *analyze.Client) *Runner {
 		SearchURL: cfg.SearchURL,
 		Client: &http.Client{
 			Timeout: searchTimeout,
-			Transport: &http.Transport{
-				DialContext: netguard.DialContext(&net.Dialer{Timeout: searchTimeout}),
-			},
+			Transport: func() *http.Transport {
+				tr := http.DefaultTransport.(*http.Transport).Clone()
+				tr.DialContext = netguard.DialContext(&net.Dialer{Timeout: searchTimeout})
+				return tr
+			}(),
 		},
 		LLM:             llm,
 		PlanLLM:         llm,

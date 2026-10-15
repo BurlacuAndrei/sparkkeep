@@ -116,12 +116,14 @@ var fetchTimeout = defaultTimeout
 // transport timeouts, replacing http.DefaultClient which has no timeout.
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
-	Transport: &http.Transport{
-		DialContext:         netguard.DialContext(&net.Dialer{Timeout: 5 * time.Second}),
-		TLSHandshakeTimeout: 5 * time.Second,
-		MaxIdleConns:        10,
-		IdleConnTimeout:     30 * time.Second,
-	},
+	Transport: func() *http.Transport {
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.DialContext = netguard.DialContext(&net.Dialer{Timeout: 5 * time.Second})
+		tr.TLSHandshakeTimeout = 5 * time.Second
+		tr.MaxIdleConns = 10
+		tr.IdleConnTimeout = 30 * time.Second
+		return tr
+	}(),
 }
 
 // Recognize classifies raw as a link (single http(s) URL) or as text.
