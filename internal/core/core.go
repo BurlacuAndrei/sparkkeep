@@ -431,6 +431,9 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 				prof = &p
 			}
 		}
+		if types, err := s.Store.GetCardTypes(ctx); err == nil && len(types) > 0 {
+			ctx = analyze.WithCardTypes(ctx, types)
+		}
 	}
 	res, err := llmClient.Analyze(ctx, fetched, prof)
 	if err != nil {
@@ -863,6 +866,11 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 	llmClient := s.clientFor(analyze.RoleTriage)
 	if llmClient == nil {
 		return nil, errors.New("core: no LLM client configured for triage")
+	}
+	if s.Store != nil {
+		if types, err := s.Store.GetCardTypes(ctx); err == nil && len(types) > 0 {
+			ctx = analyze.WithCardTypes(ctx, types)
+		}
 	}
 	res, err := llmClient.Analyze(ctx, fetched)
 	if err != nil {

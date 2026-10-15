@@ -362,6 +362,35 @@ func (s *stubStore) ListSettings(context.Context) (map[string]string, error) {
 	return out, nil
 }
 
+func (s *stubStore) GetCardTypes(_ context.Context) ([]string, error) {
+	if s.settings != nil {
+		if val, ok := s.settings["card_types"]; ok && strings.TrimSpace(val) != "" {
+			var types []string
+			if err := json.Unmarshal([]byte(val), &types); err == nil && types != nil {
+				return types, nil
+			}
+		}
+	}
+	res := make([]string, len(port.DefaultCardTypes))
+	copy(res, port.DefaultCardTypes)
+	return res, nil
+}
+
+func (s *stubStore) SetCardTypes(_ context.Context, types []string) error {
+	if s.settings == nil {
+		s.settings = map[string]string{}
+	}
+	if types == nil {
+		types = []string{}
+	}
+	data, err := json.Marshal(types)
+	if err != nil {
+		return err
+	}
+	s.settings["card_types"] = string(data)
+	return nil
+}
+
 func (s *stubStore) RecoverInterruptedResearch(_ context.Context) (int, error) {
 	n := 0
 	for id, r := range s.researches {

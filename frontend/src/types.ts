@@ -384,3 +384,29 @@ export interface StepLibraryTemplate {
   max_queries: number;
 }
 
+export interface Settings {
+  card_types?: string[];
+  llm_base?: string;
+  llm_model?: string;
+  has_llm_key: boolean;
+  has_auth_token: boolean;
+  llm_profiles?: LLMProfile[];
+  llm_roles?: Record<string, string>;
+  llm_token_caps?: Record<string, number>;
+  default_playbook_id?: number | null;
+  user_profile?: UserProfile;
+  has_tg_token?: boolean;
+  tg_chat_id?: string;
+  openclaw_url?: string;
+  openclaw_channel?: string;
+  openclaw_target?: string;
+  openclaw_enabled?: boolean;
+  has_openclaw_token?: boolean;
+  discord_channel_id?: string;
+  has_discord_token?: boolean;
+  has_discord_public_key?: boolean;
+  has_slack_webhook?: boolean;
+  has_slack_bot_token?: boolean;
+  slack_channel_id?: string;
+}
+

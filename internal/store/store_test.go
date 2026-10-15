@@ -965,6 +965,44 @@ func TestSettingsCRUD(t *testing.T) {
 	}
 }
 
+func TestCardTypesSettings(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	// 1. Initial call returns default card types
+	types, err := s.GetCardTypes(ctx)
+	if err != nil {
+		t.Fatalf("GetCardTypes initially failed: %v", err)
+	}
+	expectedDefaults := []string{"tool", "product", "company", "article", "idea", "repo", "paper"}
+	if len(types) != len(expectedDefaults) {
+		t.Fatalf("expected %d default card types, got %d: %v", len(expectedDefaults), len(types), types)
+	}
+	for i, v := range expectedDefaults {
+		if types[i] != v {
+			t.Errorf("at index %d: expected %q, got %q", i, v, types[i])
+		}
+	}
+
+	// 2. Set custom card types
+	custom := []string{"tool", "repo", "workflow", "model"}
+	if err := s.SetCardTypes(ctx, custom); err != nil {
+		t.Fatalf("SetCardTypes failed: %v", err)
+	}
+
+	types, err = s.GetCardTypes(ctx)
+	if err != nil {
+		t.Fatalf("GetCardTypes after set failed: %v", err)
+	}
+	if len(types) != len(custom) {
+		t.Fatalf("expected %d card types, got %d: %v", len(custom), len(types), types)
+	}
+	for i, v := range custom {
+		if types[i] != v {
+			t.Errorf("at index %d: expected %q, got %q", i, v, types[i])
+		}
+	}
+}
+
 func TestCaptureCRUD(t *testing.T) {
 	s, ctx := newTestStore(t)
 	c, err := s.CreateCapture(ctx, port.Capture{

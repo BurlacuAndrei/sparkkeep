@@ -1,0 +1,3 @@
+# 0001. Custom Research Playbook Builder & Soft Health Linter
+
+Users need freedom to construct novel research pipelines without being constrained to hardcoded recipe archetypes or rigid schema blocks. We decided to transition the Playbook Manager to an unconstrained dual-pane builder canvas with immutable built-ins and editable clones, governed by a non-blocking 5-Pillar Research Health Linter and a backend Fallback Report Synthesizer. This gives users complete flexibility to craft custom prompts, tool policies, and step sequences while transparently guiding them toward rigorous, hallucination-resistant research methodology.

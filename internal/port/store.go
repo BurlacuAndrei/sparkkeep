@@ -88,6 +88,8 @@ type SettingsStore interface {
 	GetSetting(ctx context.Context, key string) (string, error)
 	SetSetting(ctx context.Context, key, value string) error
 	ListSettings(ctx context.Context) (map[string]string, error)
+	GetCardTypes(ctx context.Context) ([]string, error)
+	SetCardTypes(ctx context.Context, types []string) error
 }
 
 // MetricsStore provides pipeline metric aggregation and inspection.

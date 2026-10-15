@@ -1,4 +1,4 @@
-import { Card, Capture, Tag, DigestData, DigestSynthesisResult, ResearchItem, CardFilter, LLMProfile, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig, ChannelInfo } from './types';
+import { Card, Capture, Tag, DigestData, DigestSynthesisResult, ResearchItem, CardFilter, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig, ChannelInfo, Settings } from './types';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -210,32 +210,13 @@ export async function testWebhook(url: string, secret?: string): Promise<{ ok: b
 
 export async function getSettings(): Promise<{
   ok: boolean;
-  settings: {
-    llm_base?: string;
-    llm_model?: string;
-    has_llm_key: boolean;
-    has_auth_token: boolean;
-    llm_profiles?: LLMProfile[];
-    llm_roles?: Record<string, string>;
-    llm_token_caps?: Record<string, number>;
-    default_playbook_id?: number | null;
-    user_profile?: UserProfile;
-    has_tg_token?: boolean;
-    tg_chat_id?: string;
-    openclaw_url?: string;
-    openclaw_channel?: string;
-    openclaw_target?: string;
-    openclaw_enabled?: boolean;
-    has_openclaw_token?: boolean;
-    discord_channel_id?: string;
-    has_discord_token?: boolean;
-    has_slack_webhook?: boolean;
-  };
+  settings: Settings;
 }> {
   return request('/api/v1/settings');
 }
 
 export async function patchSettings(payload: {
+  card_types?: string[];
   auth_token?: string;
   llm_base?: string;
   llm_key?: string;

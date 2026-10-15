@@ -51,6 +51,14 @@ func (m *memoryStore) ListSettings(_ context.Context) (map[string]string, error)
 	return out, nil
 }
 
+func (m *memoryStore) GetCardTypes(_ context.Context) ([]string, error) {
+	return append([]string(nil), port.DefaultCardTypes...), nil
+}
+
+func (m *memoryStore) SetCardTypes(_ context.Context, _ []string) error {
+	return nil
+}
+
 func TestWebhook_DispatchedByDefault(t *testing.T) {
 	var called atomic.Bool
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

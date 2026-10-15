@@ -3,10 +3,14 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"strings"
 
 	"sparkkeep/internal/port"
 )
+
+var DefaultCardTypes = port.DefaultCardTypes
 
 func (s *Store) GetSetting(ctx context.Context, key string) (string, error) {
 	var val string
@@ -40,4 +44,39 @@ func (s *Store) ListSettings(ctx context.Context) (map[string]string, error) {
 		res[k] = v
 	}
 	return res, rows.Err()
+}
+
+func defaultCardTypes() []string {
+	res := make([]string, len(DefaultCardTypes))
+	copy(res, DefaultCardTypes)
+	return res
+}
+
+func (s *Store) GetCardTypes(ctx context.Context) ([]string, error) {
+	val, err := s.GetSetting(ctx, "card_types")
+	if err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			return defaultCardTypes(), nil
+		}
+		return nil, err
+	}
+	if strings.TrimSpace(val) == "" {
+		return defaultCardTypes(), nil
+	}
+	var types []string
+	if err := json.Unmarshal([]byte(val), &types); err != nil || types == nil {
+		return defaultCardTypes(), nil
+	}
+	return types, nil
+}
+
+func (s *Store) SetCardTypes(ctx context.Context, types []string) error {
+	if types == nil {
+		types = []string{}
+	}
+	data, err := json.Marshal(types)
+	if err != nil {
+		return err
+	}
+	return s.SetSetting(ctx, "card_types", string(data))
 }

@@ -35,8 +35,20 @@ const (
 	CardTypeClaim    = "claim"
 	CardTypeTutorial = "tutorial"
 	CardTypeProduct  = "product"
+	CardTypeCompany  = "company"
+	CardTypePaper    = "paper"
 	CardTypeOther    = "other"
 )
+
+var DefaultCardTypes = []string{
+	CardTypeTool,
+	CardTypeProduct,
+	CardTypeCompany,
+	CardTypeArticle,
+	CardTypeIdea,
+	CardTypeRepo,
+	CardTypePaper,
+}
 
 const (
 	ResearchStateNone    = "none"

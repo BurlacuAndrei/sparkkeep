@@ -1,0 +1,3 @@
+# 0002. Configurable Card Taxonomy and Category-Based Playbook Routing
+
+Users need domain-specific card categorization and automatic research routing without risking classification drift or accumulating dead playbooks from volatile AI tags. We decided to separate Card Taxonomy management into Platform Preferences (allowing users to configure up to 20 macro Card Types with an immutable `other` fallback) and route playbooks strictly by Explicit User Selection → Card Type Default → Platform Default, explicitly rejecting tag-based playbook triggers. This keeps triage classification highly accurate and bounded while ensuring playbook routing remains clean, predictable, and maintainable.

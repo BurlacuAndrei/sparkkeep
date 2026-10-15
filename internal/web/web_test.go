@@ -634,6 +634,39 @@ func (s *stubStore) ListSettings(_ context.Context) (map[string]string, error) {
 	return res, nil
 }
 
+func (s *stubStore) GetCardTypes(_ context.Context) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settings != nil {
+		if val, ok := s.settings["card_types"]; ok && strings.TrimSpace(val) != "" {
+			var types []string
+			if err := json.Unmarshal([]byte(val), &types); err == nil && types != nil {
+				return types, nil
+			}
+		}
+	}
+	res := make([]string, len(port.DefaultCardTypes))
+	copy(res, port.DefaultCardTypes)
+	return res, nil
+}
+
+func (s *stubStore) SetCardTypes(_ context.Context, types []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settings == nil {
+		s.settings = make(map[string]string)
+	}
+	if types == nil {
+		types = []string{}
+	}
+	data, err := json.Marshal(types)
+	if err != nil {
+		return err
+	}
+	s.settings["card_types"] = string(data)
+	return nil
+}
+
 func (s *stubStore) RecoverInterruptedResearch(_ context.Context) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -3061,6 +3094,80 @@ func TestUserProfileSettings_RoundTripAndLengthValidation(t *testing.T) {
 	}
 	if !strings.Contains(rrTooLong.Body.String(), "1,500 characters") {
 		t.Errorf("expected error message to mention '1,500 characters', got: %s", rrTooLong.Body.String())
+	}
+}
+
+func TestCardTypesSettings_RoundTripAndValidation(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, &core.Service{Store: st, Logf: t.Logf})
+
+	// 1. Initial GET /api/v1/settings returns default card_types
+	rrGet := doJSON(t, h, http.MethodGet, "/api/v1/settings", "")
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings failed: %d", rrGet.Code)
+	}
+	var getResp struct {
+		Settings struct {
+			CardTypes []string `json:"card_types"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(rrGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("unmarshal GET settings: %v", err)
+	}
+	expectedDefaults := []string{"tool", "product", "company", "article", "idea", "repo", "paper"}
+	if len(getResp.Settings.CardTypes) != len(expectedDefaults) {
+		t.Fatalf("expected %d default card_types, got %d: %v", len(expectedDefaults), len(getResp.Settings.CardTypes), getResp.Settings.CardTypes)
+	}
+	for i, v := range expectedDefaults {
+		if getResp.Settings.CardTypes[i] != v {
+			t.Errorf("at index %d: expected %q, got %q", i, v, getResp.Settings.CardTypes[i])
+		}
+	}
+
+	// 2. PATCH /api/v1/settings with valid card_types (trim, lowercase, deduplicate, filter 'other')
+	patchBody := `{
+		"card_types": ["  Tool ", "PRODUCT", "tool", "RESEARCH", "  ", "other", "OTHER"]
+	}`
+	rrPatch := doJSON(t, h, http.MethodPatch, "/api/v1/settings", patchBody)
+	if rrPatch.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/v1/settings failed: %d: %s", rrPatch.Code, rrPatch.Body.String())
+	}
+
+	// Verify GET returns cleaned list: ["tool", "product", "research"]
+	rrGet2 := doJSON(t, h, http.MethodGet, "/api/v1/settings", "")
+	if rrGet2.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings failed: %d", rrGet2.Code)
+	}
+	var getResp2 struct {
+		Settings struct {
+			CardTypes []string `json:"card_types"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(rrGet2.Body.Bytes(), &getResp2); err != nil {
+		t.Fatalf("unmarshal GET settings: %v", err)
+	}
+	expectedCleaned := []string{"tool", "product", "research"}
+	if len(getResp2.Settings.CardTypes) != len(expectedCleaned) {
+		t.Fatalf("expected %d card_types, got %d: %v", len(expectedCleaned), len(getResp2.Settings.CardTypes), getResp2.Settings.CardTypes)
+	}
+	for i, v := range expectedCleaned {
+		if getResp2.Settings.CardTypes[i] != v {
+			t.Errorf("at index %d: expected %q, got %q", i, v, getResp2.Settings.CardTypes[i])
+		}
+	}
+
+	// 3. PATCH /api/v1/settings with > 20 entries is rejected (400)
+	var tooMany []string
+	for i := 1; i <= 21; i++ {
+		tooMany = append(tooMany, fmt.Sprintf("type%d", i))
+	}
+	tooManyBytes, _ := json.Marshal(map[string]any{"card_types": tooMany})
+	rrTooMany := doJSON(t, h, http.MethodPatch, "/api/v1/settings", string(tooManyBytes))
+	if rrTooMany.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for > 20 card_types, got %d: %s", rrTooMany.Code, rrTooMany.Body.String())
+	}
+	if !strings.Contains(rrTooMany.Body.String(), "max") && !strings.Contains(rrTooMany.Body.String(), "20") {
+		t.Errorf("expected error message to mention max/20, got: %s", rrTooMany.Body.String())
 	}
 }
 

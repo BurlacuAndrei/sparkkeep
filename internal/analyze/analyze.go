@@ -63,7 +63,64 @@ type Client struct {
 	Model       string
 	VisionModel string
 	MaxTokens   int
+	CardTypes   []string
 	HTTP        *http.Client
+}
+
+type contextKey string
+
+const cardTypesContextKey contextKey = "card_types"
+
+// WithCardTypes stores active card types into context.
+func WithCardTypes(ctx context.Context, types []string) context.Context {
+	return context.WithValue(ctx, cardTypesContextKey, types)
+}
+
+// CardTypesFromContext retrieves active card types from context if present.
+func CardTypesFromContext(ctx context.Context) ([]string, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	val, ok := ctx.Value(cardTypesContextKey).([]string)
+	return val, ok
+}
+
+// CleanCardTypes trims, lowercases, deduplicates, and removes "other".
+func CleanCardTypes(types []string) []string {
+	var cleaned []string
+	seen := make(map[string]bool)
+	for _, t := range types {
+		s := strings.ToLower(strings.TrimSpace(t))
+		if s == "" || s == "other" {
+			continue
+		}
+		if !seen[s] {
+			seen[s] = true
+			cleaned = append(cleaned, s)
+		}
+	}
+	return cleaned
+}
+
+// SystemPrompt returns the triage curator system prompt with active card types injected.
+func SystemPrompt(cardTypes []string) string {
+	cleaned := CleanCardTypes(cardTypes)
+	if len(cleaned) == 0 {
+		return "You are a curator that returns strict JSON."
+	}
+	return fmt.Sprintf("You are a curator that returns strict JSON. 'type' must be one of: %s, other.", strings.Join(cleaned, ", "))
+}
+
+func (c *Client) getActiveTypes(ctx context.Context) []string {
+	if ctx != nil {
+		if types, ok := CardTypesFromContext(ctx); ok && len(types) > 0 {
+			return types
+		}
+	}
+	if len(c.CardTypes) > 0 {
+		return c.CardTypes
+	}
+	return port.DefaultCardTypes
 }
 
 // New returns a client bound to the endpoint/key/model. A non-nil
@@ -74,6 +131,7 @@ func New(cfg config.Config, forceClient *http.Client) *Client {
 		APIKey:    cfg.LLMKey,
 		Model:     cfg.LLMModel,
 		MaxTokens: cfg.MaxAnalyzeTokens,
+		CardTypes: append([]string(nil), port.DefaultCardTypes...),
 		// No client-level response timeout: a local CPU-only Ollama model can
 		// take far longer than any fixed bound, and this service tolerates
 		// waiting. Ask() is bounded by the caller's ctx (research run has a
@@ -241,11 +299,12 @@ func (c *Client) doCompletion(ctx context.Context, body map[string]any) (string,
 // Analyze turns a Fetched payload into an AnalysisResult containing the briefing
 // and idea cards. ErrInvalidResponse if the model answer is invalid or empty.
 func (c *Client) Analyze(ctx context.Context, payload capture.Fetched, profile ...*port.UserProfile) (AnalysisResult, error) {
+	activeTypes := c.getActiveTypes(ctx)
 	content, err := c.doCompletion(ctx, map[string]any{
 		"model": c.Model,
 		"messages": []map[string]any{
-			{"role": "system", "content": "You are a curator that returns strict JSON."},
-			{"role": "user", "content": PromptFor(payload, profile...)},
+			{"role": "system", "content": SystemPrompt(activeTypes)},
+			{"role": "user", "content": PromptForWithTypes(payload, activeTypes, profile...)},
 		},
 		"response_format": map[string]string{"type": "json_object"},
 		"max_tokens":      c.MaxTokens,
@@ -254,7 +313,7 @@ func (c *Client) Analyze(ctx context.Context, payload capture.Fetched, profile .
 	if err != nil {
 		return AnalysisResult{}, err
 	}
-	res, err := ExtractJSON(content)
+	res, err := ExtractJSON(content, activeTypes)
 	if err != nil {
 		return AnalysisResult{}, err
 	}
@@ -303,9 +362,10 @@ func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
 }
 
 // ExtractJSON parses the model's answer into an AnalysisResult. It tolerates
+// ExtractJSON parses the model's answer into an AnalysisResult. It tolerates
 // the new Action Engine briefing schema, legacy idea arrays, and markdown fences.
 // Returns ErrInvalidResponse on any malformed/empty payload.
-func ExtractJSON(s string) (AnalysisResult, error) {
+func ExtractJSON(s string, activeTypes ...[]string) (AnalysisResult, error) {
 	s = stripFences(s)
 	if s == "" {
 		return AnalysisResult{}, ErrInvalidResponse
@@ -360,7 +420,7 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 		if len(res.Cards) == 0 {
 			return AnalysisResult{}, ErrInvalidResponse
 		}
-		res.Cards = normalizeIdeaCards(res.Cards)
+		res.Cards = normalizeIdeaCards(res.Cards, activeTypes...)
 		if err := validateCards(res.Cards); err != nil {
 			return AnalysisResult{}, err
 		}
@@ -380,7 +440,7 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 		if err := json.Unmarshal([]byte(s), &cards); err != nil {
 			return AnalysisResult{}, ErrInvalidResponse
 		}
-		cards = normalizeIdeaCards(cards)
+		cards = normalizeIdeaCards(cards, activeTypes...)
 		if err := validateCards(cards); err != nil {
 			return AnalysisResult{}, err
 		}
@@ -404,14 +464,37 @@ func ExtractJSON(s string) (AnalysisResult, error) {
 	}
 }
 
-func normalizeIdeaCards(cards []Idea) []Idea {
+func normalizeIdeaCards(cards []Idea, activeTypes ...[]string) []Idea {
+	var allowed map[string]bool
+	if len(activeTypes) > 0 && len(activeTypes[0]) > 0 {
+		allowed = make(map[string]bool)
+		for _, t := range CleanCardTypes(activeTypes[0]) {
+			allowed[t] = true
+		}
+	} else {
+		allowed = make(map[string]bool)
+		for _, t := range CleanCardTypes(port.DefaultCardTypes) {
+			allowed[t] = true
+		}
+	}
+	allowed["other"] = true
+
 	for i := range cards {
 		cards[i].Horizon = normalizeHorizon(cards[i].Horizon)
 		if cards[i].Summary == "" && cards[i].TLDR != "" {
 			cards[i].Summary = cards[i].TLDR
 		}
-		if cards[i].Type == "" {
-			cards[i].Type = port.CardTypeIdea
+		rawType := strings.ToLower(strings.TrimSpace(cards[i].Type))
+		if rawType == "" {
+			if allowed[port.CardTypeIdea] {
+				cards[i].Type = port.CardTypeIdea
+			} else {
+				cards[i].Type = port.CardTypeOther
+			}
+		} else if !allowed[rawType] {
+			cards[i].Type = port.CardTypeOther
+		} else {
+			cards[i].Type = rawType
 		}
 		if cards[i].Claims == nil {
 			cards[i].Claims = []string{}
@@ -529,7 +612,15 @@ func stripFences(s string) string {
 // explicitly as extraction warnings so the model qualifies the card instead of
 // treating a login wall or a missing transcript as content. If a non-empty user profile
 // is provided, a compact USER PROFILE block is appended for personal fit tailoring.
+// It references the card types declared in the system prompt without contradictory lists.
 func PromptFor(payload capture.Fetched, profile ...*port.UserProfile) string {
+	return PromptForWithTypes(payload, nil, profile...)
+}
+
+// PromptForWithTypes builds the curator prompt for the Triage Brief with active card types.
+// If activeTypes is provided, the card type schema and rules match those active types.
+// If activeTypes is empty or nil, the prompt references the types declared in the system prompt.
+func PromptForWithTypes(payload capture.Fetched, activeTypes []string, profile ...*port.UserProfile) string {
 	notes := "(none)"
 	if len(payload.Notes) > 0 {
 		notes = strings.Join(payload.Notes, "; ")
@@ -542,6 +633,16 @@ func PromptFor(payload capture.Fetched, profile ...*port.UserProfile) string {
 	if strings.TrimSpace(digest) == "" {
 		digest = "(none)"
 	}
+
+	typeSchema := "allowed card type"
+	typeRule := `- "type" must be one of the card types declared in the system prompt (or "other").`
+	cleaned := CleanCardTypes(activeTypes)
+	if len(cleaned) > 0 {
+		all := append(cleaned, "other")
+		typeSchema = strings.Join(all, "|")
+		typeRule = fmt.Sprintf(`- "type" must be one of: %s.`, strings.Join(all, ", "))
+	}
+
 	base := fmt.Sprintf(`You receive captured content of kind %q. You are the Sparkkeep Action Engine curator.
 Analyze the source and produce a Triage Brief for each distinct idea, tool, or takeaway.
 Return ONLY a valid JSON object matching this schema:
@@ -549,7 +650,7 @@ Return ONLY a valid JSON object matching this schema:
   "cards": [
     {
       "title": "short headline",
-      "type": "tool|repo|article|idea|claim|tutorial|product|other",
+      "type": "%s",
       "tldr": "1 sentence summarizing what this is",
       "why_care": "1-2 sentences on why it matters or is worth investigating",
       "horizon": "short-term|medium-term|long-term",
@@ -579,7 +680,7 @@ Return ONLY a valid JSON object matching this schema:
 
 Rules:
 - Each card MUST have distinct, specific "tldr" and "why_care" reflecting that individual idea (no generic shared text).
-- "type" must be one of: tool, repo, article, idea, claim, tutorial, product, collection, other.
+%s
 - "horizon" must be "short-term" (actionable now/soon), "medium-term" (planned), or "long-term" (vision).
 - "claims": up to 3 core claims or assertions made by the source.
 - "open_questions": up to 3 key questions research would need to answer.
@@ -602,6 +703,8 @@ TRANSCRIPT: %s
 IMAGE READING: %s
 EXTRACTION NOTES: %s`,
 		payload.Kind,
+		typeSchema,
+		typeRule,
 		clip(payload.Title, 300), clip(payload.Description, 600),
 		clip(payload.Text, 4000), clip(payload.Caption, 2000),
 		clip(transcript, 6000), clip(digest, 2000), notes)

@@ -45,9 +45,12 @@ export type SettingsTab =
   | 'integrations'
   | 'security';
 
+const DEFAULT_CARD_TYPES = ['tool', 'product', 'company', 'article', 'idea', 'repo', 'paper'];
+
 interface SettingsBaseline {
   cardDensity: 'comfortable' | 'compact';
   reduceMotion: 'default' | 'reduced';
+  cardTypes: string[];
   profileGoals: string;
   profileSkills: string;
   profileStack: string;
@@ -60,6 +63,10 @@ interface SettingsBaseline {
 export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const bodyRef = React.useRef<HTMLDivElement>(null);
+
+  // Card Taxonomy state
+  const [cardTypes, setCardTypes] = useState<string[]>(DEFAULT_CARD_TYPES);
+  const [newCardTypeInput, setNewCardTypeInput] = useState('');
 
   // AI & Profiles state
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
@@ -193,6 +200,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
 
         setHasSlackWebhook(Boolean(res.settings.has_slack_webhook));
 
+        const loadedCardTypes = res.settings.card_types && res.settings.card_types.length > 0
+          ? res.settings.card_types
+          : DEFAULT_CARD_TYPES;
+        setCardTypes(loadedCardTypes);
+
         // Establish clean baseline for dirty tracking
         const savedDensity =
           typeof window !== 'undefined'
@@ -206,6 +218,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
         setBaseline({
           cardDensity: savedDensity,
           reduceMotion: savedMotion,
+          cardTypes: loadedCardTypes,
           profileGoals: loadedGoals,
           profileSkills: loadedSkills,
           profileStack: loadedStack,
@@ -232,6 +245,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     if (slackWebhookUrl.trim().length > 0) return true;
     if (cardDensity !== baseline.cardDensity) return true;
     if (reduceMotion !== baseline.reduceMotion) return true;
+    if (JSON.stringify(cardTypes) !== JSON.stringify(baseline.cardTypes)) return true;
     if (profileGoals !== baseline.profileGoals) return true;
     if (profileSkills !== baseline.profileSkills) return true;
     if (profileStack !== baseline.profileStack) return true;
@@ -249,6 +263,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
     slackWebhookUrl,
     cardDensity,
     reduceMotion,
+    cardTypes,
     profileGoals,
     profileSkills,
     profileStack,
@@ -309,10 +324,11 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
         }
       }
 
-      // Save user profile
+      // Save card taxonomy and user profile
       const lang = profileLanguage.trim();
       const finalLang = lang === 'Same as source / English' || lang === 'Custom' ? '' : lang;
       await api.patchSettings({
+        card_types: cardTypes,
         user_profile: {
           goals: profileGoals.trim(),
           skills: parseTags(profileSkills),
@@ -340,6 +356,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
       setBaseline({
         cardDensity,
         reduceMotion,
+        cardTypes,
         profileGoals,
         profileSkills,
         profileStack,
@@ -355,6 +372,26 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
       setError(api.getErrorMessage(err));
       setSubmitting(false);
     }
+  };
+
+  const handleAddCardType = () => {
+    const trimmed = newCardTypeInput.trim().toLowerCase();
+    if (!trimmed) return;
+    if (trimmed === 'other') {
+      setError('"other" is already an immutable fallback card type.');
+      return;
+    }
+    if (cardTypes.includes(trimmed)) {
+      setError(`Card type "${trimmed}" already exists.`);
+      return;
+    }
+    if (cardTypes.length >= 20) {
+      setError('Maximum of 20 active card types reached.');
+      return;
+    }
+    setError(null);
+    setCardTypes([...cardTypes, trimmed]);
+    setNewCardTypeInput('');
   };
 
   return createPortal(
@@ -611,6 +648,131 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                           <option value="default">Full Glassmorphism</option>
                           <option value="reduced">Reduced Blur & Motion</option>
                         </select>
+                      </div>
+                    </div>
+
+                    <div className="settings-section">
+                      <div className="settings-section-header">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+                          <div>
+                            <span className="settings-section-title">Card Taxonomy</span>
+                            <span className="settings-section-desc">
+                              Configure up to 20 macro Card Types for triage ingestion and category routing. "other" is an immutable fallback.
+                            </span>
+                          </div>
+                          <span
+                            className="settings-counter-badge"
+                            style={{
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              color: cardTypes.length >= 20 ? 'var(--accent-amber, #eab308)' : 'var(--text-muted)',
+                              background: 'var(--bg-surface)',
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--border-subtle)',
+                            }}
+                          >
+                            {cardTypes.length} / 20 active types
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Active Card Type Chips */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+                        {cardTypes.map((type) => (
+                          <div
+                            key={type}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border-subtle)',
+                              borderRadius: '6px',
+                              padding: '4px 10px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              color: 'var(--text-main)',
+                            }}
+                          >
+                            <span>{type}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setError(null);
+                                setCardTypes(cardTypes.filter((t) => t !== type));
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--text-muted)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '2px',
+                                borderRadius: '4px',
+                                marginLeft: '2px',
+                              }}
+                              aria-label={`Remove ${type}`}
+                              title={`Remove ${type}`}
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ))}
+                        {/* Immutable Fallback Chip */}
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            border: '1px dashed var(--border-subtle)',
+                            borderRadius: '6px',
+                            padding: '4px 10px',
+                            fontSize: '12px',
+                            color: 'var(--text-dim)',
+                          }}
+                          title="Immutable fallback"
+                        >
+                          <span>other</span>
+                          <span style={{ fontSize: '10px', opacity: 0.6 }}>(fallback)</span>
+                        </div>
+                      </div>
+
+                      {/* Add Card Type Input Form */}
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          className="setup-input"
+                          style={{ maxWidth: '260px' }}
+                          placeholder="Add card type..."
+                          value={newCardTypeInput}
+                          onChange={(e) => setNewCardTypeInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCardType();
+                            }
+                          }}
+                          disabled={cardTypes.length >= 20}
+                          aria-label="New card type"
+                        />
+                        <button
+                          type="button"
+                          className="setup-btn-secondary"
+                          style={{ padding: '8px 14px' }}
+                          onClick={handleAddCardType}
+                          disabled={
+                            cardTypes.length >= 20 ||
+                            !newCardTypeInput.trim() ||
+                            cardTypes.includes(newCardTypeInput.trim().toLowerCase()) ||
+                            newCardTypeInput.trim().toLowerCase() === 'other'
+                          }
+                        >
+                          Add Type
+                        </button>
                       </div>
                     </div>
                   </div>

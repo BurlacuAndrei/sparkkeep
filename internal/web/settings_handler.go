@@ -372,9 +372,15 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 	slackBotToken, _ := a.store.GetSetting(ctx, "slack_bot_token")
 	slackChanID, _ := a.store.GetSetting(ctx, "slack_channel_id")
 
+	cardTypes, err := a.store.GetCardTypes(ctx)
+	if err != nil || cardTypes == nil {
+		cardTypes = append([]string(nil), port.DefaultCardTypes...)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
+			"card_types":             cardTypes,
 			"llm_base":               activeBase,
 			"llm_model":              activeModel,
 			"has_llm_key":            hasKey,
@@ -404,6 +410,7 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var b struct {
+		CardTypes         *[]string          `json:"card_types,omitempty"`
 		AuthToken         *string            `json:"auth_token,omitempty"`
 		LLMBase           *string            `json:"llm_base,omitempty"`
 		LLMKey            *string            `json:"llm_key,omitempty"`
@@ -431,6 +438,36 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
 		return
+	}
+
+	if b.CardTypes != nil {
+		if len(*b.CardTypes) > 20 {
+			writeErr(w, http.StatusBadRequest, "card_types exceeds maximum limit of 20")
+			return
+		}
+		var cleaned []string
+		seen := make(map[string]bool)
+		for _, ct := range *b.CardTypes {
+			t := strings.ToLower(strings.TrimSpace(ct))
+			if t == "" || t == "other" {
+				continue
+			}
+			if !seen[t] {
+				seen[t] = true
+				cleaned = append(cleaned, t)
+			}
+		}
+		if len(cleaned) > 20 {
+			writeErr(w, http.StatusBadRequest, "card_types exceeds maximum limit of 20")
+			return
+		}
+		if cleaned == nil {
+			cleaned = []string{}
+		}
+		if err := a.store.SetCardTypes(ctx, cleaned); err != nil {
+			a.fail(w, err)
+			return
+		}
 	}
 
 	if b.UserProfile != nil {

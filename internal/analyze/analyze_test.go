@@ -830,3 +830,170 @@ func TestPromptForWithProfileGoldenAndLanguage(t *testing.T) {
 		t.Errorf("language-only prompt should not have empty user profile block")
 	}
 }
+
+func TestCardTaxonomy_SystemPrompt(t *testing.T) {
+	// 1. With active card types
+	active := []string{"tool", "repo", "paper"}
+	sp := SystemPrompt(active)
+	expected := "You are a curator that returns strict JSON. 'type' must be one of: tool, repo, paper, other."
+	if sp != expected {
+		t.Fatalf("expected %q, got %q", expected, sp)
+	}
+
+	// 2. With default card types
+	spDef := SystemPrompt(port.DefaultCardTypes)
+	expectedDef := "You are a curator that returns strict JSON. 'type' must be one of: tool, product, company, article, idea, repo, paper, other."
+	if spDef != expectedDef {
+		t.Fatalf("expected %q, got %q", expectedDef, spDef)
+	}
+
+	// 3. With empty or only 'other'
+	spEmpty := SystemPrompt([]string{})
+	if spEmpty != "You are a curator that returns strict JSON." {
+		t.Fatalf("expected fallback for empty types, got %q", spEmpty)
+	}
+
+	spOtherOnly := SystemPrompt([]string{"other", "  "})
+	if spOtherOnly != "You are a curator that returns strict JSON." {
+		t.Fatalf("expected fallback for other-only, got %q", spOtherOnly)
+	}
+}
+
+func TestCardTaxonomy_ExtractJSONNormalizesUnlistedTypes(t *testing.T) {
+	jsonPayload := `{
+		"cards": [
+			{"title": "Card 1", "type": "tool", "tldr": "Tool card", "why_care": "Care", "horizon": "short-term"},
+			{"title": "Card 2", "type": "repo", "tldr": "Repo card", "why_care": "Care", "horizon": "short-term"},
+			{"title": "Card 3", "type": "unlisted_thing", "tldr": "Unlisted card", "why_care": "Care", "horizon": "short-term"},
+			{"title": "Card 4", "type": "other", "tldr": "Other card", "why_care": "Care", "horizon": "short-term"},
+			{"title": "Card 5", "type": "ARTICLE", "tldr": "Article uppercase", "why_care": "Care", "horizon": "short-term"}
+		]
+	}`
+
+	// Active types: tool, repo, article
+	active := []string{"tool", "repo", "article"}
+	res, err := ExtractJSON(jsonPayload, active)
+	if err != nil {
+		t.Fatalf("ExtractJSON failed: %v", err)
+	}
+	if len(res.Cards) != 5 {
+		t.Fatalf("expected 5 cards, got %d", len(res.Cards))
+	}
+	if res.Cards[0].Type != "tool" {
+		t.Errorf("card 0 expected 'tool', got %q", res.Cards[0].Type)
+	}
+	if res.Cards[1].Type != "repo" {
+		t.Errorf("card 1 expected 'repo', got %q", res.Cards[1].Type)
+	}
+	// unlisted_thing normalized to "other"
+	if res.Cards[2].Type != "other" {
+		t.Errorf("card 2 expected 'other', got %q", res.Cards[2].Type)
+	}
+	// other remains "other"
+	if res.Cards[3].Type != "other" {
+		t.Errorf("card 3 expected 'other', got %q", res.Cards[3].Type)
+	}
+	// ARTICLE lowercased to "article"
+	if res.Cards[4].Type != "article" {
+		t.Errorf("card 4 expected 'article', got %q", res.Cards[4].Type)
+	}
+}
+
+func TestCardTaxonomy_AnalyzeInjectsSystemPromptAndNormalizes(t *testing.T) {
+	var capturedSystemPrompt, capturedUserPrompt string
+	st := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		for _, m := range req.Messages {
+			if m.Role == "system" {
+				capturedSystemPrompt = m.Content
+			}
+			if m.Role == "user" {
+				capturedUserPrompt = m.Content
+			}
+		}
+
+		resp := `{
+			"cards": [
+				{"title": "Active Tool", "type": "tool", "tldr": "A great tool", "why_care": "Good", "horizon": "short-term"},
+				{"title": "Unlisted Item", "type": "video", "tldr": "A video link", "why_care": "Watch", "horizon": "short-term"}
+			]
+		}`
+		chatResp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": resp}},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(chatResp)
+	}))
+	defer st.Close()
+
+	client := New(config.Config{LLMBase: st.URL, LLMModel: "test-model"}, st.Client())
+	ctx := WithCardTypes(context.Background(), []string{"tool", "product"})
+
+	res, err := client.Analyze(ctx, capture.Fetched{Title: "Test Link"})
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	expectedSystemPrompt := "You are a curator that returns strict JSON. 'type' must be one of: tool, product, other."
+	if capturedSystemPrompt != expectedSystemPrompt {
+		t.Fatalf("expected captured system prompt %q, got %q", expectedSystemPrompt, capturedSystemPrompt)
+	}
+	if !strings.Contains(capturedUserPrompt, `"type": "tool|product|other"`) {
+		t.Fatalf("expected user prompt to contain active types schema: %s", capturedUserPrompt)
+	}
+	if !strings.Contains(capturedUserPrompt, `"type" must be one of: tool, product, other.`) {
+		t.Fatalf("expected user prompt to contain active types rule: %s", capturedUserPrompt)
+	}
+
+	if len(res.Cards) != 2 {
+		t.Fatalf("expected 2 cards, got %d", len(res.Cards))
+	}
+	if res.Cards[0].Type != "tool" {
+		t.Errorf("card 0 expected 'tool', got %q", res.Cards[0].Type)
+	}
+	if res.Cards[1].Type != "other" {
+		t.Errorf("card 1 unlisted type 'video' expected to be normalized to 'other', got %q", res.Cards[1].Type)
+	}
+}
+
+func TestCardTaxonomy_PromptForWithTypes(t *testing.T) {
+	fixture := capture.Fetched{Title: "Sample Title"}
+
+	// 1. PromptFor without types references the system prompt without contradictory lists
+	basePrompt := PromptFor(fixture)
+	if !strings.Contains(basePrompt, `"type": "allowed card type"`) {
+		t.Errorf("PromptFor schema missing 'allowed card type': %s", basePrompt)
+	}
+	if !strings.Contains(basePrompt, `"type" must be one of the card types declared in the system prompt (or "other").`) {
+		t.Errorf("PromptFor rule missing system prompt reference: %s", basePrompt)
+	}
+	// Verify legacy contradictory hardcoded types are absent
+	if strings.Contains(basePrompt, "tool|repo|article|idea|claim") {
+		t.Errorf("PromptFor contains legacy hardcoded schema types: %s", basePrompt)
+	}
+	if strings.Contains(basePrompt, "must be one of: tool, repo, article, idea, claim") {
+		t.Errorf("PromptFor contains legacy hardcoded rule types: %s", basePrompt)
+	}
+
+	// 2. PromptForWithTypes with custom active types formats them cleanly
+	customPrompt := PromptForWithTypes(fixture, []string{"repo", "paper"})
+	if !strings.Contains(customPrompt, `"type": "repo|paper|other"`) {
+		t.Errorf("PromptForWithTypes schema missing custom types: %s", customPrompt)
+	}
+	if !strings.Contains(customPrompt, `"type" must be one of: repo, paper, other.`) {
+		t.Errorf("PromptForWithTypes rule missing custom types: %s", customPrompt)
+	}
+
+	// 3. PromptForWithTypes with nil matches PromptFor exactly
+	nilPrompt := PromptForWithTypes(fixture, nil)
+	if nilPrompt != basePrompt {
+		t.Errorf("PromptForWithTypes(fixture, nil) did not match PromptFor(fixture)")
+	}
+}

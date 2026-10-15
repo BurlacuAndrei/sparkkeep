@@ -180,3 +180,89 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('Card Taxonomy Management in Platform Preferences', () => {
+  const mockOnClose = vi.fn();
+  const mockShowToast = vi.fn();
+
+  const renderWithTheme = (ui: React.ReactElement) => {
+    return render(<ThemeProvider defaultTheme="dark">{ui}</ThemeProvider>);
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('renders the Card Taxonomy section with pre-seeded 7 default types and active count', async () => {
+    renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Card Taxonomy')).toBeDefined();
+      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+    });
+
+    for (const t of ['tool', 'product', 'company', 'article', 'idea', 'repo', 'paper']) {
+      expect(screen.getByText(t)).toBeDefined();
+    }
+    // Immutable fallback chip
+    expect(screen.getByText('(fallback)')).toBeDefined();
+  });
+
+  it('allows adding a new card type and updates active count', async () => {
+    renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+    });
+
+    const input = screen.getByLabelText('New card type');
+    fireEvent.change(input, { target: { value: 'framework' } });
+
+    const addBtn = screen.getByRole('button', { name: /Add Type/i });
+    expect(addBtn.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(addBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('8 / 20 active types')).toBeDefined();
+      expect(screen.getByText('framework')).toBeDefined();
+    });
+  });
+
+  it('allows removing a card type and updates active count', async () => {
+    renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+    });
+
+    const removePaperBtn = screen.getByLabelText('Remove paper');
+    fireEvent.click(removePaperBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('6 / 20 active types')).toBeDefined();
+      expect(screen.queryByText('paper')).toBeNull();
+    });
+  });
+
+  it('prevents adding duplicate card types or "other"', async () => {
+    renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+    });
+
+    const input = screen.getByLabelText('New card type');
+    const addBtn = screen.getByRole('button', { name: /Add Type/i });
+
+    // Try adding "tool" (already exists)
+    fireEvent.change(input, { target: { value: 'tool' } });
+    expect(addBtn.hasAttribute('disabled')).toBe(true);
+
+    // Try adding "other"
+    fireEvent.change(input, { target: { value: 'other' } });
+    expect(addBtn.hasAttribute('disabled')).toBe(true);
+  });
+});
+

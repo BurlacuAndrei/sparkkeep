@@ -5,7 +5,7 @@ Return ONLY a valid JSON object matching this schema:
   "cards": [
     {
       "title": "short headline",
-      "type": "tool|repo|article|idea|claim|tutorial|product|other",
+      "type": "allowed card type",
       "tldr": "1 sentence summarizing what this is",
       "why_care": "1-2 sentences on why it matters or is worth investigating",
       "horizon": "short-term|medium-term|long-term",
@@ -35,7 +35,7 @@ Return ONLY a valid JSON object matching this schema:
 
 Rules:
 - Each card MUST have distinct, specific "tldr" and "why_care" reflecting that individual idea (no generic shared text).
-- "type" must be one of: tool, repo, article, idea, claim, tutorial, product, collection, other.
+- "type" must be one of the card types declared in the system prompt (or "other").
 - "horizon" must be "short-term" (actionable now/soon), "medium-term" (planned), or "long-term" (vision).
 - "claims": up to 3 core claims or assertions made by the source.
 - "open_questions": up to 3 key questions research would need to answer.
