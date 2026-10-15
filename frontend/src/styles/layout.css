@@ -826,3 +826,87 @@
     border-bottom: 1px solid var(--border-subtle);
   }
 }
+
+/* Collapsible Tag Sidebar */
+.main-layout {
+  position: relative;
+  transition: grid-template-columns 0.2s ease;
+}
+
+.main-layout.sidebar-collapsed {
+  grid-template-columns: 0px 1fr;
+}
+
+.sidebar-collapse-container {
+  position: relative;
+  display: flex;
+  transition: width 0.2s ease;
+}
+
+.main-layout.sidebar-collapsed .sidebar-collapse-container {
+  overflow: visible;
+}
+
+/* Vertical Toggle Tab when collapsed */
+.sidebar-vertical-tab {
+  position: absolute;
+  left: 0;
+  top: 20px;
+  background: var(--bg-surface, #161a24);
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.1));
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim, #9ca3af);
+  cursor: pointer;
+  z-index: 30;
+  box-shadow: 4px 0 12px rgba(0,0,0,0.2);
+  transition: all 0.15s ease;
+}
+
+.sidebar-vertical-tab:hover {
+  background: var(--bg-surface-elevated, #1a202d);
+  color: var(--text-main, #f3f4f6);
+  border-color: var(--border-highlight, #6366f159);
+}
+
+.sidebar-vertical-tab.has-active-tag {
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.sidebar-vertical-tab .tag-glyph {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sidebar-vertical-tab .tag-label {
+  writing-mode: vertical-rl;
+  font-size: 9.5px;
+  letter-spacing: 1.5px;
+  font-weight: 600;
+}
+
+/* Collapse button inside sidebar header */
+.sidebar-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+}
