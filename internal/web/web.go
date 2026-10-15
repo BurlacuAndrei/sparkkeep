@@ -51,6 +51,10 @@ const (
 	// loginFailWindow are rejected with 429 until the window passes.
 	loginMaxFailures = 5
 	loginFailWindow  = 15 * time.Minute
+	// loginSweepThreshold caps the failed-login map: once it holds this many
+	// entries, expired ones are evicted before a new one is added so a flood of
+	// distinct source IPs cannot grow it without bound.
+	loginSweepThreshold = 1024
 )
 
 // loginFail tracks failed verify attempts for one client IP.
@@ -261,7 +265,9 @@ func (a *api) newSession() (string, error) {
 }
 
 // secureCookie reports whether the auth cookie should carry the Secure flag:
-// only when the request is served over TLS or a trusted proxy terminates it.
+// when the request is served over TLS, or when X-Forwarded-Proto says so. The
+// header is trusted unconditionally — strip it at the edge when not behind a
+// TLS-terminating proxy.
 func secureCookie(r *http.Request) bool {
 	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
@@ -287,7 +293,8 @@ func (a *api) loginAllowed(ip string) bool {
 }
 
 // recordLoginFailure counts a failed verify attempt, starting a fresh window
-// after the previous one elapsed.
+// after the previous one elapsed. Once the map is large it evicts expired
+// entries so a flood of distinct source IPs cannot grow it without bound.
 func (a *api) recordLoginFailure(ip string) {
 	a.loginMu.Lock()
 	defer a.loginMu.Unlock()
@@ -295,6 +302,13 @@ func (a *api) recordLoginFailure(ip string) {
 		a.loginFails = map[string]loginFail{}
 	}
 	now := time.Now()
+	if len(a.loginFails) >= loginSweepThreshold {
+		for k, v := range a.loginFails {
+			if now.After(v.resetAt) {
+				delete(a.loginFails, k)
+			}
+		}
+	}
 	f := a.loginFails[ip]
 	if f.resetAt.IsZero() || now.After(f.resetAt) {
 		f = loginFail{resetAt: now.Add(loginFailWindow)}

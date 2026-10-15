@@ -1879,6 +1879,31 @@ func TestVerifyThrottle(t *testing.T) {
 	}
 }
 
+// TestLoginFailMapSwept proves the failed-login map evicts expired entries once
+// it grows past loginSweepThreshold, so a flood of distinct source IPs cannot
+// grow it without bound.
+func TestLoginFailMapSwept(t *testing.T) {
+	a := &api{loginFails: map[string]loginFail{}}
+	past := time.Now().Add(-time.Minute)
+	live := time.Now().Add(time.Hour)
+	for i := 0; i < loginSweepThreshold; i++ {
+		a.loginFails[fmt.Sprintf("stale-%d", i)] = loginFail{count: 1, resetAt: past}
+	}
+	a.loginFails["stale-0"] = loginFail{count: 1, resetAt: live} // one still-valid entry
+
+	a.recordLoginFailure("fresh")
+
+	if got := len(a.loginFails); got != 2 {
+		t.Fatalf("map size after sweep = %d, want 2 (expired evicted, live + fresh kept)", got)
+	}
+	if _, ok := a.loginFails["stale-0"]; !ok {
+		t.Error("unexpired entry evicted, want kept")
+	}
+	if f, ok := a.loginFails["fresh"]; !ok || f.count != 1 {
+		t.Errorf("fresh entry = %+v (present=%v), want count 1", f, ok)
+	}
+}
+
 // TestSessionExpiry proves an expired session token is treated as absent, is
 // swept from the map, and that an unexpired one still authorizes.
 func TestSessionExpiry(t *testing.T) {
