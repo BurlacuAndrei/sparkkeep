@@ -326,7 +326,7 @@ function AppContent() {
           }}
         />
 
-      <div className={`main-layout ${viewMode === 'digest' ? 'no-sidebar' : ''} ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <div className={`main-layout ${viewMode === 'digest' ? 'no-sidebar' : ''} ${isSidebarCollapsed && viewMode !== 'digest' ? 'sidebar-collapsed' : ''}`}>
         {viewMode !== 'digest' && (
           <Sidebar
             selectedTag={selectedTag}
