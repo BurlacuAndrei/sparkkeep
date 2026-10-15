@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -33,6 +35,7 @@ func printUsage() {
 	fmt.Println("  sparkkeep auth status              Show current authentication protection state")
 	fmt.Println("  sparkkeep auth set-passphrase <p>  Set or update master passphrase (hashed with bcrypt)")
 	fmt.Println("  sparkkeep auth generate-token      Generate a new static API token for integrations")
+	fmt.Println("  sparkkeep backup [output-file]     Snapshot the SQLite database (VACUUM INTO)")
 	fmt.Println()
 }
 
@@ -99,6 +102,33 @@ func handleAuthCommand(args []string) {
 	}
 }
 
+func handleBackup(args []string) {
+	dbPath := config.DBPath()
+	out := ""
+	if len(args) > 0 {
+		out = args[0]
+	}
+	if out == "" {
+		out = filepath.Join(filepath.Dir(dbPath), "backups",
+			"sparkkeep-"+time.Now().UTC().Format("20060102-150405")+".db")
+	}
+	if _, err := os.Stat(out); err == nil {
+		log.Fatalf("backup: %s already exists; refusing to overwrite", out)
+	}
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		log.Fatalf("backup: %v", err)
+	}
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		log.Fatalf("backup: open %s: %v", dbPath, err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`VACUUM INTO ?`, out); err != nil {
+		log.Fatalf("backup: %v", err)
+	}
+	fmt.Printf("✓ Backed up %s to %s\n", dbPath, out)
+}
+
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -110,6 +140,9 @@ func main() {
 			return
 		case "auth":
 			handleAuthCommand(os.Args[2:])
+			return
+		case "backup":
+			handleBackup(os.Args[2:])
 			return
 		case "server":
 			// run daemon below

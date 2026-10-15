@@ -303,6 +303,14 @@ While all settings can be adjusted on the fly in the **Settings Modal**, you can
 | `SPARKKEEP_SEARCH_URL` | `https://searx.be` | SearXNG instance for deep research |
 | `SPARKKEEP_HEADLESS_ENABLED` | `true` | Headless Chromium rendering toggle |
 
+### 💾 Backup & Restore
+
+`sparkkeep backup [output-file]` writes a consistent single-file snapshot of the SQLite database using `VACUUM INTO`, safe to run while the daemon is live (WAL mode). Without an argument it writes `<dbdir>/backups/sparkkeep-<UTC YYYYMMDD-HHMMSS>.db`.
+
+This snapshots the SQLite database only. Uploaded media lives in `SPARKKEEP_UPLOAD_DIR` (default `<dbdir>/uploads`), a separate directory to copy alongside the backup.
+
+To restore: stop the daemon, copy the backup file over the path in `SPARKKEEP_DB`, then start the daemon again.
+
 ---
 
 ## 🏛️ Technology Stack

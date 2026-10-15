@@ -27,16 +27,27 @@ func migrate(db *sql.DB) error {
 	}
 	sort.Strings(files)
 
+	versions := make([]int, len(files))
+	highest := 0
+	for i, file := range files {
+		if _, err := fmt.Sscanf(file, "migrations/%d", &versions[i]); err != nil {
+			return fmt.Errorf("store: parse migration filename %s: %w", file, err)
+		}
+		if versions[i] > highest {
+			highest = versions[i]
+		}
+	}
+
 	var current int
 	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_version`).Scan(&current); err != nil {
 		return err
 	}
+	if current > highest {
+		return fmt.Errorf("store: database schema v%d is newer than this binary v%d; upgrade the binary", current, highest)
+	}
 
-	for _, file := range files {
-		var version int
-		if _, err := fmt.Sscanf(file, "migrations/%d", &version); err != nil {
-			return fmt.Errorf("store: parse migration filename %s: %w", file, err)
-		}
+	for i, file := range files {
+		version := versions[i]
 		if version <= current {
 			continue
 		}
