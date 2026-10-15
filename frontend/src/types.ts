@@ -309,15 +309,6 @@ export interface SetupPayload {
   llm_model?: string;
 }
 
-export interface LicenseStatus {
-  tier: 'community' | string;
-  email?: string;
-  features: string[];
-  expires_at?: number;
-  is_lifetime: boolean;
-  is_valid: boolean;
-}
-
 export interface LLMProfile {
   id: string;
   name: string;

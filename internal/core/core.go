@@ -65,7 +65,6 @@ type Service struct {
 	UploadMaxAgeDays  int                 // 0 disables age-based cleanup
 	UploadMaxSizeMB   int                 // 0 disables size-based cleanup
 	FFmpegBin         string              // "" disables video audio extraction
-	License           *license.Manager    // offline Tier/capability manager
 	Webhook           *webhook.Dispatcher // outbound webhook dispatcher
 	Logf              func(format string, args ...any)
 	WG                sync.WaitGroup
@@ -93,13 +92,6 @@ func (s *Service) now() time.Time {
 func (s *Service) clientFor(role string) *analyze.Client {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	ctx := s.ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
-		role = ""
-	}
 	if s.Router != nil {
 		if c := s.Router.For(role); c != nil {
 			return c
@@ -156,8 +148,6 @@ func (s *Service) GoResearch(ctx context.Context, cardID int64, playbookID ...*i
 // New constructs a Service with the default capture adapter, an analyze
 // client and research runner for cfg, and logf (default log.Printf).
 func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format string, args ...any)) *Service {
-	licMgr := license.NewManager(st)
-
 	base := cfg.LLMBase
 	key := cfg.LLMKey
 	model := cfg.LLMModel
@@ -228,8 +218,7 @@ func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format
 		UploadMaxAgeDays:  cfg.UploadMaxAgeDays,
 		UploadMaxSizeMB:   cfg.UploadMaxSizeMB,
 		FFmpegBin:         ffmpegBin(cfg),
-		License:           licMgr,
-		Webhook:           webhook.NewDispatcher(st, licMgr, logf),
+		Webhook:           webhook.NewDispatcher(st, logf),
 		Logf:              logf,
 		QueueConcurrency:  1,
 		QueuePollInterval: 1 * time.Second,
@@ -327,12 +316,7 @@ func (s *Service) RebuildRouter(ctx context.Context) error {
 		httpCl = s.Analyze.HTTP
 	}
 
-	// Pro gating: if not Pro (FeatureDeepResearchV2 capability missing), ignore role mappings
-	// and route all roles to the default profile.
-	if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
-		roles = nil
-	}
-
+	// Role mappings always apply: role routing is a core capability.
 	newRouter := analyze.NewRouter(analyze.RouterConfig{
 		Profiles:   profiles,
 		Roles:      roles,
@@ -366,29 +350,10 @@ func (s *Service) SetRouter(router *analyze.Router) {
 	}
 }
 
-// HasCapability checks whether a feature is permitted under the active license.
-// In 100% Permissive Open Source mode, all capabilities are permitted by default.
-func (s *Service) HasCapability(ctx context.Context, feature string) bool {
-	if s.License == nil {
-		return true
-	}
-	return s.License.HasCapability(ctx, feature)
-}
-
-// LicenseStatus returns the current active tier, expiry, and features.
+// LicenseStatus returns the community/MIT status: every capability is
+// included and always on.
 func (s *Service) LicenseStatus(ctx context.Context) license.LicenseStatus {
-	if s.License == nil {
-		return license.LicenseStatus{Tier: license.TierCommunity, IsValid: true}
-	}
-	return s.License.Status(ctx)
-}
-
-// ActivateLicense attempts to verify and activate a license key.
-func (s *Service) ActivateLicense(ctx context.Context, key string) (*license.LicenseStatus, error) {
-	if s.License == nil {
-		return nil, errors.New("license manager not initialized")
-	}
-	return s.License.Activate(ctx, key)
+	return license.Status()
 }
 
 // ffmpegBin returns a usable ffmpeg path or "" when it is not installed.
@@ -706,22 +671,6 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 	} else if active {
 		return port.ErrResearchActive
 	}
-	if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
-		var reqPB *port.Playbook
-		if len(playbookID) > 0 && playbookID[0] != nil {
-			if pb, err := s.Store.GetPlaybook(ctx, *playbookID[0]); err == nil {
-				reqPB = &pb
-			}
-		}
-		if reqPB != nil {
-			if !reqPB.IsBuiltin {
-				return errors.New("custom playbooks require deep research capability")
-			}
-			if reqPB.ID != 1 && reqPB.ID != 2 && !strings.EqualFold(reqPB.Name, "Default") && !strings.EqualFold(reqPB.Name, "Claim check only") {
-				return errors.New("this playbook requires deep research capability")
-			}
-		}
-	}
 	row, err := s.Store.CreateResearch(ctx, cardID, "", playbookID...)
 	if err != nil {
 		return err
@@ -740,25 +689,10 @@ func (s *Service) executeResearch(ctx context.Context, row port.Research, card p
 	runner := *s.Runner
 	runner.Store = s.Store
 	if s.Router != nil {
-		if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
-			runner.PlanLLM = s.Analyze
-			runner.SynthesisLLM = s.Analyze
-		} else {
-			runner.PlanLLM = s.Router.For(analyze.RoleResearchPlan)
-			runner.SynthesisLLM = s.Router.For(analyze.RoleResearchSynthesis)
-		}
+		runner.PlanLLM = s.Router.For(analyze.RoleResearchPlan)
+		runner.SynthesisLLM = s.Router.For(analyze.RoleResearchSynthesis)
 	}
-	var findings string
-	var err error
-	if !s.HasCapability(ctx, license.FeatureDeepResearchV2) {
-		runPB := research.DefaultLitePlaybook()
-		if row.PlaybookSnapshot != nil && (row.PlaybookSnapshot.ID == 2 || strings.EqualFold(row.PlaybookSnapshot.Name, "Claim check only")) {
-			runPB = *row.PlaybookSnapshot
-		}
-		findings, err = runner.RunWithPlaybook(ctx, card, row.ID, runPB)
-	} else {
-		findings, err = runner.RunWithID(ctx, card, row.ID)
-	}
+	findings, err := runner.RunWithID(ctx, card, row.ID)
 	if err != nil {
 		row, rerr := s.Store.SetResearch(ctx, row.ID, "failed", "", err.Error())
 		if rerr != nil {

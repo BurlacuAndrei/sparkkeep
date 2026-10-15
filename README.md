@@ -345,4 +345,4 @@ We welcome community contributions, bug reports, and suggestions!
 
 Sparkkeep is open-source software licensed under the [MIT License](LICENSE).
 
-All core capture, multi-channel messaging, triage, LLM analysis, and kanban workflows are 100% free and open-source. For our architectural and licensing review, please refer to our internal [System Architecture](docs/design.md).
+All features are included: capture, multi-channel messaging, triage, LLM analysis, kanban workflows, research playbooks, Obsidian sync, and webhooks are 100% free and open-source. There are no paid tiers, no license keys, and no gated capabilities. For our architectural review, please refer to our internal [System Architecture](docs/design.md).

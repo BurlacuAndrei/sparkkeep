@@ -192,18 +192,6 @@ export async function submitSetup(payload: { auth_token?: string; llm_base?: str
   return data;
 }
 
-export async function fetchLicenseStatus(): Promise<{ ok: boolean; status: import('./types').LicenseStatus }> {
-  return request<{ ok: boolean; status: import('./types').LicenseStatus }>('/api/v1/license/status');
-}
-
-export async function activateLicense(key: string): Promise<{ ok: boolean; status: import('./types').LicenseStatus }> {
-  return request<{ ok: boolean; status: import('./types').LicenseStatus }>('/api/v1/license/activate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key }),
-  });
-}
-
 export async function syncObsidian(vaultPath?: string): Promise<{ ok: boolean; written: number; vault_path: string }> {
   return request<{ ok: boolean; written: number; vault_path: string }>('/api/v1/export/obsidian', {
     method: 'POST',

@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
 )
 
@@ -32,30 +31,24 @@ type Payload struct {
 }
 
 type Dispatcher struct {
-	store   port.SettingsStore
-	license *license.Manager
-	client  *http.Client
-	logf    func(format string, args ...any)
+	store  port.SettingsStore
+	client *http.Client
+	logf   func(format string, args ...any)
 }
 
-func NewDispatcher(store port.SettingsStore, lic *license.Manager, logf func(format string, args ...any)) *Dispatcher {
+func NewDispatcher(store port.SettingsStore, logf func(format string, args ...any)) *Dispatcher {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
 	return &Dispatcher{
-		store:   store,
-		license: lic,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		logf:    logf,
+		store:  store,
+		client: &http.Client{Timeout: 10 * time.Second},
+		logf:   logf,
 	}
 }
 
-// Dispatch triggers an asynchronous outbound HTTP POST if a webhook URL is configured and webhook capability is active.
+// Dispatch triggers an asynchronous outbound HTTP POST if a webhook URL is configured.
 func (d *Dispatcher) Dispatch(ctx context.Context, event EventType, data any) {
-	if d.license != nil && !d.license.HasCapability(ctx, license.FeatureWebhooks) {
-		return
-	}
-
 	if d.store == nil {
 		return
 	}

@@ -19,7 +19,6 @@ import (
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
-	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
 )
 
@@ -157,7 +156,6 @@ func TestCoreRouterPerRoleEndpoints(t *testing.T) {
 	_ = st.SetSetting(ctx, "llm_roles", string(rolesJSON))
 
 	svc := New(ctx, st, config.Config{SearchURL: searchSrv.URL}, t.Logf)
-	svc.License = license.NewManager(st)
 	svc.Fetcher = stubTestFetcher{}
 	// Use test http client so httptest servers work
 	svc.Router = analyze.NewRouter(analyze.RouterConfig{
@@ -258,7 +256,6 @@ func TestCoreRouterDeletionFallback(t *testing.T) {
 	_ = st.SetSetting(ctx, "llm_roles", string(rolesJSON))
 
 	svc := New(ctx, st, config.Config{SearchURL: searchSrv.URL}, t.Logf)
-	svc.License = license.NewManager(st)
 	svc.Fetcher = stubTestFetcher{}
 	svc.Router = analyze.NewRouter(analyze.RouterConfig{
 		Profiles:   []analyze.Profile{profA},
@@ -339,7 +336,6 @@ func TestCoreRouterSettingsChangeTakesEffectWithoutRestart(t *testing.T) {
 	_ = st.SetSetting(ctx, "llm_profiles", string(profsJSON))
 
 	svc := New(ctx, st, config.Config{SearchURL: searchSrv.URL}, t.Logf)
-	svc.License = license.NewManager(st)
 	svc.Fetcher = stubTestFetcher{}
 	// Initially no role mapping -> synthesis goes to server A
 	svc.Router = analyze.NewRouter(analyze.RouterConfig{
@@ -488,7 +484,6 @@ func TestCaptureTriageBriefDistinctCards(t *testing.T) {
 	ctx := context.Background()
 
 	svc := New(ctx, st, config.Config{}, t.Logf)
-	svc.License = license.NewManager(st)
 	svc.Fetcher = stubTestFetcher{}
 	svc.Router = analyze.NewRouter(analyze.RouterConfig{
 		Profiles: []analyze.Profile{

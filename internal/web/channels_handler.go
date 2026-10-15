@@ -13,17 +13,12 @@ import (
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/channel/discord"
 	"sparkkeep/internal/channel/openclaw"
-	"sparkkeep/internal/license"
 	"sparkkeep/internal/obsidian"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/webhook"
 )
 
 func (a *api) syncObsidian(w http.ResponseWriter, r *http.Request) {
-	if a.svc == nil || !a.svc.HasCapability(r.Context(), license.FeatureObsidianSync) {
-		writeErr(w, http.StatusPaymentRequired, "feature not enabled")
-		return
-	}
 	var b struct {
 		VaultPath string `json:"vault_path"`
 	}
@@ -56,8 +51,8 @@ func (a *api) syncObsidian(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) testWebhook(w http.ResponseWriter, r *http.Request) {
-	if a.svc == nil || a.svc.Webhook == nil || !a.svc.HasCapability(r.Context(), license.FeatureWebhooks) {
-		writeErr(w, http.StatusPaymentRequired, "webhooks not enabled")
+	if a.svc == nil || a.svc.Webhook == nil {
+		writeErr(w, http.StatusServiceUnavailable, "webhook dispatcher not available")
 		return
 	}
 	var b struct {

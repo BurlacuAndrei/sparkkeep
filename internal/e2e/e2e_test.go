@@ -22,7 +22,6 @@ import (
 	"sparkkeep/internal/channel/telegram"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
-	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
 	"sparkkeep/internal/store"
@@ -128,8 +127,7 @@ func newE2EHarness(t *testing.T, llmResponseJSON string) *harness {
 			LLM:          ac,
 			Timeout:      5 * time.Second,
 		},
-		Logf:    t.Logf,
-		License: license.NewManager(st),
+		Logf: t.Logf,
 	}
 
 	// 5. Telegram Adapter

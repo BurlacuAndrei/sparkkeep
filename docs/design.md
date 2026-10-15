@@ -63,7 +63,7 @@ internal/analyze/            OpenAI-compatible LLM client, prompt templates, mod
 internal/research/           playbook step execution engine, search, synthesizer, reporter
 internal/obsidian/           local Obsidian note export and synchronization
 internal/webhook/            outbound HMAC-signed webhook dispatcher
-internal/license/            license capability manager & status provider
+internal/license/            MIT status provider (all features; no gating)
 internal/store/              modular SQLite repository, migrations runner, FTS5 sync triggers
 internal/web/                domain HTTP handlers, auth middleware, embedded static file server
 frontend/                    React 19 + TypeScript + Vite SPA, CSS design tokens, Vitest harness

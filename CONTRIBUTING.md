@@ -41,7 +41,7 @@ Sparkkeep is built as a single-binary, self-hosted web app with an embedded Reac
 
 1. **Zero External DB Dependencies:** All persistence uses local SQLite with embedded SQL migrations (`internal/store/migrations`).
 2. **Single Binary:** Production releases embed the Vite frontend bundle (`internal/web/dist`) directly into the Go binary using `//go:embed`.
-3. **Fail-Open Core:** The open-source core provides complete capture, AI analysis, horizon routing, search, and kanban triage without any paywall. Pro capabilities (like Obsidian sync and outbound webhooks) are gated via local Ed25519 signature checks.
+3. **Fail-Open Core, No Gating:** Every capability — capture, AI analysis, horizon routing, search, kanban triage, research playbooks, Obsidian sync, and outbound webhooks — is always on. There is no paywall, license key, or capability flag; nothing may be made conditional on a tier.
 
 ## 🧪 Code Quality & CI
 

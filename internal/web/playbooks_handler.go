@@ -3,7 +3,6 @@ package web
 import (
 	"net/http"
 
-	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
 )
@@ -35,14 +34,6 @@ func (a *api) getPlaybook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) createPlaybook(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Custom playbooks require deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	var pb port.Playbook
 	if err := decodeJSON(w, r, &pb); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -57,14 +48,6 @@ func (a *api) createPlaybook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) updatePlaybook(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Custom playbooks require deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	id, ok := pathID(r)
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "bad playbook id")
@@ -98,14 +81,6 @@ func (a *api) deletePlaybook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) duplicatePlaybook(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Custom playbooks require deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	id, ok := pathID(r)
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "bad playbook id")

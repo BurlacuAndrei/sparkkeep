@@ -2,8 +2,6 @@ package webhook
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
 )
 
@@ -65,18 +62,17 @@ func TestWebhook_DispatchedByDefault(t *testing.T) {
 	store := newMemoryStore()
 	store.SetSetting(context.Background(), "webhook_url", ts.URL)
 
-	licMgr := license.NewManager(store)
-	d := NewDispatcher(store, licMgr, t.Logf)
+	d := NewDispatcher(store, t.Logf)
 
 	d.Dispatch(context.Background(), EventCardCreated, map[string]string{"title": "Test"})
 	time.Sleep(50 * time.Millisecond)
 
 	if !called.Load() {
-		t.Fatalf("webhook should be dispatched by default under MIT open source")
+		t.Fatalf("webhook should be dispatched when a webhook_url is configured")
 	}
 }
 
-func TestWebhook_DispatchedForPro(t *testing.T) {
+func TestWebhook_DeliveryAndSignature(t *testing.T) {
 	var receivedPayload Payload
 	var receivedSignature string
 	delivered := make(chan struct{}, 1)
@@ -96,21 +92,9 @@ func TestWebhook_DispatchedForPro(t *testing.T) {
 	store.SetSetting(context.Background(), "webhook_url", ts.URL)
 	store.SetSetting(context.Background(), "webhook_secret", secret)
 
-	licMgr := license.NewManager(store)
-	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	licMgr.SetPublicKeyForTest(pub)
+	d := NewDispatcher(store, t.Logf)
 
-	// Activate Pro with webhooks capability
-	key, _ := license.SignLicense(priv, license.LicensePayload{
-		Email:    "user@example.com",
-		Tier:     license.TierCommunity,
-		Features: []string{license.FeatureWebhooks},
-	})
-	_, _ = licMgr.Activate(context.Background(), key)
-
-	d := NewDispatcher(store, licMgr, t.Logf)
-
-	d.Dispatch(context.Background(), EventCardCreated, map[string]string{"title": "My Pro Card"})
+	d.Dispatch(context.Background(), EventCardCreated, map[string]string{"title": "My Card"})
 
 	select {
 	case <-delivered:

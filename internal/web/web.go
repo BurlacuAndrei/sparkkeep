@@ -137,7 +137,6 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("PATCH /api/v1/settings", a.patchSettings)
 	mux.HandleFunc("PUT /api/v1/settings", a.patchSettings)
 	mux.HandleFunc("GET /api/v1/license/status", a.getLicenseStatus)
-	mux.HandleFunc("POST /api/v1/license/activate", a.activateLicense)
 	mux.HandleFunc("POST /api/v1/export/obsidian", a.syncObsidian)
 	mux.HandleFunc("POST /api/v1/webhooks/test", a.testWebhook)
 	return a.authMiddleware(mux)

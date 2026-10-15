@@ -705,29 +705,8 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) getLicenseStatus(w http.ResponseWriter, r *http.Request) {
 	if a.svc == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": license.LicenseStatus{Tier: license.TierCommunity, IsValid: true}})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": license.Status()})
 		return
 	}
-	status := a.svc.LicenseStatus(r.Context())
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": status})
-}
-
-func (a *api) activateLicense(w http.ResponseWriter, r *http.Request) {
-	if a.svc == nil {
-		writeErr(w, http.StatusInternalServerError, "service not initialized")
-		return
-	}
-	var b struct {
-		Key string `json:"key"`
-	}
-	if err := decodeJSON(w, r, &b); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
-		return
-	}
-	status, err := a.svc.ActivateLicense(r.Context(), b.Key)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": status})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": a.svc.LicenseStatus(r.Context())})
 }

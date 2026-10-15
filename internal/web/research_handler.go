@@ -8,9 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
-	"sparkkeep/internal/research"
 )
 
 // researchReport renders a single research row as a readable page for the
@@ -181,40 +179,10 @@ func (a *api) triggerResearch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "research already running")
 		return
 	}
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		if b.PlaybookID != nil {
-			reqPB, err := a.store.GetPlaybook(r.Context(), *b.PlaybookID)
-			if err != nil {
-				a.fail(w, err)
-				return
-			}
-			if !reqPB.IsBuiltin {
-				writeJSON(w, http.StatusForbidden, map[string]any{
-					"ok":      false,
-					"error":   "Custom playbooks require deep research capability",
-					"feature": license.FeatureDeepResearchV2,
-				})
-				return
-			}
-			if reqPB.ID != 1 && reqPB.ID != 2 && !strings.EqualFold(reqPB.Name, "Default") && !strings.EqualFold(reqPB.Name, "Claim check only") {
-				writeJSON(w, http.StatusForbidden, map[string]any{
-					"ok":      false,
-					"error":   "This playbook requires deep research capability",
-					"feature": license.FeatureDeepResearchV2,
-				})
-				return
-			}
-		}
-	}
 	pb, err := a.store.ResolvePlaybook(r.Context(), b.CardID, b.PlaybookID)
 	if err != nil {
 		a.fail(w, err)
 		return
-	}
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		if pb.ID != 2 && !strings.EqualFold(pb.Name, "Claim check only") {
-			pb = research.DefaultLitePlaybook()
-		}
 	}
 	a.svc.GoResearch(context.WithoutCancel(r.Context()), b.CardID, &pb.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -302,14 +270,6 @@ type batchResearchReq struct {
 }
 
 func (a *api) batchQueueResearch(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Batch research requires deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	var req batchResearchReq
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -330,14 +290,6 @@ func (a *api) batchQueueResearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) listResearchRules(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Scheduled research rules require deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	rules, err := a.svc.GetResearchRules(r.Context())
 	if err != nil {
 		a.fail(w, err)
@@ -347,14 +299,6 @@ func (a *api) listResearchRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) createResearchRule(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Scheduled research rules require deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	var rule port.ResearchRule
 	if err := decodeJSON(w, r, &rule); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -378,14 +322,6 @@ func (a *api) createResearchRule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) updateResearchRule(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Scheduled research rules require deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	id := r.PathValue("id")
 	if id == "" {
 		writeErr(w, http.StatusBadRequest, "rule id is required")
@@ -405,14 +341,6 @@ func (a *api) updateResearchRule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) deleteResearchRule(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Scheduled research rules require deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	id := r.PathValue("id")
 	if id == "" {
 		writeErr(w, http.StatusBadRequest, "rule id is required")
@@ -426,14 +354,6 @@ func (a *api) deleteResearchRule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) runResearchRule(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Scheduled research rules require deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	id := r.PathValue("id")
 	rules, err := a.svc.GetResearchRules(r.Context())
 	if err != nil {
@@ -460,14 +380,6 @@ func (a *api) runResearchRule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) getQuietWindow(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Quiet window requires deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	enabled, start, end, err := a.svc.GetQuietWindow(r.Context())
 	if err != nil {
 		a.fail(w, err)
@@ -482,14 +394,6 @@ func (a *api) getQuietWindow(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) setQuietWindow(w http.ResponseWriter, r *http.Request) {
-	if !a.svc.HasCapability(r.Context(), license.FeatureDeepResearchV2) {
-		writeJSON(w, http.StatusForbidden, map[string]any{
-			"ok":      false,
-			"error":   "Quiet window requires deep research capability",
-			"feature": license.FeatureDeepResearchV2,
-		})
-		return
-	}
 	var b struct {
 		Enabled bool   `json:"enabled"`
 		Start   string `json:"start"`
