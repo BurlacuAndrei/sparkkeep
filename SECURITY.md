@@ -13,3 +13,15 @@ Instead, please send an email to the repository owner or submit a private securi
 - Any proposed remediation or patches if available.
 
 We will acknowledge receipt within 48 hours and work with you on a patch and responsible disclosure timeline.
+
+## Deployment Hardening
+
+Sparkkeep is a single-user app. The supported security model is a single shared
+passphrase served over TLS behind a reverse proxy:
+
+- Set `SPARKKEEP_AUTH_TOKEN` (or a master passphrase during first-run setup)
+  before exposing the port. An unset credential leaves the dashboard and API
+  open to anyone who can reach the port.
+- Terminate TLS at a reverse proxy and never expose the app port directly to the
+  internet.
+- Keep the database, `SPARKKEEP_UPLOAD_DIR`, and cookie state on trusted storage.
