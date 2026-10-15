@@ -16,9 +16,19 @@ import (
 	"sparkkeep/internal/port"
 )
 
+// setAuthCookie writes the session cookie, marking it Secure when the request
+// arrives over TLS (directly or via a TLS-terminating proxy).
+func setAuthCookie(w http.ResponseWriter, r *http.Request, session string) {
+	http.SetCookie(w, &http.Cookie{
+		Name: authCookie, Value: session, Path: "/",
+		HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		MaxAge: int(sessionTTL / time.Second), Secure: secureCookie(r),
+	})
+}
+
 // verifyToken exchanges a token for the long-lived cookie the browser then
 // sends on every request. It stays public because the token travels in the
-// body, not a header.
+// body, not a header. Repeated failures from one IP are throttled (429).
 func (a *api) verifyToken(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Token string `json:"token"`
@@ -27,24 +37,27 @@ func (a *api) verifyToken(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
 		return
 	}
+	ip := clientIP(r)
+	if !a.loginAllowed(ip) {
+		writeErr(w, http.StatusTooManyRequests, "too many attempts")
+		return
+	}
 	tok := b.Token
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		tok = strings.TrimPrefix(h, "Bearer ")
 	}
 	if !a.validateToken(r.Context(), tok) {
+		a.recordLoginFailure(ip)
 		writeErr(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
-	session, err := newSessionToken()
+	a.clearLoginFailures(ip)
+	session, err := a.newSession()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "session error")
 		return
 	}
-	a.sessions.Store(session, true)
-	http.SetCookie(w, &http.Cookie{
-		Name: authCookie, Value: session, Path: "/",
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
-	})
+	setAuthCookie(w, r, session)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -175,12 +188,8 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 	// never the ephemeral session, which clients must not persist.
 	effectiveTok := a.authToken
 	if effectiveTok != "" || a.hasAuth(ctx) {
-		if session, err := newSessionToken(); err == nil {
-			a.sessions.Store(session, true)
-			http.SetCookie(w, &http.Cookie{
-				Name: authCookie, Value: session, Path: "/",
-				HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 31536000,
-			})
+		if session, err := a.newSession(); err == nil {
+			setAuthCookie(w, r, session)
 		}
 	}
 

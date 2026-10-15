@@ -1799,11 +1799,15 @@ func TestAuthMiddleware(t *testing.T) {
 	}{
 		{"bearer", "secret123", "", "/api/v1/cards"},
 		{"cookie", "", "secret123", "/api/v1/cards"},
-		{"query", "secret123", "", "/api/v1/cards?token=secret123"},
 	} {
 		if rr := do(http.MethodGet, tc.path, tc.bear, tc.cooke); rr.Code != http.StatusOK {
 			t.Errorf("%s: status = %d, want 200", tc.name, rr.Code)
 		}
+	}
+
+	// A token in the query string is no longer accepted (leak vector).
+	if rr := do(http.MethodGet, "/api/v1/cards?token=secret123", "", ""); rr.Code != http.StatusUnauthorized {
+		t.Errorf("query token: status = %d, want 401", rr.Code)
 	}
 
 	// A verified token is exchanged for the cookie.
@@ -1823,8 +1827,9 @@ func TestAuthMiddleware(t *testing.T) {
 	if cookies[0].Name != "sparkkeep_auth" {
 		t.Fatalf("cookie name = %q, want sparkkeep_auth", cookies[0].Name)
 	}
-	if cookies[0].Path != "/" || cookies[0].MaxAge != 31536000 || cookies[0].SameSite != http.SameSiteLaxMode || !cookies[0].HttpOnly {
-		t.Errorf("cookie attrs = %+v, want Path=/ Max-Age=31536000 SameSite=Lax HttpOnly", cookies[0])
+	wantMaxAge := int(sessionTTL / time.Second)
+	if cookies[0].Path != "/" || cookies[0].MaxAge != wantMaxAge || cookies[0].SameSite != http.SameSiteLaxMode || !cookies[0].HttpOnly {
+		t.Errorf("cookie attrs = %+v, want Path=/ Max-Age=%d SameSite=Lax HttpOnly", cookies[0], wantMaxAge)
 	}
 	// That session token authorizes later private requests.
 	if rr := do(http.MethodGet, "/api/v1/cards", "", cookies[0].Value); rr.Code != http.StatusOK {
@@ -1838,6 +1843,103 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 	if cs := rr.Result().Cookies(); len(cs) != 0 {
 		t.Errorf("verify bad token set cookies: %+v", cs)
+	}
+}
+
+// TestVerifyThrottle covers the failed-login limiter: after loginMaxFailures
+// consecutive failures from one IP the verify endpoint returns 429, and a
+// successful verify clears the counter.
+func TestVerifyThrottle(t *testing.T) {
+	st := newStubStore()
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25, AuthToken: "correct"})
+
+	bad := func() int {
+		return doJSON(t, h, http.MethodPost, "/api/v1/auth/verify", `{"token":"wrong"}`).Code
+	}
+
+	// Failures below the limit stay 401 (count starts reset after each check).
+	for i := 0; i < loginMaxFailures-1; i++ {
+		if code := bad(); code != http.StatusUnauthorized {
+			t.Fatalf("failure %d: status = %d, want 401", i+1, code)
+		}
+	}
+	// A successful verify clears the counter before reaching the limit.
+	if code := doJSON(t, h, http.MethodPost, "/api/v1/auth/verify", `{"token":"correct"}`).Code; code != http.StatusOK {
+		t.Fatalf("successful verify: status = %d, want 200", code)
+	}
+	// The counter is fresh again: the limit takes loginMaxFailures more failures.
+	for i := 0; i < loginMaxFailures; i++ {
+		if code := bad(); code != http.StatusUnauthorized {
+			t.Fatalf("after clear, failure %d: status = %d, want 401", i+1, code)
+		}
+	}
+	// The next attempt is throttled even with the correct token.
+	if code := doJSON(t, h, http.MethodPost, "/api/v1/auth/verify", `{"token":"correct"}`).Code; code != http.StatusTooManyRequests {
+		t.Fatalf("throttled verify: status = %d, want 429", code)
+	}
+}
+
+// TestSessionExpiry proves an expired session token is treated as absent, is
+// swept from the map, and that an unexpired one still authorizes.
+func TestSessionExpiry(t *testing.T) {
+	a := &api{authToken: "correct"}
+	ctx := context.Background()
+
+	a.sessions.Store("expired", time.Now().Add(-time.Minute))
+	if a.validateToken(ctx, "expired") {
+		t.Fatal("expired session authorized, want rejected")
+	}
+	if _, ok := a.sessions.Load("expired"); ok {
+		t.Fatal("expired session not swept from the map")
+	}
+
+	a.sessions.Store("live", time.Now().Add(time.Hour))
+	if !a.validateToken(ctx, "live") {
+		t.Fatal("unexpired session rejected, want authorized")
+	}
+}
+
+// TestVerifyCookieSecure proves the auth cookie sets Secure behind a
+// TLS-terminating proxy and omits it on plain HTTP.
+func TestVerifyCookieSecure(t *testing.T) {
+	st := newStubStore()
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25, AuthToken: "correct"})
+
+	verify := func(proto string) *http.Cookie {
+		r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", strings.NewReader(`{"token":"correct"}`))
+		r.Header.Set("Content-Type", "application/json")
+		if proto != "" {
+			r.Header.Set("X-Forwarded-Proto", proto)
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, r)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("verify (%s): status = %d, want 200", proto, rr.Code)
+		}
+		cs := rr.Result().Cookies()
+		if len(cs) != 1 {
+			t.Fatalf("verify (%s): cookies = %+v, want one", proto, cs)
+		}
+		return cs[0]
+	}
+
+	if c := verify("https"); !c.Secure {
+		t.Errorf("X-Forwarded-Proto https: cookie Secure = false, want true")
+	}
+	if c := verify(""); c.Secure {
+		t.Errorf("plain HTTP: cookie Secure = true, want false")
+	}
+}
+
+// TestAuthQueryTokenRejected confirms a request carrying only ?token=<valid> no
+// longer authorizes, closing the token-in-URL leak.
+func TestAuthQueryTokenRejected(t *testing.T) {
+	st := newStubStore()
+	h := New(st, &core.Service{Logf: t.Logf}, config.Config{MaxUploadMB: 25, AuthToken: "secret123"})
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/cards?token=secret123", "")
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("query token: status = %d, want 401", rr.Code)
 	}
 }
 
