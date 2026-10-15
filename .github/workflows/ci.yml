@@ -39,6 +39,13 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Run Frontend Tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Check Embedded Bundle Is Up To Date
+        run: git diff --exit-code -- internal/web/dist
+
       - name: Check Go Formatting
         run: |
           if [ -n "$(gofmt -l .)" ]; then
@@ -52,3 +59,6 @@ jobs:
 
       - name: Run Go Unit & Integration Tests
         run: go test -v -race -count=1 ./...
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

@@ -12,7 +12,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /src/internal/web/dist ./internal/web/dist
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/sparkkeep ./cmd/sparkkeep
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o /out/sparkkeep ./cmd/sparkkeep
 
 FROM alpine:3.20
 # chromium + font-noto-cjk exist only for the headless browser (~400MB of the
