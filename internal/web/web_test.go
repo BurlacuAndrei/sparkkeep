@@ -1859,22 +1859,28 @@ func TestAuthMiddleware_WebhookIngressAndMethodSafeValidation(t *testing.T) {
 	svc := &core.Service{Store: st, Logf: t.Logf}
 	h := New(st, svc, cfg)
 
-	// a) Discord interaction and OpenClaw webhook are allowed through auth middleware without Bearer token.
+	// a) Discord interaction and OpenClaw webhook are allowed through auth middleware
+	// without the app Bearer token. Discord has no configured adapter here, so the
+	// handler itself answers 503; the OpenClaw handler authenticates the hook token.
 	rDC := httptest.NewRequest(http.MethodPost, "/api/v1/channels/discord/interactions", strings.NewReader(`{"type": 1}`))
 	rDC.Header.Set("Content-Type", "application/json")
 	rrDC := httptest.NewRecorder()
 	h.ServeHTTP(rrDC, rDC)
-	if rrDC.Code != http.StatusOK {
-		t.Fatalf("Discord interaction without Bearer token: status = %d, want 200 (body %s)", rrDC.Code, rrDC.Body.String())
+	if rrDC.Code != http.StatusServiceUnavailable {
+		t.Fatalf("Discord interaction without Bearer token: status = %d, want 503 (body %s)", rrDC.Code, rrDC.Body.String())
 	}
 
+	if err := st.SetSetting(context.Background(), "openclaw_token", "hook-secret"); err != nil {
+		t.Fatalf("set openclaw token: %v", err)
+	}
 	ocPayload := `{"channel":"whatsapp","sender":"+1555123","text":"/short 1"}`
 	rOC := httptest.NewRequest(http.MethodPost, "/api/v1/channels/openclaw/webhook", strings.NewReader(ocPayload))
 	rOC.Header.Set("Content-Type", "application/json")
+	rOC.Header.Set("Authorization", "Bearer hook-secret")
 	rrOC := httptest.NewRecorder()
 	h.ServeHTTP(rrOC, rOC)
 	if rrOC.Code != http.StatusOK {
-		t.Fatalf("OpenClaw webhook without Bearer token: status = %d, want 200 (body %s)", rrOC.Code, rrOC.Body.String())
+		t.Fatalf("OpenClaw webhook without app Bearer token: status = %d, want 200 (body %s)", rrOC.Code, rrOC.Body.String())
 	}
 
 	// b) POST /api/v1/research/{id}/feedback with Accept: text/html is rejected with 401 when no token is provided.
@@ -3323,18 +3329,18 @@ func TestChannelEndpoints(t *testing.T) {
 		t.Fatalf("expected 4 channels, got %d", len(resp.Channels))
 	}
 
-	// 2. OpenClaw Webhook
+	// 2. OpenClaw Webhook without a configured hook token fails closed.
 	ocPayload := `{"channel":"whatsapp","sender":"+1555123","text":"/short 1"}`
 	rrOC := doJSON(t, h, http.MethodPost, "/api/v1/channels/openclaw/webhook", ocPayload)
-	if rrOC.Code != http.StatusOK {
-		t.Fatalf("POST /api/v1/channels/openclaw/webhook: expected 200, got %d: %s", rrOC.Code, rrOC.Body.String())
+	if rrOC.Code != http.StatusUnauthorized {
+		t.Fatalf("POST /api/v1/channels/openclaw/webhook: expected 401, got %d: %s", rrOC.Code, rrOC.Body.String())
 	}
 
-	// 3. Discord Interactions ping
+	// 3. Discord Interactions with no configured adapter has nothing to authenticate against.
 	dcPing := `{"type": 1}`
 	rrDC := doJSON(t, h, http.MethodPost, "/api/v1/channels/discord/interactions", dcPing)
-	if rrDC.Code != http.StatusOK {
-		t.Fatalf("POST /api/v1/channels/discord/interactions: expected 200, got %d", rrDC.Code)
+	if rrDC.Code != http.StatusServiceUnavailable {
+		t.Fatalf("POST /api/v1/channels/discord/interactions: expected 503, got %d", rrDC.Code)
 	}
 
 	// 4. Test channel notification
@@ -3349,6 +3355,17 @@ func TestChannelEndpoints(t *testing.T) {
 	rrDigest := doJSON(t, h, http.MethodPost, "/api/v1/digest/push?channel=telegram", "")
 	if rrDigest.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/digest/push: expected 200, got %d: %s", rrDigest.Code, rrDigest.Body.String())
+	}
+}
+
+func TestDiscordInteractionsRequiresConfiguredAdapter(t *testing.T) {
+	st := newStubStore()
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/channels/discord/interactions", `{"type":1}`)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 Service Unavailable, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 

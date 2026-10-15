@@ -273,17 +273,19 @@ func (a *Adapter) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify Bearer token if configured
-	if a.HookToken != "" {
-		auth := r.Header.Get("Authorization")
-		token := strings.TrimPrefix(auth, "Bearer ")
-		if token == "" {
-			token = r.URL.Query().Get("token")
-		}
-		if token != a.HookToken {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
+	// Fail closed: with no token configured nothing can be authenticated.
+	if a.HookToken == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	auth := r.Header.Get("Authorization")
+	token := strings.TrimPrefix(auth, "Bearer ")
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+	if token != a.HookToken {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
 
 	var p InboundWebhookPayload

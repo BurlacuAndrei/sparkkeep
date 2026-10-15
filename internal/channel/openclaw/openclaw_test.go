@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"sparkkeep/internal/capture"
 	"sparkkeep/internal/port"
 )
 
@@ -22,6 +23,16 @@ func (m *mockStore) UpdateCard(ctx context.Context, id int64, patch port.CardPat
 	m.updatedID = id
 	m.updatedPatch = patch
 	return port.Card{ID: id}, nil
+}
+
+type mockService struct {
+	Service
+	captured bool
+}
+
+func (m *mockService) CaptureShare(_ context.Context, _ capture.Share) ([]int64, error) {
+	m.captured = true
+	return []int64{7}, nil
 }
 
 func TestOpenClawNotify(t *testing.T) {
@@ -113,5 +124,44 @@ func TestOpenClawUnauthorizedWebhook(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 Unauthorized, got %d", rec.Code)
+	}
+}
+
+func TestOpenClawWebhookFailsClosedWithoutToken(t *testing.T) {
+	svc := &mockService{}
+	adapter := New(Config{}, svc, nil, "", nil)
+
+	payload := InboundWebhookPayload{Channel: "whatsapp", Text: "https://example.com"}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/openclaw/webhook", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	adapter.HandleWebhook(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got %d", rec.Code)
+	}
+	if svc.captured {
+		t.Errorf("expected no capture when no token is configured")
+	}
+}
+
+func TestOpenClawWebhookAcceptsConfiguredToken(t *testing.T) {
+	svc := &mockService{}
+	adapter := New(Config{HookToken: "tok"}, svc, nil, "", nil)
+
+	payload := InboundWebhookPayload{Channel: "whatsapp", Text: "https://example.com"}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/openclaw/webhook", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer tok")
+	rec := httptest.NewRecorder()
+
+	adapter.HandleWebhook(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !svc.captured {
+		t.Errorf("expected capture with configured token")
 	}
 }

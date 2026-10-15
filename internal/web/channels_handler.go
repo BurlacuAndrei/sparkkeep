@@ -550,8 +550,8 @@ func (a *api) discordInteractions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	dc := discord.New(discord.Config{}, a.svc, a.store, "", nil)
-	dc.HandleInteraction(w, r)
+	// No configured adapter means there is no public key to authenticate against.
+	writeErr(w, http.StatusServiceUnavailable, "discord channel not configured")
 }
 
 func (a *api) discordCapture(w http.ResponseWriter, r *http.Request) {

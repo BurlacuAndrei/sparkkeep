@@ -3,6 +3,9 @@ package discord
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -79,9 +82,19 @@ func TestDiscordNotify(t *testing.T) {
 	}
 }
 
+func signRequest(t *testing.T, priv ed25519.PrivateKey, timestamp string, body []byte) (string, string) {
+	t.Helper()
+	sig := ed25519.Sign(priv, append([]byte(timestamp), body...))
+	return hex.EncodeToString(sig), timestamp
+}
+
 func TestDiscordHandleInteraction(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
 	st := &mockStore{}
-	adapter := New(Config{}, nil, st, "", nil)
+	adapter := New(Config{PublicKey: hex.EncodeToString(pub)}, nil, st, "", nil)
 
 	// Interaction Type 3 (Button Click)
 	interaction := DiscordInteraction{
@@ -90,7 +103,10 @@ func TestDiscordHandleInteraction(t *testing.T) {
 	interaction.Data.CustomID = "card:42:commit:short-term"
 	body, _ := json.Marshal(interaction)
 
+	sig, ts := signRequest(t, priv, "1700000000", body)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/discord/interactions", bytes.NewReader(body))
+	req.Header.Set("X-Signature-Ed25519", sig)
+	req.Header.Set("X-Signature-Timestamp", ts)
 	rec := httptest.NewRecorder()
 
 	adapter.HandleInteraction(rec, req)
@@ -103,5 +119,51 @@ func TestDiscordHandleInteraction(t *testing.T) {
 	}
 	if st.updatedPatch.Horizon == nil || *st.updatedPatch.Horizon != port.HorizonShortTerm {
 		t.Errorf("expected horizon short-term, got %+v", st.updatedPatch.Horizon)
+	}
+}
+
+func TestDiscordHandleInteractionRejectsInvalidSignature(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	ping := []byte(`{"type":1}`)
+	validSig := hex.EncodeToString(ed25519.Sign(priv, append([]byte("1700000000"), ping...)))
+
+	cases := []struct {
+		name string
+		key  string
+		sig  string
+		ts   string
+		body []byte
+	}{
+		{"unsigned ping", hex.EncodeToString(pub), "", "1700000000", ping},
+		{"wrong signature", hex.EncodeToString(pub), hex.EncodeToString(ed25519.Sign(priv, []byte("other"))), "1700000000", ping},
+		{"missing timestamp", hex.EncodeToString(pub), validSig, "", ping},
+		{"no public key", "", validSig, "1700000000", ping},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := &mockStore{}
+			adapter := New(Config{PublicKey: tc.key}, nil, st, "", nil)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/discord/interactions", bytes.NewReader(tc.body))
+			if tc.sig != "" {
+				req.Header.Set("X-Signature-Ed25519", tc.sig)
+			}
+			if tc.ts != "" {
+				req.Header.Set("X-Signature-Timestamp", tc.ts)
+			}
+			rec := httptest.NewRecorder()
+
+			adapter.HandleInteraction(rec, req)
+
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401 Unauthorized, got %d", rec.Code)
+			}
+			if st.updatedID != 0 {
+				t.Errorf("expected no store call, got updated card %d", st.updatedID)
+			}
+		})
 	}
 }

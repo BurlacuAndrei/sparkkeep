@@ -6,6 +6,8 @@ package discord
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +23,9 @@ import (
 var _ port.ChannelAdapter = (*Adapter)(nil)
 
 const discordAPIBase = "https://discord.com/api/v10"
+
+// maxInteractionBody caps the interaction body read for signature verification.
+const maxInteractionBody = 1 << 20 // 1 MB
 
 type Config struct {
 	BotToken  string `json:"bot_token"`
@@ -47,11 +52,20 @@ type Adapter struct {
 
 	apiBase string
 	client  *http.Client
+
+	// pubKey is the decoded Ed25519 key used to verify interaction signatures.
+	// nil when PublicKey is empty or malformed, in which case requests are rejected.
+	pubKey ed25519.PublicKey
 }
 
 func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(format string, args ...any)) *Adapter {
 	if logf == nil {
 		logf = func(string, ...any) {}
+	}
+	pub, _ := hex.DecodeString(strings.TrimSpace(cfg.PublicKey))
+	var pubKey ed25519.PublicKey
+	if len(pub) == ed25519.PublicKeySize {
+		pubKey = ed25519.PublicKey(pub)
 	}
 	return &Adapter{
 		BotToken:  strings.TrimSpace(cfg.BotToken),
@@ -63,6 +77,7 @@ func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(for
 		Logf:      logf,
 		apiBase:   discordAPIBase,
 		client:    &http.Client{Timeout: 10 * time.Second},
+		pubKey:    pubKey,
 	}
 }
 
@@ -266,8 +281,22 @@ func (a *Adapter) HandleInteraction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify Discord's Ed25519 signature before trusting anything in the body.
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxInteractionBody))
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	sig, err := hex.DecodeString(r.Header.Get("X-Signature-Ed25519"))
+	timestamp := r.Header.Get("X-Signature-Timestamp")
+	if err != nil || timestamp == "" || a.pubKey == nil ||
+		!ed25519.Verify(a.pubKey, append([]byte(timestamp), body...), sig) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var interaction DiscordInteraction
-	if err := json.NewDecoder(r.Body).Decode(&interaction); err != nil {
+	if err := json.Unmarshal(body, &interaction); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
