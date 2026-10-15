@@ -106,4 +106,4 @@ jobs:
             release-assets/*.zip
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
