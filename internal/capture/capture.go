@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+
+	"sparkkeep/internal/netguard"
 )
 
 // Kind classifies what the user handed us. Recognize sets text/link; the
@@ -115,7 +117,7 @@ var fetchTimeout = defaultTimeout
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 	Transport: &http.Transport{
-		DialContext:         (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		DialContext:         netguard.DialContext(&net.Dialer{Timeout: 5 * time.Second}),
 		TLSHandshakeTimeout: 5 * time.Second,
 		MaxIdleConns:        10,
 		IdleConnTimeout:     30 * time.Second,

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -21,6 +22,7 @@ import (
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
+	"sparkkeep/internal/netguard"
 	"sparkkeep/internal/port"
 )
 
@@ -113,8 +115,13 @@ func (r *Runner) maxFetches() int {
 // New returns a Runner with design defaults.
 func New(cfg config.Config, llm *analyze.Client) *Runner {
 	return &Runner{
-		SearchURL:       cfg.SearchURL,
-		Client:          &http.Client{Timeout: searchTimeout},
+		SearchURL: cfg.SearchURL,
+		Client: &http.Client{
+			Timeout: searchTimeout,
+			Transport: &http.Transport{
+				DialContext: netguard.DialContext(&net.Dialer{Timeout: searchTimeout}),
+			},
+		},
 		LLM:             llm,
 		PlanLLM:         llm,
 		SynthesisLLM:    llm,
