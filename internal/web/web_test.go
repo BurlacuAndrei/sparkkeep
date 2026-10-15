@@ -3698,3 +3698,37 @@ func TestPatchSettingsRejectsLongPassphrase(t *testing.T) {
 		t.Fatalf("auth_token changed on rejected patch: %q", val)
 	}
 }
+
+// TestSecurityHeaders asserts the four always-on hardening headers on a plain
+// API response, and that HSTS only appears under the trusted TLS/proxy rule.
+func TestSecurityHeaders(t *testing.T) {
+	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/health", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	want := map[string]string{
+		"X-Content-Type-Options":  "nosniff",
+		"Referrer-Policy":         "no-referrer",
+		"X-Frame-Options":         "DENY",
+		"Content-Security-Policy": csp,
+	}
+	for k, v := range want {
+		if got := rr.Header().Get(k); got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+	if got := rr.Header().Get("Strict-Transport-Security"); got != "" {
+		t.Errorf("Strict-Transport-Security = %q without TLS, want absent", got)
+	}
+
+	// X-Forwarded-Proto: https is the same trusted signal the auth cookie uses.
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	r.Header.Set("X-Forwarded-Proto", "https")
+	rrHTTPS := httptest.NewRecorder()
+	h.ServeHTTP(rrHTTPS, r)
+	if got := rrHTTPS.Header().Get("Strict-Transport-Security"); got != "max-age=31536000" {
+		t.Errorf("Strict-Transport-Security = %q with X-Forwarded-Proto: https, want max-age=31536000", got)
+	}
+}

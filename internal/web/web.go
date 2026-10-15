@@ -139,7 +139,29 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/license/status", a.getLicenseStatus)
 	mux.HandleFunc("POST /api/v1/export/obsidian", a.syncObsidian)
 	mux.HandleFunc("POST /api/v1/webhooks/test", a.testWebhook)
-	return a.authMiddleware(mux)
+	return securityHeaders(a.authMiddleware(mux))
+}
+
+// csp is the Content-Security-Policy sent on every response. 'unsafe-inline'
+// styles are required: React injects inline styles and the standalone research
+// report template carries an inline <style>.
+const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+
+// securityHeaders sets hardening headers on every response. It wraps the whole
+// handler so static assets and public paths get them too. HSTS is only sent
+// when secureCookie reports a trusted TLS/proxy request.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Content-Security-Policy", csp)
+		if secureCookie(r) {
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // --- auth -------------------------------------------------------------------
