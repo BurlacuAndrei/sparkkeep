@@ -293,6 +293,7 @@ type Research struct {
 	FeedbackAt       *time.Time      `json:"feedback_at,omitempty"`
 	ScheduledFor     *time.Time      `json:"scheduled_for,omitempty"`
 	BatchID          *string         `json:"batch_id,omitempty"`
+	ShareToken       string          `json:"share_token,omitempty"`
 	QueuePosition    int             `json:"queue_position,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
 }

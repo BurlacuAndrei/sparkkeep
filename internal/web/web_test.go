@@ -1485,12 +1485,29 @@ func TestGetResearchReport(t *testing.T) {
 	st.researches[7] = port.Research{
 		ID: 7, CardID: 5, Status: "done",
 		Query: "cli-fi reading list", Findings: "# Found\n\nSome **markdown** & <raw> text.",
+		ShareToken: "tok-seven",
 	}
+	st.researches[8] = port.Research{
+		ID: 8, CardID: 5, Status: "done", Findings: "other", ShareToken: "tok-eight",
+	}
+	st.researches[9] = port.Research{ID: 9, CardID: 5, Status: "done", Findings: "legacy"}
 	h := webHandler(st, &core.Service{Logf: t.Logf})
 
-	rr := doJSON(t, h, http.MethodGet, "/api/v1/research/7", "")
+	// Missing or wrong token → 404, without revealing whether the row exists.
+	if rr := doJSON(t, h, http.MethodGet, "/api/v1/research/7", ""); rr.Code != http.StatusNotFound {
+		t.Fatalf("no token: status = %d, want 404", rr.Code)
+	}
+	if rr := doJSON(t, h, http.MethodGet, "/api/v1/research/7?t=tok-eight", ""); rr.Code != http.StatusNotFound {
+		t.Fatalf("another row's token: status = %d, want 404", rr.Code)
+	}
+	// A legacy row with no token is never shareable — even an empty ?t= must miss.
+	if rr := doJSON(t, h, http.MethodGet, "/api/v1/research/9?t=", ""); rr.Code != http.StatusNotFound {
+		t.Fatalf("empty token on legacy row: status = %d, want 404", rr.Code)
+	}
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/research/7?t=tok-seven", "")
 	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rr.Code)
+		t.Fatalf("with token: status = %d, want 200", rr.Code)
 	}
 	if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Fatalf("Content-Type = %q, want text/html", ct)
@@ -2030,16 +2047,29 @@ func TestAuthMiddleware_WebhookIngressAndMethodSafeValidation(t *testing.T) {
 		t.Fatalf("POST /api/v1/research/42/feedback with Bearer token: status = %d, want 200 (body %s)", rrFBAuth.Code, rrFBAuth.Body.String())
 	}
 
-	// c) GET /api/v1/research/{id} with Accept: text/html is allowed without token.
+	// c) GET /api/v1/research/{id} with Accept: text/html is public but now
+	// requires the row's share token; row 42 has none, so the anonymous request
+	// gets a 404 rather than the report.
 	rGetHTML := httptest.NewRequest(http.MethodGet, "/api/v1/research/42", nil)
 	rGetHTML.Header.Set("Accept", "text/html")
 	rrGetHTML := httptest.NewRecorder()
 	h.ServeHTTP(rrGetHTML, rGetHTML)
-	if rrGetHTML.Code != http.StatusOK {
-		t.Fatalf("GET /api/v1/research/42 with Accept: text/html without token: status = %d, want 200 (body %s)", rrGetHTML.Code, rrGetHTML.Body.String())
+	if rrGetHTML.Code != http.StatusNotFound {
+		t.Fatalf("GET /api/v1/research/42 with Accept: text/html without token: status = %d, want 404 (body %s)", rrGetHTML.Code, rrGetHTML.Body.String())
 	}
-	if !strings.Contains(rrGetHTML.Body.String(), "<html") {
-		t.Errorf("GET /api/v1/research/42 expected HTML body, got: %s", rrGetHTML.Body.String())
+
+	// With the app Bearer token the request is authenticated, so the share-token
+	// requirement is skipped and the HTML report still renders.
+	rGetAuthHTML := httptest.NewRequest(http.MethodGet, "/api/v1/research/42", nil)
+	rGetAuthHTML.Header.Set("Accept", "text/html")
+	rGetAuthHTML.Header.Set("Authorization", "Bearer secret123")
+	rrGetAuthHTML := httptest.NewRecorder()
+	h.ServeHTTP(rrGetAuthHTML, rGetAuthHTML)
+	if rrGetAuthHTML.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/research/42 with Bearer token: status = %d, want 200 (body %s)", rrGetAuthHTML.Code, rrGetAuthHTML.Body.String())
+	}
+	if !strings.Contains(rrGetAuthHTML.Body.String(), "<html") {
+		t.Errorf("GET /api/v1/research/42 expected HTML body, got: %s", rrGetAuthHTML.Body.String())
 	}
 
 	// Confirm GET /api/v1/research/{id} with Accept: application/json without token is rejected with 401.

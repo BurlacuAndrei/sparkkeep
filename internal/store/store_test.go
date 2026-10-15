@@ -32,8 +32,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 20 {
-		t.Fatalf("version = %d, want 20", version)
+	if version != 21 {
+		t.Fatalf("version = %d, want 21", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -516,6 +516,69 @@ func TestResearchCRUD(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].ID != r.ID || list[0].CardID != c.ID || len(list[0].Steps) != 1 {
 		t.Fatalf("list: %+v", list)
+	}
+}
+
+// TestResearchShareToken proves every insert path mints a distinct, non-empty
+// token and that reads return it — the token is what makes the public report
+// link unguessable.
+func TestResearchShareToken(t *testing.T) {
+	s, ctx := newTestStore(t)
+	c, err := s.CreateCard(ctx, port.Card{Title: "Idea"})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+	r, err := s.CreateResearch(ctx, c.ID, "q")
+	if err != nil {
+		t.Fatalf("CreateResearch: %v", err)
+	}
+	if r.ShareToken == "" {
+		t.Fatal("CreateResearch: empty share_token")
+	}
+	got, err := s.GetResearch(ctx, r.ID)
+	if err != nil {
+		t.Fatalf("GetResearch: %v", err)
+	}
+	if got.ShareToken != r.ShareToken {
+		t.Fatalf("GetResearch share_token = %q, want %q", got.ShareToken, r.ShareToken)
+	}
+	if _, err := s.SetResearch(ctx, r.ID, "done", "f", ""); err != nil {
+		t.Fatalf("SetResearch: %v", err)
+	}
+	list, err := s.ListResearch(ctx)
+	if err != nil {
+		t.Fatalf("ListResearch: %v", err)
+	}
+	if len(list) != 1 || list[0].ShareToken != r.ShareToken {
+		t.Fatalf("ListResearch share_token = %+v, want %q", list, r.ShareToken)
+	}
+	queued, err := s.BatchQueueResearch(ctx, []int64{c.ID}, nil, nil, "batch_1")
+	if err != nil {
+		t.Fatalf("BatchQueueResearch: %v", err)
+	}
+	if len(queued) != 1 || queued[0].ShareToken == "" {
+		t.Fatalf("BatchQueueResearch share_token = %+v, want non-empty", queued)
+	}
+	if queued[0].ShareToken == r.ShareToken {
+		t.Fatal("share tokens are not unique")
+	}
+
+	// A pre-migration row has no token (defaults to '') and must still read
+	// back cleanly, without a shareable token.
+	res, err := s.db.ExecContext(ctx, `INSERT INTO research (card_id, status, query, findings, error, created_at) VALUES (?, 'done', '', '', '', ?)`, c.ID, now())
+	if err != nil {
+		t.Fatalf("insert legacy research: %v", err)
+	}
+	legacyID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("legacy LastInsertId: %v", err)
+	}
+	legacy, err := s.GetResearch(ctx, legacyID)
+	if err != nil {
+		t.Fatalf("GetResearch legacy: %v", err)
+	}
+	if legacy.ShareToken != "" {
+		t.Fatalf("legacy share_token = %q, want empty", legacy.ShareToken)
 	}
 }
 
@@ -1084,8 +1147,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 20 {
-		t.Fatalf("version = %d, want 20", version)
+	if version != 21 {
+		t.Fatalf("version = %d, want 21", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1197,8 +1260,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 20 {
-		t.Fatalf("version = %d, want 20", version)
+	if version != 21 {
+		t.Fatalf("version = %d, want 21", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -2363,8 +2426,8 @@ func TestCardsFTSMigrationPopulate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 20 {
-		t.Fatalf("version = %d, want 20", version)
+	if version != 21 {
+		t.Fatalf("version = %d, want 21", version)
 	}
 
 	// 4. Verify the pre-migration legacy card was backfilled into cards_fts

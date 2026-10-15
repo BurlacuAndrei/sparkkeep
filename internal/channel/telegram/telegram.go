@@ -564,8 +564,9 @@ func cardButtons(id int64, retry bool) [][]button {
 	return btns
 }
 
-// sendResearch renders a research outcome as summary text + a dashboard link
-// to the report row (/api/v1/research/{id}), base from SPARKKEEP_PUBLIC_URL.
+// sendResearch renders a research outcome as summary text + a public link to
+// the report row (/api/v1/research/{id}?t={share_token}), base from
+// SPARKKEEP_PUBLIC_URL.
 func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 	base := a.PublicURL
 	if base == "" {
@@ -578,6 +579,9 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 	)
 	if n.Res != nil {
 		link += strconv.FormatInt(n.Res.ID, 10)
+		if n.Res.ShareToken != "" {
+			link += "?t=" + url.QueryEscape(n.Res.ShareToken)
+		}
 		cardID = n.Res.CardID
 		buttons = cardButtons(cardID, false)
 	}

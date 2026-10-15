@@ -987,8 +987,9 @@ func TestSendResearchNotifications(t *testing.T) {
 	doneMsg := captureSendMessage(t, func(a *Adapter) {
 		a.PublicURL = "https://app.sparkkeep.test"
 		res := &port.Research{
-			ID:     99,
-			CardID: 42,
+			ID:         99,
+			CardID:     42,
+			ShareToken: "abc123",
 			Result: &port.ResearchResult{
 				Verdict: &port.ResearchVerdict{
 					Recommendation: "pursue",
@@ -1022,7 +1023,7 @@ func TestSendResearchNotifications(t *testing.T) {
 	if strings.Contains(doneMsg, "Fourth action") {
 		t.Errorf("did not expect 4th action in message, got: %s", doneMsg)
 	}
-	if !strings.Contains(doneMsg, "https://app.sparkkeep.test/api/v1/research/99") {
+	if !strings.Contains(doneMsg, "https://app.sparkkeep.test/api/v1/research/99?t=abc123") {
 		t.Errorf("expected link in message, got: %s", doneMsg)
 	}
 
@@ -1030,8 +1031,9 @@ func TestSendResearchNotifications(t *testing.T) {
 	failedMsg := captureSendMessage(t, func(a *Adapter) {
 		a.PublicURL = "https://app.sparkkeep.test"
 		res := &port.Research{
-			ID:     100,
-			CardID: 42,
+			ID:         100,
+			CardID:     42,
+			ShareToken: "def456",
 			Steps: []port.ResearchStep{
 				{ID: "planning", Status: "done"},
 				{ID: "search", Status: "failed"},
@@ -1053,7 +1055,7 @@ func TestSendResearchNotifications(t *testing.T) {
 	if !strings.Contains(failedMsg, "rate limit exceeded") {
 		t.Errorf("expected error text in message, got: %s", failedMsg)
 	}
-	if !strings.Contains(failedMsg, "https://app.sparkkeep.test/api/v1/research/100") {
+	if !strings.Contains(failedMsg, "https://app.sparkkeep.test/api/v1/research/100?t=def456") {
 		t.Errorf("expected link in message, got: %s", failedMsg)
 	}
 }

@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,17 @@ import (
 
 	"sparkkeep/internal/port"
 )
+
+// newResearchShareToken mints the unguessable value carried by a public report
+// link (?t=). 16 random bytes, hex — enough entropy that sequential ids can no
+// longer be enumerated.
+func newResearchShareToken() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
 
 func (s *Store) CreateResearch(ctx context.Context, cardID int64, query string, playbookID ...*int64) (port.Research, error) {
 	pb, err := s.ResolvePlaybook(ctx, cardID, playbookID...)
@@ -24,11 +37,16 @@ func (s *Store) CreateResearch(ctx context.Context, cardID int64, query string, 
 		pbSnapshot = string(pbBytes)
 	}
 
+	token, err := newResearchShareToken()
+	if err != nil {
+		return port.Research{}, err
+	}
+
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO research (card_id, status, query, findings, error, playbook_id, playbook_snapshot, created_at)
-		 SELECT ?, 'queued', ?, '', '', ?, ?, ?
+		`INSERT INTO research (card_id, status, query, findings, error, playbook_id, playbook_snapshot, share_token, created_at)
+		 SELECT ?, 'queued', ?, '', '', ?, ?, ?, ?
 		 WHERE NOT EXISTS (SELECT 1 FROM research WHERE card_id = ? AND status IN ('queued', 'running'))`,
-		cardID, query, pid, pbSnapshot, now(), cardID)
+		cardID, query, pid, pbSnapshot, token, now(), cardID)
 	if err != nil {
 		return port.Research{}, err
 	}
@@ -115,12 +133,12 @@ func (s *Store) UpdateResearchProgress(ctx context.Context, id int64, status, qu
 
 func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, feedback_rating, feedback_comment, feedback_at, scheduled_for, batch_id, created_at FROM research WHERE id = ?`, id)
+		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, feedback_rating, feedback_comment, feedback_at, scheduled_for, batch_id, share_token, created_at FROM research WHERE id = ?`, id)
 	var r port.Research
 	var created, stepsJSON, sourcesJSON, planJSON, resultJSON, snapshotJSON string
 	var pid sql.NullInt64
 	var fRating, fComment, fAt, schedFor, bID sql.NullString
-	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &fRating, &fComment, &fAt, &schedFor, &bID, &created)
+	err := row.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &fRating, &fComment, &fAt, &schedFor, &bID, &r.ShareToken, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.Research{}, port.ErrNotFound
 	}
@@ -191,7 +209,7 @@ func (s *Store) GetResearch(ctx context.Context, id int64) (port.Research, error
 
 func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, card_id, status, query, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, feedback_rating, feedback_comment, feedback_at, scheduled_for, batch_id, created_at FROM research ORDER BY id`)
+		`SELECT id, card_id, status, query, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, feedback_rating, feedback_comment, feedback_at, scheduled_for, batch_id, share_token, created_at FROM research ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +220,7 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 		var created, stepsJSON, sourcesJSON, planJSON, resultJSON, snapshotJSON string
 		var pid sql.NullInt64
 		var fRating, fComment, fAt, schedFor, bID sql.NullString
-		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &fRating, &fComment, &fAt, &schedFor, &bID, &created); err != nil {
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &fRating, &fComment, &fAt, &schedFor, &bID, &r.ShareToken, &created); err != nil {
 			return nil, err
 		}
 		if pid.Valid {
@@ -271,7 +289,7 @@ func (s *Store) ListResearch(ctx context.Context) ([]port.Research, error) {
 
 func (s *Store) ListResearchByCard(ctx context.Context, cardID int64) ([]port.Research, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, feedback_rating, feedback_comment, feedback_at, scheduled_for, batch_id, created_at FROM research WHERE card_id = ? ORDER BY id`, cardID)
+		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, feedback_rating, feedback_comment, feedback_at, scheduled_for, batch_id, share_token, created_at FROM research WHERE card_id = ? ORDER BY id`, cardID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +300,7 @@ func (s *Store) ListResearchByCard(ctx context.Context, cardID int64) ([]port.Re
 		var created, stepsJSON, sourcesJSON, planJSON, resultJSON, snapshotJSON string
 		var pid sql.NullInt64
 		var fRating, fComment, fAt, schedFor, bID sql.NullString
-		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &fRating, &fComment, &fAt, &schedFor, &bID, &created); err != nil {
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &fRating, &fComment, &fAt, &schedFor, &bID, &r.ShareToken, &created); err != nil {
 			return nil, err
 		}
 		if pid.Valid {
@@ -467,11 +485,16 @@ func (s *Store) BatchQueueResearch(ctx context.Context, cardIDs []int64, playboo
 			pbSnapshot = string(pbBytes)
 		}
 
+		token, err := newResearchShareToken()
+		if err != nil {
+			return nil, err
+		}
+
 		res, err := s.db.ExecContext(ctx,
-			`INSERT INTO research (card_id, status, query, findings, error, playbook_id, playbook_snapshot, scheduled_for, batch_id, created_at)
-			 SELECT ?, 'queued', '', '', '', ?, ?, ?, ?, ?
+			`INSERT INTO research (card_id, status, query, findings, error, playbook_id, playbook_snapshot, scheduled_for, batch_id, share_token, created_at)
+			 SELECT ?, 'queued', '', '', '', ?, ?, ?, ?, ?, ?
 			 WHERE NOT EXISTS (SELECT 1 FROM research WHERE card_id = ? AND status IN ('queued', 'running'))`,
-			cardID, pid, pbSnapshot, schedStr, bIDStr, now(), cardID)
+			cardID, pid, pbSnapshot, schedStr, bIDStr, token, now(), cardID)
 		if err != nil {
 			return nil, err
 		}
@@ -543,7 +566,7 @@ func (s *Store) FindCardsForRule(ctx context.Context, filter port.ResearchRuleFi
 func (s *Store) ListCompletedResearchSince(ctx context.Context, since time.Time) ([]port.Research, error) {
 	sinceStr := since.UTC().Format("2006-01-02T15:04:05Z")
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, feedback_rating, feedback_comment, feedback_at, scheduled_for, batch_id, created_at 
+		`SELECT id, card_id, status, query, findings, error, steps, sources, plan, result, tokens, playbook_id, playbook_snapshot, feedback_rating, feedback_comment, feedback_at, scheduled_for, batch_id, share_token, created_at 
 		 FROM research 
 		 WHERE status IN ('done', 'failed') AND (feedback_at >= ? OR created_at >= ?)
 		 ORDER BY created_at ASC`, sinceStr, sinceStr)
@@ -557,7 +580,7 @@ func (s *Store) ListCompletedResearchSince(ctx context.Context, since time.Time)
 		var created, stepsJSON, sourcesJSON, planJSON, resultJSON, snapshotJSON string
 		var pid sql.NullInt64
 		var fRating, fComment, fAt, schedFor, bID sql.NullString
-		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &fRating, &fComment, &fAt, &schedFor, &bID, &created); err != nil {
+		if err := rows.Scan(&r.ID, &r.CardID, &r.Status, &r.Query, &r.Findings, &r.Error, &stepsJSON, &sourcesJSON, &planJSON, &resultJSON, &r.Tokens, &pid, &snapshotJSON, &fRating, &fComment, &fAt, &schedFor, &bID, &r.ShareToken, &created); err != nil {
 			return nil, err
 		}
 		if pid.Valid {

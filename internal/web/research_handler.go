@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -209,6 +210,16 @@ func (a *api) getResearch(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Accept") == "application/json" || r.URL.Query().Get("format") == "json" {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": row})
 		return
+	}
+	// Anonymous HTML callers (the Telegram link) must present the row's share
+	// token; an authenticated dashboard request skips the check. A legacy row
+	// with no token is never shareable, so an empty ?t= cannot match.
+	if !a.validateToken(r.Context(), presentedToken(r)) {
+		got := r.URL.Query().Get("t")
+		if row.ShareToken == "" || subtle.ConstantTimeCompare([]byte(got), []byte(row.ShareToken)) != 1 {
+			http.NotFound(w, r)
+			return
+		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := researchTmpl.Execute(w, row); err != nil {

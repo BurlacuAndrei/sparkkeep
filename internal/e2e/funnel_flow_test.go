@@ -239,6 +239,30 @@ func TestFunnel_Migration16DataIntegrity(t *testing.T) {
 		CREATE TABLE cards_tags (card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE, tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY (card_id, tag_id));
 		CREATE TABLE card_references (id INTEGER PRIMARY KEY AUTOINCREMENT, card_id INTEGER NOT NULL, kind TEXT NOT NULL, label TEXT NOT NULL, url TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0);
 
+		-- A real v15 db always has research (created in 0001, extended through
+		-- 0014). It is unused here, but migration 0021 alters it.
+		CREATE TABLE research (
+			id                INTEGER PRIMARY KEY AUTOINCREMENT,
+			card_id           INTEGER NOT NULL REFERENCES cards (id) ON DELETE CASCADE,
+			status            TEXT NOT NULL DEFAULT 'queued',
+			query             TEXT NOT NULL DEFAULT '',
+			findings          TEXT NOT NULL DEFAULT '',
+			error             TEXT NOT NULL DEFAULT '',
+			steps             TEXT NOT NULL DEFAULT '[]',
+			sources           TEXT NOT NULL DEFAULT '[]',
+			tokens            INTEGER NOT NULL DEFAULT 0,
+			plan              TEXT NOT NULL DEFAULT '{}',
+			result            TEXT NOT NULL DEFAULT '{}',
+			playbook_id       INTEGER DEFAULT NULL,
+			playbook_snapshot TEXT NOT NULL DEFAULT '{}',
+			feedback_rating   TEXT,
+			feedback_comment  TEXT,
+			feedback_at       DATETIME,
+			scheduled_for     DATETIME,
+			batch_id          TEXT,
+			created_at        TEXT NOT NULL
+		);
+
 		-- Insert legacy rows
 		INSERT INTO cards (id, title, horizon, status, created_at, updated_at)
 		VALUES (1, 'Lifetime Card', 'lifetime', 'inbox', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
