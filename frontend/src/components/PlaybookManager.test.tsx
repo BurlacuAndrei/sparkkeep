@@ -59,7 +59,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     expect(screen.getByLabelText(/Description/i)).toBeDefined();
 
     // Lean starter steps: Grounding + Targeted Search + Custom Analysis + Briefing Report
-    expect(screen.getByText('Grounding')).toBeDefined();
+    expect(screen.getAllByText('Grounding')[0]).toBeDefined();
     expect(screen.getByText('Targeted Search')).toBeDefined();
     expect(screen.getByText('Custom Analysis')).toBeDefined();
     expect(screen.getByText('Briefing Report')).toBeDefined();
@@ -489,5 +489,170 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     expect(screen.getByDisplayValue('Pipeline evaluating quantum computing architectures')).toBeDefined();
     expect(screen.getByText('Quantum Grounding')).toBeDefined();
     expect(screen.getByText('QPU Benchmark Analysis')).toBeDefined();
+  });
+
+  describe('Research Health Inspector & Soft Linter', () => {
+    it('calculates 5-Pillar readiness score and updates dynamically when steps are toggled', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Persistent dock should be present
+      expect(screen.getByLabelText('Research Health Inspector')).toBeDefined();
+
+      // Default lean starter has Grounding, Targeted Search, Custom Analysis, Briefing Report
+      // Grounding (ready), Retrieval (ready), Delivery (ready); Extraction (missing), Verification (missing)
+      const badge = screen.getByTestId('health-score-badge');
+      expect(badge.textContent).toBe('3 / 5 Incomplete');
+
+      // Toggle Grounding off (step 1 toggle)
+      const stepToggles = screen.getAllByTitle('Toggle step enabled');
+      const firstStepCheckbox = stepToggles[0].querySelector('input')!;
+      expect(firstStepCheckbox.checked).toBe(true);
+      fireEvent.click(firstStepCheckbox);
+
+      // Score should now be 2 / 5 Incomplete (Grounding is disabled)
+      expect(badge.textContent).toBe('2 / 5 Incomplete');
+
+      // Re-enable Grounding
+      fireEvent.click(firstStepCheckbox);
+      expect(badge.textContent).toBe('3 / 5 Incomplete');
+    });
+
+    it('displays non-blocking advisory warnings for missing pillars and keeps save enabled', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // In lean starter, missing Extraction and Verification advisories should be displayed
+      expect(screen.getByText('Unextracted Sources')).toBeDefined();
+      expect(screen.getByText(/Discovered web links will not be scraped/i)).toBeDefined();
+      expect(screen.getByText('Unverified Claims')).toBeDefined();
+      expect(screen.getByText(/Findings will not be cross-verified against source citations/i)).toBeDefined();
+
+      // Save button must NOT be disabled by soft linter warnings
+      const saveBtn = screen.getByRole('button', { name: /Save Playbook/i }) as HTMLButtonElement;
+      expect(saveBtn.disabled).toBe(false);
+
+      // Load Flagship 8-Step Deep Dive (which satisfies all 5 pillars)
+      fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
+      const deepDiveRecipe = PLAYBOOK_RECIPES.find((r) => r.id === 'deep_dive')!;
+      const recipeIndex = PLAYBOOK_RECIPES.indexOf(deepDiveRecipe);
+      const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
+      fireEvent.click(useBtns[recipeIndex]);
+
+      // Badge should be 5 / 5 Pillars Ready
+      const badge = screen.getByTestId('health-score-badge');
+      expect(badge.textContent).toBe('5 / 5 Pillars Ready');
+
+      // Advisory clean message is shown
+      expect(screen.getByText(/All 5 research pillars ready\. Rigorous, hallucination-resistant methodology verified\./i)).toBeDefined();
+    });
+
+    it('inserts recommended steps at optimal positions using 1-click auto-fix buttons', async () => {
+      const mockToast = vi.fn();
+      render(<PlaybookManager showToast={mockToast} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Lean starter missing Extraction and Verification
+      const badge = screen.getByTestId('health-score-badge');
+      expect(badge.textContent).toBe('3 / 5 Incomplete');
+
+      // 1. Auto-fix Extraction via '+ Insert Source Reader'
+      const insertReaderBtn = screen.getByRole('button', { name: /\+ Insert Source Reader/i });
+      fireEvent.click(insertReaderBtn);
+
+      expect(mockToast).toHaveBeenCalledWith('Inserted Source Reader step');
+      expect(screen.getByText('Source Reader')).toBeDefined();
+      // Score should advance to 4 / 5 Incomplete
+      expect(badge.textContent).toBe('4 / 5 Incomplete');
+
+      // 2. Auto-fix Verification via '+ Insert Claims Verification'
+      const insertClaimsBtn = screen.getByRole('button', { name: /\+ Insert Claims Verification/i });
+      fireEvent.click(insertClaimsBtn);
+
+      expect(mockToast).toHaveBeenCalledWith('Inserted Claims Verification step');
+      expect(screen.getByText('Claims Verification')).toBeDefined();
+      // All 5 pillars now satisfied!
+      expect(badge.textContent).toBe('5 / 5 Pillars Ready');
+
+      // 3. Delete Grounding to verify '+ Insert Grounding'
+      const deleteGroundBtn = screen.getByRole('button', { name: /Delete Grounding/i });
+      fireEvent.click(deleteGroundBtn);
+      expect(badge.textContent).toBe('4 / 5 Incomplete');
+      expect(screen.getByText('Context Not Anchored')).toBeDefined();
+
+      const insertGroundBtn = screen.getByRole('button', { name: /\+ Insert Grounding/i });
+      fireEvent.click(insertGroundBtn);
+      expect(mockToast).toHaveBeenCalledWith('Inserted Grounding step');
+      expect(badge.textContent).toBe('5 / 5 Pillars Ready');
+
+      // 4. Delete Targeted Search to verify '+ Insert Web Search'
+      const deleteSearchBtn = screen.getByRole('button', { name: /Delete Targeted Search/i });
+      fireEvent.click(deleteSearchBtn);
+      expect(badge.textContent).toBe('4 / 5 Incomplete');
+      expect(screen.getByText('Hallucination Risk')).toBeDefined();
+
+      const insertSearchBtn = screen.getByRole('button', { name: /\+ Insert Web Search/i });
+      fireEvent.click(insertSearchBtn);
+      expect(mockToast).toHaveBeenCalledWith('Inserted Web Search step');
+      expect(badge.textContent).toBe('5 / 5 Pillars Ready');
+
+      // 5. Delete Briefing Report to verify '+ Insert Briefing Report'
+      const deleteReportBtn = screen.getByRole('button', { name: /Delete Briefing Report/i });
+      fireEvent.click(deleteReportBtn);
+      expect(badge.textContent).toBe('4 / 5 Incomplete');
+      expect(screen.getByText('No Delivery Step')).toBeDefined();
+
+      const insertReportBtn = screen.getByRole('button', { name: /\+ Insert Briefing Report/i });
+      fireEvent.click(insertReportBtn);
+      expect(mockToast).toHaveBeenCalledWith('Inserted Briefing Report step');
+      expect(badge.textContent).toBe('5 / 5 Pillars Ready');
+    });
+
+    it('calculates dynamic token usage, web fetches, and latency estimates in real time', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Lean starter estimates
+      expect(screen.getByTestId('est-llm-calls').textContent).toBe('≈ 2');
+      expect(screen.getByTestId('est-fetches').textContent).toBe('≈ 6');
+      expect(screen.getByTestId('est-tokens').textContent).toBe('~2.5k–6.0k tokens');
+      expect(screen.getByTestId('est-latency').textContent).toBe('~10–22s');
+
+      // Add Source Reader (5 fetches, ~1.0k-2.2k tokens, 4-8s latency)
+      fireEvent.click(screen.getByRole('button', { name: /\+ Insert Source Reader/i }));
+
+      expect(screen.getByTestId('est-llm-calls').textContent).toBe('≈ 2');
+      expect(screen.getByTestId('est-fetches').textContent).toBe('≈ 11');
+      expect(screen.getByTestId('est-tokens').textContent).toBe('~3.5k–8.2k tokens');
+      expect(screen.getByTestId('est-latency').textContent).toBe('~14–30s');
+
+      // Add Claims Verification (1 llm call, ~600-1500 tokens, 4-7s latency)
+      fireEvent.click(screen.getByRole('button', { name: /\+ Insert Claims Verification/i }));
+
+      expect(screen.getByTestId('est-llm-calls').textContent).toBe('≈ 3');
+      expect(screen.getByTestId('est-fetches').textContent).toBe('≈ 11');
+      expect(screen.getByTestId('est-tokens').textContent).toBe('~4.1k–9.7k tokens');
+      expect(screen.getByTestId('est-latency').textContent).toBe('~18–37s');
+    });
   });
 });

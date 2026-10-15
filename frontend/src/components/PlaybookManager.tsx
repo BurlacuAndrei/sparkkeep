@@ -19,9 +19,26 @@ import {
   Globe,
   X,
   Layers,
+  Activity,
 } from 'lucide-react';
 import * as api from '../api';
 import { Playbook, PlaybookStep, StepLibraryTemplate, CustomStepConfig } from '../types';
+
+export interface PillarHealth {
+  id: 'grounding' | 'retrieval' | 'extraction' | 'verification' | 'delivery';
+  name: string;
+  ready: boolean;
+  hint: string;
+}
+
+export interface SoftLinterAdvisory {
+  id: string;
+  pillarId: 'grounding' | 'retrieval' | 'extraction' | 'verification' | 'delivery';
+  title: string;
+  description: string;
+  actionLabel: string;
+  onFix: () => void;
+}
 
 interface PlaybookManagerProps {
   showToast: (msg: string) => void;
@@ -84,7 +101,7 @@ const DEFAULT_LEAN_STARTER_STEPS: PlaybookStep[] = [
       instruction: 'Analyze the card context and extracted sources.',
       tool_policy: 'none',
       role: 'research_synthesis',
-      inputs: ['capture', 'sources', 'previous_steps'],
+      inputs: ['sources', 'previous_steps'],
       max_queries: 2,
     },
   },
@@ -648,53 +665,409 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     return errors;
   }, [editingPlaybook]);
 
-  // Rough cost/time estimator
+  // 1-Click Auto-Fix Step Inserters for Missing Pillars
+  const insertGroundingStep = useCallback(() => {
+    if (!editingPlaybook) return;
+    const newStep: PlaybookStep = {
+      position: 1,
+      kind: 'ground',
+      name: 'Grounding',
+      enabled: true,
+      config: {
+        output_heading: 'Grounding & Context',
+        instruction: 'Anchor card context, source URL, note, and metadata into run memory.',
+        tool_policy: 'none',
+        role: 'research_synthesis',
+        inputs: ['capture'],
+      },
+    };
+    const steps = [newStep, ...editingPlaybook.steps];
+    steps.forEach((s, i) => (s.position = i + 1));
+    setEditingPlaybook({ ...editingPlaybook, steps });
+    showToast('Inserted Grounding step');
+  }, [editingPlaybook, showToast]);
+
+  const insertSearchStep = useCallback(() => {
+    if (!editingPlaybook) return;
+    const newStep: PlaybookStep = {
+      position: 1,
+      kind: 'search',
+      name: 'Web Search',
+      enabled: true,
+      config: {
+        output_heading: 'Search Discoveries',
+        instruction: 'Execute targeted web queries to locate primary sources and authoritative data.',
+        tool_policy: 'search',
+        max_queries: 2,
+        role: 'research_plan',
+        inputs: ['capture'],
+      },
+    };
+    const steps = [...editingPlaybook.steps];
+    const groundIdx = steps.findIndex((s) => s.kind === 'ground');
+    const insertIdx = groundIdx >= 0 ? groundIdx + 1 : 0;
+    steps.splice(insertIdx, 0, newStep);
+    steps.forEach((s, i) => (s.position = i + 1));
+    setEditingPlaybook({ ...editingPlaybook, steps });
+    showToast('Inserted Web Search step');
+  }, [editingPlaybook, showToast]);
+
+  const insertReaderStep = useCallback(() => {
+    if (!editingPlaybook) return;
+    const newStep: PlaybookStep = {
+      position: 1,
+      kind: 'read',
+      name: 'Source Reader',
+      enabled: true,
+      config: {
+        output_heading: 'Extracted Sources',
+        instruction: 'Scrape and extract content in round-robin fashion from discovered sources.',
+        tool_policy: 'none',
+        role: 'research_synthesis',
+        inputs: ['capture', 'sources'],
+      },
+    };
+    const steps = [...editingPlaybook.steps];
+    let searchIdx = -1;
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (
+        steps[i].kind === 'search' ||
+        steps[i].kind === 'resolve_refs' ||
+        (steps[i].kind === 'custom' && steps[i].config?.tool_policy === 'search')
+      ) {
+        searchIdx = i;
+        break;
+      }
+    }
+    const groundIdx = steps.findIndex((s) => s.kind === 'ground');
+    const insertIdx =
+      searchIdx >= 0 ? searchIdx + 1 : groundIdx >= 0 ? groundIdx + 1 : steps.length;
+    steps.splice(insertIdx, 0, newStep);
+    steps.forEach((s, i) => (s.position = i + 1));
+    setEditingPlaybook({ ...editingPlaybook, steps });
+    showToast('Inserted Source Reader step');
+  }, [editingPlaybook, showToast]);
+
+  const insertVerificationStep = useCallback(() => {
+    if (!editingPlaybook) return;
+    const newStep: PlaybookStep = {
+      position: 1,
+      kind: 'verify_claims',
+      name: 'Claims Verification',
+      enabled: true,
+      config: {
+        output_heading: 'Claim Verification',
+        instruction: 'Cross-check core claims against extracted sources with citations.',
+        tool_policy: 'none',
+        role: 'research_synthesis',
+        inputs: ['capture', 'sources', 'previous_steps'],
+      },
+    };
+    const steps = [...editingPlaybook.steps];
+    const endIdx = steps.findIndex((s) => s.kind === 'verdict' || s.kind === 'report');
+    const insertIdx = endIdx >= 0 ? endIdx : steps.length;
+    steps.splice(insertIdx, 0, newStep);
+    steps.forEach((s, i) => (s.position = i + 1));
+    setEditingPlaybook({ ...editingPlaybook, steps });
+    showToast('Inserted Claims Verification step');
+  }, [editingPlaybook, showToast]);
+
+  const insertReportStep = useCallback(() => {
+    if (!editingPlaybook) return;
+    const newStep: PlaybookStep = {
+      position: editingPlaybook.steps.length + 1,
+      kind: 'report',
+      name: 'Briefing Report',
+      enabled: true,
+      config: {
+        output_heading: 'Executive Briefing',
+        instruction: 'Compile finalized Markdown briefing report synthesizing all insights with citations.',
+        tool_policy: 'none',
+        role: 'research_synthesis',
+        inputs: ['capture', 'sources', 'previous_steps'],
+      },
+    };
+    const steps = [...editingPlaybook.steps, newStep];
+    steps.forEach((s, i) => (s.position = i + 1));
+    setEditingPlaybook({ ...editingPlaybook, steps });
+    showToast('Inserted Briefing Report step');
+  }, [editingPlaybook, showToast]);
+
+  // Active (enabled) steps for analysis and inspector
+  const activeSteps = useMemo(() => {
+    return (editingPlaybook?.steps || []).filter((s) => s.enabled);
+  }, [editingPlaybook?.steps]);
+
+  const hasGrounding = useMemo(() => {
+    return activeSteps.some((s) => {
+      if (s.kind === 'ground') return true;
+      if (s.kind === 'custom') {
+        const inputs = s.config?.inputs;
+        return Array.isArray(inputs) && inputs.includes('capture') && !inputs.includes('previous_steps');
+      }
+      return false;
+    });
+  }, [activeSteps]);
+
+  const hasRetrieval = useMemo(() => {
+    return activeSteps.some((s) => {
+      if (s.kind === 'search' || s.kind === 'resolve_refs') return true;
+      if (s.kind === 'custom' && s.config?.tool_policy === 'search') return true;
+      return false;
+    });
+  }, [activeSteps]);
+
+  const hasExtraction = useMemo(() => {
+    return activeSteps.some((s) => s.kind === 'read');
+  }, [activeSteps]);
+
+  const hasVerification = useMemo(() => {
+    return activeSteps.some((s) => s.kind === 'verify_claims');
+  }, [activeSteps]);
+
+  const hasDelivery = useMemo(() => {
+    return activeSteps.some((s) => s.kind === 'report' || s.kind === 'verdict');
+  }, [activeSteps]);
+
+  const pillars: PillarHealth[] = useMemo(
+    () => [
+      {
+        id: 'grounding',
+        name: 'Grounding',
+        ready: hasGrounding,
+        hint: hasGrounding ? 'Card context & note memory anchored' : 'Context not anchored',
+      },
+      {
+        id: 'retrieval',
+        name: 'Retrieval',
+        ready: hasRetrieval,
+        hint: hasRetrieval ? 'Active external search / refs' : 'Hallucination risk: no search',
+      },
+      {
+        id: 'extraction',
+        name: 'Extraction',
+        ready: hasExtraction,
+        hint: hasExtraction ? 'Deep source reader enabled' : 'Unextracted sources',
+      },
+      {
+        id: 'verification',
+        name: 'Verification',
+        ready: hasVerification,
+        hint: hasVerification ? 'Cross-checked citations' : 'Unverified claims',
+      },
+      {
+        id: 'delivery',
+        name: 'Delivery',
+        ready: hasDelivery,
+        hint: hasDelivery ? 'Synthesized briefing / verdict' : 'Fallback synthesizer active',
+      },
+    ],
+    [hasGrounding, hasRetrieval, hasExtraction, hasVerification, hasDelivery]
+  );
+
+  const readyPillarsCount = useMemo(() => {
+    return pillars.filter((p) => p.ready).length;
+  }, [pillars]);
+
+  // Soft Linter Advisory Notices with 1-Click Auto-Fix
+  const advisories: SoftLinterAdvisory[] = useMemo(() => {
+    if (!editingPlaybook) return [];
+    const list: SoftLinterAdvisory[] = [];
+
+    if (!hasGrounding) {
+      list.push({
+        id: 'grounding_missing',
+        pillarId: 'grounding',
+        title: 'Context Not Anchored',
+        description: 'Context not anchored: Research run will lack card context, note body, and source URL metadata.',
+        actionLabel: '+ Insert Grounding',
+        onFix: insertGroundingStep,
+      });
+    }
+
+    if (!hasRetrieval) {
+      list.push({
+        id: 'retrieval_missing',
+        pillarId: 'retrieval',
+        title: 'Hallucination Risk',
+        description: 'Hallucination risk: No search or live retrieval configured to fetch external facts.',
+        actionLabel: '+ Insert Web Search',
+        onFix: insertSearchStep,
+      });
+    }
+
+    if (!hasExtraction) {
+      list.push({
+        id: 'extraction_missing',
+        pillarId: 'extraction',
+        title: 'Unextracted Sources',
+        description: 'Unextracted sources: Discovered web links will not be scraped or read into source context.',
+        actionLabel: '+ Insert Source Reader',
+        onFix: insertReaderStep,
+      });
+    }
+
+    if (!hasVerification) {
+      list.push({
+        id: 'verification_missing',
+        pillarId: 'verification',
+        title: 'Unverified Claims',
+        description: 'Unverified claims: Findings will not be cross-verified against source citations for factual rigor.',
+        actionLabel: '+ Insert Claims Verification',
+        onFix: insertVerificationStep,
+      });
+    }
+
+    if (!hasDelivery) {
+      list.push({
+        id: 'delivery_missing',
+        pillarId: 'delivery',
+        title: 'No Delivery Step',
+        description: 'Notice: Fallback Report Synthesizer will compile final outputs if omitted.',
+        actionLabel: '+ Insert Briefing Report',
+        onFix: insertReportStep,
+      });
+    }
+
+    return list;
+  }, [
+    editingPlaybook,
+    hasGrounding,
+    hasRetrieval,
+    hasExtraction,
+    hasVerification,
+    hasDelivery,
+    insertGroundingStep,
+    insertSearchStep,
+    insertReaderStep,
+    insertVerificationStep,
+    insertReportStep,
+  ]);
+
+  // Dynamic Resource & Cost Estimator
   const estimates = useMemo(() => {
-    if (!editingPlaybook) return { llmCalls: 0, fetches: 0, estSeconds: '0s' };
+    if (!editingPlaybook) {
+      return {
+        llmCalls: 0,
+        fetches: 0,
+        tokenRange: '0 tokens',
+        latency: '0s',
+      };
+    }
+    if (activeSteps.length === 0) {
+      return {
+        llmCalls: 0,
+        fetches: 0,
+        tokenRange: '0 tokens',
+        latency: '0s',
+      };
+    }
+
     let llm = 0;
     let fetches = 0;
+    let minTokens = 600;
+    let maxTokens = 1200;
+    let minSec = 0;
+    let maxSec = 0;
 
-    editingPlaybook.steps.forEach((st) => {
-      if (!st.enabled) return;
+    activeSteps.forEach((st) => {
       switch (st.kind) {
+        case 'ground':
+          minTokens += 200;
+          maxTokens += 500;
+          break;
         case 'resolve_refs':
           fetches += 2;
+          minTokens += 300;
+          maxTokens += 800;
+          minSec += 2;
+          maxSec += 4;
           break;
         case 'plan':
           llm += 1;
+          minTokens += 500;
+          maxTokens += 1200;
+          minSec += 3;
+          maxSec += 6;
           break;
-        case 'search':
-          fetches += 6;
+        case 'search': {
+          const q = st.config?.max_queries ?? 2;
+          fetches += q * 3;
+          minTokens += 400;
+          maxTokens += 900;
+          minSec += 3;
+          maxSec += 6;
           break;
+        }
         case 'read':
           fetches += 5;
+          minTokens += 1000;
+          maxTokens += 2200;
+          minSec += 4;
+          maxSec += 8;
           break;
         case 'verify_claims':
           llm += 1;
+          minTokens += 600;
+          maxTokens += 1500;
+          minSec += 4;
+          maxSec += 7;
           break;
         case 'landscape':
           llm += 1;
+          minTokens += 600;
+          maxTokens += 1400;
+          minSec += 3;
+          maxSec += 6;
           break;
         case 'verdict':
           llm += 1;
+          minTokens += 500;
+          maxTokens += 1200;
+          minSec += 3;
+          maxSec += 6;
           break;
-        case 'custom':
+        case 'report':
           llm += 1;
-          if (st.config?.tool_policy === 'search') {
-            fetches += st.config?.max_queries || 2;
+          minTokens += 800;
+          maxTokens += 2000;
+          minSec += 4;
+          maxSec += 8;
+          break;
+        case 'custom': {
+          llm += 1;
+          const isSearch = st.config?.tool_policy === 'search';
+          if (isSearch) {
+            const q = st.config?.max_queries ?? 2;
+            fetches += q;
+            minTokens += 800;
+            maxTokens += 2000;
+            minSec += 5;
+            maxSec += 9;
+          } else {
+            minTokens += 500;
+            maxTokens += 1400;
+            minSec += 3;
+            maxSec += 6;
           }
           break;
+        }
       }
     });
 
-    const minSec = Math.max(5, llm * 5 + Math.round(fetches * 1.5));
-    const maxSec = Math.max(10, llm * 10 + Math.round(fetches * 3));
+    maxSec += 2;
+
+    const formatK = (n: number) => {
+      return `${(n / 1000).toFixed(1)}k`;
+    };
+
     return {
       llmCalls: llm,
       fetches,
-      estSeconds: `~${minSec}–${maxSec}s`,
+      tokenRange: `~${formatK(minTokens)}–${formatK(maxTokens)} tokens`,
+      latency: `~${minSec}–${maxSec}s`,
     };
-  }, [editingPlaybook]);
+  }, [editingPlaybook, activeSteps]);
 
   // Reorder step
   const moveStep = (fromIdx: number, toIdx: number) => {
@@ -1256,48 +1629,30 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
             )}
           </div>
 
-          {/* Resource & Time Estimate Strip */}
-          <div className="pb-estimate-strip">
-            <div className="pb-estimate-item">
-              <Clock size={15} className="pb-est-icon" />
-              <span>
-                Estimated Time: <strong>{estimates.estSeconds}</strong>
-              </span>
-            </div>
-            <div className="pb-estimate-item">
-              <Sparkles size={15} className="pb-est-icon" />
-              <span>
-                LLM Calls: <strong>≈ {estimates.llmCalls}</strong>
-              </span>
-            </div>
-            <div className="pb-estimate-item">
-              <Globe size={15} className="pb-est-icon" />
-              <span>
-                Web Fetches: <strong>≈ {estimates.fetches}</strong>
-              </span>
-            </div>
-          </div>
+          {/* DUAL-PANE BUILDER CANVAS */}
+          <div className="pb-builder-dual-pane">
+            {/* LEFT PANE: Pipeline Sequencer */}
+            <div className="pb-sequencer-pane">
+              {/* Validation Warnings */}
+              {validationErrors.length > 0 && (
+                <div className="pb-validation-box">
+                  <div className="pb-validation-title">
+                    <AlertCircle size={15} />
+                    <span>Validation Checklist ({validationErrors.length})</span>
+                  </div>
+                  <ul className="pb-validation-list">
+                    {validationErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-          {/* Validation Warnings */}
-          {validationErrors.length > 0 && (
-            <div className="pb-validation-box">
-              <div className="pb-validation-title">
-                <AlertCircle size={15} />
-                <span>Validation Checklist ({validationErrors.length})</span>
-              </div>
-              <ul className="pb-validation-list">
-                {validationErrors.map((err, i) => (
-                  <li key={i}>{err}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Steps List */}
-          <div className="pb-steps-header">
-            <div className="pb-steps-title">
-              <Layers size={16} />
-              <span>Pipeline Steps ({editingPlaybook.steps.length} / 12)</span>
+              {/* Steps List */}
+              <div className="pb-steps-header">
+                <div className="pb-steps-title">
+                  <Layers size={16} />
+                  <span>Pipeline Steps ({editingPlaybook.steps.length} / 12)</span>
             </div>
             <button
               type="button"
@@ -1575,7 +1930,114 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
             })}
           </div>
         </div>
-      )}
+
+        {/* RIGHT PANE: Persistent Research Health Inspector Dock */}
+        <aside className="pb-inspector-dock" aria-label="Research Health Inspector">
+          <div className="pb-inspector-header">
+            <div className="pb-inspector-title">
+              <Activity size={16} className="pb-inspector-icon" />
+              <span>Research Health Inspector</span>
+            </div>
+            <span
+              className={`pb-health-score-badge ${readyPillarsCount === 5 ? 'ready' : 'incomplete'}`}
+              data-testid="health-score-badge"
+            >
+              {readyPillarsCount === 5 ? '5 / 5 Pillars Ready' : `${readyPillarsCount} / 5 Incomplete`}
+            </span>
+          </div>
+
+          {/* 5-Pillar Research Model Checklist */}
+          <div className="pb-pillars-list" aria-label="5-Pillar Research Model">
+            {pillars.map((p) => (
+              <div key={p.id} className={`pb-pillar-item ${p.ready ? 'ready' : 'missing'}`}>
+                <div className="pb-pillar-status">
+                  {p.ready ? (
+                    <CheckCircle2 size={14} className="pb-pillar-icon ready" />
+                  ) : (
+                    <AlertCircle size={14} className="pb-pillar-icon missing" />
+                  )}
+                  <span className="pb-pillar-name">{p.name}</span>
+                </div>
+                <span className="pb-pillar-tag">{p.ready ? 'Ready' : 'Missing'}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Health Linter Advisories */}
+          <div className="pb-inspector-section">
+            <div className="pb-inspector-section-title">
+              <AlertCircle size={13} className="pb-section-icon" />
+              <span>Health Linter Advisories</span>
+            </div>
+
+            {advisories.length === 0 ? (
+              <div className="pb-linter-clean">
+                <CheckCircle2 size={15} className="pb-clean-icon" />
+                <span>All 5 research pillars ready. Rigorous, hallucination-resistant methodology verified.</span>
+              </div>
+            ) : (
+              <div className="pb-advisories-list">
+                {advisories.map((adv) => (
+                  <div key={adv.id} className="pb-advisory-card">
+                    <div className="pb-adv-header">
+                      <span className="pb-adv-title">{adv.title}</span>
+                    </div>
+                    <p className="pb-adv-desc">{adv.description}</p>
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm pb-adv-action"
+                      onClick={adv.onFix}
+                    >
+                      <Plus size={12} />
+                      <span>{adv.actionLabel}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Dynamic Resource & Cost Estimator */}
+          <div className="pb-inspector-section">
+            <div className="pb-inspector-section-title">
+              <Sparkles size={13} className="pb-section-icon" />
+              <span>Dynamic Cost & Resource Estimator</span>
+            </div>
+            <div className="pb-cost-grid">
+              <div className="pb-cost-card">
+                <span className="pb-cost-label">
+                  <Sparkles size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                  LLM Calls
+                </span>
+                <span className="pb-cost-val" data-testid="est-llm-calls">≈ {estimates.llmCalls}</span>
+              </div>
+              <div className="pb-cost-card">
+                <span className="pb-cost-label">
+                  <Globe size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                  Web Fetches
+                </span>
+                <span className="pb-cost-val" data-testid="est-fetches">≈ {estimates.fetches}</span>
+              </div>
+              <div className="pb-cost-card">
+                <span className="pb-cost-label">
+                  <Layers size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                  Estimated Tokens
+                </span>
+                <span className="pb-cost-val" data-testid="est-tokens">{estimates.tokenRange}</span>
+              </div>
+              <div className="pb-cost-card">
+                <span className="pb-cost-label">
+                  <Clock size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                  Est. Latency
+                </span>
+                <span className="pb-cost-val" data-testid="est-latency">{estimates.latency}</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  )}
 
       {/* RECIPE ARCHETYPE & STARTER PICKER MODAL */}
       {isRecipePickerOpen && (

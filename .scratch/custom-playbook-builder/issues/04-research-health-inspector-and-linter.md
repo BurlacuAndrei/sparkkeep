@@ -6,10 +6,10 @@ Implement the persistent Research Health Inspector sidebar in the Custom Playboo
 **Blocked by:**
 03-custom-playbook-builder-canvas.md
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Implement Research Health Inspector right-hand dock/sidebar in `PlaybookManager.tsx`.
-- [ ] Implement 5-Pillar scoring logic assessing Grounding, Retrieval, Extraction, Verification, and Delivery.
-- [ ] Surface non-blocking advisory notices with 1-click `+ Add Step` action buttons inserting the recommended step into the optimal position.
-- [ ] Build dynamic cost & time estimator recalculating LLM calls, web queries, and estimated latency as steps are edited.
-- [ ] Update `PlaybookManager.test.tsx` verifying health score calculation, advisory notices, and 1-click auto-fix actions.
+- [x] Implement Research Health Inspector right-hand dock/sidebar in `PlaybookManager.tsx`.
+- [x] Implement 5-Pillar scoring logic assessing Grounding, Retrieval, Extraction, Verification, and Delivery.
+- [x] Surface non-blocking advisory notices with 1-click `+ Add Step` action buttons inserting the recommended step into the optimal position.
+- [x] Build dynamic cost & time estimator recalculating LLM calls, web queries, and estimated latency as steps are edited.
+- [x] Update `PlaybookManager.test.tsx` verifying health score calculation, advisory notices, and 1-click auto-fix actions.

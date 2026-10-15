@@ -3880,6 +3880,255 @@
   transform: translateX(14px);
 }
 
+/* Dual-Pane Builder Layout & Persistent Research Health Inspector Dock */
+.pb-builder-dual-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .pb-builder-dual-pane {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pb-sequencer-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.pb-inspector-dock {
+  position: sticky;
+  top: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.pb-inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pb-inspector-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.pb-inspector-icon {
+  color: var(--accent-indigo);
+}
+
+.pb-health-score-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 12px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.pb-health-score-badge.ready {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+}
+
+.pb-health-score-badge.incomplete {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.pb-pillars-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pb-pillar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--border-subtle);
+}
+
+.pb-pillar-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.pb-pillar-icon.ready {
+  color: #4ade80;
+}
+
+.pb-pillar-icon.missing {
+  color: #f59e0b;
+}
+
+.pb-pillar-name {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.pb-pillar-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.pb-pillar-item.ready .pb-pillar-tag {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.pb-pillar-item.missing .pb-pillar-tag {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.pb-inspector-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pb-inspector-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.pb-section-icon {
+  color: var(--accent-indigo);
+}
+
+.pb-advisories-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pb-advisory-card {
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.pb-adv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.pb-adv-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.pb-adv-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+.pb-adv-action {
+  width: 100%;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #818cf8;
+}
+
+.pb-adv-action:hover {
+  background: rgba(99, 102, 241, 0.22);
+}
+
+.pb-linter-clean {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: #4ade80;
+  line-height: 1.35;
+}
+
+.pb-clean-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.pb-cost-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pb-cost-card {
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pb-cost-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  letter-spacing: 0.03em;
+}
+
+.pb-cost-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
 /* Add Step Modal */
 .pb-modal-backdrop {
   position: fixed;
