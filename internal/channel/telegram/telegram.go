@@ -40,17 +40,26 @@ type Service interface {
 	Retry(ctx context.Context, cardID int64) ([]port.Card, error)
 	GoResearch(ctx context.Context, cardID int64, playbookID ...*int64)
 	SendMorningDigest(ctx context.Context) error
+	GetSetting(ctx context.Context, key string) (string, error)
+	SetSetting(ctx context.Context, key, value string) error
+	GetCard(ctx context.Context, id int64) (port.Card, error)
+	ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, error)
+	UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error)
+	SetCardTags(ctx context.Context, id int64, tags []string) error
+	RecordChannelMessage(ctx context.Context, channel, messageID string, cardID int64) error
+	GetCardIDByChannelMessage(ctx context.Context, channel, messageID string) (int64, error)
+	HasActiveResearch(ctx context.Context, cardID int64) (bool, error)
+	ListPlaybooks(ctx context.Context) ([]port.Playbook, error)
+	GetPlaybook(ctx context.Context, id int64) (port.Playbook, error)
 }
 
 // Adapter implements port.Channel (outbound Notify) and the long-poll Run
-// loop. Service and Store are injected; callback/reaction handling uses the
-// injected Store directly, inbound messages go through Service.Capture.
+// loop. Service is injected; all operations go through Service.
 type Adapter struct {
 	Token     string
 	OwnerID   int64 // configured TG_CHAT_ID; everyone else is ignored
 	PublicURL string
 	Service   Service
-	Store     port.Store
 	Logf      func(format string, args ...any)
 
 	// Scheduled weekly digest: pushed once per DigestPushDay/DigestPushHour
@@ -316,8 +325,8 @@ func (a *Adapter) call(ctx context.Context, method string, body any) (json.RawMe
 
 func (a *Adapter) targetChatID(ctx context.Context) int64 {
 	chatID := a.OwnerID
-	if a.Store != nil {
-		if dbIDStr, err := a.Store.GetSetting(ctx, "tg_chat_id"); err == nil && dbIDStr != "" {
+	if a.Service != nil {
+		if dbIDStr, err := a.Service.GetSetting(ctx, "tg_chat_id"); err == nil && dbIDStr != "" {
 			if parsed, err := strconv.ParseInt(dbIDStr, 10, 64); err == nil {
 				chatID = parsed
 			}
@@ -591,8 +600,8 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 	}
 
 	card := n.Card
-	if card.ID == 0 && cardID != 0 && a.Store != nil {
-		if c, err := a.Store.GetCard(ctx, cardID); err == nil {
+	if card.ID == 0 && cardID != 0 && a.Service != nil {
+		if c, err := a.Service.GetCard(ctx, cardID); err == nil {
 			card = c
 		}
 	}
@@ -767,20 +776,24 @@ func (a *Adapter) handleMessage(m *message) {
 	defer cancel()
 
 	ownerID := a.OwnerID
-	if dbIDStr, err := a.Store.GetSetting(ctx, "tg_chat_id"); err == nil && dbIDStr != "" {
-		if parsed, err := strconv.ParseInt(dbIDStr, 10, 64); err == nil {
-			ownerID = parsed
+	if a.Service != nil {
+		if dbIDStr, err := a.Service.GetSetting(ctx, "tg_chat_id"); err == nil && dbIDStr != "" {
+			if parsed, err := strconv.ParseInt(dbIDStr, 10, 64); err == nil {
+				ownerID = parsed
+			}
 		}
 	}
 
 	// Intercept /start <magic_token> for dynamic linking
 	if strings.HasPrefix(m.Text, "/start ") {
 		token := strings.TrimSpace(strings.TrimPrefix(m.Text, "/start "))
-		masterToken, err := a.Store.GetSetting(ctx, "auth_token")
-		if err == nil && masterToken != "" && token == masterToken {
-			if err := a.Store.SetSetting(ctx, "tg_chat_id", strconv.FormatInt(m.Chat.ID, 10)); err == nil {
-				_, _ = a.sendMessage(ctx, "✅ *Successfully linked!* You can now send me links, files, and notes.", 0, nil)
-				return
+		if a.Service != nil {
+			masterToken, err := a.Service.GetSetting(ctx, "auth_token")
+			if err == nil && masterToken != "" && token == masterToken {
+				if err := a.Service.SetSetting(ctx, "tg_chat_id", strconv.FormatInt(m.Chat.ID, 10)); err == nil {
+					_, _ = a.sendMessage(ctx, "✅ *Successfully linked!* You can now send me links, files, and notes.", 0, nil)
+					return
+				}
 			}
 		}
 	}
@@ -903,7 +916,10 @@ const digestRecentLimit = 5
 // status, then the most recent titles. Dismissed cards are left out — "not
 // interested" isn't part of the week's wins.
 func (a *Adapter) sendDigest(ctx context.Context) {
-	cards, err := a.Store.ListCards(ctx, port.CardFilter{Since: time.Now().UTC().AddDate(0, 0, -digestDays)})
+	if a.Service == nil {
+		return
+	}
+	cards, err := a.Service.ListCards(ctx, port.CardFilter{Since: time.Now().UTC().AddDate(0, 0, -digestDays)})
 	if err != nil {
 		a.logf("telegram: digest: ListCards: %v", err)
 		return
@@ -995,10 +1011,10 @@ var hashtagRe = regexp.MustCompile(`#[a-zA-Z0-9_]+`)
 // fatal — the message is never worth losing the reply thread over.
 func (a *Adapter) organizeReply(ctx context.Context, cardID int64, raw string) {
 	text := strings.TrimSpace(raw)
-	if text == "" {
+	if text == "" || a.Service == nil {
 		return
 	}
-	card, err := a.Store.GetCard(ctx, cardID)
+	card, err := a.Service.GetCard(ctx, cardID)
 	if err != nil {
 		a.logf("telegram: organize reply: GetCard(%d): %v", cardID, err)
 		return
@@ -1008,13 +1024,13 @@ func (a *Adapter) organizeReply(ctx context.Context, cardID int64, raw string) {
 		if old := strings.TrimSpace(card.SourceNote); old != "" {
 			note = old + "\n" + rest
 		}
-		if _, err := a.Store.UpdateCard(ctx, cardID, port.CardPatch{Note: &note}); err != nil {
+		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Note: &note}); err != nil {
 			a.logf("telegram: organize reply: UpdateCard(%d): %v", cardID, err)
 		}
 	}
 	tags := mergeTags(card.Tags, hashtagRe.FindAllString(text, -1))
 	if len(tags) > len(card.Tags) {
-		if err := a.Store.SetCardTags(ctx, cardID, tags); err != nil {
+		if err := a.Service.SetCardTags(ctx, cardID, tags); err != nil {
 			a.logf("telegram: organize reply: SetCardTags(%d): %v", cardID, err)
 		}
 	}
@@ -1185,8 +1201,10 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 	case strings.HasPrefix(action, "commit:"):
 		horizon := strings.TrimPrefix(action, "commit:")
 		status := port.StatusToDo
-		if _, err := a.Store.UpdateCard(ctx, id, port.CardPatch{Status: &status, Horizon: &horizon}); err != nil {
-			a.logf("telegram: UpdateCard commit (%d, %s): %v", id, horizon, err)
+		if a.Service != nil {
+			if _, err := a.Service.UpdateCard(ctx, id, port.CardPatch{Status: &status, Horizon: &horizon}); err != nil {
+				a.logf("telegram: UpdateCard commit (%d, %s): %v", id, horizon, err)
+			}
 		}
 		a.ackCallback(cb.ID, "Committed to "+horizon)
 		// Optionally edit the message to remove buttons or show updated status
@@ -1208,11 +1226,11 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 }
 
 func (a *Adapter) handlePlaybookMenu(ctx context.Context, cardID int64, cb *callbackQuery) {
-	if a.Store == nil || cb.Message == nil || cb.Message.Chat == nil {
+	if a.Service == nil || cb.Message == nil || cb.Message.Chat == nil {
 		a.ackCallback(cb.ID, "")
 		return
 	}
-	pbs, err := a.Store.ListPlaybooks(ctx)
+	pbs, err := a.Service.ListPlaybooks(ctx)
 	if err != nil {
 		a.ackCallback(cb.ID, "Failed to load playbooks")
 		return
@@ -1255,19 +1273,23 @@ func (a *Adapter) handleResearchCallback(ctx context.Context, cardID int64, acti
 	if len(parts) == 2 {
 		pid, err := strconv.ParseInt(parts[1], 10, 64)
 		if err == nil {
-			if _, gerr := a.Store.GetPlaybook(ctx, pid); gerr != nil {
-				a.ackCallback(cb.ID, "Playbook no longer exists")
-				return
+			if a.Service != nil {
+				if _, gerr := a.Service.GetPlaybook(ctx, pid); gerr != nil {
+					a.ackCallback(cb.ID, "Playbook no longer exists")
+					return
+				}
 			}
 			explicitPID = &pid
 		}
 	}
 
-	if active, err := a.Store.HasActiveResearch(ctx, cardID); err != nil {
-		a.logf("telegram: HasActiveResearch(%d): %v", cardID, err)
-	} else if active {
-		a.ackCallback(cb.ID, "Research already running")
-		return
+	if a.Service != nil {
+		if active, err := a.Service.HasActiveResearch(ctx, cardID); err != nil {
+			a.logf("telegram: HasActiveResearch(%d): %v", cardID, err)
+		} else if active {
+			a.ackCallback(cb.ID, "Research already running")
+			return
+		}
 	}
 
 	a.ackCallback(cb.ID, "")
@@ -1293,16 +1315,18 @@ func parseCallback(data string) (id int64, action string, ok bool) {
 // setStatus persists a status change, answers the callback, clears the
 // button keyboard and, for doing/done, sends the "done" summary.
 func (a *Adapter) setStatus(ctx context.Context, id int64, status string, cb *callbackQuery) {
-	_, err := a.Store.UpdateCard(ctx, id, port.CardPatch{Status: &status})
-	if err != nil {
-		a.logf("telegram: UpdateCard(%d, %s): %v", id, status, err)
+	if a.Service != nil {
+		_, err := a.Service.UpdateCard(ctx, id, port.CardPatch{Status: &status})
+		if err != nil {
+			a.logf("telegram: UpdateCard(%d, %s): %v", id, status, err)
+		}
 	}
 	a.ackCallback(cb.ID, "")
 	if (status == port.StatusInProgress || status == port.StatusDone || status == port.StatusDismissed) && cb.Message != nil && cb.Message.MessageID != 0 && cb.Message.Chat != nil {
 		a.editReplyMarkup(ctx, cb.Message.Chat.ID, cb.Message.MessageID)
 	}
-	if status == port.StatusDone {
-		if card, gerr := a.Store.GetCard(ctx, id); gerr == nil {
+	if status == port.StatusDone && a.Service != nil {
+		if card, gerr := a.Service.GetCard(ctx, id); gerr == nil {
 			if nerr := a.Notify(ctx, port.Notification{Kind: "done", Card: card}); nerr != nil {
 				a.logf("telegram: notify done: %v", nerr)
 			}
@@ -1370,8 +1394,10 @@ func (a *Adapter) handleReaction(r *messageReaction) {
 	if cardID == 0 {
 		return
 	}
-	if _, err := a.Store.UpdateCard(context.Background(), cardID, port.CardPatch{Horizon: &horizon}); err != nil {
-		a.logf("telegram: reaction update card %d: %v", cardID, err)
+	if a.Service != nil {
+		if _, err := a.Service.UpdateCard(context.Background(), cardID, port.CardPatch{Horizon: &horizon}); err != nil {
+			a.logf("telegram: reaction update card %d: %v", cardID, err)
+		}
 	}
 }
 
@@ -1397,8 +1423,8 @@ func (a *Adapter) recordMsgCard(msgID, cardID int64) {
 	a.msgCard[msgID] = cardID
 	a.msgMu.Unlock()
 
-	if a.Store != nil {
-		if err := a.Store.RecordChannelMessage(context.Background(), a.ID(), strconv.FormatInt(msgID, 10), cardID); err != nil {
+	if a.Service != nil {
+		if err := a.Service.RecordChannelMessage(context.Background(), a.ID(), strconv.FormatInt(msgID, 10), cardID); err != nil {
 			a.logf("telegram: record channel message %d -> %d: %v", msgID, cardID, err)
 		}
 	}
@@ -1417,8 +1443,8 @@ func (a *Adapter) cardForMsg(msgID int64) int64 {
 	}
 	a.msgMu.Unlock()
 
-	if a.Store != nil {
-		cardID, err := a.Store.GetCardIDByChannelMessage(context.Background(), a.ID(), strconv.FormatInt(msgID, 10))
+	if a.Service != nil {
+		cardID, err := a.Service.GetCardIDByChannelMessage(context.Background(), a.ID(), strconv.FormatInt(msgID, 10))
 		if err == nil && cardID > 0 {
 			a.msgMu.Lock()
 			if a.msgCard == nil {

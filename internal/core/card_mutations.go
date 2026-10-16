@@ -144,3 +144,32 @@ func (s *Service) ResolvePlaybook(ctx context.Context, cardID int64, explicitPla
 	}
 	return s.Store.ResolvePlaybook(ctx, cardID, explicitPlaybookID...)
 }
+
+// GetSetting retrieves a runtime setting by key.
+func (s *Service) GetSetting(ctx context.Context, key string) (string, error) {
+	if s.Store == nil {
+		return "", errors.New("core: store not initialized")
+	}
+	return s.Store.GetSetting(ctx, key)
+}
+
+// SetSetting saves a runtime setting by key.
+func (s *Service) SetSetting(ctx context.Context, key, value string) error {
+	if s.Store == nil {
+		return errors.New("core: store not initialized")
+	}
+	return s.Store.SetSetting(ctx, key, value)
+}
+
+// ListCards returns cards matching the filter.
+func (s *Service) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, error) {
+	if s.Store == nil {
+		return nil, errors.New("core: store not initialized")
+	}
+	return s.Store.ListCards(ctx, f)
+}
+
+// RecordChannelMessage links a channel message to a card.
+func (s *Service) RecordChannelMessage(ctx context.Context, channel, msgID string, cardID int64) error {
+	return s.LinkChannelMessage(ctx, channel, msgID, cardID)
+}

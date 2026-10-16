@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: Domain Core Card Mutation Pipeline & Webhook Dispatch (Expand)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Telegram `Adapter` struct no longer contains `Store port.Store`
-- [ ] Telegram `New` constructor signature drops `port.Store`
-- [ ] Telegram callback query handlers for triage, note appending, tagging, and research trigger call `Service` methods
-- [ ] Telegram `RecordChannelMessage` and `GetCardIDByChannelMessage` invoke `Service` methods instead of direct storage queries
-- [ ] Telegram `Service` interface includes required mutation, research check, and message linking methods
-- [ ] `telegram_test.go` updated to verify all interactions through `Service` without `port.Store`
+- [x] Telegram `Adapter` struct no longer contains `Store port.Store`
+- [x] Telegram `New` constructor signature drops `port.Store`
+- [x] Telegram callback query handlers for triage, note appending, tagging, and research trigger call `Service` methods
+- [x] Telegram `RecordChannelMessage` and `GetCardIDByChannelMessage` invoke `Service` methods instead of direct storage queries
+- [x] Telegram `Service` interface includes required mutation, research check, and message linking methods
+- [x] `telegram_test.go` updated to verify all interactions through `Service` without `port.Store`
