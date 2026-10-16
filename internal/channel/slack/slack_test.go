@@ -24,7 +24,7 @@ func TestSlackNotifyWebhook(t *testing.T) {
 
 	adapter := New(Config{
 		WebhookURL: server.URL,
-	}, nil, nil, "http://localhost:8080", nil)
+	}, nil, "http://localhost:8080", nil)
 
 	card := port.Card{
 		ID:      42,

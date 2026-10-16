@@ -13,26 +13,23 @@ import (
 	"sparkkeep/internal/port"
 )
 
-type mockStore struct {
-	port.Store
+type mockService struct {
+	captured     bool
 	updatedID    int64
 	updatedPatch port.CardPatch
-}
-
-func (m *mockStore) UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error) {
-	m.updatedID = id
-	m.updatedPatch = patch
-	return port.Card{ID: id}, nil
-}
-
-type mockService struct {
-	Service
-	captured bool
 }
 
 func (m *mockService) CaptureShare(_ context.Context, _ capture.Share) ([]int64, error) {
 	m.captured = true
 	return []int64{7}, nil
+}
+
+func (m *mockService) GoResearch(ctx context.Context, cardID int64, playbookID ...*int64) {}
+
+func (m *mockService) UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error) {
+	m.updatedID = id
+	m.updatedPatch = patch
+	return port.Card{ID: id}, nil
 }
 
 func TestOpenClawNotify(t *testing.T) {
@@ -54,7 +51,7 @@ func TestOpenClawNotify(t *testing.T) {
 		HookToken:      "secret-token-123",
 		DefaultChannel: "whatsapp",
 		DefaultTarget:  "+1555123456",
-	}, nil, nil, "http://localhost:8080", nil)
+	}, nil, "http://localhost:8080", nil)
 
 	ctx := context.Background()
 	card := port.Card{
@@ -86,8 +83,8 @@ func TestOpenClawNotify(t *testing.T) {
 }
 
 func TestOpenClawHandleActionCommand(t *testing.T) {
-	st := &mockStore{}
-	adapter := New(Config{HookToken: "tok"}, nil, st, "", nil)
+	svc := &mockService{}
+	adapter := New(Config{HookToken: "tok"}, svc, "", nil)
 
 	// Inbound webhook with action command
 	payload := InboundWebhookPayload{
@@ -105,16 +102,16 @@ func TestOpenClawHandleActionCommand(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if st.updatedID != 42 {
-		t.Errorf("expected updated card ID 42, got %d", st.updatedID)
+	if svc.updatedID != 42 {
+		t.Errorf("expected updated card ID 42, got %d", svc.updatedID)
 	}
-	if st.updatedPatch.Horizon == nil || *st.updatedPatch.Horizon != port.HorizonShortTerm {
-		t.Errorf("expected horizon short-term, got %+v", st.updatedPatch.Horizon)
+	if svc.updatedPatch.Horizon == nil || *svc.updatedPatch.Horizon != port.HorizonShortTerm {
+		t.Errorf("expected horizon short-term, got %+v", svc.updatedPatch.Horizon)
 	}
 }
 
 func TestOpenClawUnauthorizedWebhook(t *testing.T) {
-	adapter := New(Config{HookToken: "secret"}, nil, nil, "", nil)
+	adapter := New(Config{HookToken: "secret"}, nil, "", nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/openclaw/webhook", io.NopCloser(bytes.NewReader([]byte("{}"))))
 	req.Header.Set("Authorization", "Bearer wrong-token")
@@ -129,7 +126,7 @@ func TestOpenClawUnauthorizedWebhook(t *testing.T) {
 
 func TestOpenClawWebhookFailsClosedWithoutToken(t *testing.T) {
 	svc := &mockService{}
-	adapter := New(Config{}, svc, nil, "", nil)
+	adapter := New(Config{}, svc, "", nil)
 
 	payload := InboundWebhookPayload{Channel: "whatsapp", Text: "https://example.com"}
 	body, _ := json.Marshal(payload)
@@ -148,7 +145,7 @@ func TestOpenClawWebhookFailsClosedWithoutToken(t *testing.T) {
 
 func TestOpenClawWebhookAcceptsConfiguredToken(t *testing.T) {
 	svc := &mockService{}
-	adapter := New(Config{HookToken: "tok"}, svc, nil, "", nil)
+	adapter := New(Config{HookToken: "tok"}, svc, "", nil)
 
 	payload := InboundWebhookPayload{Channel: "whatsapp", Text: "https://example.com"}
 	body, _ := json.Marshal(payload)

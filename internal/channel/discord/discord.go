@@ -39,6 +39,7 @@ type Config struct {
 type Service interface {
 	CaptureShare(ctx context.Context, share capture.Share) ([]int64, error)
 	GoResearch(ctx context.Context, cardID int64, playbookID ...*int64)
+	UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error)
 }
 
 type Adapter struct {
@@ -47,7 +48,6 @@ type Adapter struct {
 	PublicKey string
 	PublicURL string
 	Service   Service
-	Store     port.Store
 	Logf      func(format string, args ...any)
 
 	apiBase string
@@ -58,7 +58,7 @@ type Adapter struct {
 	pubKey ed25519.PublicKey
 }
 
-func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(format string, args ...any)) *Adapter {
+func New(cfg Config, svc Service, publicURL string, logf func(format string, args ...any)) *Adapter {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
@@ -73,7 +73,6 @@ func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(for
 		PublicKey: strings.TrimSpace(cfg.PublicKey),
 		PublicURL: publicURL,
 		Service:   svc,
-		Store:     st,
 		Logf:      logf,
 		apiBase:   discordAPIBase,
 		client:    &http.Client{Timeout: 10 * time.Second},
@@ -328,18 +327,18 @@ func (a *Adapter) HandleInteraction(w http.ResponseWriter, r *http.Request) {
 					a.Service.GoResearch(context.Background(), cardID)
 				}
 			case "commit":
-				if len(parts) >= 4 && a.Store != nil {
+				if len(parts) >= 4 && a.Service != nil {
 					horizon := parts[3]
 					status := port.StatusInProgress
 					if horizon == port.HorizonMediumTerm || horizon == port.HorizonLongTerm {
 						status = port.StatusToDo
 					}
-					_, _ = a.Store.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &horizon, Status: &status})
+					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &horizon, Status: &status})
 				}
 			case "dismiss":
-				if a.Store != nil {
+				if a.Service != nil {
 					status := port.StatusShelved
-					_, _ = a.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &status})
+					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &status})
 				}
 			}
 		}

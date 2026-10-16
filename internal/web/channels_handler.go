@@ -532,7 +532,7 @@ func (a *api) openclawWebhook(w http.ResponseWriter, r *http.Request) {
 	oc := openclaw.New(openclaw.Config{
 		GatewayURL: gwURL,
 		HookToken:  gwTok,
-	}, a.svc, a.store, "", nil)
+	}, a.svc, "", nil)
 	oc.HandleWebhook(w, r)
 }
 
@@ -558,6 +558,6 @@ func (a *api) discordCapture(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	dc := discord.New(discord.Config{}, a.svc, a.store, "", nil)
+	dc := discord.New(discord.Config{}, a.svc, "", nil)
 	dc.HandleCapture(w, r)
 }

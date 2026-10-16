@@ -11,16 +11,22 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"sparkkeep/internal/capture"
 	"sparkkeep/internal/port"
 )
 
-type mockStore struct {
-	port.Store
+type mockService struct {
 	updatedID    int64
 	updatedPatch port.CardPatch
 }
 
-func (m *mockStore) UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error) {
+func (m *mockService) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
+	return nil, nil
+}
+
+func (m *mockService) GoResearch(ctx context.Context, cardID int64, playbookID ...*int64) {}
+
+func (m *mockService) UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error) {
 	m.updatedID = id
 	m.updatedPatch = patch
 	return port.Card{ID: id}, nil
@@ -43,7 +49,7 @@ func TestDiscordNotify(t *testing.T) {
 	adapter := New(Config{
 		BotToken:  "test-token",
 		ChannelID: "123456789",
-	}, nil, nil, "http://localhost:8080", nil)
+	}, nil, "http://localhost:8080", nil)
 	adapter.apiBase = server.URL // point to mock server
 
 	card := port.Card{
@@ -93,8 +99,8 @@ func TestDiscordHandleInteraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	st := &mockStore{}
-	adapter := New(Config{PublicKey: hex.EncodeToString(pub)}, nil, st, "", nil)
+	svc := &mockService{}
+	adapter := New(Config{PublicKey: hex.EncodeToString(pub)}, svc, "", nil)
 
 	// Interaction Type 3 (Button Click)
 	interaction := DiscordInteraction{
@@ -114,11 +120,11 @@ func TestDiscordHandleInteraction(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got %d", rec.Code)
 	}
-	if st.updatedID != 42 {
-		t.Errorf("expected updated card ID 42, got %d", st.updatedID)
+	if svc.updatedID != 42 {
+		t.Errorf("expected updated card ID 42, got %d", svc.updatedID)
 	}
-	if st.updatedPatch.Horizon == nil || *st.updatedPatch.Horizon != port.HorizonShortTerm {
-		t.Errorf("expected horizon short-term, got %+v", st.updatedPatch.Horizon)
+	if svc.updatedPatch.Horizon == nil || *svc.updatedPatch.Horizon != port.HorizonShortTerm {
+		t.Errorf("expected horizon short-term, got %+v", svc.updatedPatch.Horizon)
 	}
 }
 
@@ -145,8 +151,8 @@ func TestDiscordHandleInteractionRejectsInvalidSignature(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			st := &mockStore{}
-			adapter := New(Config{PublicKey: tc.key}, nil, st, "", nil)
+			svc := &mockService{}
+			adapter := New(Config{PublicKey: tc.key}, svc, "", nil)
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/discord/interactions", bytes.NewReader(tc.body))
 			if tc.sig != "" {
 				req.Header.Set("X-Signature-Ed25519", tc.sig)
@@ -161,8 +167,8 @@ func TestDiscordHandleInteractionRejectsInvalidSignature(t *testing.T) {
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("expected 401 Unauthorized, got %d", rec.Code)
 			}
-			if st.updatedID != 0 {
-				t.Errorf("expected no store call, got updated card %d", st.updatedID)
+			if svc.updatedID != 0 {
+				t.Errorf("expected no service call, got updated card %d", svc.updatedID)
 			}
 		})
 	}

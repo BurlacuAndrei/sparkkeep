@@ -67,6 +67,9 @@ type loginFail struct {
 // (/ serves index.html). When cfg.AuthToken is set every request must carry a
 // matching token.
 func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
+	if svc != nil && svc.Store == nil {
+		svc.Store = store
+	}
 	a := &api{
 		store: store, svc: svc,
 		uploadDir: cfg.UploadDir,

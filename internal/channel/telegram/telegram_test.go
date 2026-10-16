@@ -29,6 +29,7 @@ type stubStore struct {
 	captures    map[int64]port.Capture
 	researches  map[int64]port.Research
 	channelMsgs map[string]int64
+	settings    map[string]string
 	nextCard    int64
 	nextCap     int64
 	nextRes     int64
@@ -40,11 +41,25 @@ func newStubStore() *stubStore {
 		captures:    map[int64]port.Capture{},
 		researches:  map[int64]port.Research{},
 		channelMsgs: map[string]int64{},
+		settings:    map[string]string{},
 	}
 }
 
-func (s *stubStore) GetSetting(_ context.Context, _ string) (string, error) {
+func (s *stubStore) GetSetting(_ context.Context, key string) (string, error) {
+	if s.settings != nil {
+		if val, ok := s.settings[key]; ok {
+			return val, nil
+		}
+	}
 	return "", port.ErrNotFound
+}
+
+func (s *stubStore) SetSetting(_ context.Context, key, val string) error {
+	if s.settings == nil {
+		s.settings = map[string]string{}
+	}
+	s.settings[key] = val
+	return nil
 }
 
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
@@ -243,7 +258,9 @@ func stubTelegram(t *testing.T, build func() *Adapter, fn func(a *Adapter)) []st
 // server and returns the text of the message it posted.
 func captureSendMessage(t *testing.T, fn func(a *Adapter)) string {
 	t.Helper()
-	sent := stubTelegram(t, func() *Adapter { return &Adapter{Token: "tok", OwnerID: 1, Store: newStubStore()} }, fn)
+	sent := stubTelegram(t, func() *Adapter {
+		return &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: newStubStore()}}
+	}, fn)
 	if len(sent) != 1 {
 		t.Fatalf("posted %d messages, want 1", len(sent))
 	}
@@ -358,6 +375,85 @@ func (s *testStubService) SendMorningDigest(ctx context.Context) error {
 	return nil
 }
 
+func (s *testStubService) GetSetting(ctx context.Context, key string) (string, error) {
+	if s.Store == nil {
+		return "", port.ErrNotFound
+	}
+	return s.Store.GetSetting(ctx, key)
+}
+
+func (s *testStubService) SetSetting(ctx context.Context, key, value string) error {
+	if s.Store == nil {
+		return nil
+	}
+	return s.Store.SetSetting(ctx, key, value)
+}
+
+func (s *testStubService) GetCard(ctx context.Context, id int64) (port.Card, error) {
+	if s.Store == nil {
+		return port.Card{}, port.ErrNotFound
+	}
+	return s.Store.GetCard(ctx, id)
+}
+
+func (s *testStubService) ListCards(ctx context.Context, f port.CardFilter) ([]port.Card, error) {
+	if s.Store == nil {
+		return nil, nil
+	}
+	return s.Store.ListCards(ctx, f)
+}
+
+func (s *testStubService) UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error) {
+	if s.Store == nil {
+		return port.Card{}, port.ErrNotFound
+	}
+	return s.Store.UpdateCard(ctx, id, patch)
+}
+
+func (s *testStubService) SetCardTags(ctx context.Context, id int64, tags []string) error {
+	if s.Store == nil {
+		return port.ErrNotFound
+	}
+	return s.Store.SetCardTags(ctx, id, tags)
+}
+
+func (s *testStubService) RecordChannelMessage(ctx context.Context, channel, messageID string, cardID int64) error {
+	if s.Store == nil {
+		return nil
+	}
+	return s.Store.RecordChannelMessage(ctx, channel, messageID, cardID)
+}
+
+func (s *testStubService) GetCardIDByChannelMessage(ctx context.Context, channel, messageID string) (int64, error) {
+	if s.Store == nil {
+		return 0, port.ErrNotFound
+	}
+	return s.Store.GetCardIDByChannelMessage(ctx, channel, messageID)
+}
+
+func (s *testStubService) HasActiveResearch(ctx context.Context, cardID int64) (bool, error) {
+	if s.Store == nil {
+		return false, nil
+	}
+	return s.Store.HasActiveResearch(ctx, cardID)
+}
+
+func (s *testStubService) ListPlaybooks(ctx context.Context) ([]port.Playbook, error) {
+	if s.Store == nil {
+		return nil, nil
+	}
+	return s.Store.ListPlaybooks(ctx)
+}
+
+func (s *testStubService) GetPlaybook(ctx context.Context, id int64) (port.Playbook, error) {
+	if s.Store == nil {
+		return port.Playbook{}, port.ErrNotFound
+	}
+	return s.Store.GetPlaybook(ctx, id)
+}
+
+var _ Service = (*testStubService)(nil)
+
 // stubService is a capture pipeline that never touches the network: a text
 // share is echoed by the fetcher, the analyzer answers from llmStub.
 func stubService(t *testing.T, st port.Store, llm *httptest.Server) *testStubService {
@@ -414,7 +510,7 @@ func TestOrganizeReplyUpdatesCardInPlace(t *testing.T) {
 	svc := stubService(t, st, llmStub(t, `[{"title":"New","summary":"s","horizon":"short-term","tags":[],"links":[]}]`))
 
 	sent := stubTelegram(t, func() *Adapter {
-		a := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		a := &Adapter{Token: "tok", OwnerID: 1, Service: svc}
 		a.trackMessage(500, 1) // card 1 went out as bot message 500
 		return a
 	}, func(a *Adapter) {
@@ -450,7 +546,7 @@ func TestOrganizeReplyUntrackedFallsThroughToCapture(t *testing.T) {
 	svc := stubService(t, st, llmStub(t, `[{"title":"New","summary":"s","horizon":"short-term","tags":[],"links":[]}]`))
 
 	sent := stubTelegram(t, func() *Adapter {
-		a := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		a := &Adapter{Token: "tok", OwnerID: 1, Service: svc}
 		svc.Channel = a
 		return a
 	}, func(a *Adapter) {
@@ -491,7 +587,7 @@ func TestDigestCommandSendsCountsWithoutCapturing(t *testing.T) {
 	svc := stubService(t, st, llmStub(t, `[{"title":"New","summary":"s","horizon":"short-term","tags":[],"links":[]}]`))
 
 	sent := stubTelegram(t, func() *Adapter {
-		return &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc, PublicURL: "https://spark.example/"}
+		return &Adapter{Token: "tok", OwnerID: 1, Service: svc, PublicURL: "https://spark.example/"}
 	}, func(a *Adapter) {
 		a.handleMessage(&message{MessageID: 600, Chat: &chat{ID: 1}, Text: "/digest"})
 	})
@@ -518,7 +614,7 @@ func TestMorningDigestCommandDelegatesToService(t *testing.T) {
 	svc := stubService(t, st, llmStub(t, `[]`))
 
 	sent := stubTelegram(t, func() *Adapter {
-		a := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		a := &Adapter{Token: "tok", OwnerID: 1, Service: svc}
 		svc.Channel = a
 		return a
 	}, func(a *Adapter) {
@@ -535,7 +631,7 @@ func TestMorningDigestCommandDelegatesToService(t *testing.T) {
 func TestDigestScheduler_TriggersAtScheduledTime(t *testing.T) {
 	st := newStubStore()
 	sent := stubTelegram(t, func() *Adapter {
-		return &Adapter{Token: "tok", OwnerID: 1, Store: st, DigestPushDay: time.Wednesday, DigestPushHour: 19}
+		return &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: st}, DigestPushDay: time.Wednesday, DigestPushHour: 19}
 	}, func(a *Adapter) {
 		wednesday := time.Date(2026, 10, 7, 0, 0, 0, 0, time.Local)
 		at := func(day time.Weekday, hour int) time.Time {
@@ -562,7 +658,7 @@ func TestHelpCommandSendsHelpWithoutCapturing(t *testing.T) {
 	svc := stubService(t, st, llmStub(t, `[{"title":"New","summary":"s","horizon":"short-term","tags":[],"links":[]}]`))
 
 	sent := stubTelegram(t, func() *Adapter {
-		return &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		return &Adapter{Token: "tok", OwnerID: 1, Service: svc}
 	}, func(a *Adapter) {
 		a.handleMessage(&message{MessageID: 601, Chat: &chat{ID: 1}, Text: "/start"})
 	})
@@ -632,7 +728,7 @@ func TestNotifyVariants(t *testing.T) {
 
 	// 1. Notify duplicate
 	sent := stubTelegram(t, func() *Adapter {
-		return &Adapter{Token: "tok", OwnerID: 1, Store: newStubStore()}
+		return &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: newStubStore()}}
 	}, func(a *Adapter) {
 		err := a.Notify(context.Background(), port.Notification{
 			Kind: "duplicate",
@@ -649,7 +745,7 @@ func TestNotifyVariants(t *testing.T) {
 
 	// 2. Notify default (e.g. done)
 	sent = stubTelegram(t, func() *Adapter {
-		return &Adapter{Token: "tok", OwnerID: 1, Store: newStubStore()}
+		return &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: newStubStore()}}
 	}, func(a *Adapter) {
 		err := a.Notify(context.Background(), port.Notification{
 			Kind: "done",
@@ -676,7 +772,7 @@ func TestTelegramNotificationCounts(t *testing.T) {
 
 	var adapter *Adapter
 	sent := stubTelegram(t, func() *Adapter {
-		adapter = &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		adapter = &Adapter{Token: "tok", OwnerID: 1, Service: svc}
 		svc.Channel = adapter
 		return adapter
 	}, func(a *Adapter) {
@@ -740,7 +836,7 @@ func TestTelegramRetryCallback(t *testing.T) {
 	svc := stubService(t, st, llm)
 
 	sent := stubTelegram(t, func() *Adapter {
-		adapter := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		adapter := &Adapter{Token: "tok", OwnerID: 1, Service: svc}
 		svc.Channel = adapter
 		return adapter
 	}, func(a *Adapter) {
@@ -945,7 +1041,6 @@ func TestTelegramPlaybookPicker(t *testing.T) {
 		Token:   "token",
 		OwnerID: 12345,
 		baseURL: srv.URL,
-		Store:   st,
 		Service: &testStubService{Store: st},
 		httpc:   srv.Client(),
 	}
@@ -1133,7 +1228,7 @@ func TestShareIngestionAcknowledgmentAndSendAndEdit(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	adapter := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc, baseURL: srv.URL}
+	adapter := &Adapter{Token: "tok", OwnerID: 1, Service: svc, baseURL: srv.URL}
 	svc.Channel = adapter
 
 	adapter.handleMessage(&message{
@@ -1214,7 +1309,7 @@ func TestShareIngestionAnalysisFailedEditsPlaceholder(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	adapter := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc, baseURL: srv.URL}
+	adapter := &Adapter{Token: "tok", OwnerID: 1, Service: svc, baseURL: srv.URL}
 	svc.Channel = adapter
 
 	adapter.handleMessage(&message{
@@ -1263,7 +1358,6 @@ func TestHandleCallback_CommitAndTriageFunnel(t *testing.T) {
 	adapter := &Adapter{
 		Token:   "tok",
 		OwnerID: 100,
-		Store:   st,
 		Service: svc,
 		baseURL: srv.URL,
 	}
@@ -1366,7 +1460,6 @@ func TestTelegramResearchCallbackTracksAndCleansMessage(t *testing.T) {
 		OwnerID: 100,
 		baseURL: ts.URL,
 		Service: svc,
-		Store:   st,
 		Logf:    t.Logf,
 	}
 
@@ -1405,7 +1498,7 @@ func TestTelegramResearchCallbackTracksAndCleansMessage(t *testing.T) {
 
 func TestCardForMsg_ResolvesFromStoreAfterMemoryReset(t *testing.T) {
 	st := newStubStore()
-	a := &Adapter{Token: "tok", OwnerID: 1, Store: st}
+	a := &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: st}}
 
 	a.recordMsgCard(500, 42)
 
@@ -1458,7 +1551,7 @@ func TestCardForMsg_ServerRestart_WithRealStore(t *testing.T) {
 		t.Fatalf("CreateCard: %v", err)
 	}
 
-	a1 := &Adapter{Token: "tok", OwnerID: 1, Store: st1}
+	a1 := &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: st1}}
 	a1.recordMsgCard(777, c.ID)
 
 	// Close store and simulate full server shutdown
@@ -1473,7 +1566,7 @@ func TestCardForMsg_ServerRestart_WithRealStore(t *testing.T) {
 	}
 	defer st2.Close()
 
-	a2 := &Adapter{Token: "tok", OwnerID: 1, Store: st2}
+	a2 := &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: st2}}
 	if got := a2.cardForMsg(777); got != c.ID {
 		t.Fatalf("a2.cardForMsg(777) after restart: got %d, want %d", got, c.ID)
 	}
@@ -1494,7 +1587,7 @@ func TestReactionAndReplyAfterRestart(t *testing.T) {
 	}
 
 	svc := stubService(t, st, llmStub(t, `[{"title":"New","summary":"s","horizon":"short-term","tags":[],"links":[]}]`))
-	a := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+	a := &Adapter{Token: "tok", OwnerID: 1, Service: svc}
 
 	// Bot sent card out as message 500
 	a.recordMsgCard(500, c.ID)

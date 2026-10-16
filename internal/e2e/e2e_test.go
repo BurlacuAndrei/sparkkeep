@@ -134,7 +134,6 @@ func newE2EHarness(t *testing.T, llmResponseJSON string) *harness {
 	tgAdapter := &telegram.Adapter{
 		Token:   "e2e-token",
 		OwnerID: 1001,
-		Store:   st,
 		Service: h.service,
 		Logf:    t.Logf,
 		BaseURL: h.tgSrv.URL,

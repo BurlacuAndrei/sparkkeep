@@ -34,13 +34,12 @@ type Adapter struct {
 	ChannelID  string
 	PublicURL  string
 	Service    Service
-	Store      port.Store
 	Logf       func(format string, args ...any)
 
 	client *http.Client
 }
 
-func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(format string, args ...any)) *Adapter {
+func New(cfg Config, svc Service, publicURL string, logf func(format string, args ...any)) *Adapter {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
@@ -50,7 +49,6 @@ func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(for
 		ChannelID:  strings.TrimSpace(cfg.ChannelID),
 		PublicURL:  publicURL,
 		Service:    svc,
-		Store:      st,
 		Logf:       logf,
 		client:     &http.Client{Timeout: 10 * time.Second},
 	}

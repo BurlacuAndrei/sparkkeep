@@ -25,6 +25,7 @@ var _ port.ChannelAdapter = (*Adapter)(nil)
 type Service interface {
 	CaptureShare(ctx context.Context, share capture.Share) ([]int64, error)
 	GoResearch(ctx context.Context, cardID int64, playbookID ...*int64)
+	UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error)
 }
 
 // Adapter connects Sparkkeep with a local or remote OpenClaw Gateway.
@@ -35,7 +36,6 @@ type Adapter struct {
 	DefaultTarget  string // e.g. "+15550199" or user ID
 	PublicURL      string
 	Service        Service
-	Store          port.Store
 	Logf           func(format string, args ...any)
 
 	client *http.Client
@@ -52,7 +52,7 @@ type Config struct {
 }
 
 // New constructs an OpenClaw bridge adapter.
-func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(format string, args ...any)) *Adapter {
+func New(cfg Config, svc Service, publicURL string, logf func(format string, args ...any)) *Adapter {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
@@ -71,7 +71,6 @@ func New(cfg Config, svc Service, st port.Store, publicURL string, logf func(for
 		DefaultTarget:  strings.TrimSpace(cfg.DefaultTarget),
 		PublicURL:      publicURL,
 		Service:        svc,
-		Store:          st,
 		Logf:           logf,
 		client:         &http.Client{Timeout: 10 * time.Second},
 	}
@@ -373,28 +372,28 @@ func (a *Adapter) handleActionCommand(ctx context.Context, text string) (bool, s
 	case "short", "2":
 		h := port.HorizonShortTerm
 		st := port.StatusInProgress
-		if a.Store != nil {
-			_, _ = a.Store.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st})
+		if a.Service != nil {
+			_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st})
 			return true, fmt.Sprintf("Card %d moved to Short-term (Doing)", cardID)
 		}
 	case "med", "medium", "3":
 		h := port.HorizonMediumTerm
 		st := port.StatusToDo
-		if a.Store != nil {
-			_, _ = a.Store.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st})
+		if a.Service != nil {
+			_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st})
 			return true, fmt.Sprintf("Card %d moved to Medium-term (To Do)", cardID)
 		}
 	case "long", "4":
 		h := port.HorizonLongTerm
 		st := port.StatusToDo
-		if a.Store != nil {
-			_, _ = a.Store.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st})
+		if a.Service != nil {
+			_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st})
 			return true, fmt.Sprintf("Card %d moved to Long-term", cardID)
 		}
 	case "discard", "x", "shelve":
 		st := port.StatusShelved
-		if a.Store != nil {
-			_, _ = a.Store.UpdateCard(ctx, cardID, port.CardPatch{Status: &st})
+		if a.Service != nil {
+			_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &st})
 			return true, fmt.Sprintf("Card %d shelved", cardID)
 		}
 	}

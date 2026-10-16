@@ -22,27 +22,30 @@ import (
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
+	"sparkkeep/internal/webhook"
 )
 
 // --- stubs -----------------------------------------------------------------
 
 // stubStore is an in-memory port.Store.
 type stubStore struct {
-	cards      map[int64]port.Card
-	captures   map[int64]port.Capture
-	researches map[int64]port.Research
-	settings   map[string]string
-	nextCard   int64
-	nextCap    int64
-	nextRes    int64
+	cards       map[int64]port.Card
+	captures    map[int64]port.Capture
+	researches  map[int64]port.Research
+	settings    map[string]string
+	channelMsgs map[string]int64
+	nextCard    int64
+	nextCap     int64
+	nextRes     int64
 }
 
 func newStubStore() *stubStore {
 	return &stubStore{
-		cards:      map[int64]port.Card{},
-		captures:   map[int64]port.Capture{},
-		researches: map[int64]port.Research{},
-		settings:   map[string]string{},
+		cards:       map[int64]port.Card{},
+		captures:    map[int64]port.Capture{},
+		researches:  map[int64]port.Research{},
+		settings:    map[string]string{},
+		channelMsgs: map[string]int64{},
 	}
 }
 
@@ -332,7 +335,17 @@ func (s *stubStore) GetResearchFindings(_ context.Context, id int64) (string, er
 	return r.Findings, nil
 }
 
-func (s *stubStore) ShelveStale(context.Context, int) (int64, error) { return 0, nil }
+func (s *stubStore) ShelveStale(_ context.Context, _ int) (int64, error) {
+	var count int64
+	for id, c := range s.cards {
+		if c.Status != port.StatusDone && c.Status != port.StatusDismissed && c.Status != "shelved" {
+			c.Status = "shelved"
+			s.cards[id] = c
+			count++
+		}
+	}
+	return count, nil
+}
 
 func (s *stubStore) GetSetting(_ context.Context, key string) (string, error) {
 	if s.settings != nil {
@@ -503,11 +516,20 @@ func (s *stubStore) ListCardComments(_ context.Context, cardID int64) ([]port.Ca
 	return nil, nil
 }
 
-func (s *stubStore) RecordChannelMessage(_ context.Context, _, _ string, _ int64) error {
+func (s *stubStore) RecordChannelMessage(_ context.Context, channel, msgID string, cardID int64) error {
+	if s.channelMsgs == nil {
+		s.channelMsgs = make(map[string]int64)
+	}
+	s.channelMsgs[channel+":"+msgID] = cardID
 	return nil
 }
 
-func (s *stubStore) GetCardIDByChannelMessage(_ context.Context, _, _ string) (int64, error) {
+func (s *stubStore) GetCardIDByChannelMessage(_ context.Context, channel, msgID string) (int64, error) {
+	if s.channelMsgs != nil {
+		if id, ok := s.channelMsgs[channel+":"+msgID]; ok {
+			return id, nil
+		}
+	}
 	return 0, port.ErrNotFound
 }
 
@@ -2211,5 +2233,120 @@ func TestReloadChannels_DynamicallyUpdatesHub(t *testing.T) {
 	}
 	if len(hub.Adapters()) != 0 {
 		t.Fatalf("expected 0 adapters left, got %d", len(hub.Adapters()))
+	}
+}
+
+func TestService_CardMutationPipeline(t *testing.T) {
+	ctx := context.Background()
+	st := newStubStore()
+	c1, _ := st.CreateCard(ctx, port.Card{Title: "Card 1", Status: port.StatusInbox, Horizon: "short-term"})
+	c2, _ := st.CreateCard(ctx, port.Card{Title: "Card 2", Status: "doing", Horizon: "medium-term"})
+
+	var webhookEvents []string
+	var webhookMu sync.Mutex
+	whServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload webhook.Payload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			webhookMu.Lock()
+			webhookEvents = append(webhookEvents, string(payload.Event))
+			webhookMu.Unlock()
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer whServer.Close()
+
+	_ = st.SetSetting(ctx, "webhook_url", whServer.URL)
+	dispatcher := webhook.NewDispatcher(st, nil)
+
+	svc := &Service{
+		Store:   st,
+		Webhook: dispatcher,
+		Logf:    t.Logf,
+	}
+
+	// 1. UpdateCard
+	newStatus := port.StatusDone
+	newHorizon := "lifetime"
+	updated, err := svc.UpdateCard(ctx, c1.ID, port.CardPatch{Status: &newStatus, Horizon: &newHorizon})
+	if err != nil {
+		t.Fatalf("UpdateCard failed: %v", err)
+	}
+	if updated.Status != port.StatusDone || updated.Horizon != "lifetime" {
+		t.Fatalf("expected status=done horizon=lifetime, got status=%s horizon=%s", updated.Status, updated.Horizon)
+	}
+
+	// Wait briefly for async webhook dispatch
+	time.Sleep(50 * time.Millisecond)
+	webhookMu.Lock()
+	foundUpdate := false
+	for _, ev := range webhookEvents {
+		if ev == "card.updated" {
+			foundUpdate = true
+			break
+		}
+	}
+	webhookMu.Unlock()
+	if !foundUpdate {
+		t.Errorf("expected card.updated webhook event on UpdateCard")
+	}
+
+	// 2. SetCardTags (tests normalization and deduplication)
+	if err := svc.SetCardTags(ctx, c1.ID, []string{"AI", " ai ", "Tool", "TOOL", ""}); err != nil {
+		t.Fatalf("SetCardTags failed: %v", err)
+	}
+	fetched, _ := svc.GetCard(ctx, c1.ID)
+	if len(fetched.Tags) != 2 || fetched.Tags[0] != "ai" || fetched.Tags[1] != "tool" {
+		t.Fatalf("expected tags [ai, tool], got %v", fetched.Tags)
+	}
+
+	// 3. AddCardComment
+	cmt, err := svc.AddCardComment(ctx, c1.ID, "A test comment")
+	if err != nil {
+		t.Fatalf("AddCardComment failed: %v", err)
+	}
+	if cmt.Content != "A test comment" {
+		t.Errorf("expected comment content 'A test comment', got %q", cmt.Content)
+	}
+	if _, err := svc.AddCardComment(ctx, c1.ID, "   "); err == nil {
+		t.Errorf("expected error on empty comment content")
+	}
+
+	// 4. LinkChannelMessage and GetCardIDByChannelMessage
+	if err := svc.LinkChannelMessage(ctx, "telegram", "msg_999", c1.ID); err != nil {
+		t.Fatalf("LinkChannelMessage failed: %v", err)
+	}
+	matchedID, err := svc.GetCardIDByChannelMessage(ctx, "telegram", "msg_999")
+	if err != nil {
+		t.Fatalf("GetCardIDByChannelMessage failed: %v", err)
+	}
+	if matchedID != c1.ID {
+		t.Fatalf("expected cardID %d, got %d", c1.ID, matchedID)
+	}
+
+	// 5. ShelveStaleCards
+	shelvedCount, err := svc.ShelveStaleCards(ctx, 30)
+	if err != nil {
+		t.Fatalf("ShelveStaleCards failed: %v", err)
+	}
+	if shelvedCount != 1 { // c2 was doing, c1 is done
+		t.Errorf("expected 1 card shelved, got %d", shelvedCount)
+	}
+	c2Fetched, _ := svc.GetCard(ctx, c2.ID)
+	if c2Fetched.Status != "shelved" {
+		t.Errorf("expected c2 status to be shelved, got %s", c2Fetched.Status)
+	}
+
+	// 6. HasActiveResearch, ListPlaybooks, GetPlaybook
+	active, err := svc.HasActiveResearch(ctx, c1.ID)
+	if err != nil || active {
+		t.Errorf("expected active=false, err=nil, got active=%v err=%v", active, err)
+	}
+	pbs, err := svc.ListPlaybooks(ctx)
+	if err != nil || len(pbs) == 0 {
+		t.Errorf("expected playbooks list, got pbs=%v err=%v", pbs, err)
+	}
+	pb, err := svc.GetPlaybook(ctx, 1)
+	if err != nil || pb.ID != 1 {
+		t.Errorf("expected playbook ID=1, got pb=%v err=%v", pb, err)
 	}
 }
