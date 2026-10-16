@@ -12,7 +12,7 @@
 
 .search-input {
   width: 100%;
-  padding: 7px 64px 7px 34px;
+  padding: 7px 64px 7px 38px;
   border-radius: 999px;
   background: var(--bg-input);
   border: 1px solid var(--border-input);
@@ -35,7 +35,7 @@
 
 .search-icon {
   position: absolute;
-  left: 12px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-faint);
@@ -3512,8 +3512,8 @@
 }
 
 .capture-hero-box {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-sunken, rgba(15, 23, 42, 0.6));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
   border-radius: 10px;
   padding: 16px;
   display: flex;
@@ -3536,7 +3536,7 @@
 .capture-label {
   font-size: 12px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--text-dim, #94a3b8);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -3550,17 +3550,23 @@
   padding: 2px 7px;
   border-radius: 12px;
   background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
+  color: #818cf8;
   border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+[data-theme="light"] .capture-detected-badge {
+  background: #e0e7ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
 }
 
 .capture-textarea {
   width: 100%;
-  background: rgba(30, 41, 59, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-input, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--border-input, rgba(255, 255, 255, 0.1));
   border-radius: 8px;
   padding: 12px 14px;
-  color: #f8fafc;
+  color: var(--text-main, #f8fafc);
   font-size: 14px;
   line-height: 1.5;
   resize: vertical;
@@ -3569,28 +3575,38 @@
   transition: all 0.15s ease;
 }
 
+.capture-textarea::placeholder {
+  color: var(--text-faint, #64748b);
+}
+
 .capture-textarea:focus {
   outline: none;
-  background: rgba(30, 41, 59, 0.8);
-  border-color: #6366f1;
+  background: var(--bg-input-focus, rgba(30, 41, 59, 0.8));
+  border-color: var(--border-input-focus, #6366f1);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
 .capture-context-input {
   width: 100%;
-  background: rgba(30, 41, 59, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-input, rgba(30, 41, 59, 0.4));
+  border: 1px solid var(--border-input, rgba(255, 255, 255, 0.08));
   border-radius: 8px;
   padding: 9px 12px;
-  color: #e2e8f0;
+  color: var(--text-main, #e2e8f0);
   font-size: 13px;
   font-family: inherit;
   transition: all 0.15s ease;
 }
 
+.capture-context-input::placeholder {
+  color: var(--text-faint, #64748b);
+}
+
 .capture-context-input:focus {
   outline: none;
-  border-color: #6366f1;
-  background: rgba(30, 41, 59, 0.7);
+  border-color: var(--border-input-focus, #6366f1);
+  background: var(--bg-input-focus, rgba(30, 41, 59, 0.7));
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
 .capture-footer-row {
@@ -3607,17 +3623,18 @@
   gap: 6px;
   padding: 5px 10px;
   font-size: 12px;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.15);
+  color: var(--text-dim, #94a3b8);
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.04));
+  border: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.15));
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .capture-attachment-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--text-main, #e2e8f0);
+  border-color: var(--accent-indigo, #6366f1);
 }
 
 .capture-file-chip {
@@ -3628,8 +3645,14 @@
   font-size: 12px;
   background: rgba(99, 102, 241, 0.15);
   border: 1px solid rgba(99, 102, 241, 0.3);
-  color: #c7d2fe;
+  color: #818cf8;
   border-radius: 6px;
+}
+
+[data-theme="light"] .capture-file-chip {
+  background: #e0e7ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
 }
 
 /* Synthesis Pulse State */
@@ -3655,7 +3678,7 @@
 .capture-manual-toggle {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--text-dim, #94a3b8);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
@@ -3666,7 +3689,7 @@
 }
 
 .capture-manual-toggle:hover {
-  color: #e2e8f0;
+  color: var(--text-main, #e2e8f0);
 }
 
 /* ==========================================================================

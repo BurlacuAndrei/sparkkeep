@@ -415,3 +415,29 @@
   border-radius: 3px;
   color: var(--text-dim);
 }
+
+/* Light Theme Overrides */
+[data-theme="light"] .omnisearch-empty-create-btn {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #4338ca;
+}
+
+[data-theme="light"] .omnisearch-empty-create-btn:hover {
+  background: rgba(99, 102, 241, 0.18);
+  color: #3730a3;
+}
+
+[data-theme="light"] .omnisearch-footer {
+  background: var(--surface-sunken, #f8fafc);
+  color: var(--text-dim, #64748b);
+  border-top: 1px solid var(--border-subtle, #e2e8f0);
+}
+
+[data-theme="light"] .omnisearch-footer-hint kbd {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: var(--text-main, #334155);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+}
+

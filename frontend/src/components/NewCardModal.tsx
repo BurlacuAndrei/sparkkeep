@@ -178,9 +178,9 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
               gap: 8,
               padding: '10px 14px',
               borderRadius: 8,
-              background: 'rgba(239, 68, 68, 0.12)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              color: '#fca5a5',
+              background: 'var(--color-error-bg, rgba(239, 68, 68, 0.12))',
+              border: '1px solid var(--color-error-border, rgba(239, 68, 68, 0.3))',
+              color: 'var(--color-error-text, #fca5a5)',
               fontSize: 13,
             }}
           >
@@ -197,17 +197,17 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
                 width: 44,
                 height: 44,
                 borderRadius: '50%',
-                background: 'rgba(99, 102, 241, 0.2)',
+                background: 'rgba(99, 102, 241, 0.15)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 border: '1px solid rgba(129, 140, 248, 0.4)',
               }}
             >
-              <Sparkles size={22} color="#a5b4fc" className="spin-slow" />
+              <Sparkles size={22} color="var(--accent-indigo, #6366f1)" className="spin-slow" />
             </div>
             <div>
-              <h4 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>
+              <h4 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-main)' }}>
                 Synthesizing Intelligence Brief...
               </h4>
               <p style={{ margin: 0, fontSize: 13, color: 'var(--text-dim)', maxWidth: 380, lineHeight: 1.5 }}>
@@ -288,7 +288,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
                     <button
                       type="button"
                       onClick={() => setFile(null)}
-                      style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', padding: 0 }}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 0 }}
                       aria-label="Remove attachment"
                     >
                       <X size={12} />
@@ -313,7 +313,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
             </div>
 
             {/* Manual Accordion Toggle */}
-            <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: 10 }}>
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
               <button
                 type="button"
                 className="capture-manual-toggle"
@@ -324,7 +324,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
               </button>
 
               {isManualExpanded && (
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12, padding: '14px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12, padding: '14px', background: 'var(--surface-sunken)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
                   <div className="form-group">
                     <label>Card Title *</label>
                     <input
