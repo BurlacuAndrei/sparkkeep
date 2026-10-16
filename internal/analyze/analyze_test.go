@@ -670,7 +670,7 @@ func TestExtractJSONTriageBriefFullAndPartial(t *testing.T) {
 		"cards": [
 			{
 				"title": "Local LLM Router",
-				"type": "tool",
+				"type": "product",
 				"tldr": "Dynamic role-based router for local model deployments.",
 				"why_care": "Saves 90% latency by using specialized smaller models.",
 				"horizon": "short-term",
@@ -701,7 +701,7 @@ func TestExtractJSONTriageBriefFullAndPartial(t *testing.T) {
 		t.Fatalf("len = %d, want 1", len(res.Cards))
 	}
 	card := res.Cards[0]
-	if card.Type != "tool" || card.TLDR != "Dynamic role-based router for local model deployments." {
+	if card.Type != "product" || card.TLDR != "Dynamic role-based router for local model deployments." {
 		t.Errorf("mismatch card basic: %+v", card)
 	}
 	if card.WhyCare != "Saves 90% latency by using specialized smaller models." {
@@ -842,7 +842,7 @@ func TestCardTaxonomy_SystemPrompt(t *testing.T) {
 
 	// 2. With default card types
 	spDef := SystemPrompt(port.DefaultCardTypes)
-	expectedDef := "You are a curator that returns strict JSON. 'type' must be one of: tool, product, company, article, idea, repo, paper, other."
+	expectedDef := "You are a curator that returns strict JSON. 'type' must be one of: article, video, book, guide, product, place, idea, quote, other."
 	if spDef != expectedDef {
 		t.Fatalf("expected %q, got %q", expectedDef, spDef)
 	}

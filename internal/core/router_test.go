@@ -430,10 +430,10 @@ func TestCaptureTriageBriefDistinctCards(t *testing.T) {
 		resp := `{
 			"cards": [
 				{
-					"title": "Card 1 Tool",
-					"type": "tool",
-					"tldr": "Distinct TLDR for first tool.",
-					"why_care": "Distinct reason why we care about tool 1.",
+					"title": "Card 1 Product",
+					"type": "product",
+					"tldr": "Distinct TLDR for first product.",
+					"why_care": "Distinct reason why we care about product 1.",
 					"horizon": "short-term",
 					"tags": ["tool1"],
 					"claims": ["Claim 1A", "Claim 1B"],
@@ -540,13 +540,13 @@ func TestCaptureTriageBriefDistinctCards(t *testing.T) {
 	if card1.WhyCare == card2.WhyCare {
 		t.Errorf("expected distinct WhyCare, but both were %q", card1.WhyCare)
 	}
-	if card1.TLDR != "Distinct TLDR for first tool." {
+	if card1.TLDR != "Distinct TLDR for first product." {
 		t.Errorf("card1.TLDR = %q", card1.TLDR)
 	}
 	if card2.TLDR != "Distinct TLDR for second idea." {
 		t.Errorf("card2.TLDR = %q", card2.TLDR)
 	}
-	if card1.WhyCare != "Distinct reason why we care about tool 1." {
+	if card1.WhyCare != "Distinct reason why we care about product 1." {
 		t.Errorf("card1.WhyCare = %q", card1.WhyCare)
 	}
 	if card2.WhyCare != "Distinct reason why we care about idea 2." {
@@ -554,7 +554,7 @@ func TestCaptureTriageBriefDistinctCards(t *testing.T) {
 	}
 
 	// 3. New fields persisted
-	if card1.Type != "tool" || card2.Type != "idea" {
+	if card1.Type != "product" || card2.Type != "idea" {
 		t.Errorf("types: %q, %q", card1.Type, card2.Type)
 	}
 	if len(card1.Claims) != 2 || card1.Claims[0] != "Claim 1A" {

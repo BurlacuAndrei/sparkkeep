@@ -3125,7 +3125,7 @@ func TestCardTypesSettings_RoundTripAndValidation(t *testing.T) {
 	if err := json.Unmarshal(rrGet.Body.Bytes(), &getResp); err != nil {
 		t.Fatalf("unmarshal GET settings: %v", err)
 	}
-	expectedDefaults := []string{"tool", "product", "company", "article", "idea", "repo", "paper"}
+	expectedDefaults := []string{"article", "video", "book", "guide", "product", "place", "idea", "quote"}
 	if len(getResp.Settings.CardTypes) != len(expectedDefaults) {
 		t.Fatalf("expected %d default card_types, got %d: %v", len(expectedDefaults), len(getResp.Settings.CardTypes), getResp.Settings.CardTypes)
 	}

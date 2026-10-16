@@ -42,7 +42,7 @@ export type SettingsTab =
   | 'integrations'
   | 'security';
 
-const DEFAULT_CARD_TYPES = ['tool', 'product', 'company', 'article', 'idea', 'repo', 'paper'];
+const DEFAULT_CARD_TYPES = ['article', 'video', 'book', 'guide', 'product', 'place', 'idea', 'quote'];
 
 interface SettingsBaseline {
   cardDensity: 'comfortable' | 'compact';

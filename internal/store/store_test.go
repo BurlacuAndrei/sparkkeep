@@ -973,7 +973,7 @@ func TestCardTypesSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCardTypes initially failed: %v", err)
 	}
-	expectedDefaults := []string{"tool", "product", "company", "article", "idea", "repo", "paper"}
+	expectedDefaults := []string{"article", "video", "book", "guide", "product", "place", "idea", "quote"}
 	if len(types) != len(expectedDefaults) {
 		t.Fatalf("expected %d default card types, got %d: %v", len(expectedDefaults), len(types), types)
 	}

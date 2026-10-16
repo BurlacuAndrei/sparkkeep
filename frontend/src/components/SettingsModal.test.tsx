@@ -215,15 +215,15 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     localStorage.clear();
   });
 
-  it('renders the Card Taxonomy section with pre-seeded 7 default types and active count', async () => {
+  it('renders the Card Taxonomy section with pre-seeded 8 default types and active count', async () => {
     renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
 
     await waitFor(() => {
       expect(screen.getByText('Card Taxonomy')).toBeDefined();
-      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+      expect(screen.getByText('8 / 20 active types')).toBeDefined();
     });
 
-    for (const t of ['tool', 'product', 'company', 'article', 'idea', 'repo', 'paper']) {
+    for (const t of ['article', 'video', 'book', 'guide', 'product', 'place', 'idea', 'quote']) {
       expect(screen.getByText(t)).toBeDefined();
     }
     // Immutable fallback chip
@@ -234,7 +234,7 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
 
     await waitFor(() => {
-      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+      expect(screen.getByText('8 / 20 active types')).toBeDefined();
     });
 
     const input = screen.getByLabelText('New card type');
@@ -246,7 +246,7 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     fireEvent.click(addBtn);
 
     await waitFor(() => {
-      expect(screen.getByText('8 / 20 active types')).toBeDefined();
+      expect(screen.getByText('9 / 20 active types')).toBeDefined();
       expect(screen.getByText('framework')).toBeDefined();
     });
   });
@@ -255,15 +255,15 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
 
     await waitFor(() => {
-      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+      expect(screen.getByText('8 / 20 active types')).toBeDefined();
     });
 
-    const removePaperBtn = screen.getByLabelText('Remove paper');
-    fireEvent.click(removePaperBtn);
+    const removeQuoteBtn = screen.getByLabelText('Remove quote');
+    fireEvent.click(removeQuoteBtn);
 
     await waitFor(() => {
-      expect(screen.getByText('6 / 20 active types')).toBeDefined();
-      expect(screen.queryByText('paper')).toBeNull();
+      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+      expect(screen.queryByText('quote')).toBeNull();
     });
   });
 
@@ -271,14 +271,14 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
 
     await waitFor(() => {
-      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+      expect(screen.getByText('8 / 20 active types')).toBeDefined();
     });
 
     const input = screen.getByLabelText('New card type');
     const addBtn = screen.getByRole('button', { name: /Add Type/i });
 
-    // Try adding "tool" (already exists)
-    fireEvent.change(input, { target: { value: 'tool' } });
+    // Try adding "article" (already exists)
+    fireEvent.change(input, { target: { value: 'article' } });
     expect(addBtn.hasAttribute('disabled')).toBe(true);
 
     // Try adding "other"
@@ -290,28 +290,28 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     vi.mocked(api.fetchPlaybooks).mockResolvedValueOnce([
       {
         id: 10,
-        name: 'Deep Repo Audit',
-        description: 'Audits open source repositories',
+        name: 'Deep Research Guide',
+        description: 'Audits guides and workflows',
         is_builtin: false,
-        card_types: ['repo', 'tool'],
+        card_types: ['guide', 'product'],
         version: 1,
         steps: [],
       },
       {
         id: 11,
-        name: 'Academic Literature Review',
-        description: 'Reviews papers',
+        name: 'Book Reading Pipeline',
+        description: 'Reviews books',
         is_builtin: false,
-        card_types: ['paper'],
+        card_types: ['book'],
         version: 1,
         steps: [],
       },
       {
         id: 12,
-        name: 'DevTool Landscape',
-        description: 'Compares developer tools and repos',
+        name: 'Cooking Guide',
+        description: 'Processes kitchen guides and recipes',
         is_builtin: false,
-        card_types: ['repo'],
+        card_types: ['guide'],
         version: 2,
         steps: [],
       },
@@ -320,19 +320,19 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
 
     await waitFor(() => {
-      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+      expect(screen.getByText('8 / 20 active types')).toBeDefined();
     });
 
-    // Click delete on 'repo', which is referenced by 2 playbooks
-    const removeRepoBtn = screen.getByLabelText('Remove repo');
-    fireEvent.click(removeRepoBtn);
+    // Click delete on 'guide', which is referenced by 2 playbooks
+    const removeGuideBtn = screen.getByLabelText('Remove guide');
+    fireEvent.click(removeGuideBtn);
 
     // Impact confirmation modal should appear and list only the 2 affected playbooks
     await waitFor(() => {
-      expect(screen.getByText(/Deep Repo Audit/i)).toBeDefined();
-      expect(screen.getByText(/DevTool Landscape/i)).toBeDefined();
+      expect(screen.getByText(/Deep Research Guide/i)).toBeDefined();
+      expect(screen.getByText(/Cooking Guide/i)).toBeDefined();
     });
-    expect(screen.queryByText(/Academic Literature Review/i)).toBeNull();
+    expect(screen.queryByText(/Book Reading Pipeline/i)).toBeNull();
 
     // Modal offers 'Detach from Playbooks (Default)' and 'Cancel'
     const impactModal = screen.getByTestId('taxonomy-impact-modal');
@@ -340,61 +340,61 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     const cancelBtn = within(impactModal).getByRole('button', { name: /^Cancel$/i });
 
     // Card type should still be present before confirmation
-    expect(screen.getByText('7 / 20 active types')).toBeDefined();
+    expect(screen.getByText('8 / 20 active types')).toBeDefined();
 
-    // Clicking Cancel closes the impact modal and leaves 'repo' intact
+    // Clicking Cancel closes the impact modal and leaves 'guide' intact
     fireEvent.click(cancelBtn);
 
     await waitFor(() => {
       expect(screen.queryByTestId('taxonomy-impact-modal')).toBeNull();
     });
-    expect(screen.getByText('7 / 20 active types')).toBeDefined();
+    expect(screen.getByText('8 / 20 active types')).toBeDefined();
     expect(api.updatePlaybook).not.toHaveBeenCalled();
   });
 
   it('dispatches batch updatePlaybook calls and updates settings when confirming Detach from Playbooks (Default) without deleting playbooks', async () => {
-    const repoPlaybook1 = {
+    const guidePlaybook1 = {
       id: 10,
-      name: 'Deep Repo Audit',
-      description: 'Audits open source repositories',
+      name: 'Deep Research Guide',
+      description: 'Audits guides and workflows',
       is_builtin: false,
-      card_types: ['repo', 'tool'],
+      card_types: ['guide', 'product'],
       version: 1,
       steps: [{ position: 1, kind: 'custom', name: 'Step 1', enabled: true, config: {} }],
     };
-    const paperPlaybook = {
+    const bookPlaybook = {
       id: 11,
-      name: 'Academic Literature Review',
-      description: 'Reviews papers',
+      name: 'Book Reading Pipeline',
+      description: 'Reviews books',
       is_builtin: false,
-      card_types: ['paper'],
+      card_types: ['book'],
       version: 1,
       steps: [],
     };
-    const repoPlaybook2 = {
+    const guidePlaybook2 = {
       id: 12,
-      name: 'DevTool Landscape',
-      description: 'Compares developer tools and repos',
+      name: 'Cooking Guide',
+      description: 'Processes kitchen guides and recipes',
       is_builtin: false,
-      card_types: ['repo'],
+      card_types: ['guide'],
       version: 2,
       steps: [],
     };
 
     vi.mocked(api.fetchPlaybooks).mockResolvedValueOnce([
-      repoPlaybook1,
-      paperPlaybook,
-      repoPlaybook2,
+      guidePlaybook1,
+      bookPlaybook,
+      guidePlaybook2,
     ]);
 
     renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
 
     await waitFor(() => {
-      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+      expect(screen.getByText('8 / 20 active types')).toBeDefined();
     });
 
-    // Click delete on 'repo'
-    fireEvent.click(screen.getByLabelText('Remove repo'));
+    // Click delete on 'guide'
+    fireEvent.click(screen.getByLabelText('Remove guide'));
 
     const impactModal = await screen.findByTestId('taxonomy-impact-modal');
     const detachBtn = within(impactModal).getByRole('button', {
@@ -411,32 +411,32 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
       10,
       expect.objectContaining({
         id: 10,
-        name: 'Deep Repo Audit',
-        card_types: ['tool'],
+        name: 'Deep Research Guide',
+        card_types: ['product'],
       })
     );
     expect(api.updatePlaybook).toHaveBeenCalledWith(
       12,
       expect.objectContaining({
         id: 12,
-        name: 'DevTool Landscape',
+        name: 'Cooking Guide',
         card_types: [],
       })
     );
     expect(api.deletePlaybook).not.toHaveBeenCalled();
 
-    // Settings updated with 'repo' removed
+    // Settings updated with 'guide' removed
     expect(api.patchSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        card_types: ['tool', 'product', 'company', 'article', 'idea', 'paper'],
+        card_types: ['article', 'video', 'book', 'product', 'place', 'idea', 'quote'],
       })
     );
 
-    // Impact modal closes and active card types count updates to 6 / 20
+    // Impact modal closes and active card types count updates to 7 / 20
     await waitFor(() => {
       expect(screen.queryByTestId('taxonomy-impact-modal')).toBeNull();
-      expect(screen.getByText('6 / 20 active types')).toBeDefined();
-      expect(screen.queryByLabelText('Remove repo')).toBeNull();
+      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+      expect(screen.queryByLabelText('Remove guide')).toBeNull();
     });
   });
 });

@@ -37,17 +37,23 @@ const (
 	CardTypeProduct  = "product"
 	CardTypeCompany  = "company"
 	CardTypePaper    = "paper"
+	CardTypeVideo    = "video"
+	CardTypeBook     = "book"
+	CardTypeGuide    = "guide"
+	CardTypePlace    = "place"
+	CardTypeQuote    = "quote"
 	CardTypeOther    = "other"
 )
 
 var DefaultCardTypes = []string{
-	CardTypeTool,
-	CardTypeProduct,
-	CardTypeCompany,
 	CardTypeArticle,
+	CardTypeVideo,
+	CardTypeBook,
+	CardTypeGuide,
+	CardTypeProduct,
+	CardTypePlace,
 	CardTypeIdea,
-	CardTypeRepo,
-	CardTypePaper,
+	CardTypeQuote,
 }
 
 const (

@@ -411,7 +411,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    const canonicalTypes = ['tool', 'product', 'company', 'article', 'idea', 'repo', 'paper'];
+    const canonicalTypes = ['article', 'video', 'book', 'guide', 'product', 'place', 'idea', 'quote'];
     for (const type of canonicalTypes) {
       expect(screen.getByRole('button', { name: type })).toBeDefined();
     }

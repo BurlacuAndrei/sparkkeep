@@ -172,7 +172,7 @@ func TestE2E_TelegramIngestionToInbox(t *testing.T) {
 	sampleTelegramCard := `[{
 		"title": "Agency Agents - 200+ Specialized AI Agents",
 		"summary": "Full AI agency repo for Claude Code, Cursor and Copilot.",
-		"type": "repo",
+		"type": "video",
 		"horizon": "short-term",
 		"tags": ["ai", "agents", "github"],
 		"links": []
@@ -210,8 +210,8 @@ func TestE2E_TelegramIngestionToInbox(t *testing.T) {
 	if card.Title != "Agency Agents - 200+ Specialized AI Agents" {
 		t.Errorf("card title = %q, want %q", card.Title, "Agency Agents - 200+ Specialized AI Agents")
 	}
-	if card.Type != port.CardTypeRepo {
-		t.Errorf("card type = %q, want %q", card.Type, port.CardTypeRepo)
+	if card.Type != port.CardTypeVideo {
+		t.Errorf("card type = %q, want %q", card.Type, port.CardTypeVideo)
 	}
 }
 

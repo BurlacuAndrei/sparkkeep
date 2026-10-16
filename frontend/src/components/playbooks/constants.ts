@@ -17,13 +17,14 @@ export interface SoftLinterAdvisory {
 }
 
 export const DEFAULT_CARD_TYPES = [
-  'tool',
-  'product',
-  'company',
   'article',
+  'video',
+  'book',
+  'guide',
+  'product',
+  'place',
   'idea',
-  'repo',
-  'paper',
+  'quote',
 ];
 
 export const INPUT_BINDING_OPTIONS = [
