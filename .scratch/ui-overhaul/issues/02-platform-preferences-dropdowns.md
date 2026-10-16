@@ -4,10 +4,10 @@
 
 **Blocked by:** 01: Universal Form Controls Foundation & CSS Modular Seam
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] "Constraints & Operating Guidelines" textarea renders with modern styling, clear hint text, and focus states.
-- [ ] "Output Language for triage & research" uses `CustomSelect` with a globe icon, smooth popover, and support for custom language input.
-- [ ] AI Profile tab model provider and role dropdowns use `CustomSelect`.
-- [ ] Dirty state change and save handlers function seamlessly.
-- [ ] Component tests in `UserProfileTab.test.tsx` and `SettingsModal.test.tsx` pass cleanly.
+- [x] "Constraints & Operating Guidelines" textarea renders with modern styling, clear hint text, and focus states.
+- [x] "Output Language for triage & research" uses `CustomSelect` with a globe icon, smooth popover, and support for custom language input.
+- [x] AI Profile tab model provider and role dropdowns use `CustomSelect`.
+- [x] Dirty state change and save handlers function seamlessly.
+- [x] Component tests in `UserProfileTab.test.tsx` and `SettingsModal.test.tsx` pass cleanly.

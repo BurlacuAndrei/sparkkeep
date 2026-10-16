@@ -4,11 +4,11 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Raw `input`, `textarea`, and `select` elements have default font inheritance, proper box-sizing, background, border, and focus outline in base styles.
-- [ ] `.setup-textarea` and `.setup-select` classes are defined and visually styled matching `.setup-input`.
-- [ ] `.input-text` and `.input-select` classes are defined and styled.
-- [ ] Native select elements have custom theme-reactive SVG chevrons and proper padding.
-- [ ] Playbook-specific CSS selectors are moved from `components.css` to `playbooks.css`.
-- [ ] Existing component tests continue to pass.
+- [x] Raw `input`, `textarea`, and `select` elements have default font inheritance, proper box-sizing, background, border, and focus outline in base styles.
+- [x] `.setup-textarea` and `.setup-select` classes are defined and visually styled matching `.setup-input`.
+- [x] `.input-text` and `.input-select` classes are defined and styled.
+- [x] Native select elements have custom theme-reactive SVG chevrons and proper padding.
+- [x] Playbook-specific CSS selectors are moved from `components.css` to `playbooks.css`.
+- [x] Existing component tests continue to pass.

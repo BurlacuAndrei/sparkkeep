@@ -4,9 +4,9 @@
 
 **Blocked by:** 05: Light Mode Visual Polish, Token Enforcement & Contrast Remediation
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] All Vitest unit and component tests pass cleanly.
-- [ ] Production frontend build completes with zero errors.
-- [ ] Distribution bundle in `internal/web/dist` is fresh and committed.
-- [ ] `make check` passes all CI invariants.
+- [x] All Vitest unit and component tests pass cleanly.
+- [x] Production frontend build completes with zero errors.
+- [x] Distribution bundle in `internal/web/dist` is fresh and committed.
+- [x] `make check` passes all CI invariants.

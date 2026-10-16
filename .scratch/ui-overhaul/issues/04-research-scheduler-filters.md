@@ -4,10 +4,10 @@
 
 **Blocked by:** 01: Universal Form Controls Foundation & CSS Modular Seam
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Card Status filter dropdown uses `CustomSelect` (Any, Inbox, Doing).
-- [ ] Worthiness filter dropdown uses `CustomSelect` (Any, High, Medium, Low).
-- [ ] Card Type filter dropdown uses `CustomSelect`.
-- [ ] Automated research rule creation and editing save filter parameters accurately.
-- [ ] Existing tests in the test suite pass.
+- [x] Card Status filter dropdown uses `CustomSelect` (Any, Inbox, Doing).
+- [x] Worthiness filter dropdown uses `CustomSelect` (Any, High, Medium, Low).
+- [x] Card Type filter dropdown uses `CustomSelect`.
+- [x] Automated research rule creation and editing save filter parameters accurately.
+- [x] Existing tests in the test suite pass.

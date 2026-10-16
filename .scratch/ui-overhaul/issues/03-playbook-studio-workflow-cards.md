@@ -4,12 +4,12 @@
 
 **Blocked by:** 01: Universal Form Controls Foundation & CSS Modular Seam
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Playbook cards display a visual mini-pipeline flow strip showing step progression.
-- [ ] Playbook cards display target Card Type chips.
-- [ ] An active "Default" badge appears on the playbook configured as `default_playbook_id`.
-- [ ] Built-in and Custom playbooks have clear, elegant badge differentiation.
-- [ ] The "Default Playbook for Untyped Cards" selector uses `CustomSelect`.
-- [ ] Step Editor Modal dropdowns (Tool Policy, LLM Role) use `CustomSelect`.
-- [ ] Tests in `PlaybookManager.test.tsx` pass.
+- [x] Playbook cards display a visual mini-pipeline flow strip showing step progression.
+- [x] Playbook cards display target Card Type chips.
+- [x] An active "Default" badge appears on the playbook configured as `default_playbook_id`.
+- [x] Built-in and Custom playbooks have clear, elegant badge differentiation.
+- [x] The "Default Playbook for Untyped Cards" selector uses `CustomSelect`.
+- [x] Step Editor Modal dropdowns (Tool Policy, LLM Role) use `CustomSelect`.
+- [x] Tests in `PlaybookManager.test.tsx` pass.

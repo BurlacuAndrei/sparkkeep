@@ -4,10 +4,10 @@
 
 **Blocked by:** 02: Platform Preferences Form & Dropdown Modernization, 03: Playbook Studio Rich Workflow Cards & Dropdown Overhaul, 04: Research Scheduler Filters Modernization
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] All briefing summaries and action items in cards are dark and legible in Light Mode (WCAG AA 4.5:1+ contrast).
-- [ ] Status badges, worthiness badges, signal chips, and reference chips have high contrast text with tinted backgrounds.
-- [ ] Prompt code blocks and simulator outputs have dark/light contrast rules.
-- [ ] Cards in Light Mode have subtle elevation shadows and crisp `#e2e8f0` borders against `#f8fafc`.
-- [ ] Full regression check across dark, light, and OLED themes.
+- [x] All briefing summaries and action items in cards are dark and legible in Light Mode (WCAG AA 4.5:1+ contrast).
+- [x] Status badges, worthiness badges, signal chips, and reference chips have high contrast text with tinted backgrounds.
+- [x] Prompt code blocks and simulator outputs have dark/light contrast rules.
+- [x] Cards in Light Mode have subtle elevation shadows and crisp `#e2e8f0` borders against `#f8fafc`.
+- [x] Full regression check across dark, light, and OLED themes.
