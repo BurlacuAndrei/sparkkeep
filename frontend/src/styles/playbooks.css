@@ -40,8 +40,8 @@
 
 .pb-domain-tab.active {
   background: rgba(99, 102, 241, 0.15);
-  border-color: #6366f1;
-  color: #818cf8;
+  border-color: var(--accent-indigo);
+  color: var(--accent-indigo);
 }
 
 .pb-domain-count {
@@ -85,7 +85,7 @@
   padding: 2px 7px;
   border-radius: 4px;
   background: rgba(99, 102, 241, 0.12);
-  color: #a5b4fc;
+  color: var(--accent-indigo);
 }
 
 .pb-template-steps-badge {
@@ -98,10 +98,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--bg-surface-elevated);
   padding: 8px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
 }
 
 .pb-flow-label {
@@ -123,7 +123,8 @@
   font-size: 11px;
   font-weight: 500;
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -168,16 +169,16 @@
 }
 
 .pb-pillar-pill.ready {
-  background: rgba(16, 185, 129, 0.2);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.35);
 }
 
 .pb-pillar-pill.missing {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-dim);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  opacity: 0.5;
+  background: var(--bg-surface-elevated);
+  color: var(--text-faint);
+  border: 1px solid var(--border-subtle);
+  opacity: 0.6;
 }
 
 .pb-template-metrics {
@@ -258,7 +259,7 @@
 
 .pb-inspector-tab-btn.active {
   background: rgba(99, 102, 241, 0.15);
-  color: #818cf8;
+  color: var(--accent-indigo);
 }
 
 .pb-dryrun-container {
@@ -276,7 +277,7 @@
 }
 
 .pb-dryrun-icon {
-  color: #818cf8;
+  color: var(--accent-indigo);
   margin-top: 2px;
 }
 
@@ -454,10 +455,10 @@
   margin: 0;
   padding: 10px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-surface-elevated);
   border: 1px solid var(--border-subtle);
-  color: #e2e8f0;
-  font-family: monospace;
+  color: var(--text-main);
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -2055,4 +2056,49 @@
 .pb-default-dropdown {
   max-width: 220px;
   font-size: 12px;
+}
+
+/* ==========================================================================
+   Playbooks Engine - Light Mode Contrast & Elevation Overrides
+   ========================================================================== */
+[data-theme="light"] .pb-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .pb-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06), 0 12px 24px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .pb-card-flow-strip {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .pb-card-flow-badge {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+[data-theme="light"] .pb-card-type-chip {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #334155;
+}
+
+[data-theme="light"] .pb-template-flow-strip {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .pb-flow-step-badge {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+[data-theme="light"] .pb-dryrun-prompt-code {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
 }
