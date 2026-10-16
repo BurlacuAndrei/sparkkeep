@@ -7,7 +7,6 @@ import {
   STEP_PROMPT_STARTERS,
   DEFAULT_PROMPT_STARTERS,
   PLAYBOOK_TEMPLATES,
-  PLAYBOOK_RECIPES,
   PlaybookTemplate,
   PlaybookRecipe,
   TemplateDomain,

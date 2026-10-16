@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   BookOpen, Lock, Copy, Pencil, Trash2, Plus, Download, Upload,
-  CheckCircle2, AlertCircle, Sparkles, Layers,
+  CheckCircle2, AlertCircle, Sparkles, Layers, Eye,
 } from 'lucide-react';
 import * as api from '../api';
 import { Card, Playbook, PlaybookStep, StepLibraryTemplate } from '../types';
 import {
-  DEFAULT_CARD_TYPES, DEFAULT_LEAN_STARTER_STEPS, PlaybookTemplate, PlaybookRecipe,
+  DEFAULT_CARD_TYPES, DEFAULT_LEAN_STARTER_STEPS, PlaybookTemplate,
   UserSavedStepTemplate, validatePlaybook, exportPlaybookToFile,
   parseImportedPlaybook, buildUserStepTemplate, PlaybookCanvas,
-  AddStepModal, PlaybookTemplateGalleryModal, RecipePickerModal, ImportPlaybookModal,
+  AddStepModal, PlaybookTemplateGalleryModal, ImportPlaybookModal,
 } from './playbooks';
 
 // oxlint-disable-next-line react/only-export-components
@@ -23,7 +23,7 @@ export interface PlaybookManagerProps {
   cards?: Card[];
 }
 
-export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) => {
+export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, cards = [] }) => {
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [libraryTemplates, setLibraryTemplates] = useState<StepLibraryTemplate[]>([]);
   const [userStepTemplates, setUserStepTemplates] = useState<UserSavedStepTemplate[]>(() => {
@@ -38,6 +38,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
   const [loading, setLoading] = useState(true);
   const [editingPlaybook, setEditingPlaybook] = useState<Playbook | null>(null);
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({});
+  const [inspectorTab, setInspectorTab] = useState<'health' | 'dryrun'>('health');
   const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
   const [isAddStepOpen, setIsAddStepOpen] = useState(false);
   const [addStepTab, setAddStepTab] = useState<'library' | 'blank'>('library');
@@ -318,6 +319,16 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
               <Layers size={14} />
               <span>Load Template</span>
             </button>
+            <button
+              type="button"
+              className={`btn-secondary ${inspectorTab === 'dryrun' ? 'active' : ''}`}
+              onClick={() => setInspectorTab((prev) => (prev === 'dryrun' ? 'health' : 'dryrun'))}
+              title="Toggle Dry-Run Prompt Inspector"
+              aria-label="Dry-Run Inspector"
+            >
+              <Eye size={14} />
+              <span>{inspectorTab === 'dryrun' ? 'Close Preview' : 'Dry-Run Preview'}</span>
+            </button>
             <button type="button" className="btn-secondary" onClick={handleExportJSON} title="Export playbook as JSON file or copy to clipboard">
               <Download size={14} />
               <span>Export JSON</span>
@@ -454,6 +465,9 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
           showToast={showToast}
           libraryTemplates={libraryTemplates}
           userStepTemplates={userStepTemplates}
+          cards={cards}
+          inspectorTab={inspectorTab}
+          onInspectorTabChange={setInspectorTab}
         />
       )}
 

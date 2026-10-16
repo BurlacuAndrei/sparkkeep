@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { PlaybookManager, PLAYBOOK_TEMPLATES, PLAYBOOK_RECIPES } from './PlaybookManager';
+import { PlaybookManager, PLAYBOOK_TEMPLATES } from './PlaybookManager';
 import * as api from '../api';
 
 vi.mock('../api', async () => {
@@ -591,6 +591,111 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
     expect(screen.getByDisplayValue('Fast Fact Check & Claim Verification')).toBeDefined();
     expect(screen.getByText('Evidence Search')).toBeDefined();
     expect(mockToast).toHaveBeenCalledWith('Loaded "Fast Fact Check & Claim Verification" template');
+  });
+
+  describe('Client-Side Dry-Run Inspector & Real-Time Prompt Preview', () => {
+    it('toggles Dry-Run Inspector, displays compiled prompts and planned queries for fallback card with zero cost', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Click Dry-Run Preview toggle in top toolbar
+      const toggleBtn = screen.getByRole('button', { name: /Dry-Run Inspector/i });
+      fireEvent.click(toggleBtn);
+
+      // Verify Dry-Run Inspector panel is rendered
+      expect(screen.getByLabelText('Dry-Run Inspector Panel')).toBeDefined();
+      expect(screen.getByText(/\$0 Token Cost · 0ms Latency/i)).toBeDefined();
+
+      // Card picker should default to Neon Serverless Postgres
+      expect(screen.getByLabelText(/Select Card for Dry-Run/i)).toBeDefined();
+      expect(screen.getByText('Neon Serverless Postgres')).toBeDefined();
+
+      // Verify compiled steps in the deck
+      expect(screen.getByTestId('dryrun-step-1')).toBeDefined();
+      expect(screen.getByTestId('dryrun-step-2')).toBeDefined();
+
+      // Step 1 Grounding prompt contains card context
+      const step1Card = screen.getByTestId('dryrun-step-1');
+      expect(step1Card.textContent).toContain('Neon Serverless Postgres');
+      expect(step1Card.textContent).toContain('https://neon.tech');
+
+      // Step 2 Targeted Search contains planned query
+      const step2Card = screen.getByTestId('dryrun-step-2');
+      expect(step2Card.textContent).toContain('Planned Web Queries');
+      expect(step2Card.textContent).toContain('"Neon Serverless Postgres" tool architecture');
+
+      // Toggle back to Health Inspector
+      const healthTab = screen.getByRole('tab', { name: /Health Inspector/i });
+      fireEvent.click(healthTab);
+      expect(screen.getByLabelText('Research Health Inspector')).toBeDefined();
+    });
+
+    it('switches test cards and re-compiles prompt variables and search query plans dynamically in real time', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Switch to Dry-Run via dock tab
+      const dryRunTab = screen.getByRole('tab', { name: /Dry-Run Inspector/i });
+      fireEvent.click(dryRunTab);
+
+      // Select DeepSeek-R1 test card
+      const cardSelect = screen.getByLabelText(/Select Card for Dry-Run/i);
+      fireEvent.change(cardSelect, { target: { value: '-2' } });
+
+      // Verify prompt and queries dynamically update
+      expect(screen.getByText('DeepSeek-R1 Technical Report')).toBeDefined();
+      const step2Card = screen.getByTestId('dryrun-step-2');
+      expect(step2Card.textContent).toContain('"DeepSeek-R1 Technical Report" paper architecture');
+    });
+
+    it('supports custom saved cards passed via props in Dry-Run Inspector', async () => {
+      const customCards = [
+        {
+          id: 777,
+          title: 'Antigravity Workspace Engine',
+          source_url: 'https://antigravity.dev',
+          type: 'tool',
+          summary: 'Next-gen agentic pairing environment for deep modules.',
+          horizon: 'short-term' as const,
+          status: 'inbox' as const,
+          source_note: 'Proprietary core engine',
+          tags: ['agent', 'dev'],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ];
+
+      render(<PlaybookManager showToast={vi.fn()} cards={customCards} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Switch to Dry-Run
+      fireEvent.click(screen.getByRole('tab', { name: /Dry-Run Inspector/i }));
+
+      // Select custom card
+      const cardSelect = screen.getByLabelText(/Select Card for Dry-Run/i);
+      fireEvent.change(cardSelect, { target: { value: '777' } });
+
+      // Verify custom card details rendered and compiled
+      expect(screen.getByText('Antigravity Workspace Engine')).toBeDefined();
+      const step1Card = screen.getByTestId('dryrun-step-1');
+      expect(step1Card.textContent).toContain('Antigravity Workspace Engine');
+      expect(step1Card.textContent).toContain('https://antigravity.dev');
+    });
   });
 
   describe('Research Health Inspector & Soft Linter', () => {

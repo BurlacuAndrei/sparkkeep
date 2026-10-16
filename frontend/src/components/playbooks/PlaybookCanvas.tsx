@@ -5,16 +5,18 @@ import {
   Plus,
   ArrowUp,
   ArrowDown,
-  Globe,
   ChevronUp,
   ChevronDown,
   Trash2,
+  Eye,
+  ShieldCheck,
 } from 'lucide-react';
-import { Playbook, PlaybookStep, CustomStepConfig, StepLibraryTemplate } from '../../types';
+import { Card, Playbook, PlaybookStep, CustomStepConfig, StepLibraryTemplate } from '../../types';
 import { CORE_STEP_DESCRIPTIONS, STEP_STAGE_LABELS, UserSavedStepTemplate } from './constants';
 import { StepEditorModal } from './StepEditorModal';
 import { PlaybookHealthInspector } from './PlaybookHealthInspector';
 import { QuickAddPalette } from './QuickAddPalette';
+import { DryRunInspector } from './DryRunInspector';
 
 export interface PlaybookCanvasProps {
   playbook: Playbook;
@@ -30,6 +32,9 @@ export interface PlaybookCanvasProps {
   showToast: (msg: string) => void;
   libraryTemplates?: StepLibraryTemplate[];
   userStepTemplates?: UserSavedStepTemplate[];
+  cards?: Card[];
+  inspectorTab?: 'health' | 'dryrun';
+  onInspectorTabChange?: (tab: 'health' | 'dryrun') => void;
 }
 
 export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
@@ -46,7 +51,13 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
   showToast,
   libraryTemplates = [],
   userStepTemplates = [],
+  cards = [],
+  inspectorTab,
+  onInspectorTabChange,
 }) => {
+  const [internalTab, setInternalTab] = useState<'health' | 'dryrun'>('health');
+  const activeTab = inspectorTab !== undefined ? inspectorTab : internalTab;
+  const setTab = onInspectorTabChange || setInternalTab;
   const [activeInsertIndex, setActiveInsertIndex] = useState<number | null>(null);
 
   const insertStepAtIndex = (insertIdx: number, newStep: PlaybookStep) => {
@@ -463,14 +474,44 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
           </div>
         </div>
 
-        {/* RIGHT PANE: Persistent Research Health Inspector Dock */}
-        <PlaybookHealthInspector
-          steps={playbook.steps}
-          onUpdateSteps={(nextSteps) =>
-            onChangePlaybook({ ...playbook, steps: nextSteps })
-          }
-          showToast={showToast}
-        />
+        {/* RIGHT PANE: Dual Inspector Dock (Health Inspector & Dry-Run Inspector) */}
+        <div className="pb-inspector-dock" data-testid="pb-inspector-dock">
+          <div className="pb-inspector-tabs-header" role="tablist" aria-label="Inspector Tabs">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'health'}
+              className={`pb-inspector-tab-btn ${activeTab === 'health' ? 'active' : ''}`}
+              onClick={() => setTab('health')}
+            >
+              <ShieldCheck size={14} />
+              <span>Health Inspector</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'dryrun'}
+              className={`pb-inspector-tab-btn ${activeTab === 'dryrun' ? 'active' : ''}`}
+              onClick={() => setTab('dryrun')}
+              aria-label="Dry-Run Inspector"
+            >
+              <Eye size={14} />
+              <span>Dry-Run Inspector</span>
+            </button>
+          </div>
+
+          {activeTab === 'health' ? (
+            <PlaybookHealthInspector
+              steps={playbook.steps}
+              onUpdateSteps={(nextSteps) =>
+                onChangePlaybook({ ...playbook, steps: nextSteps })
+              }
+              showToast={showToast}
+            />
+          ) : (
+            <DryRunInspector steps={playbook.steps} cards={cards} />
+          )}
+        </div>
       </div>
     </div>
   );

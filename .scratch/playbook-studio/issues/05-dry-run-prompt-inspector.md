@@ -5,10 +5,10 @@ An interactive "Preview & Dry-Run" panel inside Playbook Studio. Allows users to
 
 **Blocked by:** 02: Visual Pipeline Timeline Canvas & In-Place Focused Step Editor
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Add a toggleable "Dry-Run / Prompt Inspector" panel in the Playbook Studio builder.
-- [ ] Allow selecting an existing card or fallback realistic test card.
-- [ ] Compile variable bindings (`{card_title}`, `{card_url}`, `{card_content}`, `{sources}`, `{previous_steps}`) purely client-side without LLM calls.
-- [ ] Display step-by-step compiled prompts and planned tool queries.
-- [ ] Tests verify prompt preview generation and card selection.
+- [x] Add a toggleable "Dry-Run / Prompt Inspector" panel in the Playbook Studio builder.
+- [x] Allow selecting an existing card or fallback realistic test card.
+- [x] Compile variable bindings (`{card_title}`, `{card_url}`, `{card_content}`, `{sources}`, `{previous_steps}`) purely client-side without LLM calls.
+- [x] Display step-by-step compiled prompts and planned tool queries.
+- [x] Tests verify prompt preview generation and card selection.
