@@ -4,6 +4,7 @@ import {
   Zap,
   Layers,
   Calendar,
+  BookOpen,
   Plus,
   Settings,
   Tag as TagIcon,
@@ -12,7 +13,7 @@ import {
   FileText,
   Sparkles,
 } from 'lucide-react';
-import { Card, Tag } from '../types';
+import { Card, Tag, ViewMode } from '../types';
 import * as api from '../api';
 import '../styles/omnisearch.css';
 
@@ -22,7 +23,7 @@ interface OmnisearchProps {
   triageCount?: number;
   onSelectCard: (card: Card) => void;
   onSelectTag: (tagName: string) => void;
-  onViewModeChange: (mode: 'triage' | 'boards' | 'digest') => void;
+  onViewModeChange: (mode: ViewMode) => void;
   onOpenNewCard: () => void;
   onOpenSettingsModal: () => void;
 }
@@ -226,6 +227,14 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
         subtitle: 'Synthesized timeline, themes & briefings',
         icon: <Calendar size={14} strokeWidth={2} />,
         execute: () => onViewModeChange('digest'),
+      },
+      {
+        kind: 'command',
+        id: 'cmd-playbooks',
+        title: 'Playbook Studio',
+        subtitle: 'Design and customize multi-step AI research playbooks',
+        icon: <BookOpen size={14} strokeWidth={2} />,
+        execute: () => onViewModeChange('playbooks'),
       },
       {
         kind: 'command',

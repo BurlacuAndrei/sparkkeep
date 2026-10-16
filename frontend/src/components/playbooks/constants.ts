@@ -125,12 +125,37 @@ export const CORE_STEP_DESCRIPTIONS: Record<string, string> = {
   custom: 'User-configured custom research analysis step',
 };
 
-export interface PlaybookRecipe {
+export const STEP_STAGE_LABELS: Record<string, string> = {
+  ground: 'Grounding',
+  resolve_refs: 'Retrieval',
+  plan: 'Planning',
+  search: 'Retrieval',
+  read: 'Extraction',
+  verify_claims: 'Verification',
+  landscape: 'Synthesis',
+  verdict: 'Delivery',
+  report: 'Delivery',
+  custom: 'Synthesis',
+};
+
+export type TemplateDomain =
+  | 'All'
+  | 'Market Intelligence'
+  | 'Due Diligence & Risk'
+  | 'Academic & Science'
+  | 'Fast Fact-Check'
+  | 'General';
+
+export interface PlaybookTemplate {
   id: string;
   name: string;
   badge: string;
   icon: string;
   description: string;
+  domain: 'Market Intelligence' | 'Due Diligence & Risk' | 'Academic & Science' | 'Fast Fact-Check' | 'General';
+  estCost: string;
+  estLatency: string;
+  pillarsReady: Array<'grounding' | 'retrieval' | 'extraction' | 'verification' | 'delivery'>;
   card_types: string[];
   steps: Array<{
     position: number;
@@ -141,13 +166,28 @@ export interface PlaybookRecipe {
   }>;
 }
 
-export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
+export type PlaybookRecipe = PlaybookTemplate;
+
+export const TEMPLATE_DOMAINS: TemplateDomain[] = [
+  'All',
+  'Market Intelligence',
+  'Due Diligence & Risk',
+  'Academic & Science',
+  'Fast Fact-Check',
+  'General',
+];
+
+export const PLAYBOOK_TEMPLATES: PlaybookTemplate[] = [
   {
     id: 'competitor',
     name: 'Competitor & Moat Teardown',
-    badge: '🎯 Competitor Teardown',
+    badge: '🎯 Market Intelligence',
     icon: '🎯',
+    domain: 'Market Intelligence',
     description: 'Dissects direct competitors, pricing models, feature parity, and defensibility moats.',
+    estCost: '~$0.04',
+    estLatency: '~12s',
+    pillarsReady: ['grounding', 'retrieval', 'extraction', 'delivery'],
     card_types: ['tool', 'product', 'company'],
     steps: [
       { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
@@ -174,9 +214,13 @@ export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
   {
     id: 'due_diligence',
     name: 'Investment & Risk Due Diligence',
-    badge: '📈 Investment Due Diligence',
+    badge: '📈 Due Diligence & Risk',
     icon: '📈',
+    domain: 'Due Diligence & Risk',
     description: 'Deep-dive into unit economics, downside risks, regulatory exposure, and bear case failure modes.',
+    estCost: '~$0.05',
+    estLatency: '~16s',
+    pillarsReady: ['grounding', 'retrieval', 'extraction', 'verification', 'delivery'],
     card_types: ['company', 'product', 'idea'],
     steps: [
       { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
@@ -204,9 +248,13 @@ export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
   {
     id: 'academic',
     name: 'Academic & Literature Review',
-    badge: '🔬 Academic Review',
+    badge: '🔬 Academic & Science',
     icon: '🔬',
+    domain: 'Academic & Science',
     description: 'Examines paper citations, empirical methodology, statistical validity, and reproducible results.',
+    estCost: '~$0.06',
+    estLatency: '~18s',
+    pillarsReady: ['grounding', 'retrieval', 'extraction', 'verification', 'delivery'],
     card_types: ['article', 'paper'],
     steps: [
       { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
@@ -233,9 +281,13 @@ export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
   {
     id: 'fact_check',
     name: 'Fast Fact Check & Claim Verification',
-    badge: '⚡ Fast Fact Check',
+    badge: '⚡ Fast Fact-Check',
     icon: '⚡',
+    domain: 'Fast Fact-Check',
     description: 'Rapid verification of specific claims and statistical assertions without heavy planning.',
+    estCost: '~$0.02',
+    estLatency: '~6s',
+    pillarsReady: ['grounding', 'retrieval', 'extraction', 'verification', 'delivery'],
     card_types: ['article', 'idea', 'paper'],
     steps: [
       { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
@@ -248,9 +300,13 @@ export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
   {
     id: 'deep_dive',
     name: 'Flagship 8-Step Deep Dive',
-    badge: '🏛️ Comprehensive Pipeline',
+    badge: '🏛️ General Deep Dive',
     icon: '🏛️',
+    domain: 'General',
     description: 'The complete 8-step investigation covering references, planning, search, reading, claims, and verdict.',
+    estCost: '~$0.07',
+    estLatency: '~20s',
+    pillarsReady: ['grounding', 'retrieval', 'extraction', 'verification', 'delivery'],
     card_types: [],
     steps: [
       { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
@@ -266,9 +322,13 @@ export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
   {
     id: 'blank',
     name: 'Modular Blank Canvas',
-    badge: '🎨 Blank Canvas',
+    badge: '🎨 General',
     icon: '🎨',
+    domain: 'General',
     description: 'Start lean with just Grounding and Report, adding custom analysis steps as needed.',
+    estCost: '~$0.01',
+    estLatency: '~4s',
+    pillarsReady: ['grounding', 'retrieval', 'delivery'],
     card_types: [],
     steps: [
       { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
@@ -277,6 +337,8 @@ export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
     ],
   },
 ];
+
+export const PLAYBOOK_RECIPES = PLAYBOOK_TEMPLATES;
 
 export interface UserSavedStepTemplate {
   id: string;

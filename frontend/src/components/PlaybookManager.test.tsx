@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { PlaybookManager, PLAYBOOK_RECIPES } from './PlaybookManager';
+import { PlaybookManager, PLAYBOOK_TEMPLATES } from './PlaybookManager';
 import * as api from '../api';
 
 vi.mock('../api', async () => {
@@ -34,7 +34,7 @@ vi.mock('../api', async () => {
   };
 });
 
-describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
+describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -51,7 +51,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     fireEvent.click(newBtn);
 
     // Modal should NOT open immediately
-    expect(screen.queryByText('Load Starter Template or Recipe')).toBeNull();
+    expect(screen.queryByText('Playbook Template Gallery')).toBeNull();
 
     // Canvas input fields & default lean starter steps should be displayed
     expect(screen.getByLabelText(/Playbook Name/i)).toBeDefined();
@@ -71,7 +71,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     expect(screen.getByLabelText(/Set as Platform Default/i)).toBeDefined();
   });
 
-  it('selects a recipe archetype and loads its steps into the editor via Load Template', async () => {
+  it('selects a playbook template archetype and loads its steps into the editor via Load Template', async () => {
     render(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
@@ -85,14 +85,14 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     fireEvent.click(loadTplBtn);
 
     // Modal should now be open
-    expect(screen.getByText('Load Starter Template or Recipe')).toBeDefined();
+    expect(screen.getByText('Playbook Template Gallery')).toBeDefined();
 
     // Choose Competitor Teardown
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
-    expect(useBtns.length).toBe(PLAYBOOK_RECIPES.length);
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
+    expect(useBtns.length).toBe(PLAYBOOK_TEMPLATES.length);
     fireEvent.click(useBtns[0]); // Competitor Teardown
 
-    // Should load the recipe's title and steps
+    // Should load the template's title and steps
     expect(screen.getByDisplayValue('Competitor & Moat Teardown')).toBeDefined();
     expect(screen.getByText(/Moat & Pricing Analysis/i)).toBeDefined();
   });
@@ -127,12 +127,12 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    // Open template picker and choose Flagship 8-Step Deep Dive (recipe index 4)
+    // Open template picker and choose Flagship 8-Step Deep Dive (template index 4)
     fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-    const deepDiveRecipe = PLAYBOOK_RECIPES.find((r) => r.id === 'deep_dive')!;
-    const recipeIndex = PLAYBOOK_RECIPES.indexOf(deepDiveRecipe);
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
-    fireEvent.click(useBtns[recipeIndex]);
+    const deepDiveTpl = PLAYBOOK_TEMPLATES.find((r) => r.id === 'deep_dive')!;
+    const tplIndex = PLAYBOOK_TEMPLATES.indexOf(deepDiveTpl);
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
+    fireEvent.click(useBtns[tplIndex]);
 
     // 1. Expand and edit Planning standard step
     const editPlanBtn = screen.getByRole('button', { name: /Edit Question Planning config/i });
@@ -197,9 +197,9 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    // Load Competitor Teardown recipe
+    // Load Competitor Teardown template
     fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
     fireEvent.click(useBtns[0]);
 
     // 1. Test Landscape standard step prompt starters
@@ -256,7 +256,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     // Load Competitor Teardown
     fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
     fireEvent.click(useBtns[0]);
 
     // In Competitor Teardown, Moat & Pricing Analysis is step 5, Synthesis & Verdict is step 6, Report is step 7
@@ -286,7 +286,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     // Load Competitor Teardown
     fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
     fireEvent.click(useBtns[0]);
 
     // Expand Moat & Pricing Analysis step drawer
@@ -534,6 +534,170 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     expect(screen.getByText('QPU Benchmark Analysis')).toBeDefined();
   });
 
+  it('browses visual Template Gallery by research domains, displaying 5-pillar badges and budget estimates', async () => {
+    const mockToast = vi.fn();
+    render(<PlaybookManager showToast={mockToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+    // Open Template Gallery
+    fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
+
+    // Verify modal header & title
+    expect(screen.getByText('Playbook Template Gallery')).toBeDefined();
+    expect(
+      screen.getByText(/Select a domain-tailored research pipeline archetype or clone a built-in playbook into your builder canvas/i)
+    ).toBeDefined();
+
+    // Verify all domain tabs exist
+    expect(screen.getByRole('tab', { name: /All/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Market Intelligence/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Due Diligence & Risk/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Academic & Science/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Fast Fact-Check/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /General/i })).toBeDefined();
+
+    // All templates should initially be visible
+    expect(screen.getByText('Competitor & Moat Teardown')).toBeDefined();
+    expect(screen.getByText('Investment & Risk Due Diligence')).toBeDefined();
+    expect(screen.getByText('Academic & Literature Review')).toBeDefined();
+    expect(screen.getByText('Fast Fact Check & Claim Verification')).toBeDefined();
+
+    // Verify budget estimates & 5-pillar indicators
+    expect(screen.getByText('🪙 ~$0.04')).toBeDefined();
+    expect(screen.getByText('⏱️ ~12s')).toBeDefined();
+
+    // Filter by Academic & Science
+    fireEvent.click(screen.getByRole('tab', { name: /Academic & Science/i }));
+    expect(screen.getByText('Academic & Literature Review')).toBeDefined();
+    expect(screen.queryByText('Competitor & Moat Teardown')).toBeNull();
+    expect(screen.queryByText('Investment & Risk Due Diligence')).toBeNull();
+
+    // Filter by Fast Fact-Check
+    fireEvent.click(screen.getByRole('tab', { name: /Fast Fact-Check/i }));
+    expect(screen.getByText('Fast Fact Check & Claim Verification')).toBeDefined();
+    expect(screen.queryByText('Academic & Literature Review')).toBeNull();
+
+    // 1-click "Use this Template" loads it into canvas
+    const useBtn = screen.getByRole('button', { name: /Use this Template: Fast Fact Check & Claim Verification/i });
+    fireEvent.click(useBtn);
+
+    // Modal closes and canvas updates
+    expect(screen.queryByText('Playbook Template Gallery')).toBeNull();
+    expect(screen.getByDisplayValue('Fast Fact Check & Claim Verification')).toBeDefined();
+    expect(screen.getByText('Evidence Search')).toBeDefined();
+    expect(mockToast).toHaveBeenCalledWith('Loaded "Fast Fact Check & Claim Verification" template');
+  });
+
+  describe('Client-Side Dry-Run Inspector & Real-Time Prompt Preview', () => {
+    it('toggles Dry-Run Inspector, displays compiled prompts and planned queries for fallback card with zero cost', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Click Dry-Run Preview toggle in top toolbar
+      const toggleBtn = screen.getByRole('button', { name: /Dry-Run Inspector/i });
+      fireEvent.click(toggleBtn);
+
+      // Verify Dry-Run Inspector panel is rendered
+      expect(screen.getByLabelText('Dry-Run Inspector Panel')).toBeDefined();
+      expect(screen.getByText(/\$0 Token Cost · 0ms Latency/i)).toBeDefined();
+
+      // Card picker should default to Neon Serverless Postgres
+      expect(screen.getByLabelText(/Select Card for Dry-Run/i)).toBeDefined();
+      expect(screen.getByText('Neon Serverless Postgres')).toBeDefined();
+
+      // Verify compiled steps in the deck
+      expect(screen.getByTestId('dryrun-step-1')).toBeDefined();
+      expect(screen.getByTestId('dryrun-step-2')).toBeDefined();
+
+      // Step 1 Grounding prompt contains card context
+      const step1Card = screen.getByTestId('dryrun-step-1');
+      expect(step1Card.textContent).toContain('Neon Serverless Postgres');
+      expect(step1Card.textContent).toContain('https://neon.tech');
+
+      // Step 2 Targeted Search contains planned query
+      const step2Card = screen.getByTestId('dryrun-step-2');
+      expect(step2Card.textContent).toContain('Planned Web Queries');
+      expect(step2Card.textContent).toContain('"Neon Serverless Postgres" tool architecture');
+
+      // Toggle back to Health Inspector
+      const healthTab = screen.getByRole('tab', { name: /Health Inspector/i });
+      fireEvent.click(healthTab);
+      expect(screen.getByLabelText('Research Health Inspector')).toBeDefined();
+    });
+
+    it('switches test cards and re-compiles prompt variables and search query plans dynamically in real time', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Switch to Dry-Run via dock tab
+      const dryRunTab = screen.getByRole('tab', { name: /Dry-Run Inspector/i });
+      fireEvent.click(dryRunTab);
+
+      // Select DeepSeek-R1 test card
+      const cardSelect = screen.getByLabelText(/Select Card for Dry-Run/i);
+      fireEvent.change(cardSelect, { target: { value: '-2' } });
+
+      // Verify prompt and queries dynamically update
+      expect(screen.getByText('DeepSeek-R1 Technical Report')).toBeDefined();
+      const step2Card = screen.getByTestId('dryrun-step-2');
+      expect(step2Card.textContent).toContain('"DeepSeek-R1 Technical Report" paper architecture');
+    });
+
+    it('supports custom saved cards passed via props in Dry-Run Inspector', async () => {
+      const customCards = [
+        {
+          id: 777,
+          title: 'Antigravity Workspace Engine',
+          source_url: 'https://antigravity.dev',
+          type: 'tool',
+          summary: 'Next-gen agentic pairing environment for deep modules.',
+          horizon: 'short-term' as const,
+          status: 'inbox' as const,
+          source_note: 'Proprietary core engine',
+          tags: ['agent', 'dev'],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ];
+
+      render(<PlaybookManager showToast={vi.fn()} cards={customCards} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Switch to Dry-Run
+      fireEvent.click(screen.getByRole('tab', { name: /Dry-Run Inspector/i }));
+
+      // Select custom card
+      const cardSelect = screen.getByLabelText(/Select Card for Dry-Run/i);
+      fireEvent.change(cardSelect, { target: { value: '777' } });
+
+      // Verify custom card details rendered and compiled
+      expect(screen.getByText('Antigravity Workspace Engine')).toBeDefined();
+      const step1Card = screen.getByTestId('dryrun-step-1');
+      expect(step1Card.textContent).toContain('Antigravity Workspace Engine');
+      expect(step1Card.textContent).toContain('https://antigravity.dev');
+    });
+  });
+
   describe('Research Health Inspector & Soft Linter', () => {
     it('calculates 5-Pillar readiness score and updates dynamically when steps are toggled', async () => {
       render(<PlaybookManager showToast={vi.fn()} />);
@@ -587,10 +751,10 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
       // Load Flagship 8-Step Deep Dive (which satisfies all 5 pillars)
       fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-      const deepDiveRecipe = PLAYBOOK_RECIPES.find((r) => r.id === 'deep_dive')!;
-      const recipeIndex = PLAYBOOK_RECIPES.indexOf(deepDiveRecipe);
-      const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
-      fireEvent.click(useBtns[recipeIndex]);
+      const deepDiveTpl = PLAYBOOK_TEMPLATES.find((r) => r.id === 'deep_dive')!;
+      const tplIndex = PLAYBOOK_TEMPLATES.indexOf(deepDiveTpl);
+      const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
+      fireEvent.click(useBtns[tplIndex]);
 
       // Badge should be 5 / 5 Pillars Ready
       const badge = screen.getByTestId('health-score-badge');
@@ -698,4 +862,120 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
       expect(screen.getByTestId('est-latency').textContent).toBe('~18–37s');
     });
   });
+
+  describe('Visual Pipeline Timeline & In-Place Focused Step Editor', () => {
+    it('renders pipeline steps as connected timeline nodes with connector rails, stage badges, and tool policy chips', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Timeline container and connector rails should render
+      const timeline = screen.getByTestId('pipeline-timeline');
+      expect(timeline).toBeDefined();
+      const rails = timeline.querySelectorAll('.pb-timeline-rail');
+      expect(rails.length).toBe(3); // 3 connector rails between 4 steps
+
+      // Stage badges for the 4 starter steps
+      expect(screen.getByTestId('step-stage-badge-0').textContent).toMatch(/Grounding/i);
+      expect(screen.getByTestId('step-stage-badge-1').textContent).toMatch(/Retrieval/i);
+      expect(screen.getByTestId('step-stage-badge-2').textContent).toMatch(/Synthesis/i);
+      expect(screen.getByTestId('step-stage-badge-3').textContent).toMatch(/Delivery/i);
+
+      // Tool policy chips: step 1 (Targeted Search) has Web Search with query count, others have Source Reasoning
+      expect(screen.getByTestId('step-tool-chip-0').textContent).toContain('🧠 Source Reasoning');
+      expect(screen.getByTestId('step-tool-chip-1').textContent).toContain('🔍 Web Search (2 queries)');
+      expect(screen.getByTestId('step-tool-chip-2').textContent).toContain('🧠 Source Reasoning');
+      expect(screen.getByTestId('step-tool-chip-3').textContent).toContain('🧠 Source Reasoning');
+    });
+
+    it('expands in-place focused card editor when clicking a step card while preserving surrounding pipeline context and updates live indicators', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Click directly on the Custom Analysis step card header to expand in-place editor
+      const customStepTitle = screen.getByText('Custom Analysis');
+      fireEvent.click(customStepTitle);
+
+      // In-place editor is expanded while surrounding steps remain visible in timeline
+      expect(screen.getByLabelText(/Step Display Name/i)).toBeDefined();
+      expect(screen.getByText('Targeted Search')).toBeDefined();
+      expect(screen.getByText('Briefing Report')).toBeDefined();
+
+      // Live character counter updates as prompt instruction is edited
+      const charCounter = screen.getByTestId('step-char-counter');
+      expect(charCounter.textContent).toBe('47 / 8,000');
+
+      const promptTextarea = screen.getByLabelText(/Instruction \/ Prompt/i);
+      fireEvent.change(promptTextarea, { target: { value: 'Evaluate unit economics and competitive moat.' } });
+      expect(charCounter.textContent).toBe('45 / 8,000');
+
+      // Changing tool policy to search and max queries to 4 updates the step card tool policy chip live
+      const toolPolicySelect = screen.getByLabelText(/Tool Policy/i);
+      fireEvent.change(toolPolicySelect, { target: { value: 'search' } });
+      expect(screen.getByTestId('step-tool-chip-2').textContent).toContain('🔍 Web Search (2 queries)');
+
+      const maxQueriesInput = screen.getByLabelText(/Max Search Queries/i);
+      fireEvent.change(maxQueriesInput, { target: { value: '4' } });
+      expect(screen.getByTestId('step-tool-chip-2').textContent).toContain('🔍 Web Search (4 queries)');
+
+      // Input binding chips toggle active state cleanly
+      const refsCheckbox = screen.getByLabelText(/Input binding references/i) as HTMLInputElement;
+      const refsChip = refsCheckbox.closest('.pb-binding-chip');
+      expect(refsChip?.classList.contains('active')).toBe(false);
+      fireEvent.click(refsCheckbox);
+      expect(refsChip?.classList.contains('active')).toBe(true);
+    });
+
+    it('renders contextual in-line step inserters and opens quick-add palette to insert custom steps at exact indices', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // In-line inserter buttons are rendered between steps
+      expect(screen.getByTestId('inline-step-inserter-0')).toBeDefined();
+      expect(screen.getByTestId('inline-step-inserter-1')).toBeDefined();
+      expect(screen.getByTestId('inline-step-inserter-2')).toBeDefined();
+
+      // Click in-line inserter between Grounding (pos 1) and Targeted Search (pos 2)
+      fireEvent.click(screen.getByTestId('inline-step-inserter-1'));
+
+      // Quick-Add Palette popover should be visible
+      const palette = screen.getByTestId('quick-add-palette');
+      expect(palette).toBeDefined();
+      expect(palette.textContent).toContain('Insert Step at Position 2 of 5');
+
+      // Click "Create Blank Custom Step"
+      const blankBtn = screen.getByTestId('add-blank-step-btn');
+      fireEvent.click(blankBtn);
+
+      // Step is inserted at index 1 (position 2)
+      await waitFor(() => {
+        expect(screen.queryByTestId('quick-add-palette')).toBeNull();
+      });
+
+      const timeline = screen.getByTestId('pipeline-timeline');
+      const stepNames = Array.from(timeline.querySelectorAll('.pb-step-name')).map((el) => el.textContent);
+      expect(stepNames[0]).toBe('Grounding');
+      expect(stepNames[1]).toBe('Custom Analysis');
+      expect(stepNames[2]).toBe('Targeted Search');
+
+      // Newly inserted step is expanded in edit mode
+      const stepNameInput = screen.getByLabelText(/Step Display Name/i) as HTMLInputElement;
+      expect(stepNameInput.value).toBe('Custom Analysis');
+    });
+  });
 });
+

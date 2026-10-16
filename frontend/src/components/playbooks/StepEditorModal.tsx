@@ -6,8 +6,11 @@ import {
   getDefaultInputsForStep,
   STEP_PROMPT_STARTERS,
   DEFAULT_PROMPT_STARTERS,
-  PLAYBOOK_RECIPES,
+  PLAYBOOK_TEMPLATES,
+  PlaybookTemplate,
   PlaybookRecipe,
+  TemplateDomain,
+  TEMPLATE_DOMAINS,
   UserSavedStepTemplate,
 } from './constants';
 
@@ -22,8 +25,10 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
   onUpdateConfig,
   onSaveToLibrary,
 }) => {
+  const charCount = (step.config?.instruction || '').length;
+
   return (
-    <div className="pb-custom-config-drawer">
+    <div className="pb-custom-config-drawer pb-inplace-editor">
       <div className="pb-cfg-row">
         <div className="pb-form-field">
           <label>Step Display Name</label>
@@ -54,33 +59,21 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
         <div className="pb-label-with-count">
           <label>Instruction / Prompt</label>
           <span
-            className={`pb-char-counter ${
-              (step.config?.instruction || '').length > 8000 ? 'overflow' : ''
-            }`}
+            className={`pb-char-counter ${charCount > 8000 ? 'overflow' : ''}`}
+            data-testid="step-char-counter"
           >
-            {(step.config?.instruction || '').length} / 8,000
+            {charCount} / 8,000
           </span>
         </div>
 
         {/* Quick Prompt Starters */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            margin: '6px 0',
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
-            Prompt Starters:
-          </span>
+        <div className="pb-prompt-starters-row">
+          <span className="pb-prompt-starters-label">Prompt Starters:</span>
           {(STEP_PROMPT_STARTERS[step.kind] || DEFAULT_PROMPT_STARTERS).map((snip) => (
             <button
               key={snip.label}
               type="button"
-              className="btn-secondary"
-              style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 12 }}
+              className="btn-secondary pb-prompt-starter-pill"
               onClick={() => {
                 const current = step.config?.instruction || '';
                 const next = current ? `${current}\n\n${snip.text}` : snip.text;
@@ -162,7 +155,7 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
         </div>
       </div>
 
-      {/* Input Bindings Checkboxes */}
+      {/* Input Bindings Chips */}
       <div className="pb-form-field" style={{ marginTop: 10 }}>
         <label>Input Bindings</label>
         <div className="pb-input-bindings">
@@ -170,7 +163,10 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
             const activeInputs = getDefaultInputsForStep(step);
             const checked = activeInputs.includes(key);
             return (
-              <label key={key} className="pb-binding-checkbox">
+              <label
+                key={key}
+                className={`pb-binding-checkbox pb-binding-chip ${checked ? 'active' : ''}`}
+              >
                 <input
                   type="checkbox"
                   checked={checked}
@@ -412,35 +408,62 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
   );
 };
 
-export interface RecipePickerModalProps {
+export interface PlaybookTemplateGalleryModalProps {
   isOpen: boolean;
   onClose: () => void;
   builtinPlaybooks: Playbook[];
-  onSelectRecipe: (recipe: PlaybookRecipe) => void;
+  onSelectTemplate?: (template: PlaybookTemplate) => void;
+  onSelectRecipe?: (recipe: PlaybookRecipe) => void;
   onCloneBuiltin: (pb: Playbook) => void;
 }
 
-export const RecipePickerModal: React.FC<RecipePickerModalProps> = ({
+export type RecipePickerModalProps = PlaybookTemplateGalleryModalProps;
+
+const ALL_PILLARS = [
+  { id: 'grounding', abbr: 'G', label: 'Grounding' },
+  { id: 'retrieval', abbr: 'R', label: 'Retrieval' },
+  { id: 'extraction', abbr: 'E', label: 'Extraction' },
+  { id: 'verification', abbr: 'V', label: 'Verification' },
+  { id: 'delivery', abbr: 'D', label: 'Delivery' },
+] as const;
+
+export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModalProps> = ({
   isOpen,
   onClose,
   builtinPlaybooks,
+  onSelectTemplate,
   onSelectRecipe,
   onCloneBuiltin,
 }) => {
+  const [selectedDomain, setSelectedDomain] = React.useState<TemplateDomain>('All');
+
   if (!isOpen) return null;
+
+  const handleSelect = (template: PlaybookTemplate) => {
+    if (onSelectTemplate) {
+      onSelectTemplate(template);
+    } else if (onSelectRecipe) {
+      onSelectRecipe(template);
+    }
+  };
+
+  const filteredTemplates = PLAYBOOK_TEMPLATES.filter((tpl) => {
+    if (selectedDomain === 'All') return true;
+    return tpl.domain === selectedDomain;
+  });
 
   return (
     <div className="pb-modal-backdrop" onClick={onClose}>
       <div
-        className="pb-modal-content"
-        style={{ maxWidth: 740 }}
+        className="pb-modal-content pb-template-gallery-modal"
+        style={{ maxWidth: 780 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pb-modal-header">
           <div>
-            <h4 className="pb-modal-title">Load Starter Template or Recipe</h4>
+            <h4 className="pb-modal-title">Playbook Template Gallery</h4>
             <p className="pb-modal-subtitle">
-              Select a workflow recipe tailored to your domain or clone a built-in playbook into
+              Select a domain-tailored research pipeline archetype or clone a built-in playbook into
               your builder canvas.
             </p>
           </div>
@@ -448,74 +471,129 @@ export const RecipePickerModal: React.FC<RecipePickerModalProps> = ({
             type="button"
             className="btn-icon"
             onClick={onClose}
-            aria-label="Close template picker"
+            aria-label="Close template gallery"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div className="pb-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-          <div
-            style={{
-              marginBottom: 10,
-              fontSize: 11.5,
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-            }}
-          >
-            Curated Recipe Archetypes
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: 12,
-              marginBottom: 20,
-            }}
-          >
-            {PLAYBOOK_RECIPES.map((recipe) => (
-              <div
-                key={recipe.id}
-                className="pb-lib-item"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  padding: 14,
-                }}
+        {/* Domain Filter Tabs */}
+        <div className="pb-template-domain-nav" role="tablist" aria-label="Template Domains">
+          {TEMPLATE_DOMAINS.map((domain) => {
+            const count =
+              domain === 'All'
+                ? PLAYBOOK_TEMPLATES.length
+                : PLAYBOOK_TEMPLATES.filter((t) => t.domain === domain).length;
+            const isActive = selectedDomain === domain;
+            return (
+              <button
+                key={domain}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className={`pb-domain-tab ${isActive ? 'active' : ''}`}
+                onClick={() => setSelectedDomain(domain)}
               >
-                <div>
+                <span>{domain}</span>
+                <span className="pb-domain-count">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="pb-modal-body" style={{ maxHeight: '68vh', overflowY: 'auto' }}>
+          <div className="pb-templates-grid">
+            {filteredTemplates.map((template) => (
+              <div
+                key={template.id}
+                className="pb-lib-item pb-template-card"
+                data-testid={`template-card-${template.id}`}
+              >
+                <div className="pb-template-card-header">
                   <div className="pb-lib-top">
-                    <span className="pb-lib-icon">{recipe.icon}</span>
+                    <span className="pb-lib-icon">{template.icon}</span>
                     <div className="pb-lib-title-box">
-                      <h5 className="pb-lib-name">{recipe.name}</h5>
-                      <span className="pb-lib-policy">{recipe.steps.length} Steps</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <h5 className="pb-lib-name">{template.name}</h5>
+                        <span className="pb-template-domain-badge">{template.domain}</span>
+                      </div>
+                      <span className="pb-lib-policy">{template.steps.length} Steps</span>
                     </div>
                   </div>
-                  <p className="pb-lib-desc" style={{ marginTop: 8 }}>
-                    {recipe.description}
-                  </p>
-                  <div className="pb-lib-preview" style={{ marginTop: 8, fontSize: 11.5 }}>
-                    <strong>Pipeline:</strong> {recipe.steps.map((s) => s.name).join(' → ')}
+                </div>
+
+                <p className="pb-lib-desc">{template.description}</p>
+
+                {/* Step Flow Badges */}
+                <div className="pb-template-flow-strip">
+                  <span className="pb-flow-label">Pipeline:</span>
+                  <div className="pb-flow-badges">
+                    {template.steps.map((s, idx) => (
+                      <React.Fragment key={idx}>
+                        <span className="pb-flow-step-badge">{s.name}</span>
+                        {idx < template.steps.length - 1 && (
+                          <span className="pb-flow-arrow">→</span>
+                        )}
+                      </React.Fragment>
+                    ))}
                   </div>
                 </div>
+
+                {/* Meta Bar: 5-Pillar Readiness, Cost & Latency */}
+                <div className="pb-template-meta-bar">
+                  <div className="pb-template-pillars" title="5-Pillar Pipeline Readiness">
+                    <span className="pb-meta-title">5-Pillars:</span>
+                    {ALL_PILLARS.map((p) => {
+                      const isReady = template.pillarsReady.includes(p.id);
+                      return (
+                        <span
+                          key={p.id}
+                          className={`pb-pillar-pill ${isReady ? 'ready' : 'missing'}`}
+                          title={`${p.label}: ${isReady ? 'Satisfied' : 'Missing'}`}
+                        >
+                          {p.abbr}
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pb-template-metrics">
+                    <span className="pb-template-metric" title="Estimated execution cost">
+                      🪙 {template.estCost}
+                    </span>
+                    <span className="pb-template-metric" title="Estimated execution latency">
+                      ⏱️ {template.estLatency}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Suited Card Types */}
+                {template.card_types.length > 0 && (
+                  <div className="pb-template-ct-row">
+                    <span className="pb-meta-title">Suited for:</span>
+                    {template.card_types.map((ct) => (
+                      <span key={ct} className="pb-template-ct-tag">
+                        #{ct}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <button
                   type="button"
-                  className="btn-primary btn-sm pb-lib-btn"
-                  style={{ marginTop: 12 }}
-                  onClick={() => onSelectRecipe(recipe)}
+                  className="btn-primary btn-sm pb-lib-btn pb-template-use-btn"
+                  onClick={() => handleSelect(template)}
+                  aria-label={`Use this Template: ${template.name}`}
                 >
-                  <Plus size={12} />
-                  <span>Use this Recipe</span>
+                  <Plus size={13} />
+                  <span>Use this Template</span>
                 </button>
               </div>
             ))}
           </div>
 
           {builtinPlaybooks.length > 0 && (
-            <>
+            <div className="pb-builtin-section" style={{ marginTop: 24 }}>
               <div
                 style={{
                   marginBottom: 10,
@@ -528,25 +606,13 @@ export const RecipePickerModal: React.FC<RecipePickerModalProps> = ({
               >
                 Built-in Playbooks
               </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-                  gap: 12,
-                }}
-              >
+              <div className="pb-templates-grid">
                 {builtinPlaybooks.map((pb) => (
                   <div
                     key={pb.id}
-                    className="pb-lib-item"
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      padding: 14,
-                    }}
+                    className="pb-lib-item pb-template-card pb-builtin-card"
                   >
-                    <div>
+                    <div className="pb-template-card-header">
                       <div className="pb-lib-top">
                         <span className="pb-lib-icon">🏛️</span>
                         <div className="pb-lib-title-box">
@@ -554,12 +620,21 @@ export const RecipePickerModal: React.FC<RecipePickerModalProps> = ({
                           <span className="pb-lib-policy">{pb.steps?.length || 0} Steps</span>
                         </div>
                       </div>
-                      <p className="pb-lib-desc" style={{ marginTop: 8 }}>
-                        {pb.description || 'System built-in research pipeline.'}
-                      </p>
-                      <div className="pb-lib-preview" style={{ marginTop: 8, fontSize: 11.5 }}>
-                        <strong>Pipeline:</strong>{' '}
-                        {pb.steps?.map((s) => s.name).join(' → ') || 'No steps'}
+                    </div>
+                    <p className="pb-lib-desc">
+                      {pb.description || 'System built-in research pipeline.'}
+                    </p>
+                    <div className="pb-template-flow-strip">
+                      <span className="pb-flow-label">Pipeline:</span>
+                      <div className="pb-flow-badges">
+                        {pb.steps?.map((s, idx) => (
+                          <React.Fragment key={idx}>
+                            <span className="pb-flow-step-badge">{s.name}</span>
+                            {idx < (pb.steps?.length || 0) - 1 && (
+                              <span className="pb-flow-arrow">→</span>
+                            )}
+                          </React.Fragment>
+                        )) || <span className="pb-flow-step-badge">No steps</span>}
                       </div>
                     </div>
                     <button
@@ -574,13 +649,15 @@ export const RecipePickerModal: React.FC<RecipePickerModalProps> = ({
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
     </div>
   );
 };
+
+export const RecipePickerModal = PlaybookTemplateGalleryModal;
 
 export interface ImportPlaybookModalProps {
   isOpen: boolean;

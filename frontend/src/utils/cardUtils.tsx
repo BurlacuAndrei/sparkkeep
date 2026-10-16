@@ -48,3 +48,17 @@ export function formatRelativeAge(dateStr?: string): string {
   const diffMonths = Math.floor(diffDays / 30);
   return `${diffMonths}mo`;
 }
+
+export function extractHostname(rawUrl?: string): string {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '';
+  try {
+    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const parsed = new URL(withScheme);
+    return parsed.hostname.replace(/^www\./i, '');
+  } catch {
+    return trimmed.split('/')[0].replace(/^www\./i, '');
+  }
+}
+

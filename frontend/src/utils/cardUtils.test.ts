@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { formatRelativeAge, getPlatformInfo } from './cardUtils';
+import { formatRelativeAge, getPlatformInfo, extractHostname } from './cardUtils';
 
 describe('cardUtils', () => {
   describe('formatRelativeAge', () => {
@@ -109,6 +109,29 @@ describe('cardUtils', () => {
       const info = getPlatformInfo('https://example.org/articles/deep-dive');
       expect(info.name).toBe('Web');
       expect(info.color).toBe('#94a3b8');
+    });
+  });
+
+  describe('extractHostname', () => {
+    it('returns empty string for falsy or empty inputs', () => {
+      expect(extractHostname(undefined)).toBe('');
+      expect(extractHostname('')).toBe('');
+      expect(extractHostname('   ')).toBe('');
+    });
+
+    it('extracts clean hostname from standard HTTP/HTTPS URLs', () => {
+      expect(extractHostname('https://neon.tech/docs/architecture')).toBe('neon.tech');
+      expect(extractHostname('http://arxiv.org/abs/2501.12948')).toBe('arxiv.org');
+    });
+
+    it('strips www prefix from hostnames', () => {
+      expect(extractHostname('https://www.stripe.com/blog/agentic')).toBe('stripe.com');
+      expect(extractHostname('http://www.github.com/torvalds')).toBe('github.com');
+    });
+
+    it('handles bare domains without protocol scheme', () => {
+      expect(extractHostname('neon.tech/docs')).toBe('neon.tech');
+      expect(extractHostname('sub.domain.org')).toBe('sub.domain.org');
     });
   });
 });
