@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { SettingsModal } from './SettingsModal';
 import { ThemeProvider } from '../context/ThemeContext';
 
@@ -51,6 +51,8 @@ vi.mock('../api', async () => {
         steps: [],
       },
     ]),
+    updatePlaybook: vi.fn().mockResolvedValue({}),
+    deletePlaybook: vi.fn().mockResolvedValue(undefined),
     fetchStepLibrary: vi.fn().mockResolvedValue([]),
     fetchResearchRules: vi.fn().mockResolvedValue([]),
     fetchQuietWindow: vi.fn().mockResolvedValue({
@@ -62,6 +64,8 @@ vi.mock('../api', async () => {
     getErrorMessage: (err: unknown) => (err instanceof Error ? err.message : String(err)),
   };
 });
+
+import * as api from '../api';
 
 describe('SettingsModal Unified Layout & Navigation UX', () => {
   const mockOnClose = vi.fn();
@@ -296,5 +300,160 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     fireEvent.change(input, { target: { value: 'other' } });
     expect(addBtn.hasAttribute('disabled')).toBe(true);
   });
+
+  it('displays an impact confirmation modal listing affected playbooks when deleting a referenced card type, and cancels cleanly', async () => {
+    vi.mocked(api.fetchPlaybooks).mockResolvedValueOnce([
+      {
+        id: 10,
+        name: 'Deep Repo Audit',
+        description: 'Audits open source repositories',
+        is_builtin: false,
+        card_types: ['repo', 'tool'],
+        version: 1,
+        steps: [],
+      },
+      {
+        id: 11,
+        name: 'Academic Literature Review',
+        description: 'Reviews papers',
+        is_builtin: false,
+        card_types: ['paper'],
+        version: 1,
+        steps: [],
+      },
+      {
+        id: 12,
+        name: 'DevTool Landscape',
+        description: 'Compares developer tools and repos',
+        is_builtin: false,
+        card_types: ['repo'],
+        version: 2,
+        steps: [],
+      },
+    ]);
+
+    renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+    });
+
+    // Click delete on 'repo', which is referenced by 2 playbooks
+    const removeRepoBtn = screen.getByLabelText('Remove repo');
+    fireEvent.click(removeRepoBtn);
+
+    // Impact confirmation modal should appear and list only the 2 affected playbooks
+    await waitFor(() => {
+      expect(screen.getByText(/Deep Repo Audit/i)).toBeDefined();
+      expect(screen.getByText(/DevTool Landscape/i)).toBeDefined();
+    });
+    expect(screen.queryByText(/Academic Literature Review/i)).toBeNull();
+
+    // Modal offers 'Detach from Playbooks (Default)' and 'Cancel'
+    const impactModal = screen.getByTestId('taxonomy-impact-modal');
+    expect(within(impactModal).getByRole('button', { name: /Detach from Playbooks \(Default\)/i })).toBeDefined();
+    const cancelBtn = within(impactModal).getByRole('button', { name: /^Cancel$/i });
+
+    // Card type should still be present before confirmation
+    expect(screen.getByText('7 / 20 active types')).toBeDefined();
+
+    // Clicking Cancel closes the impact modal and leaves 'repo' intact
+    fireEvent.click(cancelBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('taxonomy-impact-modal')).toBeNull();
+    });
+    expect(screen.getByText('7 / 20 active types')).toBeDefined();
+    expect(api.updatePlaybook).not.toHaveBeenCalled();
+  });
+
+  it('dispatches batch updatePlaybook calls and updates settings when confirming Detach from Playbooks (Default) without deleting playbooks', async () => {
+    const repoPlaybook1 = {
+      id: 10,
+      name: 'Deep Repo Audit',
+      description: 'Audits open source repositories',
+      is_builtin: false,
+      card_types: ['repo', 'tool'],
+      version: 1,
+      steps: [{ position: 1, kind: 'custom', name: 'Step 1', enabled: true, config: {} }],
+    };
+    const paperPlaybook = {
+      id: 11,
+      name: 'Academic Literature Review',
+      description: 'Reviews papers',
+      is_builtin: false,
+      card_types: ['paper'],
+      version: 1,
+      steps: [],
+    };
+    const repoPlaybook2 = {
+      id: 12,
+      name: 'DevTool Landscape',
+      description: 'Compares developer tools and repos',
+      is_builtin: false,
+      card_types: ['repo'],
+      version: 2,
+      steps: [],
+    };
+
+    vi.mocked(api.fetchPlaybooks).mockResolvedValueOnce([
+      repoPlaybook1,
+      paperPlaybook,
+      repoPlaybook2,
+    ]);
+
+    renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('7 / 20 active types')).toBeDefined();
+    });
+
+    // Click delete on 'repo'
+    fireEvent.click(screen.getByLabelText('Remove repo'));
+
+    const impactModal = await screen.findByTestId('taxonomy-impact-modal');
+    const detachBtn = within(impactModal).getByRole('button', {
+      name: /Detach from Playbooks \(Default\)/i,
+    });
+
+    fireEvent.click(detachBtn);
+
+    await waitFor(() => {
+      expect(api.updatePlaybook).toHaveBeenCalledTimes(2);
+    });
+
+    expect(api.updatePlaybook).toHaveBeenCalledWith(
+      10,
+      expect.objectContaining({
+        id: 10,
+        name: 'Deep Repo Audit',
+        card_types: ['tool'],
+      })
+    );
+    expect(api.updatePlaybook).toHaveBeenCalledWith(
+      12,
+      expect.objectContaining({
+        id: 12,
+        name: 'DevTool Landscape',
+        card_types: [],
+      })
+    );
+    expect(api.deletePlaybook).not.toHaveBeenCalled();
+
+    // Settings updated with 'repo' removed
+    expect(api.patchSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        card_types: ['tool', 'product', 'company', 'article', 'idea', 'paper'],
+      })
+    );
+
+    // Impact modal closes and active card types count updates to 6 / 20
+    await waitFor(() => {
+      expect(screen.queryByTestId('taxonomy-impact-modal')).toBeNull();
+      expect(screen.getByText('6 / 20 active types')).toBeDefined();
+      expect(screen.queryByLabelText('Remove repo')).toBeNull();
+    });
+  });
 });
+
 

@@ -7,8 +7,8 @@ When deleting a user-defined Card Type in Settings that is referenced by playboo
 
 **Status:** ready-for-agent
 
-- [ ] Inspect loaded playbooks when a user clicks delete on a Card Type chip in Settings.
-- [ ] If playbooks reference the type, display an impact confirmation dialog showing the affected playbooks.
-- [ ] Provide "Detach from Playbooks (Default)" and "Cancel" actions.
-- [ ] On confirmation, dispatch API update calls to remove the deleted card type from each affected playbook, and update settings.
-- [ ] Tests verify the impact dialog appears, affected playbooks are listed, and batch updates are dispatched without deleting playbooks.
+- [x] Inspect loaded playbooks when a user clicks delete on a Card Type chip in Settings.
+- [x] If playbooks reference the type, display an impact confirmation dialog showing the affected playbooks.
+- [x] Provide "Detach from Playbooks (Default)" and "Cancel" actions.
+- [x] On confirmation, dispatch API update calls to remove the deleted card type from each affected playbook, and update settings.
+- [x] Tests verify the impact dialog appears, affected playbooks are listed, and batch updates are dispatched without deleting playbooks.
