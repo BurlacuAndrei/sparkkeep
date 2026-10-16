@@ -43,3 +43,15 @@ _Avoid_: Card category, card classification, ticket type
 **Configurable Taxonomy**:
 The user-governed list of up to 20 active Card Types managed in Platform Preferences, strictly bounding the AI triage classifier with unclassified items routed to `other`.
 _Avoid_: Dynamic emergent taxonomy, tag routing, open categories
+
+**Playbook Template**:
+A pre-configured, domain-specific starter sequence of Step Primitives that can be loaded into a custom playbook or used as a baseline.
+_Avoid_: Research recipe, playbook archetype, prompt recipe
+
+**Playbook Studio**:
+The dedicated, first-class workspace view in SparkKeep for designing, testing, inspecting, and managing Research Playbooks.
+_Avoid_: Playbook settings, recipe manager, workflow builder
+
+**Non-Destructive Taxonomy Cascade**:
+The safeguard policy ensuring that deleting a Card Type detaches it from associated Research Playbooks and falls back gracefully rather than destroying user-created playbooks.
+_Avoid_: Cascade delete, taxonomy wipe, orphaned playbook purge
