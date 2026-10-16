@@ -18,46 +18,90 @@ import { PlaybookHealthInspector } from './PlaybookHealthInspector';
 import { QuickAddPalette } from './QuickAddPalette';
 import { DryRunInspector } from './DryRunInspector';
 
-export interface PlaybookCanvasProps {
-  playbook: Playbook;
-  onChangePlaybook: (updated: Playbook) => void;
+export interface PlaybookPlatformSettings {
   activeCardTypes: string[];
   isPlatformDefault: boolean;
   onPlatformDefaultChange: (checked: boolean) => void;
+}
+
+export interface PlaybookInspectorControls {
+  tab?: 'health' | 'dryrun';
+  onTabChange?: (tab: 'health' | 'dryrun') => void;
+}
+
+export interface StepLibraryControls {
+  libraryTemplates?: StepLibraryTemplate[];
+  userStepTemplates?: UserSavedStepTemplate[];
+  onSaveStepToLibrary: (step: PlaybookStep) => void;
+  onOpenAddStepModal: () => void;
+}
+
+export interface PlaybookCanvasProps {
+  playbook: Playbook;
+  onChangePlaybook: (updated: Playbook) => void;
   validationErrors: string[];
   expandedSteps: Record<number, boolean>;
   onToggleExpandStep: (idx: number) => void;
-  onSaveStepToLibrary: (step: PlaybookStep) => void;
-  onOpenAddStepModal: () => void;
   showToast: (msg: string) => void;
-  libraryTemplates?: StepLibraryTemplate[];
-  userStepTemplates?: UserSavedStepTemplate[];
   cards?: Card[];
+
+  // Grouped domain models
+  platformSettings?: PlaybookPlatformSettings;
+  inspectorControls?: PlaybookInspectorControls;
+  libraryControls?: StepLibraryControls;
+
+  // Backward-compatible flat props
+  activeCardTypes?: string[];
+  isPlatformDefault?: boolean;
+  onPlatformDefaultChange?: (checked: boolean) => void;
   inspectorTab?: 'health' | 'dryrun';
   onInspectorTabChange?: (tab: 'health' | 'dryrun') => void;
+  libraryTemplates?: StepLibraryTemplate[];
+  userStepTemplates?: UserSavedStepTemplate[];
+  onSaveStepToLibrary?: (step: PlaybookStep) => void;
+  onOpenAddStepModal?: () => void;
 }
 
 export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
   playbook,
   onChangePlaybook,
-  activeCardTypes,
-  isPlatformDefault,
-  onPlatformDefaultChange,
   validationErrors,
   expandedSteps,
   onToggleExpandStep,
-  onSaveStepToLibrary,
-  onOpenAddStepModal,
   showToast,
-  libraryTemplates = [],
-  userStepTemplates = [],
   cards = [],
+  platformSettings,
+  inspectorControls,
+  libraryControls,
+  activeCardTypes,
+  isPlatformDefault,
+  onPlatformDefaultChange,
   inspectorTab,
   onInspectorTabChange,
+  libraryTemplates = [],
+  userStepTemplates = [],
+  onSaveStepToLibrary,
+  onOpenAddStepModal,
 }) => {
+  // Resolve grouped vs flat props
+  const resolvedCardTypes = platformSettings?.activeCardTypes ?? activeCardTypes ?? [];
+  const resolvedIsDefault = platformSettings?.isPlatformDefault ?? isPlatformDefault ?? false;
+  const resolvedOnDefaultChange =
+    platformSettings?.onPlatformDefaultChange ?? onPlatformDefaultChange ?? (() => {});
+
+  const currentTab = inspectorControls?.tab ?? inspectorTab;
+  const onTabChange = inspectorControls?.onTabChange ?? onInspectorTabChange;
+
+  const resolvedLibTemplates = libraryControls?.libraryTemplates ?? libraryTemplates ?? [];
+  const resolvedUserTemplates = libraryControls?.userStepTemplates ?? userStepTemplates ?? [];
+  const resolvedSaveToLibrary =
+    libraryControls?.onSaveStepToLibrary ?? onSaveStepToLibrary ?? (() => {});
+  const resolvedOpenAddModal =
+    libraryControls?.onOpenAddStepModal ?? onOpenAddStepModal ?? (() => {});
+
   const [internalTab, setInternalTab] = useState<'health' | 'dryrun'>('health');
-  const activeTab = inspectorTab !== undefined ? inspectorTab : internalTab;
-  const setTab = onInspectorTabChange || setInternalTab;
+  const activeTab = currentTab !== undefined ? currentTab : internalTab;
+  const setTab = onTabChange || setInternalTab;
   const [activeInsertIndex, setActiveInsertIndex] = useState<number | null>(null);
 
   const insertStepAtIndex = (insertIdx: number, newStep: PlaybookStep) => {
@@ -180,7 +224,7 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
       <div className="pb-form-field" style={{ marginTop: 12 }}>
         <label>Applicable Card Types (Auto-select hints)</label>
         <div className="pb-card-types-chips">
-          {activeCardTypes.map((type) => {
+          {resolvedCardTypes.map((type) => {
             const active = (playbook.card_types || []).includes(type);
             return (
               <button
@@ -207,12 +251,12 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
           <input
             type="checkbox"
             aria-label="Set as Platform Default"
-            checked={isPlatformDefault}
-            onChange={(e) => onPlatformDefaultChange(e.target.checked)}
+            checked={resolvedIsDefault}
+            onChange={(e) => resolvedOnDefaultChange(e.target.checked)}
           />
           <span>Set as Platform Default</span>
         </label>
-        {isPlatformDefault && (
+        {resolvedIsDefault && (
           <span className="pb-platform-default-badge">★ Platform Default</span>
         )}
       </div>
@@ -245,7 +289,7 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
             <button
               type="button"
               className="btn-secondary btn-sm"
-              onClick={onOpenAddStepModal}
+              onClick={resolvedOpenAddModal}
               disabled={playbook.steps.length >= 12}
             >
               <Plus size={13} />
@@ -432,7 +476,7 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                           onUpdateConfig={(patch, newName) =>
                             updateStepConfig(idx, patch, newName)
                           }
-                          onSaveToLibrary={onSaveStepToLibrary}
+                          onSaveToLibrary={resolvedSaveToLibrary}
                         />
                       )}
                     </div>
@@ -463,8 +507,8 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                         onClose={() => setActiveInsertIndex(null)}
                         onAddBlank={(name) => handleAddBlankAt(idx + 1, name)}
                         onAddTemplate={(tpl) => handleAddTemplateAt(idx + 1, tpl)}
-                        libraryTemplates={libraryTemplates}
-                        userStepTemplates={userStepTemplates}
+                        libraryTemplates={resolvedLibTemplates}
+                        userStepTemplates={resolvedUserTemplates}
                       />
                     )}
                   </div>

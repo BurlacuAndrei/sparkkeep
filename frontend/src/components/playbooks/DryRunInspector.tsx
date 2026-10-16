@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Eye, Search, Sparkles, ExternalLink, Zap, CheckCircle2 } from 'lucide-react';
 import { Card, PlaybookStep } from '../../types';
 import { CORE_STEP_DESCRIPTIONS, getDefaultInputsForStep } from './constants';
+import { extractHostname } from '../../utils/cardUtils';
 
 export interface MockDryRunCard {
   id: number;
@@ -83,12 +84,7 @@ export function compileStepForDryRun(
       plannedQueries.push(`"${card.title}" alternatives pricing reviews`);
     }
     if (maxQueries >= 3) {
-      let host = card.url;
-      try {
-        host = new URL(card.url).hostname;
-      } catch {
-        // ignore
-      }
+      const host = extractHostname(card.url) || card.title;
       plannedQueries.push(`site:${host} benchmarks whitepaper`);
     }
     for (let q = 4; q <= maxQueries; q++) {

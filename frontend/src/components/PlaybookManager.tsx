@@ -454,20 +454,26 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
         <PlaybookCanvas
           playbook={editingPlaybook}
           onChangePlaybook={setEditingPlaybook}
-          activeCardTypes={activeCardTypes}
-          isPlatformDefault={isPlatformDefault}
-          onPlatformDefaultChange={setIsPlatformDefault}
+          platformSettings={{
+            activeCardTypes,
+            isPlatformDefault,
+            onPlatformDefaultChange: setIsPlatformDefault,
+          }}
+          inspectorControls={{
+            tab: inspectorTab,
+            onTabChange: setInspectorTab,
+          }}
+          libraryControls={{
+            libraryTemplates,
+            userStepTemplates,
+            onSaveStepToLibrary: handleSaveStepToLibrary,
+            onOpenAddStepModal: handleOpenAddStepModal,
+          }}
           validationErrors={validationErrors}
           expandedSteps={expandedSteps}
           onToggleExpandStep={(idx) => setExpandedSteps((prev) => ({ ...prev, [idx]: !prev[idx] }))}
-          onSaveStepToLibrary={handleSaveStepToLibrary}
-          onOpenAddStepModal={handleOpenAddStepModal}
           showToast={showToast}
-          libraryTemplates={libraryTemplates}
-          userStepTemplates={userStepTemplates}
           cards={cards}
-          inspectorTab={inspectorTab}
-          onInspectorTabChange={setInspectorTab}
         />
       )}
 
