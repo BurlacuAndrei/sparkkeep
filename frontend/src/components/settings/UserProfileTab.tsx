@@ -3,7 +3,6 @@ import { Shield, Sparkles, Save, User, Globe } from 'lucide-react';
 import * as api from '../../api';
 import { LANGUAGE_OPTIONS, PROFILE_ARCHETYPES, ProfileArchetype } from './constants';
 import { CustomSelect } from '../CustomSelect';
-import { SelectOption } from '../selectOptions';
 
 export interface UserProfileTabProps {
   goals: string;
