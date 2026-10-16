@@ -22,8 +22,10 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
   onUpdateConfig,
   onSaveToLibrary,
 }) => {
+  const charCount = (step.config?.instruction || '').length;
+
   return (
-    <div className="pb-custom-config-drawer">
+    <div className="pb-custom-config-drawer pb-inplace-editor">
       <div className="pb-cfg-row">
         <div className="pb-form-field">
           <label>Step Display Name</label>
@@ -54,33 +56,21 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
         <div className="pb-label-with-count">
           <label>Instruction / Prompt</label>
           <span
-            className={`pb-char-counter ${
-              (step.config?.instruction || '').length > 8000 ? 'overflow' : ''
-            }`}
+            className={`pb-char-counter ${charCount > 8000 ? 'overflow' : ''}`}
+            data-testid="step-char-counter"
           >
-            {(step.config?.instruction || '').length} / 8,000
+            {charCount} / 8,000
           </span>
         </div>
 
         {/* Quick Prompt Starters */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            margin: '6px 0',
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
-            Prompt Starters:
-          </span>
+        <div className="pb-prompt-starters-row">
+          <span className="pb-prompt-starters-label">Prompt Starters:</span>
           {(STEP_PROMPT_STARTERS[step.kind] || DEFAULT_PROMPT_STARTERS).map((snip) => (
             <button
               key={snip.label}
               type="button"
-              className="btn-secondary"
-              style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 12 }}
+              className="btn-secondary pb-prompt-starter-pill"
               onClick={() => {
                 const current = step.config?.instruction || '';
                 const next = current ? `${current}\n\n${snip.text}` : snip.text;
@@ -162,7 +152,7 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
         </div>
       </div>
 
-      {/* Input Bindings Checkboxes */}
+      {/* Input Bindings Chips */}
       <div className="pb-form-field" style={{ marginTop: 10 }}>
         <label>Input Bindings</label>
         <div className="pb-input-bindings">
@@ -170,7 +160,10 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
             const activeInputs = getDefaultInputsForStep(step);
             const checked = activeInputs.includes(key);
             return (
-              <label key={key} className="pb-binding-checkbox">
+              <label
+                key={key}
+                className={`pb-binding-checkbox pb-binding-chip ${checked ? 'active' : ''}`}
+              >
                 <input
                   type="checkbox"
                   checked={checked}
