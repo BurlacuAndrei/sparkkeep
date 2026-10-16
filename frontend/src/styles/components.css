@@ -3680,11 +3680,87 @@
   gap: 8px;
 }
 
+.pb-timeline-list {
+  gap: 0;
+  position: relative;
+}
+
+.pb-timeline-item {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.pb-timeline-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 28px;
+  flex-shrink: 0;
+  padding-top: 10px;
+}
+
+.pb-timeline-node {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-surface-elevated, rgba(30, 41, 59, 0.8));
+  border: 2px solid rgba(99, 102, 241, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
+}
+
+.pb-timeline-node.active {
+  background: var(--accent-indigo);
+  border-color: #818cf8;
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.45);
+}
+
+.pb-timeline-node.active .pb-step-pos {
+  color: #ffffff;
+}
+
+.pb-timeline-node.disabled {
+  opacity: 0.45;
+  border-color: var(--border-subtle);
+  box-shadow: none;
+}
+
+.pb-timeline-rail {
+  width: 2px;
+  flex: 1;
+  min-height: 16px;
+  margin: 4px 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(99, 102, 241, 0.45),
+    rgba(148, 163, 184, 0.2)
+  );
+  border-radius: 2px;
+}
+
 .pb-step-row {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 10px;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--bg-surface);
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
+}
+
+.pb-timeline-card:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+}
+
+.pb-timeline-card.expanded {
+  border-color: rgba(99, 102, 241, 0.65);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25), 0 8px 24px rgba(0, 0, 0, 0.24);
 }
 
 .pb-step-row.disabled {
@@ -3710,7 +3786,7 @@
   font-weight: 700;
   width: 20px;
   text-align: center;
-  color: var(--text-dim);
+  color: var(--text-main);
 }
 
 .pb-step-info {
@@ -3722,12 +3798,55 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .pb-step-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-main);
+}
+
+.pb-stage-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
+}
+
+.pb-stage-badge.stage-grounding {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.pb-stage-badge.stage-retrieval {
+  background: rgba(56, 189, 248, 0.14);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+
+.pb-stage-badge.stage-extraction {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.pb-stage-badge.stage-verification {
+  background: rgba(244, 63, 94, 0.14);
+  border-color: rgba(244, 63, 94, 0.3);
+  color: #fb7185;
+}
+
+.pb-stage-badge.stage-delivery {
+  background: rgba(168, 85, 247, 0.16);
+  border-color: rgba(168, 85, 247, 0.32);
+  color: #c084fc;
 }
 
 .pb-kind-badge {
@@ -3748,13 +3867,20 @@
 .pb-tool-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 10px;
+  gap: 4px;
+  font-size: 10.5px;
   font-weight: 600;
   color: #38bdf8;
   background: rgba(56, 189, 248, 0.15);
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+}
+
+.pb-tool-chip.reasoning {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.25);
 }
 
 .pb-step-desc {
@@ -3773,10 +3899,30 @@
 }
 
 .pb-custom-config-drawer {
-  padding: 12px 16px 14px;
+  padding: 14px 16px 16px;
   border-top: 1px solid var(--border-subtle);
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.14);
   border-radius: 0 0 10px 10px;
+}
+
+.pb-prompt-starters-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  flex-wrap: wrap;
+}
+
+.pb-prompt-starters-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.pb-prompt-starter-pill {
+  font-size: 10.5px;
+  padding: 2px 9px;
+  border-radius: 999px;
 }
 
 .pb-cfg-row {
@@ -3819,7 +3965,7 @@
 .pb-input-bindings {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 8px;
   margin-top: 6px;
 }
 
@@ -3828,9 +3974,20 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--text-main);
+  color: var(--text-muted);
   cursor: pointer;
   user-select: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  transition: all 0.15s ease;
+}
+
+.pb-binding-chip.active {
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: var(--text-main);
 }
 
 /* Custom Toggle Switch */

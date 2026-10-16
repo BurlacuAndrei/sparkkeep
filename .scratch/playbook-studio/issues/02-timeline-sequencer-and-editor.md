@@ -7,8 +7,8 @@ Re-architect the playbook builder into an interactive sequential Timeline with v
 
 **Status:** ready-for-agent
 
-- [ ] Render the pipeline steps as connected visual node cards along a sequential timeline with position numbers and stage badges.
-- [ ] Display tool policy chips on step cards (`🔍 Web Search` with query count vs `🧠 Source Reasoning`).
-- [ ] Provide in-place focused card expansion when clicking a step, preserving pipeline context.
-- [ ] Include quick-insert prompt starter pills, live character counter (up to 8,000 chars), tool policy selector, and input binding chips.
-- [ ] Tests verify timeline rendering, step expansion, and config updates.
+- [x] Render the pipeline steps as connected visual node cards along a sequential timeline with position numbers and stage badges.
+- [x] Display tool policy chips on step cards (`🔍 Web Search` with query count vs `🧠 Source Reasoning`).
+- [x] Provide in-place focused card expansion when clicking a step, preserving pipeline context.
+- [x] Include quick-insert prompt starter pills, live character counter (up to 8,000 chars), tool policy selector, and input binding chips.
+- [x] Tests verify timeline rendering, step expansion, and config updates.

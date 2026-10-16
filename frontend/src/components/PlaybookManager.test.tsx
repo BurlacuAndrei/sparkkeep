@@ -698,4 +698,78 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
       expect(screen.getByTestId('est-latency').textContent).toBe('~18–37s');
     });
   });
+
+  describe('Visual Pipeline Timeline & In-Place Focused Step Editor', () => {
+    it('renders pipeline steps as connected timeline nodes with connector rails, stage badges, and tool policy chips', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Timeline container and connector rails should render
+      const timeline = screen.getByTestId('pipeline-timeline');
+      expect(timeline).toBeDefined();
+      const rails = timeline.querySelectorAll('.pb-timeline-rail');
+      expect(rails.length).toBe(3); // 3 connector rails between 4 steps
+
+      // Stage badges for the 4 starter steps
+      expect(screen.getByTestId('step-stage-badge-0').textContent).toMatch(/Grounding/i);
+      expect(screen.getByTestId('step-stage-badge-1').textContent).toMatch(/Retrieval/i);
+      expect(screen.getByTestId('step-stage-badge-2').textContent).toMatch(/Synthesis/i);
+      expect(screen.getByTestId('step-stage-badge-3').textContent).toMatch(/Delivery/i);
+
+      // Tool policy chips: step 1 (Targeted Search) has Web Search with query count, others have Source Reasoning
+      expect(screen.getByTestId('step-tool-chip-0').textContent).toContain('🧠 Source Reasoning');
+      expect(screen.getByTestId('step-tool-chip-1').textContent).toContain('🔍 Web Search (2 queries)');
+      expect(screen.getByTestId('step-tool-chip-2').textContent).toContain('🧠 Source Reasoning');
+      expect(screen.getByTestId('step-tool-chip-3').textContent).toContain('🧠 Source Reasoning');
+    });
+
+    it('expands in-place focused card editor when clicking a step card while preserving surrounding pipeline context and updates live indicators', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // Click directly on the Custom Analysis step card header to expand in-place editor
+      const customStepTitle = screen.getByText('Custom Analysis');
+      fireEvent.click(customStepTitle);
+
+      // In-place editor is expanded while surrounding steps remain visible in timeline
+      expect(screen.getByLabelText(/Step Display Name/i)).toBeDefined();
+      expect(screen.getByText('Targeted Search')).toBeDefined();
+      expect(screen.getByText('Briefing Report')).toBeDefined();
+
+      // Live character counter updates as prompt instruction is edited
+      const charCounter = screen.getByTestId('step-char-counter');
+      expect(charCounter.textContent).toBe('47 / 8,000');
+
+      const promptTextarea = screen.getByLabelText(/Instruction \/ Prompt/i);
+      fireEvent.change(promptTextarea, { target: { value: 'Evaluate unit economics and competitive moat.' } });
+      expect(charCounter.textContent).toBe('45 / 8,000');
+
+      // Changing tool policy to search and max queries to 4 updates the step card tool policy chip live
+      const toolPolicySelect = screen.getByLabelText(/Tool Policy/i);
+      fireEvent.change(toolPolicySelect, { target: { value: 'search' } });
+      expect(screen.getByTestId('step-tool-chip-2').textContent).toContain('🔍 Web Search (2 queries)');
+
+      const maxQueriesInput = screen.getByLabelText(/Max Search Queries/i);
+      fireEvent.change(maxQueriesInput, { target: { value: '4' } });
+      expect(screen.getByTestId('step-tool-chip-2').textContent).toContain('🔍 Web Search (4 queries)');
+
+      // Input binding chips toggle active state cleanly
+      const refsCheckbox = screen.getByLabelText(/Input binding references/i) as HTMLInputElement;
+      const refsChip = refsCheckbox.closest('.pb-binding-chip');
+      expect(refsChip?.classList.contains('active')).toBe(false);
+      fireEvent.click(refsCheckbox);
+      expect(refsChip?.classList.contains('active')).toBe(true);
+    });
+  });
 });
+

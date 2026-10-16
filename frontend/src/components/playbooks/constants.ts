@@ -125,6 +125,19 @@ export const CORE_STEP_DESCRIPTIONS: Record<string, string> = {
   custom: 'User-configured custom research analysis step',
 };
 
+export const STEP_STAGE_LABELS: Record<string, string> = {
+  ground: 'Grounding',
+  resolve_refs: 'Retrieval',
+  plan: 'Planning',
+  search: 'Retrieval',
+  read: 'Extraction',
+  verify_claims: 'Verification',
+  landscape: 'Synthesis',
+  verdict: 'Delivery',
+  report: 'Delivery',
+  custom: 'Synthesis',
+};
+
 export interface PlaybookRecipe {
   id: string;
   name: string;
