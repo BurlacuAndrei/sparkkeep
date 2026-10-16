@@ -532,7 +532,7 @@ func (a *api) openclawWebhook(w http.ResponseWriter, r *http.Request) {
 	oc := openclaw.New(openclaw.Config{
 		GatewayURL: gwURL,
 		HookToken:  gwTok,
-	}, a.svc, a.store, "", nil)
+	}, a.svc, "", nil)
 	oc.HandleWebhook(w, r)
 }
 

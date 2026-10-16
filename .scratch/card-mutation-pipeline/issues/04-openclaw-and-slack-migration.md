@@ -4,9 +4,9 @@
 
 **Blocked by:** 01: Domain Core Card Mutation Pipeline & Webhook Dispatch (Expand)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] OpenClaw `Adapter` and `New` no longer depend on `port.Store`
-- [ ] OpenClaw triage actions call `Service.UpdateCard` instead of direct storage mutation
-- [ ] Slack `Adapter` and `New` no longer take `port.Store` (dormant unused store field removed)
-- [ ] `openclaw_test.go` verifies triage actions against stubbed `Service` without `port.Store`
+- [x] OpenClaw `Adapter` and `New` no longer depend on `port.Store`
+- [x] OpenClaw triage actions call `Service.UpdateCard` instead of direct storage mutation
+- [x] Slack `Adapter` and `New` no longer take `port.Store` (dormant unused store field removed)
+- [x] `openclaw_test.go` verifies triage actions against stubbed `Service` without `port.Store`

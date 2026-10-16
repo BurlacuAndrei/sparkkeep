@@ -144,7 +144,7 @@ func (s *Service) ReloadChannels(ctx context.Context) error {
 			DefaultChannel: openClawChan,
 			DefaultTarget:  openClawTarget,
 			Enabled:        true,
-		}, s, s.Store, s.Config.PublicURL, s.Logf)
+		}, s, s.Config.PublicURL, s.Logf)
 		s.Hub.Register(oc)
 		s.Logf("sparkkeep: openclaw bridge channel enabled (gateway: %s, default channel: %s)", openClawURL, openClawChan)
 	} else {
@@ -210,7 +210,7 @@ func (s *Service) ReloadChannels(ctx context.Context) error {
 			BotToken:   slackToken,
 			ChannelID:  slackChanID,
 			Enabled:    true,
-		}, s, s.Store, s.Config.PublicURL, s.Logf)
+		}, s, s.Config.PublicURL, s.Logf)
 		s.Hub.Register(sl)
 		s.Logf("sparkkeep: slack channel enabled")
 	} else {
