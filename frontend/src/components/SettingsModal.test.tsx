@@ -79,6 +79,10 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
   it('renders the standardized Platform Preferences modal with unified container and sidebar', async () => {
     renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
 
+    await waitFor(() => {
+      expect(screen.getByText('Color Palette & Contrast')).toBeDefined();
+    });
+
     // Check title and subtitle
     expect(screen.getByText('Platform Preferences')).toBeDefined();
     expect(
@@ -171,6 +175,10 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
 
   it('triggers onClose when clicking close button or pressing Escape', async () => {
     renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Color Palette & Contrast')).toBeDefined();
+    });
 
     const closeBtn = screen.getByLabelText('Close settings');
     fireEvent.click(closeBtn);
