@@ -230,16 +230,27 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		References:         b.References,
 	}
 	if patch.Title != nil || patch.Status != nil || patch.Horizon != nil || patch.Note != nil || patch.Type != nil || patch.TLDR != nil || patch.WhyCare != nil || patch.Claims != nil || patch.OpenQuestions != nil || patch.Signals != nil || patch.Worthiness != nil || patch.ExecutiveSummary != nil || patch.ValueProposition != nil || patch.ProposedActions != nil || patch.CompletedActions != nil || patch.ActionsSource != nil || patch.AnalysisFailed != nil || patch.ResearchVerdict != nil || patch.ResearchConfidence != nil || patch.SuggestedHorizon != nil || patch.SuggestedTags != nil || patch.ResearchState != nil || patch.References != nil {
-		card, err = a.store.UpdateCard(r.Context(), id, patch)
+		if a.svc != nil {
+			card, err = a.svc.UpdateCard(r.Context(), id, patch)
+		} else {
+			card, err = a.store.UpdateCard(r.Context(), id, patch)
+		}
 		if err != nil {
 			a.fail(w, err)
 			return
 		}
 	}
 	if b.Tags != nil {
-		if err := a.store.SetCardTags(r.Context(), id, b.Tags); err != nil {
-			a.fail(w, err)
-			return
+		if a.svc != nil {
+			if err := a.svc.SetCardTags(r.Context(), id, b.Tags); err != nil {
+				a.fail(w, err)
+				return
+			}
+		} else {
+			if err := a.store.SetCardTags(r.Context(), id, b.Tags); err != nil {
+				a.fail(w, err)
+				return
+			}
 		}
 		card, err = a.store.GetCard(r.Context(), id)
 		if err != nil {
@@ -281,7 +292,13 @@ func (a *api) createCardComment(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "comment content cannot be empty")
 		return
 	}
-	comment, err := a.store.AddCardComment(r.Context(), id, b.Content)
+	var comment port.CardComment
+	var err error
+	if a.svc != nil {
+		comment, err = a.svc.AddCardComment(r.Context(), id, b.Content)
+	} else {
+		comment, err = a.store.AddCardComment(r.Context(), id, b.Content)
+	}
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -324,7 +341,15 @@ func (a *api) batchShelveStale(w http.ResponseWriter, r *http.Request) {
 		}
 		days = n
 	}
-	n, err := a.store.ShelveStale(r.Context(), days)
+	var n int
+	var err error
+	if a.svc != nil {
+		n, err = a.svc.ShelveStaleCards(r.Context(), days)
+	} else {
+		var n64 int64
+		n64, err = a.store.ShelveStale(r.Context(), days)
+		n = int(n64)
+	}
 	if err != nil {
 		a.fail(w, err)
 		return

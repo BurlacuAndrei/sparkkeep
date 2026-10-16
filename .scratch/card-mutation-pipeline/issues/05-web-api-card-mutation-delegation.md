@@ -4,10 +4,10 @@
 
 **Blocked by:** 01: Domain Core Card Mutation Pipeline & Webhook Dispatch (Expand)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `patchCard` in `internal/web/cards_handler.go` delegates to `svc.UpdateCard` and `svc.SetCardTags`
-- [ ] `createCardComment` delegates to `svc.AddCardComment`
-- [ ] `batchShelveStale` delegates to `svc.ShelveStaleCards`
-- [ ] Web handler responses retain existing JSON schemas and status codes
-- [ ] Web integration tests in `internal/web/web_test.go` pass with zero regressions
+- [x] `patchCard` in `internal/web/cards_handler.go` delegates to `svc.UpdateCard` and `svc.SetCardTags`
+- [x] `createCardComment` delegates to `svc.AddCardComment`
+- [x] `batchShelveStale` delegates to `svc.ShelveStaleCards`
+- [x] Web handler responses retain existing JSON schemas and status codes
+- [x] Web integration tests in `internal/web/web_test.go` pass with zero regressions
