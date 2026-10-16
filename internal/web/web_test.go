@@ -2456,8 +2456,19 @@ func TestLicenseStatusAndObsidianExport(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &licResp); err != nil {
 		t.Fatalf("unmarshal license status: %v", err)
 	}
-	if licResp.Status.Tier != license.TierCommunity || !licResp.Status.IsValid {
-		t.Fatalf("expected valid %s status, got %+v", license.TierCommunity, licResp.Status)
+	if licResp.Status.Tier != license.TierCommunity || !licResp.Status.IsValid || len(licResp.Status.Features) == 0 {
+		t.Fatalf("expected valid %s status with features, got %+v", license.TierCommunity, licResp.Status)
+	}
+	var rawResp struct {
+		Status map[string]any `json:"status"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &rawResp); err != nil {
+		t.Fatalf("unmarshal raw license status: %v", err)
+	}
+	for _, prunedKey := range []string{"email", "expires_at", "is_lifetime"} {
+		if _, exists := rawResp.Status[prunedKey]; exists {
+			t.Fatalf("expected pruned field %q to be absent from status response, got %v", prunedKey, rawResp.Status)
+		}
 	}
 
 	// 2. Obsidian sync succeeds with no gating.

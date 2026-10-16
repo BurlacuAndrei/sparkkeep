@@ -26,7 +26,6 @@ import (
 	"sparkkeep/internal/asr"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
-	"sparkkeep/internal/license"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
 	"sparkkeep/internal/webhook"
@@ -348,12 +347,6 @@ func (s *Service) SetRouter(router *analyze.Router) {
 			s.Runner.SynthesisLLM = router.For(analyze.RoleResearchSynthesis)
 		}
 	}
-}
-
-// LicenseStatus returns the community/MIT status: every capability is
-// included and always on.
-func (s *Service) LicenseStatus(ctx context.Context) license.LicenseStatus {
-	return license.Status()
 }
 
 // ffmpegBin returns a usable ffmpeg path or "" when it is not installed.

@@ -741,9 +741,5 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) getLicenseStatus(w http.ResponseWriter, r *http.Request) {
-	if a.svc == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": license.Status()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": a.svc.LicenseStatus(r.Context())})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": license.Status()})
 }
