@@ -4,7 +4,7 @@ import {
   CheckCircle2, AlertCircle, Sparkles, Layers,
 } from 'lucide-react';
 import * as api from '../api';
-import { Playbook, PlaybookStep, StepLibraryTemplate } from '../types';
+import { Card, Playbook, PlaybookStep, StepLibraryTemplate } from '../types';
 import {
   DEFAULT_CARD_TYPES, DEFAULT_LEAN_STARTER_STEPS, PlaybookRecipe,
   UserSavedStepTemplate, validatePlaybook, exportPlaybookToFile,
@@ -18,8 +18,9 @@ export {
   type PlaybookRecipe, type UserSavedStepTemplate,
 } from './playbooks';
 
-interface PlaybookManagerProps {
+export interface PlaybookManagerProps {
   showToast: (msg: string) => void;
+  cards?: Card[];
 }
 
 export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) => {
@@ -477,3 +478,6 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     </div>
   );
 };
+
+export const PlaybookStudio = PlaybookManager;
+

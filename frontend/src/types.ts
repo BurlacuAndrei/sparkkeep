@@ -1,3 +1,5 @@
+export type ViewMode = 'triage' | 'boards' | 'digest' | 'playbooks';
+
 export type ReferenceKind =
   | 'url'
   | 'repo'

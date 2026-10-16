@@ -187,6 +187,30 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(mockOnClose).toHaveBeenCalledTimes(2);
   });
+
+  it('triggers onOpenPlaybookStudio and onClose when clicking Open Playbook Studio shortcut in Research Playbooks tab', async () => {
+    const mockOpenStudio = vi.fn();
+    renderWithTheme(
+      <SettingsModal
+        onClose={mockOnClose}
+        showToast={mockShowToast}
+        onOpenPlaybookStudio={mockOpenStudio}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Color Palette & Contrast')).toBeDefined();
+    });
+
+    const playbooksTab = screen.getByRole('tab', { name: /Research Playbooks/i });
+    fireEvent.click(playbooksTab);
+
+    const openStudioBtn = await screen.findByRole('button', { name: /Open Playbook Studio/i });
+    fireEvent.click(openStudioBtn);
+
+    expect(mockOpenStudio).toHaveBeenCalledTimes(1);
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('Card Taxonomy Management in Platform Preferences', () => {

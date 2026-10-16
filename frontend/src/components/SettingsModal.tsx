@@ -33,6 +33,7 @@ import {
 export interface SettingsModalProps {
   onClose: () => void;
   showToast: (msg: string) => void;
+  onOpenPlaybookStudio?: () => void;
 }
 
 export type SettingsTab =
@@ -60,7 +61,7 @@ interface SettingsBaseline {
   discordChannelId: string;
 }
 
-export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
+export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const bodyRef = React.useRef<HTMLDivElement>(null);
 
@@ -834,6 +835,37 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                     role="tabpanel"
                     aria-labelledby="settings-tab-playbooks"
                   >
+                    <div
+                      className="pref-item-card"
+                      style={{
+                        marginBottom: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                        background: 'rgba(99, 102, 241, 0.08)',
+                        border: '1px solid rgba(99, 102, 241, 0.25)',
+                      }}
+                    >
+                      <div className="pref-item-text">
+                        <span className="pref-item-title">Dedicated Playbook Studio Workspace</span>
+                        <span className="pref-item-desc">
+                          Launch the full-width Playbook Studio workspace to build, preview, and test multi-step research pipelines.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={() => {
+                          onOpenPlaybookStudio?.();
+                          onClose();
+                        }}
+                      >
+                        <BookOpen size={14} />
+                        <span>Open Playbook Studio</span>
+                      </button>
+                    </div>
                     <PlaybookManager showToast={showToast} />
                   </div>
                 )}
