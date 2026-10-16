@@ -1256,8 +1256,11 @@ func firstURL(fetched capture.Fetched, links []string, refs []port.Reference) st
 // notify is a nil-safe Notify so a Service without an attached channel is a
 // no-op instead of a panic.
 func (s *Service) notify(ctx context.Context, n port.Notification) error {
-	if s.Channel == nil {
-		return nil
+	if s.Hub != nil {
+		return s.Hub.Notify(ctx, n)
 	}
-	return s.Channel.Notify(ctx, n)
+	if s.Channel != nil {
+		return s.Channel.Notify(ctx, n)
+	}
+	return nil
 }

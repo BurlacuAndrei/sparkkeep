@@ -258,6 +258,9 @@ func (a *Adapter) buildMessagePayload(n port.Notification) discordMessage {
 	case "duplicate":
 		return discordMessage{Content: "ℹ️ " + n.Text}
 
+	case "morning_digest":
+		return discordMessage{Content: n.Text}
+
 	default:
 		return discordMessage{Content: fmt.Sprintf("**%s**\n%s", n.Card.Title, n.Card.Summary)}
 	}

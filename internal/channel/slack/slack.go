@@ -214,6 +214,15 @@ func (a *Adapter) buildBlockPayload(n port.Notification) map[string]any {
 		}
 		return res
 
+	case "morning_digest":
+		res := map[string]any{
+			"text": n.Text,
+		}
+		if a.ChannelID != "" {
+			res["channel"] = a.ChannelID
+		}
+		return res
+
 	default:
 		res := map[string]any{
 			"text": fmt.Sprintf("*%s*\n%s", n.Card.Title, n.Card.Summary),

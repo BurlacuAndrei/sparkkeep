@@ -238,3 +238,40 @@ func TestHubBroadcastTimeout(t *testing.T) {
 		t.Fatalf("expected hub to return after adapter timeout (~40ms), took %v", elapsed)
 	}
 }
+
+func TestHubMorningDigestBroadcastFanout(t *testing.T) {
+	hub := NewHub(nil)
+	tg := &mockAdapter{id: "telegram", name: "Telegram"}
+	discord := &mockAdapter{id: "discord", name: "Discord"}
+	slack := &mockAdapter{id: "slack", name: "Slack"}
+	openclaw := &mockAdapter{id: "openclaw", name: "OpenClaw Bridge"}
+
+	hub.Register(tg)
+	hub.Register(discord)
+	hub.Register(slack)
+	hub.Register(openclaw)
+
+	digestText := "☀️ <b>Morning Research Digest</b>\n1 report(s) ready"
+	err := hub.Notify(context.Background(), port.Notification{
+		Kind: "morning_digest",
+		Card: port.Card{
+			Title:         "Morning Research Digest",
+			Summary:       digestText,
+			Provenance:    port.Provenance{Channel: "all"},
+			SourceChannel: "all",
+		},
+		Text: digestText,
+	})
+	if err != nil {
+		t.Fatalf("unexpected broadcast error: %v", err)
+	}
+
+	for _, a := range []*mockAdapter{tg, discord, slack, openclaw} {
+		if len(a.notifs) != 1 {
+			t.Fatalf("expected adapter %s to receive 1 morning digest notification, got %d", a.id, len(a.notifs))
+		}
+		if a.notifs[0].Kind != "morning_digest" || a.notifs[0].Text != digestText {
+			t.Errorf("adapter %s received unexpected notification: %+v", a.id, a.notifs[0])
+		}
+	}
+}

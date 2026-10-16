@@ -98,6 +98,57 @@ func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]stri
 	return telegram.FormatMorningResearchDigest(runs, cardTitles, baseURL)
 }
 
+// SendMorningDigest queries completed research runs within the digest window,
+// compiles the morning briefing, and broadcasts it across all registered channels
+// via s.Hub.Notify (or s.Channel.Notify) with broadcast fallback.
+func (s *Service) SendMorningDigest(ctx context.Context) error {
+	if s == nil || s.Store == nil {
+		return nil
+	}
+	now := s.now()
+	since := now.Add(-24 * time.Hour)
+	if val, err := s.Store.GetSetting(ctx, "last_morning_digest_at"); err == nil && strings.TrimSpace(val) != "" {
+		if t, err := time.Parse("2006-01-02T15:04:05Z", strings.TrimSpace(val)); err == nil {
+			since = t
+		}
+	}
+
+	runs, err := s.Store.ListCompletedResearchSince(ctx, since)
+	if err != nil {
+		return fmt.Errorf("core: morning digest list research: %w", err)
+	}
+
+	cardTitles := make(map[int64]string, len(runs))
+	for _, r := range runs {
+		if c, err := s.Store.GetCard(ctx, r.CardID); err == nil {
+			cardTitles[r.CardID] = c.Title
+		}
+	}
+
+	publicURL := s.Config.PublicURL
+	msg := FormatMorningResearchDigest(runs, cardTitles, publicURL)
+
+	n := port.Notification{
+		Kind: "morning_digest",
+		Card: port.Card{
+			Title:   "Morning Research Digest",
+			Summary: msg,
+			Provenance: port.Provenance{
+				Channel: "all",
+			},
+			SourceChannel: "all",
+		},
+		Text: msg,
+	}
+
+	if err := s.notify(ctx, n); err != nil {
+		return err
+	}
+
+	_ = s.Store.SetSetting(ctx, "last_morning_digest_at", now.Format("2006-01-02T15:04:05Z"))
+	return nil
+}
+
 // GetResearchRules returns all configured research rules from settings.
 func (s *Service) GetResearchRules(ctx context.Context) ([]port.ResearchRule, error) {
 	if s.Store == nil {

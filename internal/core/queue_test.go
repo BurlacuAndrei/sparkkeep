@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"sparkkeep/internal/channel"
+	"sparkkeep/internal/config"
 	"sparkkeep/internal/port"
 )
 
@@ -139,6 +141,130 @@ func TestFormatMorningResearchDigest(t *testing.T) {
 			t.Errorf("missing failure section: %s", out)
 		}
 	})
+}
+
+type mockDigestAdapter struct {
+	id     string
+	name   string
+	notifs []port.Notification
+}
+
+func (m *mockDigestAdapter) ID() string                      { return m.id }
+func (m *mockDigestAdapter) Name() string                    { return m.name }
+func (m *mockDigestAdapter) Start(ctx context.Context) error { return nil }
+func (m *mockDigestAdapter) Capabilities() port.ChannelCapabilities {
+	return port.ChannelCapabilities{SupportsInlineButtons: true, MarkdownFlavor: "standard"}
+}
+func (m *mockDigestAdapter) Notify(ctx context.Context, n port.Notification) error {
+	m.notifs = append(m.notifs, n)
+	return nil
+}
+
+func TestSendMorningDigest_MultiChannelFanout(t *testing.T) {
+	st := newStubStore()
+	ctx := context.Background()
+
+	now := time.Date(2026, 10, 16, 7, 0, 0, 0, time.UTC)
+	c1, _ := st.CreateCard(ctx, port.Card{Title: "Distributed SQLite Consensus"})
+	c2, _ := st.CreateCard(ctx, port.Card{Title: "Zero-Copy Rust Serializer"})
+
+	// Completed research run within the window (2 hours ago)
+	st.researches[1] = port.Research{
+		ID:        1,
+		CardID:    c1.ID,
+		Status:    "done",
+		CreatedAt: now.Add(-2 * time.Hour),
+		Result: &port.ResearchResult{
+			Verdict: &port.ResearchVerdict{
+				Recommendation: "pursue",
+				Confidence:     "high",
+				ForWhom:        "Backend engineers",
+			},
+		},
+	}
+	// Failed research run within the window (1 hour ago)
+	st.researches[2] = port.Research{
+		ID:        2,
+		CardID:    c2.ID,
+		Status:    "failed",
+		Error:     "search timeout",
+		CreatedAt: now.Add(-1 * time.Hour),
+	}
+	// Old research run outside the window (48 hours ago)
+	st.researches[3] = port.Research{
+		ID:        3,
+		CardID:    c1.ID,
+		Status:    "done",
+		CreatedAt: now.Add(-48 * time.Hour),
+		Findings:  "Old findings that should be excluded",
+	}
+
+	hub := channel.NewHub(t.Logf)
+	tg := &mockDigestAdapter{id: "telegram", name: "Telegram"}
+	dc := &mockDigestAdapter{id: "discord", name: "Discord"}
+	sl := &mockDigestAdapter{id: "slack", name: "Slack"}
+	oc := &mockDigestAdapter{id: "openclaw", name: "OpenClaw"}
+
+	hub.Register(tg)
+	hub.Register(dc)
+	hub.Register(sl)
+	hub.Register(oc)
+
+	svc := &Service{
+		Store:   st,
+		Hub:     hub,
+		Channel: hub,
+		Clock:   func() time.Time { return now },
+		Config:  config.Config{PublicURL: "https://sparkkeep.local"},
+		Logf:    t.Logf,
+	}
+
+	if err := svc.SendMorningDigest(ctx); err != nil {
+		t.Fatalf("SendMorningDigest failed: %v", err)
+	}
+
+	for _, adp := range []*mockDigestAdapter{tg, dc, sl, oc} {
+		if len(adp.notifs) != 1 {
+			t.Fatalf("expected adapter %s to receive 1 notification, got %d", adp.id, len(adp.notifs))
+		}
+		n := adp.notifs[0]
+		if n.Kind != "morning_digest" {
+			t.Errorf("adapter %s notification kind = %q, want morning_digest", adp.id, n.Kind)
+		}
+		if n.Card.SourceChannel != "all" || n.Card.Provenance.Channel != "all" {
+			t.Errorf("adapter %s notification provenance = %+v, want all", adp.id, n.Card.Provenance)
+		}
+		if !strings.Contains(n.Text, "Distributed SQLite Consensus") || !strings.Contains(n.Text, "PURSUE (high confidence)") {
+			t.Errorf("adapter %s digest missing c1 details: %s", adp.id, n.Text)
+		}
+		if !strings.Contains(n.Text, "Zero-Copy Rust Serializer") || !strings.Contains(n.Text, "search timeout") {
+			t.Errorf("adapter %s digest missing c2 failure: %s", adp.id, n.Text)
+		}
+		if strings.Contains(n.Text, "Old findings") {
+			t.Errorf("adapter %s digest included out-of-window run: %s", adp.id, n.Text)
+		}
+	}
+
+	// Verify last_morning_digest_at was persisted in Store
+	lastAt, err := st.GetSetting(ctx, "last_morning_digest_at")
+	if err != nil {
+		t.Fatalf("expected last_morning_digest_at to be set, got err: %v", err)
+	}
+	if lastAt != now.Format("2006-01-02T15:04:05Z") {
+		t.Errorf("last_morning_digest_at = %q, want %q", lastAt, now.Format("2006-01-02T15:04:05Z"))
+	}
+
+	// Advance clock by 1 hour with no new runs; subsequent digest should report no new runs
+	now = now.Add(1 * time.Hour)
+	if err := svc.SendMorningDigest(ctx); err != nil {
+		t.Fatalf("second SendMorningDigest failed: %v", err)
+	}
+	if len(tg.notifs) != 2 {
+		t.Fatalf("expected 2 notifications on tg, got %d", len(tg.notifs))
+	}
+	if !strings.Contains(tg.notifs[1].Text, "No research reports completed overnight") {
+		t.Errorf("expected empty digest on second run, got: %s", tg.notifs[1].Text)
+	}
 }
 
 func TestQueueWorker_SequentialOrderingAndRecovery(t *testing.T) {

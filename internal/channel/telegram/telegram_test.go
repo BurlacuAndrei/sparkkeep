@@ -346,6 +346,18 @@ func (s *testStubService) Retry(ctx context.Context, cardID int64) ([]port.Card,
 
 func (s *testStubService) GoResearch(ctx context.Context, cardID int64, playbookID ...*int64) {}
 
+func (s *testStubService) SendMorningDigest(ctx context.Context) error {
+	if s.Channel != nil {
+		msg := FormatMorningResearchDigest(nil, nil, "")
+		return s.Channel.Notify(ctx, port.Notification{
+			Kind: "morning_digest",
+			Card: port.Card{Title: "Morning Research Digest", Summary: msg, SourceChannel: "all"},
+			Text: msg,
+		})
+	}
+	return nil
+}
+
 // stubService is a capture pipeline that never touches the network: a text
 // share is echoed by the fetcher, the analyzer answers from llmStub.
 func stubService(t *testing.T, st port.Store, llm *httptest.Server) *testStubService {
@@ -497,6 +509,24 @@ func TestDigestCommandSendsCountsWithoutCapturing(t *testing.T) {
 		"Open dashboard: https://spark.example"
 	if sent[0] != want {
 		t.Errorf("digest =\n%q\nwant\n%q", sent[0], want)
+	}
+}
+
+// /morning delegates to Service.SendMorningDigest and delivers via Notify.
+func TestMorningDigestCommandDelegatesToService(t *testing.T) {
+	st := newStubStore()
+	svc := stubService(t, st, llmStub(t, `[]`))
+
+	sent := stubTelegram(t, func() *Adapter {
+		a := &Adapter{Token: "tok", OwnerID: 1, Store: st, Service: svc}
+		svc.Channel = a
+		return a
+	}, func(a *Adapter) {
+		a.handleMessage(&message{MessageID: 605, Chat: &chat{ID: 1}, Text: "/morning"})
+	})
+
+	if len(sent) != 1 || !strings.Contains(sent[0], "Morning Research Digest") {
+		t.Fatalf("expected morning digest message via Service, got %v", sent)
 	}
 }
 

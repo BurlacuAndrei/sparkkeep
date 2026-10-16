@@ -199,6 +199,9 @@ func (a *Adapter) formatNotification(n port.Notification) string {
 	case "duplicate":
 		fmt.Fprintf(&b, "ℹ️ %s\n", n.Text)
 
+	case "morning_digest":
+		b.WriteString(n.Text)
+
 	default:
 		fmt.Fprintf(&b, "%s\n%s", n.Card.Title, n.Card.Summary)
 	}

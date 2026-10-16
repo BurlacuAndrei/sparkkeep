@@ -39,6 +39,7 @@ type Service interface {
 	CaptureShare(ctx context.Context, share capture.Share) ([]int64, error)
 	Retry(ctx context.Context, cardID int64) ([]port.Card, error)
 	GoResearch(ctx context.Context, cardID int64, playbookID ...*int64)
+	SendMorningDigest(ctx context.Context) error
 }
 
 // Adapter implements port.Channel (outbound Notify) and the long-poll Run
@@ -237,6 +238,9 @@ func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
 		return err
 	case "research_done", "research_failed":
 		return a.sendResearch(ctx, n)
+	case "morning_digest":
+		_, err := a.sendMessage(ctx, n.Text, 0, nil)
+		return err
 	default: // done / retry / hello: plain card summary
 		_, err := a.sendMessage(ctx, fmt.Sprintf("%s\n%s", n.Card.Title, n.Card.Summary), 0, nil)
 		return err
@@ -941,35 +945,14 @@ func (a *Adapter) sendDigest(ctx context.Context) {
 	}
 }
 
-// sendMorningDigest sends the morning research summary to Telegram.
+// sendMorningDigest delegates morning research digest generation and broadcast to Service.
 func (a *Adapter) sendMorningDigest(ctx context.Context) {
-	since := time.Now().UTC().Add(-24 * time.Hour)
-	if val, err := a.Store.GetSetting(ctx, "last_morning_digest_at"); err == nil && strings.TrimSpace(val) != "" {
-		if t, err := time.Parse("2006-01-02T15:04:05Z", val); err == nil {
-			since = t
-		}
-	}
-
-	runs, err := a.Store.ListCompletedResearchSince(ctx, since)
-	if err != nil {
-		a.logf("telegram: morning digest: ListCompletedResearchSince: %v", err)
+	if a.Service == nil {
 		return
 	}
-
-	cardTitles := make(map[int64]string)
-	for _, r := range runs {
-		if c, err := a.Store.GetCard(ctx, r.CardID); err == nil {
-			cardTitles[r.CardID] = c.Title
-		}
+	if err := a.Service.SendMorningDigest(ctx); err != nil {
+		a.logf("telegram: morning digest: %v", err)
 	}
-
-	msg := FormatMorningResearchDigest(runs, cardTitles, a.PublicURL)
-	if _, err := a.sendMessage(ctx, msg, 0, nil); err != nil {
-		a.logf("telegram: morning digest: sendMessage: %v", err)
-		return
-	}
-
-	_ = a.Store.SetSetting(ctx, "last_morning_digest_at", time.Now().UTC().Format("2006-01-02T15:04:05Z"))
 }
 
 // runDigestScheduler steps digestTick once a minute until ctx is cancelled —
