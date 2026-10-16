@@ -102,8 +102,8 @@ describe('App Playbook Studio Top-Level Navigation & Full-Width Workspace', () =
     expect(localStorage.getItem('sparkkeep_active_view')).toBe('playbooks');
   });
 
-  it('navigates to Playbook Studio when clicking Open Playbook Studio shortcut in SettingsModal', async () => {
-    const { container } = render(<App />);
+  it('does not show Research Playbooks tab in SettingsModal since Playbooks is a primary platform view', async () => {
+    render(<App />);
 
     // Wait for initial mount effects to settle
     await waitFor(() => {
@@ -121,19 +121,7 @@ describe('App Playbook Studio Top-Level Navigation & Full-Width Workspace', () =
       expect(screen.getByText('Platform Preferences')).toBeDefined();
     });
 
-    // Switch to Research Playbooks tab in Settings
-    const playbooksTab = screen.getByRole('tab', { name: /Research Playbooks/i });
-    fireEvent.click(playbooksTab);
-
-    // Click Open Playbook Studio shortcut button
-    const openStudioBtn = await screen.findByRole('button', { name: /Open Playbook Studio/i });
-    fireEvent.click(openStudioBtn);
-
-    // Settings modal should close and main workspace should be in playbooks mode (no-sidebar)
-    await waitFor(() => {
-      expect(screen.queryByText('Platform Preferences')).toBeNull();
-      expect(container.querySelector('.main-layout.no-sidebar')).not.toBeNull();
-      expect(screen.getByText('Default Research Pipeline')).toBeDefined();
-    });
+    // Verify Research Playbooks tab is not rendered in Platform Preferences
+    expect(screen.queryByRole('tab', { name: /Research Playbooks/i })).toBeNull();
   });
 });

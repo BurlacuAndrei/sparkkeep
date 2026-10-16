@@ -248,7 +248,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
         kind: 'command',
         id: 'cmd-settings',
         title: 'Settings & Models',
-        subtitle: 'Configure LLMs, research playbooks & preferences',
+        subtitle: 'Configure LLMs, channels & preferences',
         icon: <Settings size={14} strokeWidth={2} />,
         execute: onOpenSettingsModal,
       },

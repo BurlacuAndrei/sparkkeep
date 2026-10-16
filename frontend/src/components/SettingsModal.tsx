@@ -8,7 +8,6 @@ import {
   Cpu,
   Shield,
   Sliders,
-  BookOpen,
   User,
   Clock,
   Plug,
@@ -19,7 +18,6 @@ import {
 import * as api from '../api';
 import { LLMProfile, Playbook } from '../types';
 import { ThemeSelector } from './ThemeSelector';
-import { PlaybookManager } from './PlaybookManager';
 import { ResearchScheduler } from './ResearchScheduler';
 import {
   AIProfileTab,
@@ -33,14 +31,12 @@ import {
 export interface SettingsModalProps {
   onClose: () => void;
   showToast: (msg: string) => void;
-  onOpenPlaybookStudio?: () => void;
 }
 
 export type SettingsTab =
   | 'appearance'
   | 'profile'
   | 'ai'
-  | 'playbooks'
   | 'schedule'
   | 'channels'
   | 'integrations'
@@ -61,7 +57,7 @@ interface SettingsBaseline {
   discordChannelId: string;
 }
 
-export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: SettingsModalProps) {
+export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const bodyRef = React.useRef<HTMLDivElement>(null);
 
@@ -534,18 +530,6 @@ export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: Sett
               <span>AI Engine</span>
             </button>
             <button
-              id="settings-tab-playbooks"
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'playbooks'}
-              aria-controls="settings-panel-playbooks"
-              className={`settings-tab-btn ${activeTab === 'playbooks' ? 'active' : ''}`}
-              onClick={() => setActiveTab('playbooks')}
-            >
-              <BookOpen size={15} />
-              <span>Research Playbooks</span>
-            </button>
-            <button
               id="settings-tab-schedule"
               type="button"
               role="tab"
@@ -874,50 +858,7 @@ export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: Sett
                   </div>
                 )}
 
-                {/* TAB 4: Research Playbooks */}
-                {activeTab === 'playbooks' && (
-                  <div
-                    id="settings-panel-playbooks"
-                    className="settings-panel"
-                    role="tabpanel"
-                    aria-labelledby="settings-tab-playbooks"
-                  >
-                    <div
-                      className="pref-item-card"
-                      style={{
-                        marginBottom: '16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '12px',
-                        flexWrap: 'wrap',
-                        background: 'rgba(99, 102, 241, 0.08)',
-                        border: '1px solid rgba(99, 102, 241, 0.25)',
-                      }}
-                    >
-                      <div className="pref-item-text">
-                        <span className="pref-item-title">Dedicated Playbook Studio Workspace</span>
-                        <span className="pref-item-desc">
-                          Launch the full-width Playbook Studio workspace to build, preview, and test multi-step research pipelines.
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={() => {
-                          onOpenPlaybookStudio?.();
-                          onClose();
-                        }}
-                      >
-                        <BookOpen size={14} />
-                        <span>Open Playbook Studio</span>
-                      </button>
-                    </div>
-                    <PlaybookManager showToast={showToast} />
-                  </div>
-                )}
-
-                {/* TAB 5: Scheduled Research */}
+                {/* TAB 4: Scheduled Research */}
                 {activeTab === 'schedule' && (
                   <div
                     id="settings-panel-schedule"
@@ -989,7 +930,7 @@ export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: Sett
             )}
 
             {/* Modal Footer Actions (Save Changes / Cancel) with Dirty Tracking */}
-            {activeTab !== 'playbooks' && activeTab !== 'schedule' && (
+            {activeTab !== 'schedule' && (
               <div className="settings-modal-footer">
                 {isDirty && (
                   <span

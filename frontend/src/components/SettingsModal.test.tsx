@@ -97,12 +97,11 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
     const card = document.querySelector('.settings-modal-card');
     expect(card).not.toBeNull();
 
-    // Check all 8 sidebar navigation tabs are present
+    // Check all 7 sidebar navigation tabs are present
     const tabs = [
       'Appearance & Preferences',
       'About me',
       'AI Engine',
-      'Research Playbooks',
       'Scheduled Research',
       'Channels & Alerts',
       'Integrations & API',
@@ -112,6 +111,9 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
     for (const tab of tabs) {
       expect(screen.getByRole('tab', { name: new RegExp(tab, 'i') })).toBeDefined();
     }
+
+    // Verify Research Playbooks is not present in Settings sidebar tabs
+    expect(screen.queryByRole('tab', { name: /Research Playbooks/i })).toBeNull();
   });
 
   it('navigates seamlessly across tabs within the stable modal body', async () => {
@@ -141,14 +143,6 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
     expect(aiTab.getAttribute('aria-selected')).toBe('true');
     await waitFor(() => {
       expect(screen.getByText('Active AI Provider')).toBeDefined();
-    });
-
-    // Switch to 'Research Playbooks'
-    const playbooksTab = screen.getByRole('tab', { name: /Research Playbooks/i });
-    fireEvent.click(playbooksTab);
-    expect(playbooksTab.getAttribute('aria-selected')).toBe('true');
-    await waitFor(() => {
-      expect(screen.getByText('Default Playbook for Untyped Cards')).toBeDefined();
     });
 
     // Switch to 'Channels & Alerts'
@@ -192,13 +186,11 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(2);
   });
 
-  it('triggers onOpenPlaybookStudio and onClose when clicking Open Playbook Studio shortcut in Research Playbooks tab', async () => {
-    const mockOpenStudio = vi.fn();
+  it('does not display Research Playbooks tab in SettingsModal sidebar', async () => {
     renderWithTheme(
       <SettingsModal
         onClose={mockOnClose}
         showToast={mockShowToast}
-        onOpenPlaybookStudio={mockOpenStudio}
       />
     );
 
@@ -206,14 +198,7 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
       expect(screen.getByText('Color Palette & Contrast')).toBeDefined();
     });
 
-    const playbooksTab = screen.getByRole('tab', { name: /Research Playbooks/i });
-    fireEvent.click(playbooksTab);
-
-    const openStudioBtn = await screen.findByRole('button', { name: /Open Playbook Studio/i });
-    fireEvent.click(openStudioBtn);
-
-    expect(mockOpenStudio).toHaveBeenCalledTimes(1);
-    expect(mockOnClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('tab', { name: /Research Playbooks/i })).toBeNull();
   });
 });
 

@@ -451,10 +451,6 @@ function AppContent() {
               setIsSettingsModalOpen(false);
               reloadAll();
             }}
-            onOpenPlaybookStudio={() => {
-              setIsSettingsModalOpen(false);
-              setViewMode('playbooks');
-            }}
             showToast={showToast}
           />
         </Suspense>
