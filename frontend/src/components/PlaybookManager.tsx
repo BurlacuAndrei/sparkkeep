@@ -44,16 +44,14 @@ interface PlaybookManagerProps {
   showToast: (msg: string) => void;
 }
 
-const AVAILABLE_CARD_TYPES = [
-  'idea',
+const DEFAULT_CARD_TYPES = [
   'tool',
-  'reading',
-  'architecture',
+  'product',
   'company',
   'article',
-  'product',
-  'research',
-  'other',
+  'idea',
+  'repo',
+  'paper',
 ];
 
 const INPUT_BINDING_OPTIONS = [
@@ -238,7 +236,7 @@ export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
     badge: '🔬 Academic Review',
     icon: '🔬',
     description: 'Examines paper citations, empirical methodology, statistical validity, and reproducible results.',
-    card_types: ['article', 'research', 'reading'],
+    card_types: ['article', 'paper'],
     steps: [
       { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
       { position: 2, kind: 'resolve_refs', name: 'Resolve Citations', enabled: true, config: {} },
@@ -267,7 +265,7 @@ export const PLAYBOOK_RECIPES: PlaybookRecipe[] = [
     badge: '⚡ Fast Fact Check',
     icon: '⚡',
     description: 'Rapid verification of specific claims and statistical assertions without heavy planning.',
-    card_types: ['article', 'idea', 'reading'],
+    card_types: ['article', 'idea', 'paper'],
     steps: [
       { position: 1, kind: 'ground', name: 'Grounding', enabled: true, config: {} },
       { position: 2, kind: 'search', name: 'Evidence Search', enabled: true, config: {} },
@@ -481,7 +479,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [defaultPlaybookId, setDefaultPlaybookId] = useState<number | null>(null);
-  const [activeCardTypes, setActiveCardTypes] = useState<string[]>(AVAILABLE_CARD_TYPES);
+  const [activeCardTypes, setActiveCardTypes] = useState<string[]>(DEFAULT_CARD_TYPES);
   const [isPlatformDefault, setIsPlatformDefault] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importJsonText, setImportJsonText] = useState('');
@@ -497,10 +495,12 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
       ]);
       setPlaybooks(pbs);
       setLibraryTemplates(lib);
-      if (st.settings?.card_types && Array.isArray(st.settings.card_types) && st.settings.card_types.length > 0) {
+      if (st?.settings?.card_types && Array.isArray(st.settings.card_types) && st.settings.card_types.length > 0) {
         setActiveCardTypes(st.settings.card_types);
+      } else {
+        setActiveCardTypes(DEFAULT_CARD_TYPES);
       }
-      if (st.settings?.default_playbook_id) {
+      if (st?.settings?.default_playbook_id) {
         setDefaultPlaybookId(st.settings.default_playbook_id);
       }
     } catch (err: unknown) {
@@ -531,10 +531,12 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
         if (!alive) return;
         setPlaybooks(pbs);
         setLibraryTemplates(lib);
-        if (st.settings?.card_types && Array.isArray(st.settings.card_types) && st.settings.card_types.length > 0) {
+        if (st?.settings?.card_types && Array.isArray(st.settings.card_types) && st.settings.card_types.length > 0) {
           setActiveCardTypes(st.settings.card_types);
+        } else {
+          setActiveCardTypes(DEFAULT_CARD_TYPES);
         }
-        if (st.settings?.default_playbook_id) {
+        if (st?.settings?.default_playbook_id) {
           setDefaultPlaybookId(st.settings.default_playbook_id);
         }
       })

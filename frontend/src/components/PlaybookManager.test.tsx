@@ -25,7 +25,7 @@ vi.mock('../api', async () => {
     getSettings: vi.fn().mockResolvedValue({
       settings: {
         default_playbook_id: 1,
-        card_types: ['idea', 'tool', 'reading', 'architecture', 'company'],
+        card_types: ['tool', 'product', 'company', 'article', 'idea', 'repo', 'paper'],
       },
     }),
     createPlaybook: vi.fn().mockResolvedValue({ id: 99, name: 'Saved Playbook' }),
@@ -348,7 +348,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     expect(screen.queryByText(/Instruction exceeds 8,000 characters limit/i)).toBeNull();
   });
 
-  it('populates card types chips dynamically from settings', async () => {
+  it('populates card types chips dynamically from settings and persists selection on save', async () => {
     vi.mocked(api.getSettings).mockResolvedValueOnce({
       ok: true,
       settings: {
@@ -372,11 +372,54 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     expect(screen.getByRole('button', { name: 'firmware' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'biotech' })).toBeDefined();
 
-    // Clicking a chip toggles it active
+    // Clicking chips toggles selection and persists when saved
     const hwChip = screen.getByRole('button', { name: 'hardware' });
+    const bioChip = screen.getByRole('button', { name: 'biotech' });
     expect(hwChip.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(hwChip);
+    fireEvent.click(bioChip);
     expect(hwChip.getAttribute('aria-pressed')).toBe('true');
+    expect(bioChip.getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: /Save Playbook/i }));
+
+    await waitFor(() => {
+      expect(api.createPlaybook).toHaveBeenCalledWith(
+        expect.objectContaining({
+          card_types: ['hardware', 'biotech'],
+        })
+      );
+    });
+  });
+
+  it('falls back to canonical backend default card types when settings has no custom card_types', async () => {
+    vi.mocked(api.getSettings).mockResolvedValueOnce({
+      ok: true,
+      settings: {
+        has_llm_key: true,
+        has_auth_token: true,
+        default_playbook_id: 1,
+        card_types: [],
+      },
+    });
+
+    render(<PlaybookManager showToast={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+    const canonicalTypes = ['tool', 'product', 'company', 'article', 'idea', 'repo', 'paper'];
+    for (const type of canonicalTypes) {
+      expect(screen.getByRole('button', { name: type })).toBeDefined();
+    }
+
+    // Legacy non-canonical types must not appear
+    expect(screen.queryByRole('button', { name: 'reading' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'architecture' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'research' })).toBeNull();
   });
 
   it('handles Set as Platform Default toggle when saving playbook', async () => {
