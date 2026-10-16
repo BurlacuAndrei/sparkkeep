@@ -1,4 +1,4 @@
-.PHONY: build build-frontend build-go test fmt vet docker
+.PHONY: build build-frontend build-go test fmt vet check docker
 
 build: build-frontend build-go
 
@@ -17,6 +17,11 @@ fmt:
 
 vet:
 	go vet ./...
+
+check: fmt vet
+	cd frontend && npm run lint && npm test && npm run build
+	git diff --exit-code -- internal/web/dist
+	go test -race ./...
 
 docker:
 	docker compose up -d --build
