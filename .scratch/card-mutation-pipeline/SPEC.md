@@ -1,7 +1,7 @@
 # SPEC: Deepen Domain Core for Card Mutations & Eliminate Storage Leakage from Channel Adapters
 
-**Triage Label:** `ready-for-agent`  
-**Status:** Ready for Ticket Breakdown  
+**Triage Label:** `resolved`  
+**Status:** Implemented  
 **Related Documents:** [GLOSSARY.md](file:///home/capitanfg/media-server/nas/sparkkeep/GLOSSARY.md), [CODING_STANDARDS.md](file:///home/capitanfg/media-server/nas/sparkkeep/CODING_STANDARDS.md), [AGENTS.md](file:///home/capitanfg/media-server/nas/sparkkeep/AGENTS.md)
 
 ---

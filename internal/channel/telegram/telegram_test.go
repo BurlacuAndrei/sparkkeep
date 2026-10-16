@@ -258,7 +258,9 @@ func stubTelegram(t *testing.T, build func() *Adapter, fn func(a *Adapter)) []st
 // server and returns the text of the message it posted.
 func captureSendMessage(t *testing.T, fn func(a *Adapter)) string {
 	t.Helper()
-	sent := stubTelegram(t, func() *Adapter { return &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: newStubStore()}} }, fn)
+	sent := stubTelegram(t, func() *Adapter {
+		return &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: newStubStore()}}
+	}, fn)
 	if len(sent) != 1 {
 		t.Fatalf("posted %d messages, want 1", len(sent))
 	}
