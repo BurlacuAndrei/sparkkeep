@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
-import { Card, Tag, DigestData } from './types';
+import { Card, Tag, DigestData, ViewMode } from './types';
 import * as api from './api';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { KanbanBoard } from './components/KanbanBoard';
 import { TriageView } from './components/TriageView';
 import { DigestView } from './components/DigestView';
+import { PlaybookManager } from './components/PlaybookManager';
 import { SetupWizard } from './components/SetupWizard';
 import { LockScreen } from './components/LockScreen';
 import { Bell } from 'lucide-react';
@@ -22,17 +23,17 @@ function AppContent() {
   const [digest, setDigest] = useState<DigestData | null>(null);
 
   // Filters & Navigation: sticky last-active view
-  const [viewMode, setViewModeState] = useState<'triage' | 'boards' | 'digest'>(() => {
+  const [viewMode, setViewModeState] = useState<ViewMode>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sparkkeep_active_view') || localStorage.getItem('sparkkeep_default_view');
-      if (saved === 'triage' || saved === 'boards' || saved === 'digest') {
+      if (saved === 'triage' || saved === 'boards' || saved === 'digest' || saved === 'playbooks') {
         return saved;
       }
     }
     return 'boards';
   });
 
-  const setViewMode = useCallback((mode: 'triage' | 'boards' | 'digest') => {
+  const setViewMode = useCallback((mode: ViewMode) => {
     setViewModeState(mode);
     if (typeof window !== 'undefined') {
       localStorage.setItem('sparkkeep_active_view', mode);
@@ -344,8 +345,8 @@ function AppContent() {
           }}
         />
 
-      <div className={`main-layout ${viewMode === 'digest' ? 'no-sidebar' : ''} ${isSidebarCollapsed && viewMode !== 'digest' ? 'sidebar-collapsed' : ''}`}>
-        {viewMode !== 'digest' && (
+      <div className={`main-layout ${viewMode === 'digest' || viewMode === 'playbooks' ? 'no-sidebar' : ''} ${isSidebarCollapsed && viewMode !== 'digest' && viewMode !== 'playbooks' ? 'sidebar-collapsed' : ''}`}>
+        {viewMode !== 'digest' && viewMode !== 'playbooks' && (
           <Sidebar
             selectedTag={selectedTag}
             onTagSelect={setSelectedTag}
@@ -392,6 +393,13 @@ function AppContent() {
               onRetry={handleRetry}
               showToast={showToast}
               onRefresh={loadDigest}
+            />
+          )}
+
+          {viewMode === 'playbooks' && (
+            <PlaybookManager
+              showToast={showToast}
+              cards={cards}
             />
           )}
         </main>
@@ -442,6 +450,10 @@ function AppContent() {
             onClose={() => {
               setIsSettingsModalOpen(false);
               reloadAll();
+            }}
+            onOpenPlaybookStudio={() => {
+              setIsSettingsModalOpen(false);
+              setViewMode('playbooks');
             }}
             showToast={showToast}
           />

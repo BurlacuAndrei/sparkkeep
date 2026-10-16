@@ -1,11 +1,11 @@
 import React, { useEffect } from 'react';
-import { Sparkles, Calendar, Layers, Zap, Settings, Coffee } from 'lucide-react';
+import { Sparkles, Calendar, Layers, Zap, Settings, Coffee, BookOpen } from 'lucide-react';
 import { Omnisearch } from './Omnisearch';
-import { Card, Tag } from '../types';
+import { Card, Tag, ViewMode } from '../types';
 
 interface HeaderProps {
-  viewMode: 'triage' | 'boards' | 'digest';
-  onViewModeChange: (mode: 'triage' | 'boards' | 'digest') => void;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
   onOpenNewCard: () => void;
   flashMessage: string;
   onOpenSettingsModal: () => void;
@@ -103,6 +103,16 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Calendar size={13} strokeWidth={1.75} />
             <span>Digest</span>
+          </button>
+          <button
+            id="playbooks-btn"
+            type="button"
+            className={`nav-tab ${viewMode === 'playbooks' ? 'active' : ''}`}
+            onClick={() => onViewModeChange('playbooks')}
+            title="Playbook Studio"
+          >
+            <BookOpen size={13} strokeWidth={1.75} />
+            <span>Playbooks</span>
           </button>
         </nav>
       </div>
