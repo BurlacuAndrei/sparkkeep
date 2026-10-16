@@ -4,10 +4,10 @@
 
 **Blocked by:** 01: Domain Core Card Mutation Pipeline & Webhook Dispatch (Expand)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Discord `Adapter` struct no longer contains `Store port.Store`
-- [ ] Discord `New` constructor signature drops `port.Store`
-- [ ] Discord interaction component handlers invoke `Service.UpdateCard` for horizon and status updates
-- [ ] Discord `Service` interface includes `UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error)`
-- [ ] `discord_test.go` verifies button triage interactions using stubbed `Service` without `port.Store`
+- [x] Discord `Adapter` struct no longer contains `Store port.Store`
+- [x] Discord `New` constructor signature drops `port.Store`
+- [x] Discord interaction component handlers invoke `Service.UpdateCard` for horizon and status updates
+- [x] Discord `Service` interface includes `UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error)`
+- [x] `discord_test.go` verifies button triage interactions using stubbed `Service` without `port.Store`

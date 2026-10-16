@@ -179,7 +179,7 @@ func (s *Service) ReloadChannels(ctx context.Context) error {
 			ChannelID: discordChanID,
 			PublicKey: discordPubKey,
 			Enabled:   true,
-		}, s, s.Store, s.Config.PublicURL, s.Logf)
+		}, s, s.Config.PublicURL, s.Logf)
 		s.Hub.Register(dc)
 		s.Logf("sparkkeep: discord channel enabled (channel: %s)", discordChanID)
 	} else {

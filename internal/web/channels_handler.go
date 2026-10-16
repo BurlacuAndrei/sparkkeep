@@ -558,6 +558,6 @@ func (a *api) discordCapture(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	dc := discord.New(discord.Config{}, a.svc, a.store, "", nil)
+	dc := discord.New(discord.Config{}, a.svc, "", nil)
 	dc.HandleCapture(w, r)
 }
