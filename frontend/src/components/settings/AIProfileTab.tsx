@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import * as api from '../../api';
 import { LLMProfile, LLMProfileInput } from '../../types';
+import { CustomSelect } from '../CustomSelect';
 import {
   ROLE_DEFINITIONS,
   DEFAULT_TOKEN_CAPS,
@@ -373,21 +374,19 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
             {/* Preset Templates */}
             <div className="setup-form-group">
               <label htmlFor="ai-preset-select">Provider Preset Template</label>
-              <select
+              <CustomSelect
                 id="ai-preset-select"
-                className="setup-select"
                 value={selectedPreset}
-                onChange={(e) => {
-                  const preset = PRESET_TEMPLATES.find((p) => p.label === e.target.value);
+                onChange={(val) => {
+                  const preset = PRESET_TEMPLATES.find((p) => p.label === val);
                   if (preset) handleSelectPreset(preset);
                 }}
-              >
-                {PRESET_TEMPLATES.map((preset) => (
-                  <option key={preset.label} value={preset.label}>
-                    {preset.label}
-                  </option>
-                ))}
-              </select>
+                options={PRESET_TEMPLATES.map((preset) => ({
+                  value: preset.label,
+                  label: preset.label,
+                }))}
+                ariaLabel="Provider Preset Template"
+              />
             </div>
 
             <div className="setup-form-group">
@@ -619,23 +618,25 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                     </span>
                   </div>
 
-                  <select
-                    value={currentProfileId}
-                    onChange={(e) => handleRoleChange(role.key, e.target.value)}
-                    className="pref-select"
-                    style={{ minWidth: '180px', maxWidth: '240px' }}
-                    aria-label={`Select model for ${role.label}`}
-                    disabled={actionLoading !== null}
-                  >
-                    <option value="">
-                      Default ({defaultProfile?.name || defaultProfile?.model || 'Active Default'})
-                    </option>
-                    {profiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name || p.model}{p.is_default ? ' (Default)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <div style={{ minWidth: '180px', maxWidth: '240px' }}>
+                    <CustomSelect
+                      value={currentProfileId}
+                      onChange={(val) => handleRoleChange(role.key, val)}
+                      options={[
+                        {
+                          value: '',
+                          label: `Default (${defaultProfile?.name || defaultProfile?.model || 'Active Default'})`,
+                        },
+                        ...profiles.map((p) => ({
+                          value: p.id,
+                          label: `${p.name || p.model}${p.is_default ? ' (Default)' : ''}`,
+                        })),
+                      ]}
+                      disabled={actionLoading !== null}
+                      ariaLabel={`Select model for ${role.label}`}
+                      size="sm"
+                    />
+                  </div>
                 </div>
               );
             })}
