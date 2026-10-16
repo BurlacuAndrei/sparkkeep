@@ -97,41 +97,86 @@ type Worthiness struct {
 	Reason string `json:"reason"`
 }
 
+type Provenance struct {
+	Channel string `json:"source_channel,omitempty"`
+	ChatID  string `json:"source_channel_chat_id,omitempty"`
+	MsgID   string `json:"source_channel_msg_id,omitempty"`
+}
+
 type Card struct {
-	ID                  int64         `json:"id"`
-	CaptureID           *int64        `json:"capture_id,omitempty"`
-	Title               string        `json:"title"`
-	Summary             string        `json:"summary"`
-	Horizon             string        `json:"horizon"`
-	Status              string        `json:"status"`
-	SourceURL           string        `json:"source_url"`
-	SourceNote          string        `json:"source_note"`
-	Tags                []string      `json:"tags"`
-	References          []Reference   `json:"references"`
-	Type                string        `json:"type"`
-	TLDR                string        `json:"tldr"`
-	WhyCare             string        `json:"why_care"`
-	Claims              []string      `json:"claims"`
-	OpenQuestions       []string      `json:"open_questions"`
-	Signals             Signals       `json:"signals"`
-	Worthiness          Worthiness    `json:"worthiness"`
-	ExecutiveSummary    string        `json:"executive_summary"`
-	ValueProposition    string        `json:"value_proposition"`
-	ProposedActions     []string      `json:"proposed_actions"`
-	CompletedActions    []string      `json:"completed_actions"` // texts of ProposedActions checked off by the user
-	ActionsSource       string        `json:"actions_source"`
-	AnalysisFailed      bool          `json:"analysis_failed"`
-	ResearchVerdict     string        `json:"research_verdict,omitempty"`
-	ResearchConfidence  string        `json:"research_confidence,omitempty"`
-	SuggestedHorizon    string        `json:"suggested_horizon,omitempty"`
-	SuggestedTags       []string      `json:"suggested_tags,omitempty"`
-	ResearchState       string        `json:"research_state,omitempty"`
+	ID                 int64       `json:"id"`
+	CaptureID          *int64      `json:"capture_id,omitempty"`
+	Title              string      `json:"title"`
+	Summary            string      `json:"summary"`
+	Horizon            string      `json:"horizon"`
+	Status             string      `json:"status"`
+	SourceURL          string      `json:"source_url"`
+	SourceNote         string      `json:"source_note"`
+	Tags               []string    `json:"tags"`
+	References         []Reference `json:"references"`
+	Type               string      `json:"type"`
+	TLDR               string      `json:"tldr"`
+	WhyCare            string      `json:"why_care"`
+	Claims             []string    `json:"claims"`
+	OpenQuestions      []string    `json:"open_questions"`
+	Signals            Signals     `json:"signals"`
+	Worthiness         Worthiness  `json:"worthiness"`
+	ExecutiveSummary   string      `json:"executive_summary"`
+	ValueProposition   string      `json:"value_proposition"`
+	ProposedActions    []string    `json:"proposed_actions"`
+	CompletedActions   []string    `json:"completed_actions"` // texts of ProposedActions checked off by the user
+	ActionsSource      string      `json:"actions_source"`
+	AnalysisFailed     bool        `json:"analysis_failed"`
+	ResearchVerdict    string      `json:"research_verdict,omitempty"`
+	ResearchConfidence string      `json:"research_confidence,omitempty"`
+	SuggestedHorizon   string      `json:"suggested_horizon,omitempty"`
+	SuggestedTags      []string    `json:"suggested_tags,omitempty"`
+	ResearchState      string      `json:"research_state,omitempty"`
+	Provenance
 	SourceChannel       string        `json:"source_channel,omitempty"`
 	SourceChannelChatID string        `json:"source_channel_chat_id,omitempty"`
 	SourceChannelMsgID  string        `json:"source_channel_msg_id,omitempty"`
 	CreatedAt           time.Time     `json:"created_at"`
 	UpdatedAt           time.Time     `json:"updated_at"`
 	Comments            []CardComment `json:"comments,omitempty"`
+}
+
+func (c *Card) syncProvenance() {
+	if c.SourceChannel == "" {
+		c.SourceChannel = c.Provenance.Channel
+	}
+	if c.Provenance.Channel == "" {
+		c.Provenance.Channel = c.SourceChannel
+	}
+	if c.SourceChannelChatID == "" {
+		c.SourceChannelChatID = c.Provenance.ChatID
+	}
+	if c.Provenance.ChatID == "" {
+		c.Provenance.ChatID = c.SourceChannelChatID
+	}
+	if c.SourceChannelMsgID == "" {
+		c.SourceChannelMsgID = c.Provenance.MsgID
+	}
+	if c.Provenance.MsgID == "" {
+		c.Provenance.MsgID = c.SourceChannelMsgID
+	}
+}
+
+func (c Card) MarshalJSON() ([]byte, error) {
+	c.syncProvenance()
+	type Alias Card
+	return json.Marshal(Alias(c))
+}
+
+func (c *Card) UnmarshalJSON(data []byte) error {
+	type Alias Card
+	var aux Alias
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*c = Card(aux)
+	c.syncProvenance()
+	return nil
 }
 
 type CardComment struct {
@@ -142,9 +187,10 @@ type CardComment struct {
 }
 
 type Capture struct {
-	ID            int64     `json:"id"`
-	Kind          string    `json:"kind"`
-	SourceURL     string    `json:"source_url"`
+	ID        int64  `json:"id"`
+	Kind      string `json:"kind"`
+	SourceURL string `json:"source_url"`
+	Provenance
 	SourceChannel string    `json:"source_channel,omitempty"`
 	Title         string    `json:"title"`
 	Description   string    `json:"description"`
@@ -154,6 +200,32 @@ type Capture struct {
 	ImageDigest   string    `json:"image_digest"`
 	Notes         []string  `json:"notes"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+func (c *Capture) syncProvenance() {
+	if c.SourceChannel == "" {
+		c.SourceChannel = c.Provenance.Channel
+	}
+	if c.Provenance.Channel == "" {
+		c.Provenance.Channel = c.SourceChannel
+	}
+}
+
+func (c Capture) MarshalJSON() ([]byte, error) {
+	c.syncProvenance()
+	type Alias Capture
+	return json.Marshal(Alias(c))
+}
+
+func (c *Capture) UnmarshalJSON(data []byte) error {
+	type Alias Capture
+	var aux Alias
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*c = Capture(aux)
+	c.syncProvenance()
+	return nil
 }
 
 type ResearchStep struct {

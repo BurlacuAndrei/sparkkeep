@@ -105,12 +105,23 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	}
 	sourceChannel := c.SourceChannel
 	if sourceChannel == "" {
+		sourceChannel = c.Provenance.Channel
+	}
+	if sourceChannel == "" {
 		sourceChannel = "web"
+	}
+	sourceChatID := c.SourceChannelChatID
+	if sourceChatID == "" {
+		sourceChatID = c.Provenance.ChatID
+	}
+	sourceMsgID := c.SourceChannelMsgID
+	if sourceMsgID == "" {
+		sourceMsgID = c.Provenance.MsgID
 	}
 	res, err := exec.ExecContext(ctx,
 		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, source_channel, source_channel_chat_id, source_channel_msg_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, completedActionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, actionsSource, analysisFailedInt, c.ResearchVerdict, c.ResearchConfidence, c.SuggestedHorizon, suggestedTagsJSON, researchState, sourceChannel, c.SourceChannelChatID, c.SourceChannelMsgID, ts, ts)
+		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, completedActionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, actionsSource, analysisFailedInt, c.ResearchVerdict, c.ResearchConfidence, c.SuggestedHorizon, suggestedTagsJSON, researchState, sourceChannel, sourceChatID, sourceMsgID, ts, ts)
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return port.Card{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
@@ -126,6 +137,13 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	c.UpdatedAt = c.CreatedAt
 	c.ResearchState = researchState
 	c.SourceChannel = sourceChannel
+	c.SourceChannelChatID = sourceChatID
+	c.SourceChannelMsgID = sourceMsgID
+	c.Provenance = port.Provenance{
+		Channel: sourceChannel,
+		ChatID:  sourceChatID,
+		MsgID:   sourceMsgID,
+	}
 	c.Type = cardType
 	c.TLDR = tldr
 	c.WhyCare = whyCare
@@ -194,6 +212,11 @@ func scanCard(row rowScanner) (port.Card, error) {
 	err := row.Scan(&c.ID, &captureID, &c.Title, &c.Summary, &c.Horizon, &c.Status, &c.SourceURL, &c.SourceNote, &c.ExecutiveSummary, &c.ValueProposition, &actionsRaw, &completedActionsRaw, &c.Type, &c.TLDR, &c.WhyCare, &claimsRaw, &oqRaw, &signalsRaw, &worthinessRaw, &c.ActionsSource, &analysisFailedInt, &c.ResearchVerdict, &c.ResearchConfidence, &c.SuggestedHorizon, &suggestedTagsRaw, &c.ResearchState, &c.SourceChannel, &c.SourceChannelChatID, &c.SourceChannelMsgID, &created, &updated)
 	if err != nil {
 		return port.Card{}, err
+	}
+	c.Provenance = port.Provenance{
+		Channel: c.SourceChannel,
+		ChatID:  c.SourceChannelChatID,
+		MsgID:   c.SourceChannelMsgID,
 	}
 	if captureID.Valid {
 		c.CaptureID = &captureID.Int64

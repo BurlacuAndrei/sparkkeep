@@ -202,3 +202,28 @@ func TestMergeReferencesDeduplication(t *testing.T) {
 		t.Fatalf("expected 1 deduplicated entity, got %d: %+v", len(mergedEntities), mergedEntities)
 	}
 }
+
+func TestNormalizeReferences(t *testing.T) {
+	refs := []port.Reference{
+		{Kind: " URL ", Label: "", URL: " https://github.com/gin-gonic/gin?utm_source=x "},
+		{Kind: "", Label: "   ", URL: ""},
+		{Kind: "tool", Label: " ffmpeg ", URL: "https://ffmpeg.org/?fbclid=123"},
+	}
+	if err := NormalizeReferences(refs); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if refs[0].Kind != port.RefKindRepo || refs[0].URL != "https://github.com/gin-gonic/gin" || refs[0].Label != "gin-gonic/gin" {
+		t.Errorf("ref[0] mismatch: %+v", refs[0])
+	}
+	if refs[1].Kind != port.RefKindOther || refs[1].Label != port.RefKindOther {
+		t.Errorf("ref[1] mismatch: %+v", refs[1])
+	}
+	if refs[2].Kind != port.RefKindTool || refs[2].Label != "ffmpeg" || refs[2].URL != "https://ffmpeg.org" {
+		t.Errorf("ref[2] mismatch: %+v", refs[2])
+	}
+
+	bad := []port.Reference{{Kind: "invalid_kind", Label: "x"}}
+	if err := NormalizeReferences(bad); err == nil {
+		t.Fatal("expected error for invalid reference kind")
+	}
+}

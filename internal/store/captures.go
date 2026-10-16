@@ -19,6 +19,7 @@ func scanCapture(row rowScanner) (port.Capture, error) {
 	if err != nil {
 		return port.Capture{}, err
 	}
+	c.Provenance = port.Provenance{Channel: c.SourceChannel}
 	if notesJSON != "" {
 		_ = json.Unmarshal([]byte(notesJSON), &c.Notes)
 	}
@@ -39,6 +40,9 @@ func (s *Store) CreateCapture(ctx context.Context, c port.Capture) (port.Capture
 	}
 	sourceChannel := c.SourceChannel
 	if sourceChannel == "" {
+		sourceChannel = c.Provenance.Channel
+	}
+	if sourceChannel == "" {
 		sourceChannel = "web"
 	}
 	res, err := s.db.ExecContext(ctx,
@@ -57,6 +61,7 @@ func (s *Store) CreateCapture(ctx context.Context, c port.Capture) (port.Capture
 	}
 	c.ID = id
 	c.SourceChannel = sourceChannel
+	c.Provenance.Channel = sourceChannel
 	t, _ := parseTime(ts)
 	c.CreatedAt = t
 	if c.Notes == nil {

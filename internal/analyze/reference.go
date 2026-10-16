@@ -1,6 +1,7 @@
 package analyze
 
 import (
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -242,6 +243,41 @@ func normalizeReference(ref port.Reference) port.Reference {
 	}
 
 	return ref
+}
+
+// NormalizeReferences validates reference kinds, canonicalizes URLs, upgrades GitHub URLs
+// to repo kind, and resolves default labels in place.
+func NormalizeReferences(refs []port.Reference) error {
+	for i := range refs {
+		ref := &refs[i]
+		ref.Kind = strings.ToLower(strings.TrimSpace(ref.Kind))
+		if ref.Kind == "" {
+			ref.Kind = port.RefKindOther
+		}
+		if !port.ValidReferenceKind(ref.Kind) {
+			return fmt.Errorf("invalid reference kind: %s", ref.Kind)
+		}
+		ref.Label = strings.TrimSpace(ref.Label)
+		ref.URL = strings.TrimSpace(ref.URL)
+		if ref.URL != "" {
+			ref.URL = CanonicalURL(ref.URL)
+			if IsGitHubURL(ref.URL) && ref.Kind == port.RefKindURL {
+				ref.Kind = port.RefKindRepo
+			}
+		}
+		if ref.Label == "" {
+			if ref.URL != "" {
+				if ref.Kind == port.RefKindRepo {
+					ref.Label = GitHubRepoLabel(ref.URL)
+				} else {
+					ref.Label = ref.URL
+				}
+			} else {
+				ref.Label = ref.Kind
+			}
+		}
+	}
+	return nil
 }
 
 // MergeReferences merges two lists of references, deduplicating by canonical URL or

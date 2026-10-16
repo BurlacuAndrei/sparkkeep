@@ -40,6 +40,10 @@ func (a *api) listCards(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "cards": cards})
 }
 
+func normalizeReferences(refs []port.Reference) error {
+	return analyze.NormalizeReferences(refs)
+}
+
 func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Title            string           `json:"title"`
@@ -84,35 +88,9 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 	if u := strings.TrimSpace(b.SourceURL); u != "" {
 		b.SourceURL = u
 	}
-	for i := range b.References {
-		ref := &b.References[i]
-		ref.Kind = strings.ToLower(strings.TrimSpace(ref.Kind))
-		if ref.Kind == "" {
-			ref.Kind = port.RefKindOther
-		}
-		if !port.ValidReferenceKind(ref.Kind) {
-			writeErr(w, http.StatusBadRequest, "invalid reference kind: "+ref.Kind)
-			return
-		}
-		ref.Label = strings.TrimSpace(ref.Label)
-		ref.URL = strings.TrimSpace(ref.URL)
-		if ref.URL != "" {
-			ref.URL = analyze.CanonicalURL(ref.URL)
-			if analyze.IsGitHubURL(ref.URL) && ref.Kind == port.RefKindURL {
-				ref.Kind = port.RefKindRepo
-			}
-		}
-		if ref.Label == "" {
-			if ref.URL != "" {
-				if ref.Kind == port.RefKindRepo {
-					ref.Label = analyze.GitHubRepoLabel(ref.URL)
-				} else {
-					ref.Label = ref.URL
-				}
-			} else {
-				ref.Label = ref.Kind
-			}
-		}
+	if err := normalizeReferences(b.References); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	card, err := a.store.CreateCard(r.Context(), port.Card{
 		Title:            b.Title,
@@ -216,35 +194,9 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if b.References != nil {
-		for i := range *b.References {
-			ref := &(*b.References)[i]
-			ref.Kind = strings.ToLower(strings.TrimSpace(ref.Kind))
-			if ref.Kind == "" {
-				ref.Kind = port.RefKindOther
-			}
-			if !port.ValidReferenceKind(ref.Kind) {
-				writeErr(w, http.StatusBadRequest, "invalid reference kind: "+ref.Kind)
-				return
-			}
-			ref.Label = strings.TrimSpace(ref.Label)
-			ref.URL = strings.TrimSpace(ref.URL)
-			if ref.URL != "" {
-				ref.URL = analyze.CanonicalURL(ref.URL)
-				if analyze.IsGitHubURL(ref.URL) && ref.Kind == port.RefKindURL {
-					ref.Kind = port.RefKindRepo
-				}
-			}
-			if ref.Label == "" {
-				if ref.URL != "" {
-					if ref.Kind == port.RefKindRepo {
-						ref.Label = analyze.GitHubRepoLabel(ref.URL)
-					} else {
-						ref.Label = ref.URL
-					}
-				} else {
-					ref.Label = ref.Kind
-				}
-			}
+		if err := normalizeReferences(*b.References); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
 		}
 	}
 	card, err := a.store.GetCard(r.Context(), id)

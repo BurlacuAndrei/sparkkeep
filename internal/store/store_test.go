@@ -2163,6 +2163,12 @@ func TestCardChannelProvenance(t *testing.T) {
 	if len(cards) == 0 || cards[0].SourceChannel != "openclaw:whatsapp" {
 		t.Fatalf("ListCards provenance mismatch: %+v", cards[0])
 	}
+	if cards[0].Provenance.Channel != "openclaw:whatsapp" || cards[0].Provenance.ChatID != "+1555123456" || cards[0].Provenance.MsgID != "msg_12345" {
+		t.Fatalf("Card.Provenance mismatch: %+v", cards[0].Provenance)
+	}
+	if retrievedCap.Provenance.Channel != "openclaw:whatsapp" {
+		t.Fatalf("Capture.Provenance mismatch: %+v", retrievedCap.Provenance)
+	}
 }
 
 func TestConnectionPoolBounds(t *testing.T) {
