@@ -976,6 +976,23 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
       const stepNameInput = screen.getByLabelText(/Step Display Name/i) as HTMLInputElement;
       expect(stepNameInput.value).toBe('Custom Analysis');
     });
+
+    it('renders rich workflow cards with flow strips, default badges, and card-type chips', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      // Default badge should be visible on the default playbook card
+      expect(screen.getByText('Default')).toBeDefined();
+
+      // Flow strip badges should render step names
+      expect(screen.getAllByText('Grounding').length).toBeGreaterThan(0);
+
+      // Default selector dropdown should be present
+      expect(screen.getByLabelText(/Default Playbook for Untyped Cards/i)).toBeDefined();
+    });
   });
 });
 

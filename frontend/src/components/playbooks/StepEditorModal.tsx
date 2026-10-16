@@ -98,8 +98,9 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
       {/* Tool Policy, Max Queries, LLM Role */}
       <div className="pb-cfg-row" style={{ marginTop: 10 }}>
         <div className="pb-form-field">
-          <label>Tool Policy</label>
+          <label htmlFor="step-tool-policy-select">Tool Policy</label>
           <select
+            id="step-tool-policy-select"
             className="input-select"
             aria-label="Tool Policy"
             value={step.config?.tool_policy || (step.kind === 'search' ? 'search' : 'none')}
@@ -117,8 +118,9 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
         {(step.config?.tool_policy === 'search' ||
           (!step.config?.tool_policy && step.kind === 'search')) && (
           <div className="pb-form-field">
-            <label>Max Search Queries (1–5)</label>
+            <label htmlFor="step-max-queries-input">Max Search Queries (1–5)</label>
             <input
+              id="step-max-queries-input"
               type="number"
               className="input-text"
               aria-label="Max Search Queries"
@@ -135,8 +137,9 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
         )}
 
         <div className="pb-form-field">
-          <label>LLM Role</label>
+          <label htmlFor="step-llm-role-select">LLM Role</label>
           <select
+            id="step-llm-role-select"
             className="input-select"
             aria-label="LLM Role"
             value={

@@ -9,6 +9,7 @@ Read [`CODING_STANDARDS.md`](CODING_STANDARDS.md) during code review for archite
 - **Frontend Utilities (`frontend/src/utils/cardUtils.tsx`):** Canonical normalizers for URL hostname extraction, relative age, and platform metadata.
 - **Frontend Modular Styles (`frontend/src/styles/`):** Feature stylesheets (`playbooks.css`, `triage-deck.css`, `digest-brief.css`). Keep `components.css` reserved for shared primitives.
 - **Frontend Production Distribution (`internal/web/dist`):** Synchronized on every frontend build (`npm run build`). Must be committed with frontend changes.
+- **Fast Localized TDD:** Run `npm test -- <path-to-test>` (e.g. `npm test -- src/components/PlaybookManager.test.tsx`) from `frontend/` for fast feedback during feature work, followed by `make check` before proposing commits.
 
 ## Verification Gate
 

@@ -320,7 +320,7 @@
   gap: 6px;
   font-size: 11.5px;
   font-weight: 600;
-  color: #a5b4fc;
+  color: var(--accent-indigo);
 }
 
 .deck-card-title {
@@ -386,6 +386,7 @@
   color: var(--text-main);
   display: -webkit-box;
   -webkit-line-clamp: 4;
+  line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -896,6 +897,22 @@
 [data-theme="light"] .deck-card {
   background: linear-gradient(160deg, rgba(99, 102, 241, 0.03), transparent 40%), var(--bg-surface);
   box-shadow: 0 24px 50px -24px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .deck-verdict.watch {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+[data-theme="light"] .deck-chip.warn {
+  color: #b45309;
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+[data-theme="light"] .deck-worth.medium {
+  color: #b45309;
+  background: #fef3c7;
 }
 
 [data-theme="light"] .triage-view {

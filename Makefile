@@ -20,7 +20,7 @@ vet:
 
 check: fmt vet
 	cd frontend && npm run lint && npm test && npm run build
-	git diff --exit-code -- internal/web/dist
+	@git diff --quiet -- internal/web/dist || (echo "❌ internal/web/dist is out of sync with frontend. Run 'npm run build' and commit the distribution bundle." && exit 1)
 	go test -race ./...
 
 docker:

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Shield, Sparkles, Save, User } from 'lucide-react';
+import { Shield, Sparkles, Save, User, Globe } from 'lucide-react';
 import * as api from '../../api';
 import { LANGUAGE_OPTIONS, PROFILE_ARCHETYPES, ProfileArchetype } from './constants';
+import { CustomSelect } from '../CustomSelect';
+import { SelectOption } from '../selectOptions';
 
 export interface UserProfileTabProps {
   goals: string;
@@ -288,26 +290,35 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
         {/* Output Language */}
         <div className="setup-form-group">
           <label htmlFor="profile-language-select">Output Language for Triage & Research</label>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <select
-              id="profile-language-select"
-              className="setup-select"
-              value={LANGUAGE_OPTIONS.includes(language) ? language : 'Custom'}
-              onChange={(e) => {
-                if (e.target.value !== 'Custom') {
-                  setLanguage(e.target.value);
-                  onDirtyChange?.();
-                }
-              }}
-              style={{ minWidth: '220px' }}
-            >
-              {LANGUAGE_OPTIONS.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
-                </option>
-              ))}
-              <option value="Custom">Custom Language...</option>
-            </select>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ minWidth: '240px', flex: '0 0 auto' }}>
+              <CustomSelect
+                id="profile-language-select"
+                value={LANGUAGE_OPTIONS.includes(language) ? language : 'Custom'}
+                onChange={(val) => {
+                  if (val !== 'Custom') {
+                    setLanguage(val);
+                    onDirtyChange?.();
+                  } else {
+                    setLanguage('Custom');
+                    onDirtyChange?.();
+                  }
+                }}
+                options={[
+                  ...LANGUAGE_OPTIONS.map((lang) => ({
+                    value: lang,
+                    label: lang,
+                    icon: <Globe size={13} style={{ color: 'var(--accent-indigo)' }} />,
+                  })),
+                  {
+                    value: 'Custom',
+                    label: 'Custom Language...',
+                    icon: <Globe size={13} style={{ color: 'var(--accent-purple)' }} />,
+                  },
+                ]}
+                ariaLabel="Output Language for Triage & Research"
+              />
+            </div>
             {(!LANGUAGE_OPTIONS.includes(language) || language === 'Custom') && (
               <input
                 id="profile-language"

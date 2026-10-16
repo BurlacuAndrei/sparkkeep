@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   BookOpen, Lock, Copy, Pencil, Trash2, Plus, Download, Upload,
-  CheckCircle2, AlertCircle, Sparkles, Layers, Eye,
+  CheckCircle2, AlertCircle, Sparkles, Layers, Eye, Check,
 } from 'lucide-react';
+import { CustomSelect } from './CustomSelect';
 import * as api from '../api';
 import { Card, Playbook, PlaybookStep, StepLibraryTemplate } from '../types';
 import {
@@ -375,40 +376,83 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                     Runs automatically when researching cards without a type-specific playbook.
                   </span>
                 </div>
-                <select
-                  className="input-select pb-default-dropdown"
-                  value={defaultPlaybookId || 1}
-                  onChange={(e) => handleDefaultPlaybookChange(parseInt(e.target.value, 10))}
-                >
-                  {playbooks.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} {p.is_builtin ? '(Built-in)' : '(Custom)'}
-                    </option>
-                  ))}
-                </select>
+                <div style={{ minWidth: '220px', maxWidth: '300px' }}>
+                  <CustomSelect
+                    id="pb-default-dropdown"
+                    value={String(defaultPlaybookId || 1)}
+                    onChange={(val) => handleDefaultPlaybookChange(parseInt(val, 10))}
+                    options={playbooks.map((p) => ({
+                      value: String(p.id),
+                      label: `${p.name} ${p.is_builtin ? '(Built-in)' : '(Custom)'}`,
+                      icon: p.is_builtin ? <Lock size={12} style={{ color: 'var(--accent-indigo)' }} /> : <Sparkles size={12} style={{ color: 'var(--accent-emerald)' }} />,
+                    }))}
+                    ariaLabel="Default Playbook for Untyped Cards"
+                    size="sm"
+                  />
+                </div>
               </div>
 
               <div className="pb-section-header">Built-in Playbooks (Read-Only)</div>
               <div className="pb-cards-grid">
-                {builtinPlaybooks.map((p) => (
-                  <div key={p.id} className="pb-card builtin">
-                    <div className="pb-card-top">
-                      <div className="pb-card-badge">
-                        <Lock size={12} />
-                        <span>Built-in</span>
+                {builtinPlaybooks.map((p) => {
+                  const isDefault = (defaultPlaybookId || 1) === p.id;
+                  return (
+                    <div key={p.id} className={`pb-card builtin ${isDefault ? 'is-default' : ''}`}>
+                      <div className="pb-card-top">
+                        <div className="pb-card-badges-group">
+                          <div className="pb-card-badge">
+                            <Lock size={12} />
+                            <span>Built-in</span>
+                          </div>
+                          {isDefault && (
+                            <span className="pb-card-default-badge" title="Active default playbook for untyped cards">
+                              <Check size={11} />
+                              <span>Default</span>
+                            </span>
+                          )}
+                        </div>
+                        <span className="pb-card-steps">{p.steps?.length || 0} steps</span>
                       </div>
-                      <span className="pb-card-steps">{p.steps?.length || 0} steps</span>
+                      <h4 className="pb-card-name">{p.name}</h4>
+                      <p className="pb-card-desc">{p.description || 'Standard deep research pipeline.'}</p>
+
+                      {/* Mini-Pipeline Flow Strip */}
+                      {p.steps && p.steps.length > 0 && (
+                        <div className="pb-card-flow-strip">
+                          {p.steps.slice(0, 4).map((s, idx) => (
+                            <React.Fragment key={idx}>
+                              <span className="pb-card-flow-badge" title={s.name || s.config?.output_heading || `Step ${idx + 1}`}>
+                                {s.name || s.config?.output_heading || `Step ${idx + 1}`}
+                              </span>
+                              {idx < Math.min(p.steps.length, 4) - 1 && <span className="pb-card-flow-arrow">→</span>}
+                            </React.Fragment>
+                          ))}
+                          {p.steps.length > 4 && (
+                            <span className="pb-card-flow-more">+{p.steps.length - 4} more</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Target Card Types Chips */}
+                      {p.card_types && p.card_types.length > 0 && (
+                        <div className="pb-card-types-row">
+                          {p.card_types.map((ct) => (
+                            <span key={ct} className="pb-card-type-chip">
+                              {ct}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="pb-card-footer">
+                        <button type="button" className="btn-secondary btn-sm" onClick={() => handleDuplicate(p.id)} title="Duplicate to edit">
+                          <Copy size={12} />
+                          <span>Duplicate</span>
+                        </button>
+                      </div>
                     </div>
-                    <h4 className="pb-card-name">{p.name}</h4>
-                    <p className="pb-card-desc">{p.description || 'Standard deep research pipeline.'}</p>
-                    <div className="pb-card-footer">
-                      <button type="button" className="btn-secondary btn-sm" onClick={() => handleDuplicate(p.id)} title="Duplicate to edit">
-                        <Copy size={12} />
-                        <span>Duplicate</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="pb-section-header" style={{ marginTop: 24 }}>Custom Playbooks</div>
@@ -418,31 +462,71 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                     No custom playbooks yet. Duplicate a built-in or click "New Playbook" to start customizing!
                   </div>
                 ) : (
-                  customPlaybooks.map((p) => (
-                    <div key={p.id} className="pb-card custom">
-                      <div className="pb-card-top">
-                        <div className="pb-card-badge custom">
-                          <Sparkles size={12} />
-                          <span>Custom</span>
+                  customPlaybooks.map((p) => {
+                    const isDefault = (defaultPlaybookId || 1) === p.id;
+                    return (
+                      <div key={p.id} className={`pb-card custom ${isDefault ? 'is-default' : ''}`}>
+                        <div className="pb-card-top">
+                          <div className="pb-card-badges-group">
+                            <div className="pb-card-badge custom">
+                              <Sparkles size={12} />
+                              <span>Custom</span>
+                            </div>
+                            {isDefault && (
+                              <span className="pb-card-default-badge" title="Active default playbook for untyped cards">
+                                <Check size={11} />
+                                <span>Default</span>
+                              </span>
+                            )}
+                          </div>
+                          <span className="pb-card-steps">{p.steps?.length || 0} steps</span>
                         </div>
-                        <span className="pb-card-steps">{p.steps?.length || 0} steps</span>
+                        <h4 className="pb-card-name">{p.name}</h4>
+                        <p className="pb-card-desc">{p.description || 'Custom research workflow'}</p>
+
+                        {/* Mini-Pipeline Flow Strip */}
+                        {p.steps && p.steps.length > 0 && (
+                          <div className="pb-card-flow-strip">
+                            {p.steps.slice(0, 4).map((s, idx) => (
+                              <React.Fragment key={idx}>
+                                <span className="pb-card-flow-badge" title={s.name || s.config?.output_heading || `Step ${idx + 1}`}>
+                                  {s.name || s.config?.output_heading || `Step ${idx + 1}`}
+                                </span>
+                                {idx < Math.min(p.steps.length, 4) - 1 && <span className="pb-card-flow-arrow">→</span>}
+                              </React.Fragment>
+                            ))}
+                            {p.steps.length > 4 && (
+                              <span className="pb-card-flow-more">+{p.steps.length - 4} more</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Target Card Types Chips */}
+                        {p.card_types && p.card_types.length > 0 && (
+                          <div className="pb-card-types-row">
+                            {p.card_types.map((ct) => (
+                              <span key={ct} className="pb-card-type-chip">
+                                {ct}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="pb-card-footer">
+                          <button type="button" className="btn-secondary btn-sm" onClick={() => startEdit(p)}>
+                            <Pencil size={12} />
+                            <span>Edit</span>
+                          </button>
+                          <button type="button" className="btn-secondary btn-sm" onClick={() => handleDuplicate(p.id)} title="Duplicate">
+                            <Copy size={12} />
+                          </button>
+                          <button type="button" className="btn-secondary btn-sm btn-danger" onClick={() => handleDelete(p.id, p.name)} title="Delete">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </div>
-                      <h4 className="pb-card-name">{p.name}</h4>
-                      <p className="pb-card-desc">{p.description || 'Custom research workflow'}</p>
-                      <div className="pb-card-footer">
-                        <button type="button" className="btn-secondary btn-sm" onClick={() => startEdit(p)}>
-                          <Pencil size={12} />
-                          <span>Edit</span>
-                        </button>
-                        <button type="button" className="btn-secondary btn-sm" onClick={() => handleDuplicate(p.id)} title="Duplicate">
-                          <Copy size={12} />
-                        </button>
-                        <button type="button" className="btn-secondary btn-sm btn-danger" onClick={() => handleDelete(p.id, p.name)} title="Delete">
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </>
