@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { PlaybookManager, PLAYBOOK_RECIPES } from './PlaybookManager';
+import { PlaybookManager, PLAYBOOK_TEMPLATES, PLAYBOOK_RECIPES } from './PlaybookManager';
 import * as api from '../api';
 
 vi.mock('../api', async () => {
@@ -34,7 +34,7 @@ vi.mock('../api', async () => {
   };
 });
 
-describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
+describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -51,7 +51,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     fireEvent.click(newBtn);
 
     // Modal should NOT open immediately
-    expect(screen.queryByText('Load Starter Template or Recipe')).toBeNull();
+    expect(screen.queryByText('Playbook Template Gallery')).toBeNull();
 
     // Canvas input fields & default lean starter steps should be displayed
     expect(screen.getByLabelText(/Playbook Name/i)).toBeDefined();
@@ -71,7 +71,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     expect(screen.getByLabelText(/Set as Platform Default/i)).toBeDefined();
   });
 
-  it('selects a recipe archetype and loads its steps into the editor via Load Template', async () => {
+  it('selects a playbook template archetype and loads its steps into the editor via Load Template', async () => {
     render(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
@@ -85,14 +85,14 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     fireEvent.click(loadTplBtn);
 
     // Modal should now be open
-    expect(screen.getByText('Load Starter Template or Recipe')).toBeDefined();
+    expect(screen.getByText('Playbook Template Gallery')).toBeDefined();
 
     // Choose Competitor Teardown
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
-    expect(useBtns.length).toBe(PLAYBOOK_RECIPES.length);
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
+    expect(useBtns.length).toBe(PLAYBOOK_TEMPLATES.length);
     fireEvent.click(useBtns[0]); // Competitor Teardown
 
-    // Should load the recipe's title and steps
+    // Should load the template's title and steps
     expect(screen.getByDisplayValue('Competitor & Moat Teardown')).toBeDefined();
     expect(screen.getByText(/Moat & Pricing Analysis/i)).toBeDefined();
   });
@@ -127,12 +127,12 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    // Open template picker and choose Flagship 8-Step Deep Dive (recipe index 4)
+    // Open template picker and choose Flagship 8-Step Deep Dive (template index 4)
     fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-    const deepDiveRecipe = PLAYBOOK_RECIPES.find((r) => r.id === 'deep_dive')!;
-    const recipeIndex = PLAYBOOK_RECIPES.indexOf(deepDiveRecipe);
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
-    fireEvent.click(useBtns[recipeIndex]);
+    const deepDiveTpl = PLAYBOOK_TEMPLATES.find((r) => r.id === 'deep_dive')!;
+    const tplIndex = PLAYBOOK_TEMPLATES.indexOf(deepDiveTpl);
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
+    fireEvent.click(useBtns[tplIndex]);
 
     // 1. Expand and edit Planning standard step
     const editPlanBtn = screen.getByRole('button', { name: /Edit Question Planning config/i });
@@ -197,9 +197,9 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
 
-    // Load Competitor Teardown recipe
+    // Load Competitor Teardown template
     fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
     fireEvent.click(useBtns[0]);
 
     // 1. Test Landscape standard step prompt starters
@@ -256,7 +256,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     // Load Competitor Teardown
     fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
     fireEvent.click(useBtns[0]);
 
     // In Competitor Teardown, Moat & Pricing Analysis is step 5, Synthesis & Verdict is step 6, Report is step 7
@@ -286,7 +286,7 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
     // Load Competitor Teardown
     fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-    const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
+    const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
     fireEvent.click(useBtns[0]);
 
     // Expand Moat & Pricing Analysis step drawer
@@ -534,6 +534,65 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
     expect(screen.getByText('QPU Benchmark Analysis')).toBeDefined();
   });
 
+  it('browses visual Template Gallery by research domains, displaying 5-pillar badges and budget estimates', async () => {
+    const mockToast = vi.fn();
+    render(<PlaybookManager showToast={mockToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+    // Open Template Gallery
+    fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
+
+    // Verify modal header & title
+    expect(screen.getByText('Playbook Template Gallery')).toBeDefined();
+    expect(
+      screen.getByText(/Select a domain-tailored research pipeline archetype or clone a built-in playbook into your builder canvas/i)
+    ).toBeDefined();
+
+    // Verify all domain tabs exist
+    expect(screen.getByRole('tab', { name: /All/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Market Intelligence/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Due Diligence & Risk/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Academic & Science/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Fast Fact-Check/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /General/i })).toBeDefined();
+
+    // All templates should initially be visible
+    expect(screen.getByText('Competitor & Moat Teardown')).toBeDefined();
+    expect(screen.getByText('Investment & Risk Due Diligence')).toBeDefined();
+    expect(screen.getByText('Academic & Literature Review')).toBeDefined();
+    expect(screen.getByText('Fast Fact Check & Claim Verification')).toBeDefined();
+
+    // Verify budget estimates & 5-pillar indicators
+    expect(screen.getByText('🪙 ~$0.04')).toBeDefined();
+    expect(screen.getByText('⏱️ ~12s')).toBeDefined();
+
+    // Filter by Academic & Science
+    fireEvent.click(screen.getByRole('tab', { name: /Academic & Science/i }));
+    expect(screen.getByText('Academic & Literature Review')).toBeDefined();
+    expect(screen.queryByText('Competitor & Moat Teardown')).toBeNull();
+    expect(screen.queryByText('Investment & Risk Due Diligence')).toBeNull();
+
+    // Filter by Fast Fact-Check
+    fireEvent.click(screen.getByRole('tab', { name: /Fast Fact-Check/i }));
+    expect(screen.getByText('Fast Fact Check & Claim Verification')).toBeDefined();
+    expect(screen.queryByText('Academic & Literature Review')).toBeNull();
+
+    // 1-click "Use this Template" loads it into canvas
+    const useBtn = screen.getByRole('button', { name: /Use this Template: Fast Fact Check & Claim Verification/i });
+    fireEvent.click(useBtn);
+
+    // Modal closes and canvas updates
+    expect(screen.queryByText('Playbook Template Gallery')).toBeNull();
+    expect(screen.getByDisplayValue('Fast Fact Check & Claim Verification')).toBeDefined();
+    expect(screen.getByText('Evidence Search')).toBeDefined();
+    expect(mockToast).toHaveBeenCalledWith('Loaded "Fast Fact Check & Claim Verification" template');
+  });
+
   describe('Research Health Inspector & Soft Linter', () => {
     it('calculates 5-Pillar readiness score and updates dynamically when steps are toggled', async () => {
       render(<PlaybookManager showToast={vi.fn()} />);
@@ -587,10 +646,10 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
 
       // Load Flagship 8-Step Deep Dive (which satisfies all 5 pillars)
       fireEvent.click(screen.getByRole('button', { name: /Load Template/i }));
-      const deepDiveRecipe = PLAYBOOK_RECIPES.find((r) => r.id === 'deep_dive')!;
-      const recipeIndex = PLAYBOOK_RECIPES.indexOf(deepDiveRecipe);
-      const useBtns = screen.getAllByRole('button', { name: /Use this Recipe/i });
-      fireEvent.click(useBtns[recipeIndex]);
+      const deepDiveTpl = PLAYBOOK_TEMPLATES.find((r) => r.id === 'deep_dive')!;
+      const tplIndex = PLAYBOOK_TEMPLATES.indexOf(deepDiveTpl);
+      const useBtns = screen.getAllByRole('button', { name: /Use this Template/i });
+      fireEvent.click(useBtns[tplIndex]);
 
       // Badge should be 5 / 5 Pillars Ready
       const badge = screen.getByTestId('health-score-badge');

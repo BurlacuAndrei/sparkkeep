@@ -6,16 +6,16 @@ import {
 import * as api from '../api';
 import { Card, Playbook, PlaybookStep, StepLibraryTemplate } from '../types';
 import {
-  DEFAULT_CARD_TYPES, DEFAULT_LEAN_STARTER_STEPS, PlaybookRecipe,
+  DEFAULT_CARD_TYPES, DEFAULT_LEAN_STARTER_STEPS, PlaybookTemplate, PlaybookRecipe,
   UserSavedStepTemplate, validatePlaybook, exportPlaybookToFile,
   parseImportedPlaybook, buildUserStepTemplate, PlaybookCanvas,
-  AddStepModal, RecipePickerModal, ImportPlaybookModal,
+  AddStepModal, PlaybookTemplateGalleryModal, RecipePickerModal, ImportPlaybookModal,
 } from './playbooks';
 
 // oxlint-disable-next-line react/only-export-components
 export {
-  PLAYBOOK_RECIPES, type PillarHealth, type SoftLinterAdvisory,
-  type PlaybookRecipe, type UserSavedStepTemplate,
+  PLAYBOOK_TEMPLATES, PLAYBOOK_RECIPES, type PillarHealth, type SoftLinterAdvisory,
+  type PlaybookTemplate, type PlaybookRecipe, type UserSavedStepTemplate,
 } from './playbooks';
 
 export interface PlaybookManagerProps {
@@ -38,7 +38,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
   const [loading, setLoading] = useState(true);
   const [editingPlaybook, setEditingPlaybook] = useState<Playbook | null>(null);
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({});
-  const [isRecipePickerOpen, setIsRecipePickerOpen] = useState(false);
+  const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
   const [isAddStepOpen, setIsAddStepOpen] = useState(false);
   const [addStepTab, setAddStepTab] = useState<'library' | 'blank'>('library');
   const [saving, setSaving] = useState(false);
@@ -136,16 +136,16 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
     setExpandedSteps({});
   };
 
-  const handleSelectRecipe = (recipe: PlaybookRecipe) => {
+  const handleSelectTemplate = (template: PlaybookTemplate) => {
     setEditingPlaybook((prev) => ({
-      id: prev?.id || 0, name: recipe.name, description: recipe.description,
-      is_builtin: false, card_types: [...recipe.card_types], version: prev?.version || 1,
-      steps: JSON.parse(JSON.stringify(recipe.steps)),
+      id: prev?.id || 0, name: template.name, description: template.description,
+      is_builtin: false, card_types: [...template.card_types], version: prev?.version || 1,
+      steps: JSON.parse(JSON.stringify(template.steps)),
     }));
-    setIsRecipePickerOpen(false);
+    setIsTemplateGalleryOpen(false);
     setServerError(null);
     setExpandedSteps({});
-    showToast(`Loaded "${recipe.name}" template`);
+    showToast(`Loaded "${template.name}" template`);
   };
 
   const handleCloneBuiltin = (pb: Playbook) => {
@@ -154,7 +154,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
       is_builtin: false, card_types: [...(pb.card_types || [])], version: prev?.version || 1,
       steps: JSON.parse(JSON.stringify(pb.steps || [])),
     }));
-    setIsRecipePickerOpen(false);
+    setIsTemplateGalleryOpen(false);
     setServerError(null);
     setExpandedSteps({});
     showToast(`Loaded "${pb.name}" built-in steps`);
@@ -308,7 +308,13 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
             </p>
           </div>
           <div className="pb-actions-group">
-            <button type="button" className="btn-secondary" onClick={() => setIsRecipePickerOpen(true)} title="Load steps from an archetype recipe or built-in playbook">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setIsTemplateGalleryOpen(true)}
+              title="Browse curated starter templates or clone a built-in playbook"
+              aria-label="Load Template"
+            >
               <Layers size={14} />
               <span>Load Template</span>
             </button>
@@ -451,11 +457,11 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
         />
       )}
 
-      <RecipePickerModal
-        isOpen={isRecipePickerOpen}
-        onClose={() => setIsRecipePickerOpen(false)}
+      <PlaybookTemplateGalleryModal
+        isOpen={isTemplateGalleryOpen}
+        onClose={() => setIsTemplateGalleryOpen(false)}
         builtinPlaybooks={builtinPlaybooks}
-        onSelectRecipe={handleSelectRecipe}
+        onSelectTemplate={handleSelectTemplate}
         onCloneBuiltin={handleCloneBuiltin}
       />
       <ImportPlaybookModal
