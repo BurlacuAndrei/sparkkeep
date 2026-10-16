@@ -17,7 +17,7 @@ import {
   Heart,
 } from 'lucide-react';
 import * as api from '../api';
-import { LLMProfile } from '../types';
+import { LLMProfile, Playbook } from '../types';
 import { ThemeSelector } from './ThemeSelector';
 import { PlaybookManager } from './PlaybookManager';
 import { ResearchScheduler } from './ResearchScheduler';
@@ -68,6 +68,11 @@ export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: Sett
   // Card Taxonomy state
   const [cardTypes, setCardTypes] = useState<string[]>(DEFAULT_CARD_TYPES);
   const [newCardTypeInput, setNewCardTypeInput] = useState('');
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
+  const [pendingDeleteCardType, setPendingDeleteCardType] = useState<{
+    type: string;
+    affectedPlaybooks: Playbook[];
+  } | null>(null);
 
   // AI & Profiles state
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
@@ -141,10 +146,14 @@ export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: Sett
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // Load existing settings
+  // Load existing settings and playbooks
   useEffect(() => {
-    api.getSettings()
-      .then((res) => {
+    Promise.all([
+      api.getSettings(),
+      api.fetchPlaybooks().catch(() => [] as Playbook[]),
+    ])
+      .then(([res, loadedPlaybooks]) => {
+        setPlaybooks(loadedPlaybooks || []);
         setHasAuthToken(Boolean(res.settings.has_auth_token));
         const profs = res.settings.llm_profiles || [];
         if (profs.length > 0) {
@@ -393,6 +402,47 @@ export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: Sett
     setError(null);
     setCardTypes([...cardTypes, trimmed]);
     setNewCardTypeInput('');
+  };
+
+  const handleRemoveCardType = (type: string) => {
+    setError(null);
+    const affectedPlaybooks = playbooks.filter(
+      (pb) => Array.isArray(pb.card_types) && pb.card_types.includes(type)
+    );
+    if (affectedPlaybooks.length > 0) {
+      setPendingDeleteCardType({ type, affectedPlaybooks });
+      return;
+    }
+    setCardTypes(cardTypes.filter((t) => t !== type));
+  };
+
+  const handleConfirmDetachCardType = async () => {
+    if (!pendingDeleteCardType) return;
+    const { type, affectedPlaybooks } = pendingDeleteCardType;
+    const nextCardTypes = cardTypes.filter((t) => t !== type);
+    setError(null);
+    try {
+      await Promise.all(
+        affectedPlaybooks.map((pb) =>
+          api.updatePlaybook(pb.id, {
+            ...pb,
+            card_types: (pb.card_types || []).filter((t) => t !== type),
+          })
+        )
+      );
+      await api.patchSettings({ card_types: nextCardTypes });
+      setCardTypes(nextCardTypes);
+      setPlaybooks((prev) =>
+        prev.map((pb) =>
+          Array.isArray(pb.card_types) && pb.card_types.includes(type)
+            ? { ...pb, card_types: pb.card_types.filter((t) => t !== type) }
+            : pb
+        )
+      );
+      setPendingDeleteCardType(null);
+    } catch (err) {
+      setError(api.getErrorMessage(err));
+    }
   };
 
   return createPortal(
@@ -699,10 +749,7 @@ export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: Sett
                             <span>{type}</span>
                             <button
                               type="button"
-                              onClick={() => {
-                                setError(null);
-                                setCardTypes(cardTypes.filter((t) => t !== type));
-                              }}
+                              onClick={() => handleRemoveCardType(type)}
                               style={{
                                 background: 'transparent',
                                 border: 'none',
@@ -985,6 +1032,102 @@ export function SettingsModal({ onClose, showToast, onOpenPlaybookStudio }: Sett
           </div>
         </div>
       </div>
+
+      {pendingDeleteCardType && (
+        <div
+          className="modal-backdrop"
+          style={{ zIndex: 1100 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPendingDeleteCardType(null);
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="taxonomy-impact-modal-title"
+          data-testid="taxonomy-impact-modal"
+        >
+          <div
+            className="settings-modal-card"
+            style={{
+              maxWidth: '480px',
+              width: '100%',
+              height: 'auto',
+              maxHeight: '80vh',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <AlertCircle size={20} color="var(--accent-amber, #eab308)" />
+              <h3
+                id="taxonomy-impact-modal-title"
+                style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--text-main)' }}
+              >
+                Detach "{pendingDeleteCardType.type}" from Playbooks?
+              </h3>
+            </div>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              The card type <strong>{pendingDeleteCardType.type}</strong> is currently referenced by{' '}
+              {pendingDeleteCardType.affectedPlaybooks.length}{' '}
+              {pendingDeleteCardType.affectedPlaybooks.length === 1 ? 'playbook' : 'playbooks'}.
+              Detaching will safely remove this card type tag while keeping your playbooks intact.
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                maxHeight: '200px',
+                overflowY: 'auto',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                padding: '10px 12px',
+              }}
+            >
+              {pendingDeleteCardType.affectedPlaybooks.map((pb) => (
+                <div
+                  key={pb.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px',
+                    padding: '4px 0',
+                  }}
+                >
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    {pb.name}
+                  </span>
+                  {pb.description && (
+                    <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+                      {pb.description}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                className="setup-btn-secondary"
+                onClick={() => setPendingDeleteCardType(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="setup-btn-primary"
+                onClick={handleConfirmDetachCardType}
+              >
+                Detach from Playbooks (Default)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   );
