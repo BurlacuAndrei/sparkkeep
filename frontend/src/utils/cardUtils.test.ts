@@ -61,12 +61,12 @@ describe('cardUtils', () => {
     it('returns Web defaults when url is undefined or empty', () => {
       const undefinedInfo = getPlatformInfo(undefined);
       expect(undefinedInfo.name).toBe('Web');
-      expect(undefinedInfo.color).toBe('#94a3b8');
+      expect(undefinedInfo.color).toBe('var(--text-dim, #64748b)');
       expect(undefinedInfo.icon).toBeDefined();
 
       const emptyInfo = getPlatformInfo('');
       expect(emptyInfo.name).toBe('Web');
-      expect(emptyInfo.color).toBe('#94a3b8');
+      expect(emptyInfo.color).toBe('var(--text-dim, #64748b)');
     });
 
     it('identifies YouTube URLs correctly', () => {
@@ -90,7 +90,7 @@ describe('cardUtils', () => {
     it('identifies GitHub URLs correctly', () => {
       const info = getPlatformInfo('https://github.com/torvalds/linux');
       expect(info.name).toBe('GitHub');
-      expect(info.color).toBe('#cbd5e1');
+      expect(info.color).toBe('var(--text-main, #334155)');
     });
 
     it('identifies X / Twitter URLs correctly', () => {
@@ -108,7 +108,7 @@ describe('cardUtils', () => {
     it('falls back to Web for unknown domains', () => {
       const info = getPlatformInfo('https://example.org/articles/deep-dive');
       expect(info.name).toBe('Web');
-      expect(info.color).toBe('#94a3b8');
+      expect(info.color).toBe('var(--text-dim, #64748b)');
     });
   });
 

@@ -56,9 +56,13 @@ export const CardLifecycleStepper: React.FC<CardLifecycleStepperProps> = ({
             borderRadius: 4,
             background:
               status === 'shelved'
-                ? 'rgba(245, 158, 11, 0.2)'
-                : 'rgba(244, 63, 94, 0.2)',
-            color: status === 'shelved' ? '#fbbf24' : '#fb7185',
+                ? 'var(--color-warning-bg)'
+                : 'var(--color-error-bg)',
+            border:
+              status === 'shelved'
+                ? '1px solid var(--color-warning-border)'
+                : '1px solid var(--color-error-border)',
+            color: status === 'shelved' ? 'var(--color-warning-text)' : 'var(--color-error-text)',
             marginLeft: 6,
           }}
         >

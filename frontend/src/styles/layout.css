@@ -850,6 +850,32 @@
   scrollbar-color: rgba(148, 163, 184, 0.5) rgba(15, 23, 42, 0.4);
 }
 
+[data-theme="light"] .drawer-stepper-step:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-main);
+}
+
+[data-theme="light"] .drawer-stepper-step.active {
+  background: #e0e7ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
+}
+
+[data-theme="light"] .drawer-stepper-step.done {
+  color: #059669;
+}
+
+[data-theme="light"] .drawer-main-col,
+[data-theme="light"] .drawer-right-rail {
+  scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
+}
+
+[data-theme="light"] .drawer-main-col::-webkit-scrollbar-track,
+[data-theme="light"] .drawer-right-rail::-webkit-scrollbar-track,
+[data-theme="light"] .drawer-body-layout::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 @media (max-width: 880px) {
   .drawer-body-layout {
     flex-direction: column;

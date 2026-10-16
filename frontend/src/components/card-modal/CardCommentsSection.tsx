@@ -30,7 +30,7 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
   return (
     <div className="rail-section">
       <div className="rail-section-title">
-        <MessageSquare size={13} color="#f59e0b" />
+        <MessageSquare size={13} color="var(--accent-amber)" />
         <span>Comments & History ({comments.length})</span>
       </div>
 
@@ -39,7 +39,7 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
           <div
             key={c.id}
             style={{
-              background: 'rgba(255, 255, 255, 0.02)',
+              background: 'var(--bg-input)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 4,
               padding: 6,
@@ -58,8 +58,8 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
                   textTransform: 'uppercase',
                   padding: '1px 5px',
                   borderRadius: 3,
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  color: '#fbbf24',
+                  background: 'var(--color-warning-bg)',
+                  color: 'var(--color-warning-text)',
                 }}
               >
                 <User size={9} />
@@ -67,19 +67,19 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
               </span>
 
               {/* Timestamp */}
-              <span style={{ fontSize: 10, color: '#64748b' }}>
+              <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>
                 {new Date(c.created_at).toLocaleString()}
               </span>
             </div>
 
-            <div style={{ color: '#cbd5e1', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <div style={{ color: 'var(--text-main)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {c.content}
             </div>
           </div>
         ))}
 
         {comments.length === 0 && (
-          <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>
             No comments yet. Add a note or observation below.
           </div>
         )}

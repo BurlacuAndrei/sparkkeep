@@ -75,7 +75,7 @@ export const CardActionsChecklist: React.FC<CardActionsChecklistProps> = ({
                 background: 'transparent',
                 border: '1px solid transparent',
                 fontSize: 13,
-                color: completedActions[idx] ? '#94a3b8' : '#f1f5f9',
+                color: completedActions[idx] ? 'var(--text-muted)' : 'var(--text-main)',
                 textDecoration: completedActions[idx] ? 'line-through' : 'none',
               }}
             />

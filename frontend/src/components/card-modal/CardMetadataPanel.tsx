@@ -183,7 +183,7 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
       {/* 2. References Manager */}
       <div className="rail-section">
         <div className="rail-section-title">
-          <Link2 size={13} color="#38bdf8" />
+          <Link2 size={13} color="var(--accent-blue)" />
           <span>References ({references.length})</span>
         </div>
 
@@ -196,7 +196,7 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '4px 6px',
-                background: 'rgba(255, 255, 255, 0.02)',
+                background: 'var(--bg-input)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 4,
                 fontSize: 12,
@@ -204,13 +204,13 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
                 <span className={`ref-kind-chip ref-kind-${ref.kind}`}>{ref.kind}</span>
-                <span style={{ color: '#e2e8f0' }} className="line-clamp-1">
+                <span style={{ color: 'var(--text-main)' }} className="line-clamp-1">
                   {ref.label || ref.url}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {ref.url && (
-                  <a href={ref.url} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>
+                  <a href={ref.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)' }}>
                     <ExternalLink size={11} />
                   </a>
                 )}
@@ -227,7 +227,7 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
           ))}
 
           {references.length === 0 && (
-            <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>
               No references attached.
             </div>
           )}
@@ -282,7 +282,7 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
       {/* 3. Tags Chips with Add/Remove */}
       <div className="rail-section">
         <div className="rail-section-title">
-          <Tag size={13} color="#a78bfa" />
+          <Tag size={13} color="var(--accent-purple)" />
           <span>Tags ({tags.length})</span>
         </div>
 
@@ -296,9 +296,9 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
-                background: 'rgba(167, 139, 250, 0.08)',
-                borderColor: 'rgba(167, 139, 250, 0.25)',
-                color: '#ddd6fe',
+                background: 'rgba(167, 139, 250, 0.12)',
+                borderColor: 'rgba(167, 139, 250, 0.3)',
+                color: 'var(--accent-purple)',
               }}
             >
               <span>#{tag}</span>
@@ -323,7 +323,7 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
           ))}
 
           {tags.length === 0 && (
-            <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>
               No tags assigned.
             </div>
           )}

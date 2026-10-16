@@ -128,19 +128,19 @@ const SafeMarkdown: React.FC<{ text: string }> = ({ text }) => {
 
     if (trimmed.startsWith('### ')) {
       elements.push(
-        <h4 key={idx} style={{ margin: '14px 0 6px', color: '#f8fafc', fontSize: 14 }}>
+        <h4 key={idx} style={{ margin: '14px 0 6px', color: 'var(--text-main)', fontSize: 14 }}>
           {renderInline(trimmed.slice(4))}
         </h4>
       );
     } else if (trimmed.startsWith('## ')) {
       elements.push(
-        <h3 key={idx} style={{ margin: '16px 0 8px', color: '#f8fafc', fontSize: 16 }}>
+        <h3 key={idx} style={{ margin: '16px 0 8px', color: 'var(--text-main)', fontSize: 16 }}>
           {renderInline(trimmed.slice(3))}
         </h3>
       );
     } else if (trimmed.startsWith('# ')) {
       elements.push(
-        <h2 key={idx} style={{ margin: '18px 0 10px', color: '#f8fafc', fontSize: 18 }}>
+        <h2 key={idx} style={{ margin: '18px 0 10px', color: 'var(--text-main)', fontSize: 18 }}>
           {renderInline(trimmed.slice(2))}
         </h2>
       );
@@ -155,7 +155,7 @@ const SafeMarkdown: React.FC<{ text: string }> = ({ text }) => {
 
   flushList(lines.length);
 
-  return <div style={{ fontSize: 13.5, color: '#cbd5e1' }}>{elements}</div>;
+  return <div style={{ fontSize: 13.5, color: 'var(--text-main)' }}>{elements}</div>;
 };
 
 export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
@@ -344,14 +344,14 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
           flexWrap: 'wrap',
           gap: 10,
           padding: '10px 14px',
-          background: 'rgba(30, 41, 59, 0.4)',
+          background: 'var(--surface-sunken)',
           border: '1px solid var(--border-subtle)',
           borderRadius: 8,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <History size={15} color="#94a3b8" />
-          <span style={{ fontSize: 13, fontWeight: 500, color: '#e2e8f0' }}>Research Run:</span>
+          <History size={15} color="var(--text-dim)" />
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-main)' }}>Research Run:</span>
           {history.length > 0 ? (
             <select
               className="form-input"
@@ -537,7 +537,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             <div
               id="report-section-verdict"
               style={{
-                background: 'rgba(30, 41, 59, 0.5)',
+                background: 'var(--surface-sunken)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 8,
                 padding: 16,
@@ -557,16 +557,16 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   <span className={`badge ${badgeClass}`} style={{ fontSize: 13, padding: '4px 12px' }}>
                     {badgeText}
                   </span>
-                  <span style={{ fontSize: 13, color: '#94a3b8' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
                     Confidence:{' '}
-                    <strong style={{ color: '#f8fafc', textTransform: 'capitalize' }}>
+                    <strong style={{ color: 'var(--text-main)', textTransform: 'capitalize' }}>
                       {verdict.confidence || 'Medium'}
                     </strong>
                   </span>
                 </div>
                 {verdict.for_whom && (
-                  <div style={{ fontSize: 12.5, color: '#cbd5e1' }}>
-                    <span style={{ color: '#94a3b8' }}>Target:</span> <em>{verdict.for_whom}</em>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-main)' }}>
+                    <span style={{ color: 'var(--text-dim)' }}>Target:</span> <em>{verdict.for_whom}</em>
                   </div>
                 )}
               </div>
@@ -667,7 +667,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             <div
               id="report-section-claims"
               style={{
-                background: 'rgba(30, 41, 59, 0.5)',
+                background: 'var(--surface-sunken)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 8,
                 padding: 16,
@@ -680,10 +680,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   alignItems: 'center',
                   gap: 8,
                   fontSize: 14,
-                  color: '#f8fafc',
+                  color: 'var(--text-main)',
                 }}
               >
-                <CheckCircle2 size={16} color="#34d399" />
+                <CheckCircle2 size={16} color="var(--accent-emerald)" />
                 <span>Claim Verification</span>
               </h4>
 
@@ -691,10 +691,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                 <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', color: '#94a3b8', width: '35%' }}>Claim</th>
-                      <th style={{ padding: '8px 10px', color: '#94a3b8', width: '15%' }}>Status</th>
-                      <th style={{ padding: '8px 10px', color: '#94a3b8', width: '35%' }}>Rationale</th>
-                      <th style={{ padding: '8px 10px', color: '#94a3b8', width: '15%' }}>Sources</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '35%' }}>Claim</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '15%' }}>Status</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '35%' }}>Rationale</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '15%' }}>Sources</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -717,11 +717,11 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                         <tr
                           key={idx}
                           style={{
-                            borderBottom: '1px solid rgba(51, 65, 85, 0.4)',
+                            borderBottom: '1px solid var(--border-subtle)',
                             verticalAlign: 'top',
                           }}
                         >
-                          <td style={{ padding: '10px 10px', color: '#f8fafc', fontWeight: 500 }}>
+                          <td style={{ padding: '10px 10px', color: 'var(--text-main)', fontWeight: 500 }}>
                             {cl.claim}
                           </td>
                           <td style={{ padding: '10px 10px' }}>
@@ -730,7 +730,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                               <span style={{ fontWeight: 600, fontSize: 12 }}>{statusText}</span>
                             </div>
                           </td>
-                          <td style={{ padding: '10px 10px', color: '#cbd5e1', lineHeight: 1.5 }}>
+                          <td style={{ padding: '10px 10px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
                             {cl.rationale}
                           </td>
                           <td style={{ padding: '10px 10px' }}>
@@ -770,7 +770,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             <div
               id="report-section-landscape"
               style={{
-                background: 'rgba(30, 41, 59, 0.5)',
+                background: 'var(--surface-sunken)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 8,
                 padding: 16,
@@ -783,10 +783,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   alignItems: 'center',
                   gap: 8,
                   fontSize: 14,
-                  color: '#f8fafc',
+                  color: 'var(--text-main)',
                 }}
               >
-                <Compass size={16} color="#38bdf8" />
+                <Compass size={16} color="var(--accent-blue)" />
                 <span>Competitive Landscape</span>
               </h4>
 
@@ -794,10 +794,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                 <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', color: '#94a3b8', width: '25%' }}>Name</th>
-                      <th style={{ padding: '8px 10px', color: '#94a3b8', width: '35%' }}>Summary</th>
-                      <th style={{ padding: '8px 10px', color: '#94a3b8', width: '25%' }}>How It Differs</th>
-                      <th style={{ padding: '8px 10px', color: '#94a3b8', width: '15%' }}>Sources</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '25%' }}>Name</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '35%' }}>Summary</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '25%' }}>How It Differs</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '15%' }}>Sources</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -805,7 +805,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       <tr
                         key={idx}
                         style={{
-                          borderBottom: '1px solid rgba(51, 65, 85, 0.4)',
+                          borderBottom: '1px solid var(--border-subtle)',
                           verticalAlign: 'top',
                         }}
                       >
@@ -816,7 +816,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                               target="_blank"
                               rel="noopener noreferrer"
                               style={{
-                                color: '#38bdf8',
+                                color: 'var(--accent-blue)',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 4,
@@ -827,13 +827,13 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                               <ExternalLink size={12} />
                             </a>
                           ) : (
-                            <span style={{ color: '#f8fafc' }}>{item.name}</span>
+                            <span style={{ color: 'var(--text-main)' }}>{item.name}</span>
                           )}
                         </td>
-                        <td style={{ padding: '10px 10px', color: '#cbd5e1', lineHeight: 1.5 }}>
+                        <td style={{ padding: '10px 10px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
                           {item.one_liner}
                         </td>
-                        <td style={{ padding: '10px 10px', color: '#cbd5e1', lineHeight: 1.5 }}>
+                        <td style={{ padding: '10px 10px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
                           {item.how_it_differs}
                         </td>
                         <td style={{ padding: '10px 10px' }}>
@@ -880,7 +880,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             {risks.length > 0 && (
               <div
                 style={{
-                  background: 'rgba(30, 41, 59, 0.5)',
+                  background: 'var(--surface-sunken)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: 8,
                   padding: 16,
@@ -893,13 +893,13 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     alignItems: 'center',
                     gap: 8,
                     fontSize: 14,
-                    color: '#f87171',
+                    color: 'var(--color-error)',
                   }}
                 >
                   <ShieldAlert size={16} />
                   <span>Identified Risks</span>
                 </h4>
-                <ul style={{ margin: 0, paddingLeft: 18, color: '#cbd5e1', fontSize: 13, lineHeight: 1.6 }}>
+                <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-main)', fontSize: 13, lineHeight: 1.6 }}>
                   {risks.map((risk, i) => (
                     <li key={i} style={{ marginBottom: 6 }}>
                       {risk}
@@ -913,7 +913,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             {nextActions.length > 0 && (
               <div
                 style={{
-                  background: 'rgba(30, 41, 59, 0.5)',
+                  background: 'var(--surface-sunken)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: 8,
                   padding: 16,
@@ -934,7 +934,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       alignItems: 'center',
                       gap: 8,
                       fontSize: 14,
-                      color: '#38bdf8',
+                      color: 'var(--accent-blue)',
                     }}
                   >
                     <ListTodo size={16} />
@@ -970,11 +970,11 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                         alignItems: 'flex-start',
                         gap: 8,
                         fontSize: 13,
-                        color: '#cbd5e1',
+                        color: 'var(--text-main)',
                         cursor: 'pointer',
                         padding: '4px 6px',
                         borderRadius: 4,
-                        background: selectedActions[idx] ? 'rgba(56, 189, 248, 0.08)' : 'transparent',
+                        background: selectedActions[idx] ? 'var(--color-info-bg)' : 'transparent',
                       }}
                     >
                       <input
@@ -998,7 +998,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             <div
               id="report-section-findings"
               style={{
-                background: 'rgba(30, 41, 59, 0.5)',
+                background: 'var(--surface-sunken)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 8,
                 padding: 16,
@@ -1011,10 +1011,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   alignItems: 'center',
                   gap: 8,
                   fontSize: 14,
-                  color: '#f8fafc',
+                  color: 'var(--text-main)',
                 }}
               >
-                <FileText size={16} color="#94a3b8" />
+                <FileText size={16} color="var(--text-dim)" />
                 <span>Detailed Findings</span>
               </h4>
               <SafeMarkdown text={selectedRun.findings} />
@@ -1026,7 +1026,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             <div
               id="report-section-sources"
               style={{
-                background: 'rgba(30, 41, 59, 0.5)',
+                background: 'var(--surface-sunken)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 8,
                 padding: 16,
@@ -1039,10 +1039,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   alignItems: 'center',
                   gap: 8,
                   fontSize: 14,
-                  color: '#f8fafc',
+                  color: 'var(--text-main)',
                 }}
               >
-                <Sparkles size={16} color="#fbbf24" />
+                <Sparkles size={16} color="var(--accent-amber)" />
                 <span>Cited Sources ({sources.length})</span>
               </h4>
 
@@ -1053,7 +1053,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     id={`source-${s.id}`}
                     style={{
                       padding: '10px 12px',
-                      background: 'rgba(15, 23, 42, 0.6)',
+                      background: 'var(--bg-input)',
                       border: '1px solid var(--border-subtle)',
                       borderRadius: 6,
                       transition: 'all 0.3s ease',
@@ -1062,8 +1062,8 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <span
                         style={{
-                          background: 'rgba(56, 189, 248, 0.2)',
-                          color: '#38bdf8',
+                          background: 'var(--color-info-bg)',
+                          color: 'var(--accent-blue)',
                           padding: '2px 6px',
                           borderRadius: 4,
                           fontSize: 11,
@@ -1078,7 +1078,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{
-                            color: '#38bdf8',
+                            color: 'var(--accent-blue)',
                             fontSize: 13,
                             fontWeight: 600,
                             display: 'inline-flex',
@@ -1091,15 +1091,15 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                           <ExternalLink size={12} />
                         </a>
                       ) : (
-                        <span style={{ color: '#f8fafc', fontSize: 13, fontWeight: 600 }}>
+                        <span style={{ color: 'var(--text-main)', fontSize: 13, fontWeight: 600 }}>
                           {s.title || 'Untitled'}
                         </span>
                       )}
                       <span
                         style={{
                           fontSize: 11,
-                          color: '#94a3b8',
-                          background: 'rgba(51, 65, 85, 0.4)',
+                          color: 'var(--text-dim)',
+                          background: 'var(--border-subtle)',
                           padding: '1px 6px',
                           borderRadius: 4,
                           textTransform: 'uppercase',
@@ -1142,7 +1142,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
           {selectedRun && selectedRun.status === 'done' && (
             <div
               style={{
-                background: 'rgba(30, 41, 59, 0.4)',
+                background: 'var(--surface-sunken)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 8,
                 padding: '14px 18px',
@@ -1153,7 +1153,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
                   Was this research report useful?
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1164,9 +1164,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       padding: '6px 12px',
                       fontSize: 12.5,
                       borderRadius: 6,
-                      border: feedbackRating === 'thumbs_up' ? '1px solid #10b981' : '1px solid rgba(148, 163, 184, 0.2)',
-                      background: feedbackRating === 'thumbs_up' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-                      color: feedbackRating === 'thumbs_up' ? '#34d399' : '#cbd5e1',
+                      border: feedbackRating === 'thumbs_up' ? '1px solid #10b981' : '1px solid var(--border-subtle)',
+                      background: feedbackRating === 'thumbs_up' ? 'var(--color-success-bg)' : 'transparent',
+                      color: feedbackRating === 'thumbs_up' ? 'var(--color-success-text)' : 'var(--text-dim)',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 6,
@@ -1185,9 +1185,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       padding: '6px 12px',
                       fontSize: 12.5,
                       borderRadius: 6,
-                      border: feedbackRating === 'thumbs_down' ? '1px solid #ef4444' : '1px solid rgba(148, 163, 184, 0.2)',
-                      background: feedbackRating === 'thumbs_down' ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
-                      color: feedbackRating === 'thumbs_down' ? '#f87171' : '#cbd5e1',
+                      border: feedbackRating === 'thumbs_down' ? '1px solid #ef4444' : '1px solid var(--border-subtle)',
+                      background: feedbackRating === 'thumbs_down' ? 'var(--color-error-bg)' : 'transparent',
+                      color: feedbackRating === 'thumbs_down' ? 'var(--color-error-text)' : 'var(--text-dim)',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 6,
@@ -1211,11 +1211,11 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     onChange={(e) => setFeedbackComment(e.target.value)}
                     style={{
                       flex: 1,
-                      background: 'rgba(15, 23, 42, 0.6)',
-                      border: '1px solid rgba(148, 163, 184, 0.2)',
+                      background: 'var(--bg-input)',
+                      border: '1px solid var(--border-input)',
                       borderRadius: 6,
                       padding: '6px 10px',
-                      color: '#f8fafc',
+                      color: 'var(--text-main)',
                       fontSize: 12,
                     }}
                     onKeyDown={(e) => {
@@ -1246,12 +1246,12 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
           style={{
             padding: 32,
             textAlign: 'center',
-            background: 'rgba(30, 41, 59, 0.3)',
+            background: 'var(--surface-sunken)',
             borderRadius: 8,
             border: '1px dashed var(--border-subtle)',
           }}
         >
-          <p style={{ color: '#94a3b8', margin: '0 0 12px', fontSize: 13 }}>
+          <p style={{ color: 'var(--text-dim)', margin: '0 0 12px', fontSize: 13 }}>
             No research report generated for this card yet.
           </p>
           <button type="button" className="btn-primary" onClick={() => handleReRun()} disabled={loading}>

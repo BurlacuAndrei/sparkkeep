@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 export function getPlatformInfo(url?: string): { name: string; icon: React.ReactNode; color: string } {
-  if (!url) return { name: 'Web', icon: <Globe size={11} />, color: '#94a3b8' };
+  if (!url) return { name: 'Web', icon: <Globe size={11} />, color: 'var(--text-dim, #64748b)' };
   const lower = url.toLowerCase();
   if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
     return { name: 'YouTube', icon: <Video size={11} />, color: '#ef4444' };
@@ -22,7 +22,7 @@ export function getPlatformInfo(url?: string): { name: string; icon: React.React
     return { name: 'Facebook', icon: <Share2 size={11} />, color: '#3b82f6' };
   }
   if (lower.includes('github.com')) {
-    return { name: 'GitHub', icon: <Code2 size={11} />, color: '#cbd5e1' };
+    return { name: 'GitHub', icon: <Code2 size={11} />, color: 'var(--text-main, #334155)' };
   }
   if (lower.includes('twitter.com') || lower.includes('x.com')) {
     return { name: 'X', icon: <AtSign size={11} />, color: '#38bdf8' };
@@ -30,7 +30,7 @@ export function getPlatformInfo(url?: string): { name: string; icon: React.React
   if (lower.includes('t.me') || lower.includes('telegram.me')) {
     return { name: 'Telegram', icon: <Send size={11} />, color: '#0ea5e9' };
   }
-  return { name: 'Web', icon: <Globe size={11} />, color: '#94a3b8' };
+  return { name: 'Web', icon: <Globe size={11} />, color: 'var(--text-dim, #64748b)' };
 }
 
 export function formatRelativeAge(dateStr?: string): string {

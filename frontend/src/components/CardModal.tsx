@@ -711,10 +711,10 @@ export const CardModal: React.FC<CardModalProps> = ({
             </div>
 
             {research?.result?.verdict && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-main)' }}>
                 {research.result.verdict.for_whom && (
                   <div>
-                    <strong style={{ color: '#f1f5f9' }}>For Whom: </strong>
+                    <strong style={{ color: 'var(--text-main)' }}>For Whom: </strong>
                     <span>{research.result.verdict.for_whom}</span>
                   </div>
                 )}
@@ -1269,7 +1269,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                           >
                             {st}
                           </span>
-                          <span style={{ flex: 1, fontSize: 13, color: '#e2e8f0' }}>{claim}</span>
+                          <span style={{ flex: 1, fontSize: 13, color: 'var(--text-main)' }}>{claim}</span>
                         </div>
                       );
                     })}
@@ -1326,7 +1326,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       {claims.map((claim, idx) => (
                         <div key={idx} className="action-item" style={{ alignItems: 'center' }}>
                           <span style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>•</span>
-                          <span style={{ flex: 1, fontSize: 13, color: '#e2e8f0' }}>{claim}</span>
+                          <span style={{ flex: 1, fontSize: 13, color: 'var(--text-main)' }}>{claim}</span>
                         </div>
                       ))}
                     </div>
@@ -1472,12 +1472,12 @@ export const CardModal: React.FC<CardModalProps> = ({
             {/* 1. Source Provenance */}
             <div className="rail-section">
               <div className="rail-section-title">
-                <FileCode size={13} color="#38bdf8" />
+                <FileCode size={13} color="var(--accent-blue)" />
                 <span>Source Provenance</span>
               </div>
               <div
                 style={{
-                  background: 'rgba(255, 255, 255, 0.02)',
+                  background: 'var(--bg-input)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: 6,
                   padding: 10,
@@ -1488,8 +1488,8 @@ export const CardModal: React.FC<CardModalProps> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ color: platform.color }}>{platform.icon}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#f1f5f9' }}>{platform.name}</span>
-                  <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{platform.name}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-faint)', marginLeft: 'auto' }}>
                     {formatRelativeAge(card.created_at)}
                   </span>
                 </div>
@@ -1501,7 +1501,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                     rel="noreferrer"
                     style={{
                       fontSize: 11.5,
-                      color: '#38bdf8',
+                      color: 'var(--accent-blue)',
                       textDecoration: 'none',
                       display: 'flex',
                       alignItems: 'center',
@@ -1530,12 +1530,12 @@ export const CardModal: React.FC<CardModalProps> = ({
             {/* 2. From Same Source (Siblings) */}
             <div className="rail-section">
               <div className="rail-section-title">
-                <Layers size={13} color="#a78bfa" />
+                <Layers size={13} color="var(--accent-purple)" />
                 <span>From Same Source ({siblings.length})</span>
               </div>
 
               {siblings.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>
                   Single idea from this source.
                 </div>
               ) : (
@@ -1546,7 +1546,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       onClick={() => onSelectCard?.(sib)}
                       style={{
                         padding: '6px 8px',
-                        background: 'rgba(255, 255, 255, 0.02)',
+                        background: 'var(--bg-input)',
                         border: '1px solid var(--border-subtle)',
                         borderRadius: 6,
                         cursor: 'pointer',
@@ -1557,7 +1557,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0' }} className="line-clamp-1">
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }} className="line-clamp-1">
                           {sib.title}
                         </span>
                         <span
@@ -1565,14 +1565,14 @@ export const CardModal: React.FC<CardModalProps> = ({
                             fontSize: 9.5,
                             textTransform: 'uppercase',
                             fontWeight: 700,
-                            color: sib.status === 'done' ? '#34d399' : '#38bdf8',
+                            color: sib.status === 'done' ? 'var(--accent-emerald)' : 'var(--accent-blue)',
                           }}
                         >
                           {sib.status}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 11, color: '#64748b' }}>#{sib.id}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>#{sib.id}</span>
                         <button
                           type="button"
                           className="btn-secondary"
@@ -1637,8 +1637,8 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {capture?.source_url && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', marginBottom: 4 }}>SOURCE URL</div>
-                  <a href={capture.source_url} target="_blank" rel="noreferrer" style={{ color: '#38bdf8', fontSize: 12.5 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>SOURCE URL</div>
+                  <a href={capture.source_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', fontSize: 12.5 }}>
                     {capture.source_url}
                   </a>
                 </div>
@@ -1646,8 +1646,8 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               {capture?.caption && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', marginBottom: 4 }}>CAPTION / SUMMARY</div>
-                  <div style={{ fontSize: 13, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.02)', padding: 10, borderRadius: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>CAPTION / SUMMARY</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-main)', background: 'var(--surface-sunken)', padding: 10, borderRadius: 6 }}>
                     {capture.caption}
                   </div>
                 </div>
@@ -1655,8 +1655,8 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               {capture?.transcript && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', marginBottom: 4 }}>TRANSCRIPT EXCERPT</div>
-                  <div style={{ fontSize: 12.5, color: '#cbd5e1', maxHeight: 200, overflowY: 'auto', background: 'rgba(255, 255, 255, 0.02)', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>TRANSCRIPT EXCERPT</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-main)', maxHeight: 200, overflowY: 'auto', background: 'var(--surface-sunken)', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap' }}>
                     {capture.transcript}
                   </div>
                 </div>
@@ -1664,8 +1664,8 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               {capture?.text && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', marginBottom: 4 }}>RAW EXTRACTED TEXT</div>
-                  <div style={{ fontSize: 12.5, color: '#cbd5e1', maxHeight: 200, overflowY: 'auto', background: 'rgba(255, 255, 255, 0.02)', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>RAW EXTRACTED TEXT</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-main)', maxHeight: 200, overflowY: 'auto', background: 'var(--surface-sunken)', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap' }}>
                     {capture.text}
                   </div>
                 </div>
@@ -1673,8 +1673,8 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               {note && !capture && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', marginBottom: 4 }}>SOURCE NOTE</div>
-                  <div style={{ fontSize: 13, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.02)', padding: 10, borderRadius: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>SOURCE NOTE</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-main)', background: 'var(--surface-sunken)', padding: 10, borderRadius: 6 }}>
                     {note}
                   </div>
                 </div>
@@ -1690,21 +1690,21 @@ export const CardModal: React.FC<CardModalProps> = ({
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Split size={16} color="#38bdf8" />
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Split Card #{card.id} into Two</h3>
+                <Split size={16} color="var(--accent-blue)" />
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-main)' }}>Split Card #{card.id} into Two</h3>
               </div>
               <button type="button" className="close-btn" onClick={() => setIsSplitModalOpen(false)}>
                 <X size={16} />
               </button>
             </div>
 
-            <p style={{ fontSize: 12.5, color: '#94a3b8', margin: '0 0 12px 0' }}>
+            <p style={{ fontSize: 12.5, color: 'var(--text-dim)', margin: '0 0 12px 0' }}>
               Select which claims or topics should move to the second card. Both cards will share the same source capture.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0', display: 'block', marginBottom: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)', display: 'block', marginBottom: 4 }}>
                   Card B Title
                 </label>
                 <input
@@ -1717,7 +1717,7 @@ export const CardModal: React.FC<CardModalProps> = ({
               </div>
 
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0', display: 'block', marginBottom: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)', display: 'block', marginBottom: 4 }}>
                   Select Claims to Move to Card B
                 </label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
