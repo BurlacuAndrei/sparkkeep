@@ -770,6 +770,48 @@ describe('PlaybookManager Recipe Archetypes & Prompt Freedom', () => {
       fireEvent.click(refsCheckbox);
       expect(refsChip?.classList.contains('active')).toBe(true);
     });
+
+    it('renders contextual in-line step inserters and opens quick-add palette to insert custom steps at exact indices', async () => {
+      render(<PlaybookManager showToast={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /New Playbook/i }));
+
+      // In-line inserter buttons are rendered between steps
+      expect(screen.getByTestId('inline-step-inserter-0')).toBeDefined();
+      expect(screen.getByTestId('inline-step-inserter-1')).toBeDefined();
+      expect(screen.getByTestId('inline-step-inserter-2')).toBeDefined();
+
+      // Click in-line inserter between Grounding (pos 1) and Targeted Search (pos 2)
+      fireEvent.click(screen.getByTestId('inline-step-inserter-1'));
+
+      // Quick-Add Palette popover should be visible
+      const palette = screen.getByTestId('quick-add-palette');
+      expect(palette).toBeDefined();
+      expect(palette.textContent).toContain('Insert Step at Position 2 of 5');
+
+      // Click "Create Blank Custom Step"
+      const blankBtn = screen.getByTestId('add-blank-step-btn');
+      fireEvent.click(blankBtn);
+
+      // Step is inserted at index 1 (position 2)
+      await waitFor(() => {
+        expect(screen.queryByTestId('quick-add-palette')).toBeNull();
+      });
+
+      const timeline = screen.getByTestId('pipeline-timeline');
+      const stepNames = Array.from(timeline.querySelectorAll('.pb-step-name')).map((el) => el.textContent);
+      expect(stepNames[0]).toBe('Grounding');
+      expect(stepNames[1]).toBe('Custom Analysis');
+      expect(stepNames[2]).toBe('Targeted Search');
+
+      // Newly inserted step is expanded in edit mode
+      const stepNameInput = screen.getByLabelText(/Step Display Name/i) as HTMLInputElement;
+      expect(stepNameInput.value).toBe('Custom Analysis');
+    });
   });
 });
 

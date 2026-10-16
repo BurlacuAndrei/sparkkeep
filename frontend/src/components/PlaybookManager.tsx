@@ -446,6 +446,8 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast }) =
           onSaveStepToLibrary={handleSaveStepToLibrary}
           onOpenAddStepModal={handleOpenAddStepModal}
           showToast={showToast}
+          libraryTemplates={libraryTemplates}
+          userStepTemplates={userStepTemplates}
         />
       )}
 

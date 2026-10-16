@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertCircle,
   Layers,
@@ -10,10 +10,11 @@ import {
   ChevronDown,
   Trash2,
 } from 'lucide-react';
-import { Playbook, PlaybookStep, CustomStepConfig } from '../../types';
-import { CORE_STEP_DESCRIPTIONS, STEP_STAGE_LABELS } from './constants';
+import { Playbook, PlaybookStep, CustomStepConfig, StepLibraryTemplate } from '../../types';
+import { CORE_STEP_DESCRIPTIONS, STEP_STAGE_LABELS, UserSavedStepTemplate } from './constants';
 import { StepEditorModal } from './StepEditorModal';
 import { PlaybookHealthInspector } from './PlaybookHealthInspector';
+import { QuickAddPalette } from './QuickAddPalette';
 
 export interface PlaybookCanvasProps {
   playbook: Playbook;
@@ -27,6 +28,8 @@ export interface PlaybookCanvasProps {
   onSaveStepToLibrary: (step: PlaybookStep) => void;
   onOpenAddStepModal: () => void;
   showToast: (msg: string) => void;
+  libraryTemplates?: StepLibraryTemplate[];
+  userStepTemplates?: UserSavedStepTemplate[];
 }
 
 export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
@@ -41,7 +44,63 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
   onSaveStepToLibrary,
   onOpenAddStepModal,
   showToast,
+  libraryTemplates = [],
+  userStepTemplates = [],
 }) => {
+  const [activeInsertIndex, setActiveInsertIndex] = useState<number | null>(null);
+
+  const insertStepAtIndex = (insertIdx: number, newStep: PlaybookStep) => {
+    if (playbook.steps.length >= 12) {
+      showToast('Maximum 12 steps allowed per playbook');
+      return;
+    }
+    const steps = [...playbook.steps];
+    steps.splice(insertIdx, 0, newStep);
+    steps.forEach((s, i) => (s.position = i + 1));
+    onChangePlaybook({ ...playbook, steps });
+    setActiveInsertIndex(null);
+    onToggleExpandStep(insertIdx);
+    showToast(`Inserted step "${newStep.name}" at position ${insertIdx + 1}`);
+  };
+
+  const handleAddBlankAt = (insertIdx: number, customName?: string) => {
+    const stepName = customName || 'Custom Analysis';
+    insertStepAtIndex(insertIdx, {
+      position: insertIdx + 1,
+      kind: 'custom',
+      name: stepName,
+      enabled: true,
+      config: {
+        output_heading: stepName,
+        instruction: 'Analyze the card context and extracted sources.',
+        tool_policy: 'none',
+        role: 'research_synthesis',
+        inputs: ['capture', 'sources', 'previous_steps'],
+        max_queries: 2,
+      },
+    });
+  };
+
+  const handleAddTemplateAt = (
+    insertIdx: number,
+    tpl: StepLibraryTemplate | UserSavedStepTemplate
+  ) => {
+    insertStepAtIndex(insertIdx, {
+      position: insertIdx + 1,
+      kind: 'custom',
+      name: tpl.name,
+      enabled: true,
+      config: {
+        output_heading: tpl.heading,
+        instruction: tpl.instruction,
+        tool_policy: tpl.tool_policy,
+        role: tpl.role,
+        inputs:
+          'inputs' in tpl && tpl.inputs ? tpl.inputs : ['capture', 'sources', 'previous_steps'],
+        max_queries: tpl.max_queries || 2,
+      },
+    });
+  };
   const moveStep = (fromIdx: number, toIdx: number) => {
     if (toIdx < 0 || toIdx >= playbook.steps.length) return;
     const steps = [...playbook.steps];
@@ -184,6 +243,33 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
           </div>
 
           <div className="pb-steps-list pb-timeline-list" data-testid="pipeline-timeline">
+            {/* Top In-Line Inserter (Position 0 / Step 1) */}
+            <div className="pb-inline-inserter-row">
+              <div className="pb-inline-inserter-line" aria-hidden="true" />
+              <button
+                type="button"
+                className="pb-inline-inserter-btn"
+                data-testid="inline-step-inserter-0"
+                onClick={() => setActiveInsertIndex(activeInsertIndex === 0 ? null : 0)}
+                title="Insert step at position 1"
+                aria-label="Insert step at position 1"
+              >
+                <Plus size={11} />
+                <span>Insert Step</span>
+              </button>
+              {activeInsertIndex === 0 && (
+                <QuickAddPalette
+                  insertIndex={0}
+                  totalSteps={playbook.steps.length}
+                  onClose={() => setActiveInsertIndex(null)}
+                  onAddBlank={(name) => handleAddBlankAt(0, name)}
+                  onAddTemplate={(tpl) => handleAddTemplateAt(0, tpl)}
+                  libraryTemplates={libraryTemplates}
+                  userStepTemplates={userStepTemplates}
+                />
+              )}
+            </div>
+
             {playbook.steps.map((step, idx) => {
               const isExpanded = !!expandedSteps[idx];
               const stageLabel = STEP_STAGE_LABELS[step.kind] || 'Synthesis';
@@ -192,153 +278,186 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
               const maxQueries = step.config?.max_queries ?? 2;
 
               return (
-                <div key={idx} className="pb-timeline-item">
-                  {/* Left Timeline Node & Connector Rail */}
-                  <div className="pb-timeline-track">
+                <React.Fragment key={idx}>
+                  <div className="pb-timeline-item">
+                    {/* Left Timeline Node & Connector Rail */}
+                    <div className="pb-timeline-track">
+                      <div
+                        className={`pb-timeline-node ${!step.enabled ? 'disabled' : ''} ${
+                          isExpanded ? 'active' : ''
+                        }`}
+                      >
+                        <span className="pb-step-pos">{idx + 1}</span>
+                      </div>
+                      {idx < playbook.steps.length - 1 && (
+                        <div className="pb-timeline-rail" aria-hidden="true" />
+                      )}
+                    </div>
+
+                    {/* Right Timeline Step Card */}
                     <div
-                      className={`pb-timeline-node ${!step.enabled ? 'disabled' : ''} ${
-                        isExpanded ? 'active' : ''
+                      className={`pb-step-row pb-timeline-card ${!step.enabled ? 'disabled' : ''} ${
+                        isExpanded ? 'expanded' : ''
                       }`}
                     >
-                      <span className="pb-step-pos">{idx + 1}</span>
+                      <div
+                        className="pb-step-main"
+                        onClick={() => onToggleExpandStep(idx)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {/* Reorder Controls */}
+                        <div
+                          className="pb-step-reorder"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            disabled={idx === 0}
+                            onClick={() => moveStep(idx, idx - 1)}
+                            title="Move Up"
+                            aria-label={`Move ${step.name} up`}
+                          >
+                            <ArrowUp size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            disabled={idx === playbook.steps.length - 1}
+                            onClick={() => moveStep(idx, idx + 1)}
+                            title="Move Down"
+                            aria-label={`Move ${step.name} down`}
+                          >
+                            <ArrowDown size={12} />
+                          </button>
+                        </div>
+
+                        {/* Enable toggle */}
+                        <label
+                          className="pb-toggle"
+                          title="Toggle step enabled"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={step.enabled}
+                            onChange={() => toggleStepEnabled(idx)}
+                          />
+                          <span className="pb-slider" />
+                        </label>
+
+                        {/* Step Title, Stage Badge & Tool Policy Chip */}
+                        <div className="pb-step-info">
+                          <div className="pb-step-line">
+                            <strong className="pb-step-name">{step.name}</strong>
+                            <span
+                              className={`pb-stage-badge stage-${stageLabel.toLowerCase()}`}
+                              data-testid={`step-stage-badge-${idx}`}
+                            >
+                              {stageLabel}
+                            </span>
+                            <span className={`pb-kind-badge ${step.kind}`}>{step.kind}</span>
+                            {effectiveToolPolicy === 'search' ? (
+                              <span
+                                className="pb-tool-badge pb-tool-chip search"
+                                data-testid={`step-tool-chip-${idx}`}
+                                title="Web search enabled"
+                              >
+                                🔍 Web Search ({maxQueries}{' '}
+                                {maxQueries === 1 ? 'query' : 'queries'})
+                              </span>
+                            ) : (
+                              <span
+                                className="pb-tool-badge pb-tool-chip reasoning"
+                                data-testid={`step-tool-chip-${idx}`}
+                                title="Source reasoning over existing context"
+                              >
+                                🧠 Source Reasoning
+                              </span>
+                            )}
+                          </div>
+                          <p className="pb-step-desc">
+                            {step.config?.instruction
+                              ? step.config.instruction.slice(0, 90) +
+                                (step.config.instruction.length > 90 ? '…' : '')
+                              : CORE_STEP_DESCRIPTIONS[step.kind] || ''}
+                          </p>
+                        </div>
+
+                        {/* Actions */}
+                        <div
+                          className="pb-step-actions"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            onClick={() => onToggleExpandStep(idx)}
+                            title={isExpanded ? 'Collapse config' : 'Edit config'}
+                            aria-label={
+                              isExpanded
+                                ? `Collapse ${step.name} config`
+                                : `Edit ${step.name} config`
+                            }
+                          >
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-icon btn-danger"
+                            onClick={() => removeStep(idx)}
+                            title="Delete step"
+                            aria-label={`Delete ${step.name}`}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* In-Place Focused Step Configuration Editor */}
+                      {isExpanded && (
+                        <StepEditorModal
+                          step={step}
+                          onUpdateConfig={(patch, newName) =>
+                            updateStepConfig(idx, patch, newName)
+                          }
+                          onSaveToLibrary={onSaveStepToLibrary}
+                        />
+                      )}
                     </div>
-                    {idx < playbook.steps.length - 1 && (
-                      <div className="pb-timeline-rail" aria-hidden="true" />
-                    )}
                   </div>
 
-                  {/* Right Timeline Step Card */}
-                  <div
-                    className={`pb-step-row pb-timeline-card ${!step.enabled ? 'disabled' : ''} ${
-                      isExpanded ? 'expanded' : ''
-                    }`}
-                  >
-                    <div
-                      className="pb-step-main"
-                      onClick={() => onToggleExpandStep(idx)}
-                      style={{ cursor: 'pointer' }}
+                  {/* Subsequent In-Line Inserter (after step idx) */}
+                  <div className="pb-inline-inserter-row">
+                    <div className="pb-inline-inserter-line" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="pb-inline-inserter-btn"
+                      data-testid={`inline-step-inserter-${idx + 1}`}
+                      onClick={() =>
+                        setActiveInsertIndex(
+                          activeInsertIndex === idx + 1 ? null : idx + 1
+                        )
+                      }
+                      title={`Insert step at position ${idx + 2}`}
+                      aria-label={`Insert step at position ${idx + 2}`}
                     >
-                      {/* Reorder Controls */}
-                      <div
-                        className="pb-step-reorder"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          disabled={idx === 0}
-                          onClick={() => moveStep(idx, idx - 1)}
-                          title="Move Up"
-                          aria-label={`Move ${step.name} up`}
-                        >
-                          <ArrowUp size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          disabled={idx === playbook.steps.length - 1}
-                          onClick={() => moveStep(idx, idx + 1)}
-                          title="Move Down"
-                          aria-label={`Move ${step.name} down`}
-                        >
-                          <ArrowDown size={12} />
-                        </button>
-                      </div>
-
-                      {/* Enable toggle */}
-                      <label
-                        className="pb-toggle"
-                        title="Toggle step enabled"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={step.enabled}
-                          onChange={() => toggleStepEnabled(idx)}
-                        />
-                        <span className="pb-slider" />
-                      </label>
-
-                      {/* Step Title, Stage Badge & Tool Policy Chip */}
-                      <div className="pb-step-info">
-                        <div className="pb-step-line">
-                          <strong className="pb-step-name">{step.name}</strong>
-                          <span
-                            className={`pb-stage-badge stage-${stageLabel.toLowerCase()}`}
-                            data-testid={`step-stage-badge-${idx}`}
-                          >
-                            {stageLabel}
-                          </span>
-                          <span className={`pb-kind-badge ${step.kind}`}>{step.kind}</span>
-                          {effectiveToolPolicy === 'search' ? (
-                            <span
-                              className="pb-tool-badge pb-tool-chip search"
-                              data-testid={`step-tool-chip-${idx}`}
-                              title="Web search enabled"
-                            >
-                              🔍 Web Search ({maxQueries}{' '}
-                              {maxQueries === 1 ? 'query' : 'queries'})
-                            </span>
-                          ) : (
-                            <span
-                              className="pb-tool-badge pb-tool-chip reasoning"
-                              data-testid={`step-tool-chip-${idx}`}
-                              title="Source reasoning over existing context"
-                            >
-                              🧠 Source Reasoning
-                            </span>
-                          )}
-                        </div>
-                        <p className="pb-step-desc">
-                          {step.config?.instruction
-                            ? step.config.instruction.slice(0, 90) +
-                              (step.config.instruction.length > 90 ? '…' : '')
-                            : CORE_STEP_DESCRIPTIONS[step.kind] || ''}
-                        </p>
-                      </div>
-
-                      {/* Actions */}
-                      <div
-                        className="pb-step-actions"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          onClick={() => onToggleExpandStep(idx)}
-                          title={isExpanded ? 'Collapse config' : 'Edit config'}
-                          aria-label={
-                            isExpanded
-                              ? `Collapse ${step.name} config`
-                              : `Edit ${step.name} config`
-                          }
-                        >
-                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-icon btn-danger"
-                          onClick={() => removeStep(idx)}
-                          title="Delete step"
-                          aria-label={`Delete ${step.name}`}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* In-Place Focused Step Configuration Editor */}
-                    {isExpanded && (
-                      <StepEditorModal
-                        step={step}
-                        onUpdateConfig={(patch, newName) =>
-                          updateStepConfig(idx, patch, newName)
-                        }
-                        onSaveToLibrary={onSaveStepToLibrary}
+                      <Plus size={11} />
+                      <span>Insert Step</span>
+                    </button>
+                    {activeInsertIndex === idx + 1 && (
+                      <QuickAddPalette
+                        insertIndex={idx + 1}
+                        totalSteps={playbook.steps.length}
+                        onClose={() => setActiveInsertIndex(null)}
+                        onAddBlank={(name) => handleAddBlankAt(idx + 1, name)}
+                        onAddTemplate={(tpl) => handleAddTemplateAt(idx + 1, tpl)}
+                        libraryTemplates={libraryTemplates}
+                        userStepTemplates={userStepTemplates}
                       />
                     )}
                   </div>
-                </div>
+                </React.Fragment>
               );
             })}
           </div>
