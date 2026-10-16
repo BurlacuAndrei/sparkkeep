@@ -98,6 +98,28 @@
   --accent-indigo: #6366f1;
   --accent-amber: #f59e0b;
   --accent-rose: #f43f5e;
+  --accent: var(--accent-indigo);
+
+  /* Semantic Status Tokens */
+  --surface-sunken: #0c0e14;
+  --bg-surface-sunken: #0c0e14;
+  --text-secondary: var(--text-dim);
+  --color-error: #f43f5e;
+  --color-error-text: #fecdd3;
+  --color-error-bg: rgba(244, 63, 94, 0.15);
+  --color-error-border: rgba(244, 63, 94, 0.3);
+  --color-warning: #f59e0b;
+  --color-warning-text: #fde68a;
+  --color-warning-bg: rgba(245, 158, 11, 0.15);
+  --color-warning-border: rgba(245, 158, 11, 0.3);
+  --color-success: #10b981;
+  --color-success-text: #a7f3d0;
+  --color-success-bg: rgba(16, 185, 129, 0.15);
+  --color-success-border: rgba(16, 185, 129, 0.3);
+  --color-info: #38bdf8;
+  --color-info-text: #bae6fd;
+  --color-info-bg: rgba(56, 189, 248, 0.15);
+  --color-info-border: rgba(56, 189, 248, 0.3);
 
   /* Elevation & Shadows */
   --shadow-glow: 0 0 20px -5px rgba(99, 102, 241, 0.18);
@@ -156,6 +178,28 @@
   --accent-indigo: #4f46e5;
   --accent-amber: #d97706;
   --accent-rose: #e11d48;
+  --accent: var(--accent-indigo);
+
+  /* Semantic Status Tokens */
+  --surface-sunken: #f1f5f9;
+  --bg-surface-sunken: #f1f5f9;
+  --text-secondary: var(--text-dim);
+  --color-error: #e11d48;
+  --color-error-text: #9f1239;
+  --color-error-bg: #fff1f2;
+  --color-error-border: #fecdd3;
+  --color-warning: #d97706;
+  --color-warning-text: #92400e;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-success: #059669;
+  --color-success-text: #065f46;
+  --color-success-bg: #ecfdf5;
+  --color-success-border: #a7f3d0;
+  --color-info: #0284c7;
+  --color-info-text: #075985;
+  --color-info-bg: #f0f9ff;
+  --color-info-border: #bae6fd;
 
   /* Elevation & Shadows */
   --shadow-glow: 0 0 20px -5px rgba(99, 102, 241, 0.12);
@@ -214,6 +258,28 @@
   --accent-indigo: #6366f1;
   --accent-amber: #f59e0b;
   --accent-rose: #f43f5e;
+  --accent: var(--accent-indigo);
+
+  /* Semantic Status Tokens */
+  --surface-sunken: #000000;
+  --bg-surface-sunken: #000000;
+  --text-secondary: var(--text-dim);
+  --color-error: #f43f5e;
+  --color-error-text: #fecdd3;
+  --color-error-bg: rgba(244, 63, 94, 0.2);
+  --color-error-border: rgba(244, 63, 94, 0.4);
+  --color-warning: #f59e0b;
+  --color-warning-text: #fde68a;
+  --color-warning-bg: rgba(245, 158, 11, 0.2);
+  --color-warning-border: rgba(245, 158, 11, 0.4);
+  --color-success: #10b981;
+  --color-success-text: #a7f3d0;
+  --color-success-bg: rgba(16, 185, 129, 0.2);
+  --color-success-border: rgba(16, 185, 129, 0.4);
+  --color-info: #38bdf8;
+  --color-info-text: #bae6fd;
+  --color-info-bg: rgba(56, 189, 248, 0.2);
+  --color-info-border: rgba(56, 189, 248, 0.4);
 
   /* Elevation & Shadows */
   --shadow-glow: 0 0 20px -5px rgba(99, 102, 241, 0.25);
