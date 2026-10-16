@@ -570,28 +570,57 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  padding: 14px 16px;
-  transition: all 0.18s ease;
+  padding: 16px;
+  gap: 10px;
+  transition: all 0.2s ease;
+  position: relative;
+  box-shadow: var(--shadow-card);
 }
 
 .pb-card:hover {
-  border-color: rgba(99, 102, 241, 0.4);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1px);
 }
 
 .pb-card.builtin {
-  border-left: 3px solid #818cf8;
+  border-left: 3px solid var(--accent-indigo);
 }
 
 .pb-card.custom {
-  border-left: 3px solid #34d399;
+  border-left: 3px solid var(--accent-emerald);
+}
+
+.pb-card.is-default {
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35), var(--shadow-card);
 }
 
 .pb-card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.pb-card-badges-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pb-card-default-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-indigo);
+  border: 1px solid rgba(99, 102, 241, 0.3);
 }
 
 .pb-card-badge {
@@ -610,13 +639,67 @@
 
 .pb-card-badge.custom {
   background: rgba(52, 211, 153, 0.15);
-  color: #34d399;
+  color: var(--accent-emerald);
 }
 
 .pb-card-steps {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-dim);
+}
+
+.pb-card-flow-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  margin-top: 2px;
+}
+
+.pb-card-flow-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  background: var(--bg-input);
+  padding: 2px 6px;
+  border-radius: 4px;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pb-card-flow-arrow {
+  font-size: 9px;
+  color: var(--text-faint);
+}
+
+.pb-card-flow-more {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding-left: 2px;
+}
+
+.pb-card-types-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pb-card-type-chip {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .pb-card-name {
