@@ -18,6 +18,7 @@
 - **Dynamic Taxonomy:** All card type options and chips must consume the active taxonomy from `/api/v1/settings/card-types`, with fallbacks strictly reflecting backend `DefaultCardTypes`.
 - **Component Sizing & Prop Cohesion:** UI components should adhere to single responsibility. Complex canvases, inspectors, and modal sheets must be split into dedicated domain subcomponents. Group related component state and callbacks into cohesive domain interfaces (e.g. `platformSettings`, `inspectorControls`) rather than flat argument clumps exceeding 8–10 props.
 - **Modular Feature Styles:** Feature-specific CSS belongs in dedicated stylesheets under `frontend/src/styles/<feature>.css` (imported in `index.css`), preserving `components.css` strictly for shared primitive widgets.
+- **Form Modernization Contract:** When modernizing existing forms, prefer styling the native `<select className="input-select">` with custom SVG chevrons and focus rings if existing test suites fire native change events directly against the DOM element. Reserve `CustomSelect` for interactive dropdowns that benefit from rich icons, search filters, or custom options, and update corresponding test harnesses to click option items.
 
 ## 4. CI Invariants
 Every commit must satisfy:
