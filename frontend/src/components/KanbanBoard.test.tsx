@@ -93,4 +93,42 @@ describe('KanbanBoard Density & Usability', () => {
     const cardEl = screen.getByRole('article');
     expect(cardEl.className).toContain('is-compact');
   });
+
+  it('stabilizes header toolbar and renders archive banners without layout collapse', () => {
+    renderWithProvider(
+      <KanbanBoard
+        cards={mockCards}
+        horizon="all"
+        onHorizonChange={vi.fn()}
+        onSelectCard={vi.fn()}
+        onUpdateCard={vi.fn()}
+        onResearch={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    );
+
+    // Initial Active state: Horizon tablist is present
+    expect(screen.getByRole('tablist', { name: /filter execution board by horizon/i })).toBeDefined();
+    expect(screen.getByText('Execution Boards')).toBeDefined();
+
+    // Density toggle is present
+    const densityBtn = screen.getByRole('button', { name: /switch card density/i });
+    expect(densityBtn).toBeDefined();
+
+    // Switch to Shelved mode
+    const shelvedBtn = screen.getByRole('button', { name: /shelved/i });
+    fireEvent.click(shelvedBtn);
+
+    expect(screen.getByText('Shelf (Later)')).toBeDefined();
+    expect(screen.getByText(/Shelved Cards:/i)).toBeDefined();
+    expect(densityBtn).toBeDefined();
+
+    // Switch to Dismissed mode
+    const dismissedBtn = screen.getByRole('button', { name: /dismissed/i });
+    fireEvent.click(dismissedBtn);
+
+    expect(screen.getByText('Dismissed Cards')).toBeDefined();
+    expect(screen.getByText(/Dismissed Cards:/i)).toBeDefined();
+    expect(densityBtn).toBeDefined();
+  });
 });

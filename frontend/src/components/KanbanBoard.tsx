@@ -146,137 +146,180 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   return (
     <div>
-      {/* Board Mode & Filters Bar */}
-      <div className="board-header-bar" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h2 id="main-heading" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>{boardMode === 'active' ? 'Execution Boards' : boardMode === 'shelved' ? 'Shelf (Later)' : 'Dismissed Cards'}</span>
-            <span style={{ fontSize: 12, fontWeight: 500, color: '#64748b' }}>
-              ({boardMode === 'active'
-                ? `${displayedCards.length}${activeHorizon !== 'all' && displayedCards.length !== boardCards.length ? ` of ${boardCards.length}` : ''} ${displayedCards.length === 1 ? 'card' : 'cards'}`
-                : boardMode === 'shelved'
-                ? `${shelvedCards.length} cards`
-                : `${dismissedCards.length} cards`})
-            </span>
-          </h2>
+      {/* 2-Tier Stable Board Header (Eliminates CLS) */}
+      <div className="board-header-container" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        {/* Tier 1: Main Control Toolbar (fixed geometry across all modes) */}
+        <div className="board-header-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 38 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <h2 id="main-heading" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{boardMode === 'active' ? 'Execution Boards' : boardMode === 'shelved' ? 'Shelf (Later)' : 'Dismissed Cards'}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-dim)' }}>
+                ({boardMode === 'active'
+                  ? `${displayedCards.length}${activeHorizon !== 'all' && displayedCards.length !== boardCards.length ? ` of ${boardCards.length}` : ''} ${displayedCards.length === 1 ? 'card' : 'cards'}`
+                  : boardMode === 'shelved'
+                  ? `${shelvedCards.length} cards`
+                  : `${dismissedCards.length} cards`})
+              </span>
+            </h2>
 
-          {/* Mode Switcher: Active Board vs Shelved vs Dismissed */}
-          <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255, 255, 255, 0.04)', padding: 2, borderRadius: 6, border: '1px solid var(--border-subtle)' }}>
-            <button
-              type="button"
-              className={`board-mode-btn ${boardMode === 'active' ? 'active' : ''}`}
-              onClick={() => setBoardMode('active')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: '4px 9px',
-                fontSize: 11.5,
-                fontWeight: 600,
-                borderRadius: 4,
-                border: 'none',
-                background: boardMode === 'active' ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
-                color: boardMode === 'active' ? '#e0e7ff' : '#94a3b8',
-                cursor: 'pointer',
-              }}
-            >
-              <LayoutGrid size={13} />
-              <span>Active</span>
-            </button>
-            <button
-              type="button"
-              className={`board-mode-btn ${boardMode === 'shelved' ? 'active' : ''}`}
-              onClick={() => setBoardMode('shelved')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: '4px 9px',
-                fontSize: 11.5,
-                fontWeight: 600,
-                borderRadius: 4,
-                border: 'none',
-                background: boardMode === 'shelved' ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
-                color: boardMode === 'shelved' ? '#fde68a' : '#94a3b8',
-                cursor: 'pointer',
-              }}
-            >
-              <Archive size={13} />
-              <span>Shelved ({shelvedCards.length})</span>
-            </button>
-            <button
-              type="button"
-              className={`board-mode-btn ${boardMode === 'dismissed' ? 'active' : ''}`}
-              onClick={() => setBoardMode('dismissed')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: '4px 9px',
-                fontSize: 11.5,
-                fontWeight: 600,
-                borderRadius: 4,
-                border: 'none',
-                background: boardMode === 'dismissed' ? 'rgba(244, 63, 94, 0.2)' : 'transparent',
-                color: boardMode === 'dismissed' ? '#fecdd3' : '#94a3b8',
-                cursor: 'pointer',
-              }}
-            >
-              <XCircle size={13} />
-              <span>Dismissed ({dismissedCards.length})</span>
-            </button>
+            {/* Mode Switcher: Active Board vs Shelved vs Dismissed */}
+            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-input)', padding: 2, borderRadius: 6, border: '1px solid var(--border-subtle)' }}>
+              <button
+                type="button"
+                className={`board-mode-btn ${boardMode === 'active' ? 'active' : ''}`}
+                onClick={() => setBoardMode('active')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '4px 9px',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  borderRadius: 4,
+                  border: 'none',
+                  background: boardMode === 'active' ? 'var(--color-info-bg)' : 'transparent',
+                  color: boardMode === 'active' ? 'var(--accent-indigo)' : 'var(--text-dim)',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, color 0.15s',
+                }}
+              >
+                <LayoutGrid size={13} />
+                <span>Active</span>
+              </button>
+              <button
+                type="button"
+                className={`board-mode-btn ${boardMode === 'shelved' ? 'active' : ''}`}
+                onClick={() => setBoardMode('shelved')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '4px 9px',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  borderRadius: 4,
+                  border: 'none',
+                  background: boardMode === 'shelved' ? 'var(--color-warning-bg)' : 'transparent',
+                  color: boardMode === 'shelved' ? 'var(--color-warning-text)' : 'var(--text-dim)',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, color 0.15s',
+                }}
+              >
+                <Archive size={13} />
+                <span>Shelved ({shelvedCards.length})</span>
+              </button>
+              <button
+                type="button"
+                className={`board-mode-btn ${boardMode === 'dismissed' ? 'active' : ''}`}
+                onClick={() => setBoardMode('dismissed')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '4px 9px',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  borderRadius: 4,
+                  border: 'none',
+                  background: boardMode === 'dismissed' ? 'var(--color-error-bg)' : 'transparent',
+                  color: boardMode === 'dismissed' ? 'var(--color-error-text)' : 'var(--text-dim)',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, color 0.15s',
+                }}
+              >
+                <XCircle size={13} />
+                <span>Dismissed ({dismissedCards.length})</span>
+              </button>
+            </div>
           </div>
+
+          {/* Card Density Live Toggle (Permanently anchored right) */}
+          <button
+            type="button"
+            className="board-density-toggle-btn"
+            onClick={toggleDensity}
+            title={`Card Spacing: currently ${density}. Click to switch.`}
+            aria-label={`Switch card density, currently ${density}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '4px 10px',
+              fontSize: 11.5,
+              fontWeight: 600,
+              borderRadius: 6,
+              border: '1px solid var(--border-subtle)',
+              background: density === 'compact' ? 'var(--color-info-bg)' : 'var(--bg-input)',
+              color: density === 'compact' ? 'var(--accent-indigo)' : 'var(--text-dim)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Rows3 size={13} />
+            <span>{density === 'compact' ? 'Compact' : 'Comfortable'}</span>
+          </button>
         </div>
 
-        {/* Horizon Tabs (Only in Active Mode) */}
-        {boardMode === 'active' && (
-          <div className="horizon-segmented-control" role="tablist" aria-label="Filter execution board by horizon">
-            {horizonTabs.map((tab) => {
-              const isActive = activeHorizon === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  id={`horizon-tab-${tab.id}`}
-                  aria-selected={isActive}
-                  className={`horizon-segment-btn ${tab.colorClass} ${isActive ? 'active' : ''}`}
-                  onClick={() => onHorizonChange(tab.id === 'all' ? '' : tab.id)}
-                >
-                  <span className="horizon-segment-label">{tab.label}</span>
-                  <span className="horizon-segment-count">{tab.count}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* Tier 2: Dedicated Contextual Sub-row */}
+        <div className="board-header-context-row" style={{ minHeight: 36, display: 'flex', alignItems: 'center' }}>
+          {boardMode === 'active' && (
+            <div className="horizon-segmented-control" role="tablist" aria-label="Filter execution board by horizon">
+              {horizonTabs.map((tab) => {
+                const isActive = activeHorizon === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    id={`horizon-tab-${tab.id}`}
+                    aria-selected={isActive}
+                    className={`horizon-segment-btn ${tab.colorClass} ${isActive ? 'active' : ''}`}
+                    onClick={() => onHorizonChange(tab.id === 'all' ? '' : tab.id)}
+                  >
+                    <span className="horizon-segment-label">{tab.label}</span>
+                    <span className="horizon-segment-count">{tab.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-        {/* Card Density Live Toggle */}
-        <button
-          type="button"
-          className="board-density-toggle-btn"
-          onClick={toggleDensity}
-          title={`Card Spacing: currently ${density}. Click to switch.`}
-          aria-label={`Switch card density, currently ${density}`}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 5,
-            padding: '4px 10px',
-            fontSize: 11.5,
-            fontWeight: 600,
-            borderRadius: 6,
-            border: '1px solid var(--border-subtle)',
-            background: density === 'compact' ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-input)',
-            color: density === 'compact' ? 'var(--accent-indigo)' : 'var(--text-dim)',
-            cursor: 'pointer',
-            marginLeft: 'auto',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <Rows3 size={13} />
-          <span>{density === 'compact' ? 'Compact' : 'Comfortable'}</span>
-        </button>
+          {boardMode === 'shelved' && (
+            <div style={{
+              width: '100%',
+              padding: '8px 14px',
+              background: 'var(--color-warning-bg)',
+              border: '1px solid var(--color-warning-border)',
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}>
+              <span style={{ fontSize: 13, color: 'var(--color-warning-text)' }}>
+                <strong>Shelved Cards:</strong> Ideas or projects set aside for future revisit. Click <strong>Restore</strong> on any card to move it back to your active Inbox.
+              </span>
+            </div>
+          )}
+
+          {boardMode === 'dismissed' && (
+            <div style={{
+              width: '100%',
+              padding: '8px 14px',
+              background: 'var(--color-error-bg)',
+              border: '1px solid var(--color-error-border)',
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}>
+              <span style={{ fontSize: 13, color: 'var(--color-error-text)' }}>
+                <strong>Dismissed Cards:</strong> Items decided as not relevant. You can review them anytime or click <strong>Restore</strong> to bring them back.
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Info Notice when in Active Mode and Triage has matching items */}
@@ -284,15 +327,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <div style={{
           margin: '0 0 16px 0',
           padding: '12px 16px',
-          background: 'rgba(99, 102, 241, 0.08)',
-          border: '1px solid rgba(99, 102, 241, 0.25)',
+          background: 'var(--color-info-bg)',
+          border: '1px solid var(--border-highlight)',
           borderRadius: 8,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 12,
         }}>
-          <span style={{ fontSize: 13, color: '#cbd5e1' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
             {triageMatchingCards.length} {triageMatchingCards.length === 1 ? 'card' : 'cards'} matching this view {triageMatchingCards.length === 1 ? 'is' : 'are'} currently in <strong>Triage</strong> (not yet committed to the Execution Board).
           </span>
           {onSwitchToTriage && (
@@ -320,14 +363,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           >
             <div className="column-header">
               <div className="column-title">
-                <ListTodo size={15} strokeWidth={1.5} color="#cbd5e1" />
+                <ListTodo size={15} strokeWidth={1.5} color="var(--accent-indigo)" />
                 <span>To Do</span>
               </div>
               <span className="column-count">{todoCards.length}</span>
             </div>
             <div className="cards-container">
               {todoCards.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
                   Ready for work. (Drop cards here)
                 </div>
               ) : (
@@ -345,14 +388,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           >
             <div className="column-header">
               <div className="column-title">
-                <Zap size={15} strokeWidth={1.5} color="#34d399" />
+                <Zap size={15} strokeWidth={1.5} color="var(--accent-emerald)" />
                 <span>In Progress</span>
               </div>
               <span className="column-count">{inProgressCards.length}</span>
             </div>
             <div className="cards-container">
               {inProgressCards.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
                   No active actions. (Drop cards here)
                 </div>
               ) : (
@@ -370,7 +413,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           >
             <div className="column-header">
               <div className="column-title">
-                <CheckCircle2 size={15} strokeWidth={1.5} color="#a5b4fc" />
+                <CheckCircle2 size={15} strokeWidth={1.5} color="var(--accent-blue)" />
                 <span>Completed</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -394,7 +437,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
             <div className="cards-container">
               {displayedDoneCards.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
                   Nothing completed yet.
                 </div>
               ) : (
@@ -409,7 +452,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#818cf8',
+                    color: 'var(--accent-indigo)',
                     fontSize: 12,
                     cursor: 'pointer',
                     textDecoration: 'underline',
@@ -431,24 +474,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       {/* 2. SHELVED ARCHIVE VIEW */}
       {boardMode === 'shelved' && (
         <div>
-          <div style={{
-            margin: '0 0 16px 0',
-            padding: '12px 16px',
-            background: 'rgba(245, 158, 11, 0.08)',
-            border: '1px solid rgba(245, 158, 11, 0.25)',
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-          }}>
-            <span style={{ fontSize: 13, color: '#fde68a' }}>
-              <strong>Shelved Cards:</strong> Ideas or projects set aside for future revisit. Click <strong>Restore</strong> on any card to move it back to your active Inbox.
-            </span>
-          </div>
-
           {shelvedCards.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center', color: '#64748b', fontSize: 14 }}>
+            <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-faint)', fontSize: 14 }}>
               No cards are currently shelved.
             </div>
           ) : (
@@ -466,24 +493,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       {/* 3. DISMISSED ARCHIVE VIEW */}
       {boardMode === 'dismissed' && (
         <div>
-          <div style={{
-            margin: '0 0 16px 0',
-            padding: '12px 16px',
-            background: 'rgba(244, 63, 94, 0.08)',
-            border: '1px solid rgba(244, 63, 94, 0.25)',
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-          }}>
-            <span style={{ fontSize: 13, color: '#fecdd3' }}>
-              <strong>Dismissed Cards:</strong> Items decided as not relevant. You can review them anytime or click <strong>Restore</strong> to bring them back.
-            </span>
-          </div>
-
           {dismissedCards.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center', color: '#64748b', fontSize: 14 }}>
+            <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-faint)', fontSize: 14 }}>
               No dismissed cards.
             </div>
           ) : (
