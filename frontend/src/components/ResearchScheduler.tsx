@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import * as api from '../api';
 import { ResearchRule, QuietWindowConfig, Playbook } from '../types';
+import { CustomSelect } from './CustomSelect';
 
 interface ResearchSchedulerProps {
   showToast: (msg: string) => void;
@@ -423,61 +424,67 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-group">
                   <label>CARD STATUS</label>
-                  <select
-                    className="form-select"
+                  <CustomSelect
                     value={editingRule.filters.status || ''}
-                    onChange={(e) =>
+                    onChange={(val) =>
                       setEditingRule({
                         ...editingRule,
-                        filters: { ...editingRule.filters, status: e.target.value },
+                        filters: { ...editingRule.filters, status: val || undefined },
                       })
                     }
-                  >
-                    <option value="">Any Status</option>
-                    <option value="inbox">Inbox</option>
-                    <option value="doing">Doing</option>
-                  </select>
+                    options={[
+                      { value: '', label: 'Any Status' },
+                      { value: 'inbox', label: '📥 Inbox' },
+                      { value: 'doing', label: '⚡ Doing' },
+                    ]}
+                    ariaLabel="Filter by Card Status"
+                    size="sm"
+                  />
                 </div>
                 <div className="form-group">
                   <label>WORTHINESS</label>
-                  <select
-                    className="form-select"
+                  <CustomSelect
                     value={editingRule.filters.worthiness || ''}
-                    onChange={(e) =>
+                    onChange={(val) =>
                       setEditingRule({
                         ...editingRule,
-                        filters: { ...editingRule.filters, worthiness: e.target.value },
+                        filters: { ...editingRule.filters, worthiness: val || undefined },
                       })
                     }
-                  >
-                    <option value="">Any Worthiness</option>
-                    <option value="high">High only</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
+                    options={[
+                      { value: '', label: 'Any Worthiness' },
+                      { value: 'high', label: '🟢 High only' },
+                      { value: 'medium', label: '🟡 Medium' },
+                      { value: 'low', label: '⚪ Low' },
+                    ]}
+                    ariaLabel="Filter by Worthiness"
+                    size="sm"
+                  />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-group">
                   <label>CARD TYPE</label>
-                  <select
-                    className="form-select"
+                  <CustomSelect
                     value={editingRule.filters.type || ''}
-                    onChange={(e) =>
+                    onChange={(val) =>
                       setEditingRule({
                         ...editingRule,
-                        filters: { ...editingRule.filters, type: e.target.value },
+                        filters: { ...editingRule.filters, type: val || undefined },
                       })
                     }
-                  >
-                    <option value="">Any Type</option>
-                    <option value="article">Article</option>
-                    <option value="repo">Repo / Code</option>
-                    <option value="paper">Paper</option>
-                    <option value="tool">Tool</option>
-                    <option value="video">Video</option>
-                  </select>
+                    options={[
+                      { value: '', label: 'Any Type' },
+                      { value: 'article', label: '📄 Article' },
+                      { value: 'repo', label: '💻 Repo / Code' },
+                      { value: 'paper', label: '🔬 Paper' },
+                      { value: 'tool', label: '🛠️ Tool' },
+                      { value: 'video', label: '🎬 Video' },
+                    ]}
+                    ariaLabel="Filter by Card Type"
+                    size="sm"
+                  />
                 </div>
                 <div className="form-group">
                   <label>MAX AGE (HOURS)</label>
@@ -498,23 +505,24 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
 
               <div className="form-group">
                 <label>PLAYBOOK OVERRIDE</label>
-                <select
-                  className="form-select"
-                  value={editingRule.playbook_id || ''}
-                  onChange={(e) =>
+                <CustomSelect
+                  value={editingRule.playbook_id ? String(editingRule.playbook_id) : ''}
+                  onChange={(val) =>
                     setEditingRule({
                       ...editingRule,
-                      playbook_id: e.target.value ? parseInt(e.target.value) : undefined,
+                      playbook_id: val ? parseInt(val, 10) : undefined,
                     })
                   }
-                >
-                  <option value="">Auto (Default per Card Type)</option>
-                  {playbooks.map((pb) => (
-                    <option key={pb.id} value={pb.id}>
-                      {pb.name} {pb.is_builtin ? '(Built-in)' : ''}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: '', label: 'Auto (Default per Card Type)' },
+                    ...playbooks.map((pb) => ({
+                      value: String(pb.id),
+                      label: `${pb.name} ${pb.is_builtin ? '(Built-in)' : ''}`,
+                    })),
+                  ]}
+                  ariaLabel="Playbook Override"
+                  size="sm"
+                />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
