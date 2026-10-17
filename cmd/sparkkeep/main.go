@@ -197,7 +197,7 @@ func main() {
 
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			logger("shutdown: %v", err)
@@ -209,7 +209,7 @@ func main() {
 		}()
 		select {
 		case <-waitDone:
-		case <-time.After(5 * time.Second):
+		case <-time.After(30 * time.Second):
 			logger("shutdown: timed out waiting for background tasks")
 		}
 	case err := <-errCh:

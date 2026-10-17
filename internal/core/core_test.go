@@ -2544,3 +2544,43 @@ func TestCaptureShare_NoiseGateDiscardedCreatesZeroCards(t *testing.T) {
 		t.Fatalf("expected 0 cards stored, got: %d", len(st.cards))
 	}
 }
+
+func TestPurgeOldUploads(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+
+	// 1. Stale file (old mod time)
+	stale := filepath.Join(dir, "stale.jpg")
+	if err := os.WriteFile(stale, []byte("stale data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldTime := now.Add(-48 * time.Hour)
+	_ = os.Chtimes(stale, oldTime, oldTime)
+
+	// 2. Fresh file
+	fresh := filepath.Join(dir, "fresh.jpg")
+	if err := os.WriteFile(fresh, []byte("fresh data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := &Service{
+		UploadDir: dir,
+		Config: config.Config{
+			UploadMaxAgeDays: 1, // 1 day
+			UploadMaxSizeMB:  10,
+		},
+		Clock: func() time.Time { return now },
+		Logf:  t.Logf,
+	}
+
+	if err := svc.PurgeOldUploads(context.Background()); err != nil {
+		t.Fatalf("PurgeOldUploads error: %v", err)
+	}
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("expected stale file to be pruned")
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("expected fresh file to exist")
+	}
+}

@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -77,6 +78,7 @@ type Service struct {
 	queueWakeup       chan struct{}
 	queueWorkerStop   context.CancelFunc
 	workerMu          sync.Mutex
+	researchMu        sync.Mutex
 	ctx               context.Context
 	mu                sync.RWMutex
 }
@@ -665,12 +667,16 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 	if err != nil {
 		return err
 	}
+	s.researchMu.Lock()
 	if active, err := s.Store.HasActiveResearch(ctx, cardID); err != nil {
+		s.researchMu.Unlock()
 		return err
 	} else if active {
+		s.researchMu.Unlock()
 		return port.ErrResearchActive
 	}
 	row, err := s.Store.CreateResearch(ctx, cardID, "", playbookID...)
+	s.researchMu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -1185,9 +1191,69 @@ func (s *Service) persistUpload(f capture.File) string {
 		s.Logf("core: write upload: %v", err)
 		return ""
 	}
-	// TODO: cleanup old uploads based on UploadMaxAgeDays / UploadMaxSizeMB
-	// Run on startup or via daily cron goroutine.
 	return name
+}
+
+// PurgeOldUploads removes files in UploadDir exceeding UploadMaxAgeDays or total size UploadMaxSizeMB.
+func (s *Service) PurgeOldUploads(ctx context.Context) error {
+	if s.UploadDir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(s.UploadDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	type fileMeta struct {
+		path    string
+		size    int64
+		modTime time.Time
+	}
+	var files []fileMeta
+	var totalSize int64
+
+	now := s.now()
+	maxAge := time.Duration(s.Config.UploadMaxAgeDays) * 24 * time.Hour
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		filePath := filepath.Join(s.UploadDir, entry.Name())
+		if maxAge > 0 && now.Sub(info.ModTime()) > maxAge {
+			_ = os.Remove(filePath)
+			continue
+		}
+		files = append(files, fileMeta{
+			path:    filePath,
+			size:    info.Size(),
+			modTime: info.ModTime(),
+		})
+		totalSize += info.Size()
+	}
+
+	maxSizeBytes := int64(s.Config.UploadMaxSizeMB) * 1024 * 1024
+	if maxSizeBytes > 0 && totalSize > maxSizeBytes {
+		sort.Slice(files, func(i, j int) bool {
+			return files[i].modTime.Before(files[j].modTime)
+		})
+		for _, f := range files {
+			if totalSize <= maxSizeBytes {
+				break
+			}
+			if err := os.Remove(f.path); err == nil {
+				totalSize -= f.size
+			}
+		}
+	}
+	return nil
 }
 
 // failCard stores the "analysis failed, see source / retry" card. It is the

@@ -514,7 +514,10 @@ func (s *Store) FindCardsForRule(ctx context.Context, filter port.ResearchRuleFi
 	if maxCards <= 0 {
 		maxCards = 10
 	}
-	allCards, err := s.ListCards(ctx, port.CardFilter{Status: filter.Status})
+	allCards, err := s.ListCards(ctx, port.CardFilter{
+		Status: filter.Status,
+		Limit:  10000,
+	})
 	if err != nil {
 		return nil, err
 	}

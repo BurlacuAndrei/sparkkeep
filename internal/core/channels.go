@@ -88,7 +88,9 @@ func (s *Service) ReloadChannels(ctx context.Context) error {
 			s.tgCancel = cancel
 			s.tgToken = tgToken
 
+			s.WG.Add(1)
 			go func() {
+				defer s.WG.Done()
 				if err := tg.Run(pollCtx); err != nil && !errors.Is(err, context.Canceled) {
 					s.Logf("telegram: %v", err)
 				}

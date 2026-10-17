@@ -90,6 +90,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /icon.svg", serveEmbedded("dist/icon.svg", "image/svg+xml"))
 	mux.HandleFunc("GET /favicon.svg", serveEmbedded("dist/favicon.svg", "image/svg+xml"))
 	mux.HandleFunc("GET /favicon.ico", serveEmbedded("dist/favicon.svg", "image/svg+xml"))
+	mux.HandleFunc("GET /health", a.health)
 	mux.HandleFunc("GET /api/v1/health", a.health)
 	mux.HandleFunc("GET /api/v1/cards", a.listCards)
 	mux.HandleFunc("POST /api/v1/cards", a.createCard)
@@ -404,7 +405,18 @@ func (a *api) authMiddleware(next http.Handler) http.Handler {
 }
 
 func (a *api) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	status := map[string]any{"ok": true, "status": "healthy"}
+	if a.store != nil {
+		if _, err := a.store.GetSetting(r.Context(), "setup_completed"); err != nil && !errors.Is(err, port.ErrNotFound) {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"ok":     false,
+				"status": "unhealthy",
+				"error":  "database unavailable: " + err.Error(),
+			})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, status)
 }
 
 // --- plumbing ---------------------------------------------------------------

@@ -415,6 +415,23 @@ func (s *Service) StartQueueWorker(parentCtx context.Context) {
 		}
 	}()
 
+	// Periodic uploads pruner
+	s.WG.Add(1)
+	go func() {
+		defer s.WG.Done()
+		_ = s.PurgeOldUploads(ctx)
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = s.PurgeOldUploads(ctx)
+			}
+		}
+	}()
+
 	// Spawn concurrency workers
 	for i := 0; i < concurrency; i++ {
 		workerWG.Add(1)
