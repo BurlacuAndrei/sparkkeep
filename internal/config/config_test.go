@@ -69,11 +69,15 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
-func TestLoadErrorMissingModel(t *testing.T) {
+func TestLoadWithoutModel(t *testing.T) {
 	setenv(t, nil)
 
-	if _, err := Load(); err == nil {
-		t.Fatal("Load() error = nil, want error for missing SPARKKEEP_LLM_MODEL")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error without SPARKKEEP_LLM_MODEL: %v", err)
+	}
+	if cfg.LLMModel != "" {
+		t.Errorf("cfg.LLMModel = %q, want empty string", cfg.LLMModel)
 	}
 }
 

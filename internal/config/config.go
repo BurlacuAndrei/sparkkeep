@@ -173,10 +173,6 @@ func Load() (Config, error) {
 		cfg.OffsetFile = filepath.Join(filepath.Dir(cfg.DB), "bot_offset.json")
 	}
 
-	if cfg.LLMModel == "" {
-		return Config{}, fmt.Errorf("config: SPARKKEEP_LLM_MODEL is required")
-	}
-
 	return cfg, nil
 }
 

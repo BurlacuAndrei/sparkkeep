@@ -255,6 +255,10 @@ func encodeForVision(raw []byte) ([]byte, string, error) {
 // doCompletion performs a single OpenAI-compatible chat completion call and
 // returns the raw message content string. Shared by Analyze and Ask.
 func (c *Client) doCompletion(ctx context.Context, body map[string]any) (string, error) {
+	if model, _ := body["model"].(string); strings.TrimSpace(model) == "" {
+		return "", fmt.Errorf("analyze: no LLM model configured")
+	}
+
 	reqBody, err := json.Marshal(body)
 	if err != nil {
 		return "", err
