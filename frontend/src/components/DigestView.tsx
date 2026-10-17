@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { DigestData, Card, DigestSynthesisResult, DigestSynthesisTheme } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { DigestData, Card, DigestSynthesisResult, DigestSynthesisTheme, ChannelInfo } from '../types';
 import { CardItem } from './CardItem';
 import {
   Calendar,
@@ -14,6 +14,10 @@ import {
   AlertTriangle,
   RotateCw,
   Compass,
+  Globe,
+  MessageSquare,
+  Zap,
+  Radio,
 } from 'lucide-react';
 import * as api from '../api';
 import '../styles/digest-brief.css';
@@ -51,7 +55,17 @@ export const DigestView: React.FC<DigestViewProps> = ({
   const [customDigest, setCustomDigest] = useState<DigestData | null>(null);
   const [synthesis, setSynthesis] = useState<DigestSynthesisResult | null>(null);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
-  const [isSendingTelegram, setIsSendingTelegram] = useState(false);
+  const [isSendingDigest, setIsSendingDigest] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState<string>(() => {
+    try {
+      return localStorage.getItem('sparkkeep_digest_channel') || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+  const [availableChannels, setAvailableChannels] = useState<ChannelInfo[]>([]);
+  const [isChannelMenuOpen, setIsChannelMenuOpen] = useState(false);
+  const channelMenuRef = useRef<HTMLDivElement>(null);
   const [userToggledDays, setUserToggledDays] = useState<Record<string, boolean>>({});
 
   // Derive digest based on selected window
@@ -207,21 +221,135 @@ export const DigestView: React.FC<DigestViewProps> = ({
     }
   };
 
-  // Handle Telegram Push
-  const handleSendTelegram = async () => {
-    setIsSendingTelegram(true);
+  // Fetch configured channels to display status in the integration menu
+  useEffect(() => {
+    let alive = true;
+    api.listChannels()
+      .then((res) => {
+        if (alive && res?.channels) {
+          setAvailableChannels(res.channels);
+        }
+      })
+      .catch(() => {
+        // Fallback gracefully if channel inspection fails
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Close channel menu on outside click or Escape key
+  useEffect(() => {
+    if (!isChannelMenuOpen) return;
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (channelMenuRef.current && !channelMenuRef.current.contains(e.target as Node)) {
+        setIsChannelMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsChannelMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isChannelMenuOpen]);
+
+  const getChannelDisplayName = (id: string): string => {
+    switch (id) {
+      case 'all':
+        return 'Integrations';
+      case 'telegram':
+        return 'Telegram';
+      case 'discord':
+        return 'Discord';
+      case 'slack':
+        return 'Slack';
+      case 'openclaw':
+        return 'OpenClaw Bridge';
+      default:
+        return id.charAt(0).toUpperCase() + id.slice(1);
+    }
+  };
+
+  const channelOptions = useMemo(() => {
+    const defaultList = [
+      {
+        id: 'telegram',
+        name: 'Telegram Bot',
+        desc: 'Direct message via bot chat',
+        icon: <Send size={14} style={{ color: '#0ea5e9', flexShrink: 0 }} />,
+      },
+      {
+        id: 'discord',
+        name: 'Discord Bot',
+        desc: 'Post to configured server channel',
+        icon: <MessageSquare size={14} style={{ color: '#5865F2', flexShrink: 0 }} />,
+      },
+      {
+        id: 'slack',
+        name: 'Slack Webhook',
+        desc: 'Post to configured channel webhook',
+        icon: <Zap size={14} style={{ color: '#eab308', flexShrink: 0 }} />,
+      },
+    ];
+
+    const openclaw = availableChannels.find((c) => c.id === 'openclaw');
+    if (openclaw && openclaw.enabled) {
+      defaultList.push({
+        id: 'openclaw',
+        name: 'OpenClaw Bridge',
+        desc: 'Route via OpenClaw gateway',
+        icon: <Radio size={14} style={{ color: '#10b981', flexShrink: 0 }} />,
+      });
+    }
+
+    return defaultList.map((ch) => {
+      const match = availableChannels.find((c) => c.id === ch.id);
+      return {
+        ...ch,
+        enabled: match ? match.enabled : undefined,
+        hasStatus: availableChannels.length > 0 && match !== undefined,
+      };
+    });
+  }, [availableChannels]);
+
+  // Handle Omnichannel Digest Push
+  const handleSendDigest = async (channelOverride?: string) => {
+    const channelToUse = channelOverride || selectedChannel || 'all';
+    setIsSendingDigest(true);
     try {
-      const res = await api.pushDigestToTelegram(windowDays);
+      const res = await api.pushDigestToChannel(channelToUse, windowDays);
       if (res.ok) {
-        showToast?.('✈️ Digest successfully sent to your Telegram!');
+        if (channelToUse === 'all') {
+          showToast?.(res.message || '✈️ Digest successfully sent to your integrations!');
+        } else {
+          const chanName = getChannelDisplayName(channelToUse);
+          showToast?.(res.message || `✈️ Digest successfully sent to ${chanName}!`);
+        }
       } else {
-        showToast?.(res.error || 'Failed to send to Telegram');
+        showToast?.(res.message || 'Failed to send digest to integrations');
       }
     } catch (err: unknown) {
       showToast?.(api.getErrorMessage(err));
     } finally {
-      setIsSendingTelegram(false);
+      setIsSendingDigest(false);
     }
+  };
+
+  const handleSelectChannelAndSend = (channelId: string) => {
+    setSelectedChannel(channelId);
+    try {
+      localStorage.setItem('sparkkeep_digest_channel', channelId);
+    } catch {
+      // ignore
+    }
+    setIsChannelMenuOpen(false);
+    handleSendDigest(channelId);
   };
 
   // Handle Markdown Export
@@ -343,16 +471,89 @@ export const DigestView: React.FC<DigestViewProps> = ({
             <option value={30}>Past 30 Days</option>
           </select>
 
-          <button
-            type="button"
-            className="digest-btn digest-btn-telegram"
-            onClick={handleSendTelegram}
-            disabled={isSendingTelegram}
-            title="Push digest to Telegram bot chat"
-          >
-            <Send size={13} />
-            <span>{isSendingTelegram ? 'Sending…' : 'Send to Telegram'}</span>
-          </button>
+          <div className="digest-split-btn-group" ref={channelMenuRef}>
+            <button
+              type="button"
+              className="digest-btn digest-btn-integrations"
+              onClick={() => handleSendDigest()}
+              disabled={isSendingDigest}
+              title={`Push digest (${windowDays}d) to ${selectedChannel === 'all' ? 'configured integrations' : getChannelDisplayName(selectedChannel)}`}
+            >
+              <Send size={13} />
+              <span>
+                {isSendingDigest
+                  ? 'Sending…'
+                  : selectedChannel === 'all'
+                  ? 'Send to Integrations'
+                  : `Send to ${getChannelDisplayName(selectedChannel)}`}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`digest-btn-integrations-arrow ${isChannelMenuOpen ? 'open' : ''}`}
+              onClick={() => setIsChannelMenuOpen((prev) => !prev)}
+              disabled={isSendingDigest}
+              aria-label="Select integration channel"
+              aria-haspopup="menu"
+              aria-expanded={isChannelMenuOpen}
+              title="Choose integration"
+            >
+              <ChevronDown size={13} className={isChannelMenuOpen ? 'chevron-rotated' : ''} />
+            </button>
+
+            {isChannelMenuOpen && (
+              <div className="digest-integrations-dropdown" role="menu">
+                <div className="digest-dropdown-header">
+                  <span>Send Digest Window ({windowDays}d)</span>
+                </div>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`digest-dropdown-item ${selectedChannel === 'all' ? 'active' : ''}`}
+                  onClick={() => handleSelectChannelAndSend('all')}
+                >
+                  <div className="digest-dropdown-item-main">
+                    <Globe size={14} style={{ color: '#818cf8', flexShrink: 0 }} />
+                    <div className="digest-dropdown-item-text">
+                      <span className="channel-title">All Integrations</span>
+                      <span className="channel-desc">Broadcast to all active channels</span>
+                    </div>
+                  </div>
+                  <span className="channel-badge broadcast">Broadcast</span>
+                </button>
+
+                <div className="digest-dropdown-divider" />
+
+                {channelOptions.map((ch) => {
+                  const isSelected = selectedChannel === ch.id;
+                  return (
+                    <button
+                      key={ch.id}
+                      type="button"
+                      role="menuitem"
+                      className={`digest-dropdown-item ${isSelected ? 'active' : ''}`}
+                      onClick={() => handleSelectChannelAndSend(ch.id)}
+                    >
+                      <div className="digest-dropdown-item-main">
+                        {ch.icon}
+                        <div className="digest-dropdown-item-text">
+                          <span className="channel-title">{ch.name}</span>
+                          <span className="channel-desc">{ch.desc}</span>
+                        </div>
+                      </div>
+                      {ch.hasStatus && (
+                        <span className={`channel-status-pill ${ch.enabled ? 'configured' : 'inactive'}`}>
+                          {ch.enabled ? 'Active' : 'Not setup'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
