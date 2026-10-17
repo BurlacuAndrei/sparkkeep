@@ -221,9 +221,12 @@ function AppContent() {
   // Retry Card
   const handleRetry = async (id: number) => {
     try {
-      await api.retryCard(id);
+      const updated = await api.retryCard(id);
       showToast(`Retried extraction for card #${id}`);
       reloadAll();
+      if (selectedCard && selectedCard.id === id && updated) {
+        setSelectedCard(updated);
+      }
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }

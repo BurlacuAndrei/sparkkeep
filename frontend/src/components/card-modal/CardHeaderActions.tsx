@@ -193,6 +193,19 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
         </button>
       )}
 
+      {/* Synthesize Brief (for unbriefed cards) */}
+      {!isFailed && !card.tldr && (!card.claims || card.claims.length === 0) && (
+        <button
+          type="button"
+          className="card-primary-action-btn synthesize"
+          onClick={() => onRetry(card.id)}
+          title="Synthesize Triage Brief from card title and notes"
+        >
+          <Sparkles size={12} />
+          <span>Synthesize Brief</span>
+        </button>
+      )}
+
       {/* Primary Stage Action */}
       {isFailed ? (
         <button
@@ -356,6 +369,20 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
               >
                 <RefreshCw size={13} color="#fbbf24" />
                 <span>Retry Extraction</span>
+              </button>
+            )}
+
+            {!isFailed && !card.tldr && (!card.claims || card.claims.length === 0) && (
+              <button
+                type="button"
+                className="card-context-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onRetry(card.id);
+                }}
+              >
+                <Sparkles size={13} color="#c084fc" />
+                <span>Synthesize Brief</span>
               </button>
             )}
 
