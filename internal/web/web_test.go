@@ -1645,6 +1645,8 @@ func TestPWAAssetsServed(t *testing.T) {
 		{"/manifest.json", "application/manifest+json", "Sparkkeep Action Engine"},
 		{"/sw.js", "application/javascript", "addEventListener"},
 		{"/icon.svg", "image/svg+xml", "<svg"},
+		{"/favicon.svg", "image/svg+xml", "<svg"},
+		{"/favicon.ico", "image/svg+xml", "<svg"},
 	} {
 		rr := doJSON(t, h, http.MethodGet, tc.path, "")
 		if rr.Code != http.StatusOK {

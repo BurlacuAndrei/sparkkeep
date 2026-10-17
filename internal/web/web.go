@@ -88,6 +88,8 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 		sw(w, r)
 	})
 	mux.HandleFunc("GET /icon.svg", serveEmbedded("dist/icon.svg", "image/svg+xml"))
+	mux.HandleFunc("GET /favicon.svg", serveEmbedded("dist/favicon.svg", "image/svg+xml"))
+	mux.HandleFunc("GET /favicon.ico", serveEmbedded("dist/favicon.svg", "image/svg+xml"))
 	mux.HandleFunc("GET /api/v1/health", a.health)
 	mux.HandleFunc("GET /api/v1/cards", a.listCards)
 	mux.HandleFunc("POST /api/v1/cards", a.createCard)
@@ -178,6 +180,7 @@ func isPublicPath(r *http.Request) bool {
 	p := r.URL.Path
 	switch p {
 	case "/api/v1/health", "/api/v1/auth/verify", "/api/v1/setup/status", "/api/v1/setup", "/manifest.json", "/sw.js", "/icon.svg",
+		"/favicon.svg", "/favicon.ico",
 		"/api/v1/channels/discord/interactions", "/api/v1/channels/openclaw/webhook":
 		return true
 	}
