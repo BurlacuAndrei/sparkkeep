@@ -130,6 +130,39 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if p.SuggestedTags != nil {
 		c.SuggestedTags = *p.SuggestedTags
 	}
+	if p.TLDR != nil {
+		c.TLDR = *p.TLDR
+		if p.ExecutiveSummary == nil {
+			c.ExecutiveSummary = *p.TLDR
+		}
+	}
+	if p.WhyCare != nil {
+		c.WhyCare = *p.WhyCare
+		if p.ValueProposition == nil {
+			c.ValueProposition = *p.WhyCare
+		}
+	}
+	if p.ExecutiveSummary != nil {
+		c.ExecutiveSummary = *p.ExecutiveSummary
+	}
+	if p.ValueProposition != nil {
+		c.ValueProposition = *p.ValueProposition
+	}
+	if p.Claims != nil {
+		c.Claims = *p.Claims
+	}
+	if p.OpenQuestions != nil {
+		c.OpenQuestions = *p.OpenQuestions
+	}
+	if p.Signals != nil {
+		c.Signals = *p.Signals
+	}
+	if p.Worthiness != nil {
+		c.Worthiness = *p.Worthiness
+	}
+	if p.AnalysisFailed != nil {
+		c.AnalysisFailed = *p.AnalysisFailed
+	}
 	c.UpdatedAt = time.Now().UTC()
 	s.cards[id] = c
 	return c, nil
@@ -2348,5 +2381,138 @@ func TestService_CardMutationPipeline(t *testing.T) {
 	pb, err := svc.GetPlaybook(ctx, 1)
 	if err != nil || pb.ID != 1 {
 		t.Errorf("expected playbook ID=1, got pb=%v err=%v", pb, err)
+	}
+}
+
+func TestRetrySubjectCardInPlace(t *testing.T) {
+	st := newStubStore()
+	ch := &stubChannel{}
+
+	subjectCard, err := st.CreateCard(context.Background(), port.Card{
+		Title:         "Decentralized State Machines",
+		Summary:       "Exploring raft-based CRDTs in Go.",
+		Status:        port.StatusInbox,
+		SourceURL:     "",
+		SourceNote:    "Author note on consensus algorithms",
+		Tags:          []string{"dist-sys", "raft"},
+		SourceChannel: "manual",
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	llmResponse := `[{
+		"title": "Decentralized State Machines Analyzed",
+		"summary": "Exploring raft-based CRDTs in Go.",
+		"tldr": "Raft-based CRDTs merge distributed state safely without write conflicts.",
+		"why_care": "Enables strong consistency across multi-region edge nodes.",
+		"claims": [
+			"CRDTs avoid locking overhead in partition scenarios",
+			"Raft ordering guarantees linearizable log replay"
+		],
+		"open_questions": [
+			"What is the network latency penalty across WAN?",
+			"How do snapshot truncations behave under high churn?"
+		],
+		"horizon": "medium-term",
+		"signals": {
+			"extraction": "full",
+			"source_quality": "high"
+		},
+		"worthiness": {
+			"level": "high"
+		},
+		"references": [
+			{"url": "https://raft.github.io", "title": "Raft Consensus"}
+		]
+	}]`
+
+	llmSrv := llmStub(http.StatusOK, llmResponse)
+	defer llmSrv.Close()
+
+	svc := baseSvc(t, st, ch, llmSrv)
+
+	updatedCards, err := svc.Retry(context.Background(), subjectCard.ID)
+	if err != nil {
+		t.Fatalf("expected Retry to succeed for subject card, got err: %v", err)
+	}
+	if len(updatedCards) != 1 {
+		t.Fatalf("expected 1 updated card, got %d", len(updatedCards))
+	}
+
+	updated := updatedCards[0]
+	if updated.ID != subjectCard.ID {
+		t.Errorf("card ID changed: got %d, want %d", updated.ID, subjectCard.ID)
+	}
+	if updated.Status != port.StatusInbox {
+		t.Errorf("card status = %q, want %q", updated.Status, port.StatusInbox)
+	}
+	if updated.SourceChannel != "manual" {
+		t.Errorf("source channel = %q, want 'manual'", updated.SourceChannel)
+	}
+	if len(updated.Tags) != 2 || updated.Tags[0] != "dist-sys" || updated.Tags[1] != "raft" {
+		t.Errorf("tags changed: got %v", updated.Tags)
+	}
+	if updated.Title != subjectCard.Title {
+		t.Errorf("title changed: got %q, want %q", updated.Title, subjectCard.Title)
+	}
+	if updated.Summary != subjectCard.Summary {
+		t.Errorf("summary changed: got %q, want %q", updated.Summary, subjectCard.Summary)
+	}
+
+	if updated.TLDR != "Raft-based CRDTs merge distributed state safely without write conflicts." {
+		t.Errorf("TLDR = %q", updated.TLDR)
+	}
+	if updated.WhyCare != "Enables strong consistency across multi-region edge nodes." {
+		t.Errorf("WhyCare = %q", updated.WhyCare)
+	}
+	if len(updated.Claims) != 2 || updated.Claims[0] != "CRDTs avoid locking overhead in partition scenarios" {
+		t.Errorf("Claims = %v", updated.Claims)
+	}
+	if len(updated.OpenQuestions) != 2 || updated.OpenQuestions[0] != "What is the network latency penalty across WAN?" {
+		t.Errorf("OpenQuestions = %v", updated.OpenQuestions)
+	}
+	if updated.Horizon != port.HorizonMediumTerm {
+		t.Errorf("Horizon = %q, want %q", updated.Horizon, port.HorizonMediumTerm)
+	}
+	if len(updated.References) != 1 || updated.References[0].URL != "https://raft.github.io" {
+		t.Errorf("References = %v", updated.References)
+	}
+
+	storedCard, err := st.GetCard(context.Background(), subjectCard.ID)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if storedCard.Status != port.StatusInbox {
+		t.Errorf("stored card status = %q, want %q (should not be dismissed)", storedCard.Status, port.StatusInbox)
+	}
+	if storedCard.TLDR != updated.TLDR {
+		t.Errorf("stored card TLDR not updated: %q", storedCard.TLDR)
+	}
+}
+
+func TestRetrySubjectCardAllEmptyErrors(t *testing.T) {
+	st := newStubStore()
+	ch := &stubChannel{}
+
+	emptyCard, err := st.CreateCard(context.Background(), port.Card{
+		Title:      "",
+		Summary:    "",
+		SourceURL:  "",
+		SourceNote: "",
+		Status:     port.StatusInbox,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	llmSrv := llmStub(http.StatusOK, `[]`)
+	defer llmSrv.Close()
+
+	svc := baseSvc(t, st, ch, llmSrv)
+
+	_, err = svc.Retry(context.Background(), emptyCard.ID)
+	if !errors.Is(err, ErrNothingToReanalyze) {
+		t.Fatalf("expected ErrNothingToReanalyze, got: %v", err)
 	}
 }

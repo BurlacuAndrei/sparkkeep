@@ -786,6 +786,7 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 	}
 
 	var fetched capture.Fetched
+	var isInPlace bool
 	if hasCap && hasUsableContent(cap) {
 		fetched = fetchedFromCapture(cap, card)
 	} else {
@@ -851,6 +852,22 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 					}
 				}
 			}
+		} else if !hasCap {
+			if strings.TrimSpace(card.Title) != "" || strings.TrimSpace(card.Summary) != "" || strings.TrimSpace(card.SourceNote) != "" {
+				text := card.Summary
+				if strings.TrimSpace(text) == "" {
+					text = card.SourceNote
+				}
+				fetched = capture.Fetched{
+					Kind:    capture.KindText,
+					Title:   card.Title,
+					Text:    text,
+					Caption: card.SourceNote,
+				}
+				isInPlace = true
+			} else {
+				return nil, ErrNothingToReanalyze
+			}
 		} else {
 			return nil, ErrNothingToReanalyze
 		}
@@ -872,6 +889,38 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 	}
 	if len(res.Cards) == 0 {
 		return []port.Card{}, nil
+	}
+
+	if isInPlace {
+		idea := res.Cards[0]
+		firstCard := cardFromIdea(idea, res, card.SourceURL, card.SourceNote)
+		falseVal := false
+		patch := port.CardPatch{
+			TLDR:             &firstCard.TLDR,
+			WhyCare:          &firstCard.WhyCare,
+			ExecutiveSummary: &firstCard.ExecutiveSummary,
+			ValueProposition: &firstCard.ValueProposition,
+			Claims:           &firstCard.Claims,
+			OpenQuestions:    &firstCard.OpenQuestions,
+			Signals:          &firstCard.Signals,
+			Worthiness:       &firstCard.Worthiness,
+			References:       &firstCard.References,
+			AnalysisFailed:   &falseVal,
+		}
+		if firstCard.Horizon != "" {
+			patch.Horizon = &firstCard.Horizon
+		}
+		updated, err := s.Store.UpdateCard(ctx, cardID, patch)
+		if err != nil {
+			return nil, err
+		}
+		if s.Webhook != nil {
+			s.Webhook.Dispatch(ctx, webhook.EventCardUpdated, updated)
+		}
+		if nerr := s.notify(ctx, port.Notification{Kind: "done", Card: updated}); nerr != nil {
+			s.Logf("core: notify retry done: %v", nerr)
+		}
+		return []port.Card{updated}, nil
 	}
 
 	dismissed := port.StatusDismissed

@@ -105,6 +105,23 @@ export const CardModal: React.FC<CardModalProps> = ({
   const reportContainerRef = useRef<HTMLDivElement>(null);
   const mainColRef = useRef<HTMLDivElement>(null);
 
+  /* oxlint-disable react/set-state-in-effect */
+  useEffect(() => {
+    setTitle(card.title || '');
+    setTldr(card.tldr || card.executive_summary || card.summary || '');
+    setWhyCare(card.why_care || card.value_proposition || '');
+    setClaims(card.claims || []);
+    setOpenQuestions(card.open_questions || []);
+    setHorizon(card.horizon || 'short-term');
+    setStatus(card.status || 'inbox');
+    setCardType(card.type || 'idea');
+    setNote(card.source_note || '');
+    setTags(card.tags || []);
+    setReferences(card.references || []);
+    setActions(card.proposed_actions || []);
+  }, [card]);
+  /* oxlint-enable react/set-state-in-effect */
+
   const handleToggleReport = (e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
@@ -1098,6 +1115,42 @@ export const CardModal: React.FC<CardModalProps> = ({
                 >
                   <Split size={12} />
                   <span>Split Items</span>
+                </button>
+              </div>
+            )}
+
+            {/* Subject Card / Synthesize Brief Banner */}
+            {!isFailed && !card.tldr && (!card.claims || card.claims.length === 0) && (
+              <div
+                style={{
+                  background: 'rgba(192, 132, 252, 0.08)',
+                  border: '1px solid rgba(192, 132, 252, 0.3)',
+                  borderRadius: 8,
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  marginBottom: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#f3e8ff', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Sparkles size={14} color="#c084fc" />
+                    <span>Subject Card</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                    This card does not have an AI triage briefing yet. Synthesize a full brief from your title and notes.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => onRetry(card.id)}
+                  style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}
+                >
+                  <Sparkles size={12} />
+                  <span>Synthesize Brief</span>
                 </button>
               </div>
             )}

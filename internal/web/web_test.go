@@ -1344,6 +1344,62 @@ func TestRetryCard(t *testing.T) {
 	}
 }
 
+func TestRetryCardSubjectCardInPlace(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{
+		"title": "Synthesized Title",
+		"summary": "Synthesized Summary",
+		"tldr": "Synthesized TLDR Takeaway",
+		"why_care": "Why this subject matters",
+		"claims": ["Claim 1", "Claim 2"],
+		"open_questions": ["Question 1"],
+		"horizon": "medium-term",
+		"tags": ["ai"]
+	}]`)
+	defer llm.Close()
+	st := newStubStore()
+	st.cards[42] = port.Card{
+		ID:         42,
+		Title:      "Manual Topic",
+		Summary:    "Initial thoughts on topic",
+		Status:     port.StatusInbox,
+		SourceURL:  "",
+		SourceNote: "User research note",
+		Tags:       []string{"manual-tag"},
+	}
+	svc := &core.Service{Store: st, Analyze: analyzeClient(llm), Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards/42/retry", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var out struct {
+		OK   bool      `json:"ok"`
+		Data port.Card `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !out.OK {
+		t.Fatalf("out = %+v, want OK:true", out)
+	}
+	if out.Data.ID != 42 {
+		t.Errorf("ID = %d, want 42", out.Data.ID)
+	}
+	if out.Data.Title != "Manual Topic" {
+		t.Errorf("Title = %q, want 'Manual Topic'", out.Data.Title)
+	}
+	if out.Data.TLDR != "Synthesized TLDR Takeaway" {
+		t.Errorf("TLDR = %q", out.Data.TLDR)
+	}
+	if out.Data.WhyCare != "Why this subject matters" {
+		t.Errorf("WhyCare = %q", out.Data.WhyCare)
+	}
+	if len(out.Data.Claims) != 2 {
+		t.Errorf("Claims count = %d, want 2", len(out.Data.Claims))
+	}
+}
+
 func TestRetryCardMultiIdea(t *testing.T) {
 	llm := llmStub(http.StatusOK, `[
 		{"title":"Idea 1","summary":"first","horizon":"short-term","tags":[],"links":[]},

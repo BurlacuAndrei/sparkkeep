@@ -791,6 +791,16 @@
   transform: translateY(-1px);
 }
 
+.card-primary-action-btn.synthesize {
+  background: rgba(192, 132, 252, 0.2);
+  color: #c084fc;
+  border-color: rgba(192, 132, 252, 0.4);
+}
+.card-primary-action-btn.synthesize:hover {
+  background: rgba(192, 132, 252, 0.35);
+  transform: translateY(-1px);
+}
+
 .card-primary-action-btn.restore,
 .card-primary-action-btn.reopen {
   background: rgba(99, 102, 241, 0.15);
