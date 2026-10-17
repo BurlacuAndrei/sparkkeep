@@ -5,10 +5,11 @@ Influencer engagement bait, rhetorical interaction hooks ("agree or disagree?", 
 
 **Blocked by:** 01: Consolidated Single-Card Ingestion & 3-Card Fission Ceiling
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Analyzer schema supports returning empty cards (`cards: []`) with a discard descriptor (`discarded: true`, `reason: "engagement_bait"`).
-- [ ] Core ingestion pipeline suppresses card creation when a capture is discarded by the Noise Gate.
-- [ ] The web capture API and frontend capture handler display an explicit feedback toast explaining the post was filtered out as engagement bait / promo hype.
-- [ ] Channel notification adapters (Telegram / Discord) inform the sender when a capture is dropped by the Noise Gate.
-- [ ] Tests verify that engagement-bait fixtures yield 0 cards and explicit discard responses.
+- [x] Analyzer schema supports returning empty cards (`cards: []`) with a discard descriptor (`discarded: true`, `reason: "engagement_bait"`).
+- [x] Core ingestion pipeline suppresses card creation when a capture is discarded by the Noise Gate.
+- [x] The web capture API and frontend capture handler display an explicit feedback toast explaining the post was filtered out as engagement bait / promo hype.
+- [x] Channel notification adapters (Telegram / Discord) inform the sender when a capture is dropped by the Noise Gate.
+- [x] Tests verify that engagement-bait fixtures yield 0 cards and explicit discard responses.
+

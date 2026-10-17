@@ -5,9 +5,10 @@ Triggering Deep Research on a Subject Card uses the card's Title, Summary, and U
 
 **Blocked by:** 03: In-Place Subject Card Triage Synthesis & Drawer Action
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] `stepPlan` in the research runner detects when a card lacks capture text or claims, treating the card's title, summary, and user comments as the core research thesis.
-- [ ] Research planning prompt instructs the LLM to generate investigative web search queries focused on primary documentation, benchmarks, and counter-perspectives for the thesis.
-- [ ] Deep Research compiles a full report with claim verification and competitive landscape from external web results without empty report errors.
-- [ ] Integration tests in `internal/research` and `internal/e2e` verify autonomous research execution on Subject Cards.
+- [x] `stepPlan` in the research runner detects when a card lacks capture text or claims, treating the card's title, summary, and user comments as the core research thesis.
+- [x] Research planning prompt instructs the LLM to generate investigative web search queries focused on primary documentation, benchmarks, and counter-perspectives for the thesis.
+- [x] Deep Research compiles a full report with claim verification and competitive landscape from external web results without empty report errors.
+- [x] Integration tests in `internal/research` and `internal/e2e` verify autonomous research execution on Subject Cards.
+

@@ -5,10 +5,11 @@ Users who create cards without an external URL can click a new "Synthesize Brief
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Core `Retry` pipeline handles cards without `source_url` or `capture_id` by synthesizing a Triage Brief directly from the card's `title`, `summary`, and `source_note`.
-- [ ] Card updates occur in-place, preserving card ID, status, and existing custom tags.
-- [ ] Card Drawer renders a visible "Synthesize Brief" action when briefing fields (`claims`, `tldr`) are unpopulated.
-- [ ] Clicking "Synthesize Brief" calls the retry API, refreshes card state, and displays toast feedback.
-- [ ] Backend tests in `internal/core` and `internal/web`, and frontend tests in `CardModal.test.tsx` pass cleanly.
+- [x] Core `Retry` pipeline handles cards without `source_url` or `capture_id` by synthesizing a Triage Brief directly from the card's `title`, `summary`, and `source_note`.
+- [x] Card updates occur in-place, preserving card ID, status, and existing custom tags.
+- [x] Card Drawer renders a visible "Synthesize Brief" action when briefing fields (`claims`, `tldr`) are unpopulated.
+- [x] Clicking "Synthesize Brief" calls the retry API, refreshes card state, and displays toast feedback.
+- [x] Backend tests in `internal/core` and `internal/web`, and frontend tests in `CardModal.test.tsx` pass cleanly.
+
