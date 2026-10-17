@@ -167,11 +167,11 @@ Sparkkeep is compiled into a **single, self-contained, CGO-free binary** with ze
 
 ```mermaid
 flowchart TD
-    subgraph Inputs ["Inbound Capture Channels"]
-        TG["Telegram Bot"]
-        DC["Discord Embeds"]
-        SL["Slack Block Kit"]
-        WB["Web Extension & REST API"]
+    subgraph Inputs ["Inbound & Outbound Channels"]
+        TG["Telegram Bot (2-Way)"]
+        DC["Discord (Embeds & Interactions)"]
+        SL["Slack (Block Kit Notifications)"]
+        WB["Web Extension & REST Webhook"]
     end
 
     subgraph Hub ["Unified Channel Hub"]
@@ -237,7 +237,7 @@ flowchart TD
 | Capability | What It Does | Why It Matters |
 |---|---|---|
 | **Zero-DB Single Binary** | Pure Go SQLite (`modernc.org/sqlite`), no CGO, no PostgreSQL, no Redis. | Runs anywhere (Raspberry Pi, NAS, VPS, Mac) in <30MB RAM with zero maintenance. |
-| **Omni-Channel Capture** | Ingest links, notes, images, and voice memos from Telegram, Discord, and Slack. | Never lose an idea on mobile. Capture from the apps you already live in. |
+| **Omni-Channel Capture** | Ingest links, notes, images, and voice memos from Telegram, Discord, Web Extension, and Webhooks; broadcast to Slack. | Never lose an idea on mobile or desktop. Capture from the apps you already live in. |
 | **Interactive In-Place Triage** | Telegram inline keyboards & Discord ActionRows let you triage (`→ Doing`, `→ Done`, `Shelve`) directly in chat. | Triage from your notifications without ever opening the web app. |
 | **Triage Noise Gate & Fission Cap** | Ingestion noise gate rejects junk/bait; enforces single-card default with a 3-card max cap. | Prevents social media engagement bait and card explosion from cluttering your Inbox. |
 | **First-Class Subject Cards** | Capture raw ideas without URLs; run on-demand AI triage synthesis and autonomous research. | Freely capture open-ended hypotheses and research them with zero friction. |
@@ -381,6 +381,28 @@ This snapshots the SQLite database only. Uploaded media lives in `SPARKKEEP_UPLO
 To restore: stop the daemon, copy the backup file over the path in `SPARKKEEP_DB`, then start the daemon again.
 
 ---
+
+## 🧩 Browser Extension (Chrome & Firefox)
+
+Capture web pages, articles, and research sources with 1-click directly into your Sparkkeep library:
+1. In Chrome/Brave/Edge, navigate to `chrome://extensions/` and enable **Developer mode**.
+2. Click **Load unpacked** and select the [`extension/`](extension/) directory from this repository.
+3. Click the Sparkkeep extension icon in your toolbar, enter your instance URL (e.g. `http://localhost:8080`) and your Master Passphrase / Token to connect.
+
+---
+
+## 🔄 Upgrade & Rollback Procedures
+
+Sparkkeep uses forward-only SQLite migrations. When upgrading your instance:
+1. **Take a backup:** Always create a backup before upgrading container images or binaries:
+   ```bash
+   # Docker
+   docker compose exec sparkkeep sparkkeep backup /data/backup-pre-upgrade.db
+   # Standalone binary
+   ./sparkkeep backup ./backup-pre-upgrade.db
+   ```
+2. **Upgrade image or binary:** Pull the latest container (`docker compose pull && docker compose up -d`) or replace the executable. Schema migrations apply automatically on boot.
+3. **Rollback:** Because schema downgrade protection prohibits older binaries from executing against newer schemas, rolling back requires stopping the daemon and restoring your pre-upgrade backup file over `SPARKKEEP_DB`.
 
 ## 🏛️ Technology Stack
 

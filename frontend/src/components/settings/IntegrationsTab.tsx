@@ -157,11 +157,12 @@ echo "Saved to Sparkkeep"`;
   const mcpConfig = `{
   "mcpServers": {
     "sparkkeep": {
-      "command": "curl",
+      "command": "npx",
       "args": [
-        "-s",
-        "-H", "Authorization: Bearer YOUR_MASTER_PASSPHRASE",
-        "${currentOrigin}/api/v1/cards"
+        "-y",
+        "@sparkkeep/mcp",
+        "--endpoint", "${currentOrigin}",
+        "--token", "YOUR_MASTER_PASSPHRASE"
       ]
     }
   }
@@ -446,10 +447,10 @@ echo "Saved to Sparkkeep"`;
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FolderSync size={18} style={{ color: 'var(--accent)' }} />
-            <span className="settings-section-title">Obsidian Vault 2-Way Sync</span>
+            <span className="settings-section-title">Obsidian Vault Export</span>
           </div>
           <span className="settings-section-desc">
-            Mirror and synchronize your Sparkkeep library into your local or networked Obsidian knowledge base with full Markdown and YAML frontmatter.
+            Mirror and export your Sparkkeep library into your local or networked Obsidian knowledge base with full Markdown and YAML frontmatter.
           </span>
         </div>
 
