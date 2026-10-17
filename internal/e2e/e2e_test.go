@@ -74,6 +74,10 @@ func newE2EHarness(t *testing.T, llmResponseJSON string) *harness {
 		content := llmResponseJSON
 		if strings.Contains(str, "research planning") {
 			content = `{"questions":[{"id":"Q1","question":"What is Raft consensus?","query":"raft consensus protocol"}]}`
+		} else if strings.Contains(str, "executive decision") || strings.Contains(str, "strategic verdict") {
+			content = `{"recommendation":"pursue","confidence":"high","for_whom":"engineers","next_actions":["Read Raft paper","Prototype leader election"],"suggested_horizon":"short-term","suggested_tags":["distributed"]}`
+		} else if strings.Contains(str, "landscape analyst") || strings.Contains(str, "competitive and technology landscape") {
+			content = `{"landscape":[{"name":"Alternative Engine","one_liner":"Alternative embedded engine","how_it_differs":"Row based instead of columnar","sources":["S1"]}]}`
 		} else if strings.Contains(str, "research synthesis") || strings.Contains(str, "fact-checking") || strings.Contains(str, "verdict") {
 			content = `{"recommendation":"pursue","confidence":"high","for_whom":"engineers","next_actions":["Read Raft paper","Prototype leader election"],"suggested_horizon":"short-term","suggested_tags":["distributed"]}`
 		}
@@ -442,5 +446,66 @@ func TestE2E_DataTeardownIsolation(t *testing.T) {
 	prodDBPath := filepath.Join("data", "sparkkeep.db")
 	if prodDBPath == dbPath {
 		t.Fatalf("test database path matched production database path!")
+	}
+}
+
+// E2E-007: Autonomous Deep Research on a Subject Card
+func TestE2E_SubjectCardDeepResearch(t *testing.T) {
+	h := newE2EHarness(t, `[]`)
+	ctx := context.Background()
+
+	// 1. Create a Subject Card in the store (no capture_id, no source_url)
+	card, err := h.store.CreateCard(ctx, port.Card{
+		Title:      "DuckDB vs SQLite for embedded analytical workloads",
+		Summary:    "Investigating performance differences for local analytics queries",
+		SourceNote: "Evaluating vectorized columnar scans vs B-tree row scans",
+		Status:     port.StatusInbox,
+	})
+	if err != nil {
+		t.Fatalf("create subject card: %v", err)
+	}
+
+	// 2. Add comments
+	_, err = h.store.AddCardComment(ctx, card.ID, "Benchmark on NVMe drive")
+	if err != nil {
+		t.Fatalf("add comment: %v", err)
+	}
+
+	// 3. Trigger research on the Subject Card
+	err = h.service.Research(ctx, card.ID)
+	if err != nil {
+		t.Fatalf("Research failed: %v", err)
+	}
+
+	// 4. Verify card state after research
+	updated, err := h.store.GetCard(ctx, card.ID)
+	if err != nil {
+		t.Fatalf("get updated card: %v", err)
+	}
+	if updated.ResearchState != port.ResearchStateDone {
+		t.Errorf("ResearchState = %s, want done", updated.ResearchState)
+	}
+	if updated.ResearchVerdict != "pursue" {
+		t.Errorf("ResearchVerdict = %s, want pursue", updated.ResearchVerdict)
+	}
+	if updated.Status != port.StatusReview {
+		t.Errorf("Status = %s, want review", updated.Status)
+	}
+
+	// 5. Verify research findings exist
+	researches, err := h.store.ListResearchByCard(ctx, card.ID)
+	if err != nil || len(researches) == 0 {
+		t.Fatalf("expected research row for card %d, got %v", card.ID, researches)
+	}
+	latest := researches[len(researches)-1]
+	if latest.Status != "done" {
+		t.Errorf("latest research status = %s, want done", latest.Status)
+	}
+	findings, err := h.store.GetResearchFindings(ctx, latest.ID)
+	if err != nil || strings.TrimSpace(findings) == "" {
+		t.Errorf("expected non-empty findings, got %q (err=%v)", findings, err)
+	}
+	if !strings.Contains(findings, "# Research: DuckDB vs SQLite for embedded analytical workloads") {
+		t.Errorf("findings missing subject card title:\n%s", findings)
 	}
 }
