@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -338,6 +339,17 @@ func (a *Adapter) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := a.Service.CaptureShare(ctx, share)
 	if err != nil {
+		if errors.Is(err, port.ErrNoiseGateDiscarded) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":        true,
+				"card_ids":  []int64{},
+				"count":     0,
+				"discarded": true,
+				"reason":    "🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance.",
+			})
+			return
+		}
 		a.logf("openclaw: capture error: %v", err)
 		http.Error(w, "capture failed: "+err.Error(), http.StatusInternalServerError)
 		return

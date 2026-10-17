@@ -60,6 +60,7 @@ vi.mock('./api', async () => {
       },
     }),
     patchSettings: vi.fn().mockResolvedValue({ ok: true }),
+    captureSpark: vi.fn().mockResolvedValue({ ok: true, card_ids: [1] }),
   };
 });
 
@@ -124,4 +125,44 @@ describe('App Playbook Studio Top-Level Navigation & Full-Width Workspace', () =
     // Verify Research Playbooks tab is not rendered in Platform Preferences
     expect(screen.queryByRole('tab', { name: /Research Playbooks/i })).toBeNull();
   });
+
+  it('displays noise gate discard toast when captureSpark returns discarded: true', async () => {
+    (api.captureSpark as any).mockResolvedValueOnce({
+      ok: true,
+      card_ids: [],
+      discarded: true,
+      reason: 'engagement bait or promotional hype with zero technical substance',
+    });
+
+    render(<App />);
+
+    // Wait for initial mount
+    await waitFor(() => {
+      expect(api.getSetupStatus).toHaveBeenCalled();
+    });
+
+    // Open New Card modal
+    const newSparkBtn = screen.getByRole('button', { name: /New Spark/i });
+    fireEvent.click(newSparkBtn);
+
+    // Wait for modal to render
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Paste URL/i)).toBeDefined();
+    });
+
+    // Enter bait URL and submit
+    const textarea = screen.getByPlaceholderText(/Paste URL/i);
+    fireEvent.change(textarea, { target: { value: 'https://x.com/hype/status/123' } });
+
+    const submitBtn = screen.getByRole('button', { name: /Capture & Synthesize/i });
+    fireEvent.click(submitBtn);
+
+    // Verify Noise Gate toast appears
+    await waitFor(() => {
+      expect(
+        screen.getByText('🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance.')
+      ).toBeDefined();
+    });
+  });
 });
+

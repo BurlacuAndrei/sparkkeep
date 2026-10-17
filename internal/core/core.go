@@ -433,6 +433,9 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 		s.Logf("core: analyze failed for %s: %v", share.URL, err)
 		return s.failCard(ctx, fetched, share.URL, capRow.ID)
 	}
+	if res.Discarded || (len(res.Cards) == 0 && res.DiscardReason != "") {
+		return nil, ErrNoiseGateDiscarded
+	}
 	if len(res.Cards) == 0 {
 		return []int64{}, nil
 	}
@@ -732,6 +735,9 @@ func (s *Service) executeResearch(ctx context.Context, row port.Research, card p
 // ErrNothingToReanalyze is returned when Retry has neither usable capture content nor a URL to fetch.
 var ErrNothingToReanalyze = errors.New("nothing to re-analyze")
 
+// ErrNoiseGateDiscarded is returned when the triage noise gate filters out engagement bait or hype.
+var ErrNoiseGateDiscarded = port.ErrNoiseGateDiscarded
+
 func hasUsableContent(c port.Capture) bool {
 	return strings.TrimSpace(c.Text) != "" ||
 		strings.TrimSpace(c.Transcript) != "" ||
@@ -886,6 +892,9 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 	if err != nil {
 		s.Logf("core: retry analyze card %d: %v", cardID, err)
 		return nil, err
+	}
+	if res.Discarded || (len(res.Cards) == 0 && res.DiscardReason != "") {
+		return nil, ErrNoiseGateDiscarded
 	}
 	if len(res.Cards) == 0 {
 		return []port.Card{}, nil

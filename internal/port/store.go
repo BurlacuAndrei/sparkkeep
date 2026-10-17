@@ -24,6 +24,9 @@ var ErrBuiltinReadOnly = errors.New("builtin playbook is read-only")
 // ErrInvalidPlaybook is returned when a playbook violates validation rules.
 var ErrInvalidPlaybook = errors.New("invalid playbook")
 
+// ErrNoiseGateDiscarded is returned when the triage noise gate filters out engagement bait or hype.
+var ErrNoiseGateDiscarded = errors.New("filtered by noise gate: engagement bait or promotional hype with zero technical substance")
+
 // CardStore provides CRUD and relationship operations for cards, tags, and comments.
 type CardStore interface {
 	CreateCard(ctx context.Context, c Card) (Card, error)

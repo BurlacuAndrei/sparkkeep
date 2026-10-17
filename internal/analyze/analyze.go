@@ -50,6 +50,8 @@ type AnalysisResult struct {
 	ExecutiveSummary string   `json:"executive_summary,omitempty"`
 	ValueProposition string   `json:"value_proposition,omitempty"`
 	ProposedActions  []string `json:"proposed_actions,omitempty"`
+	Discarded        bool     `json:"discarded"`
+	DiscardReason    string   `json:"discard_reason,omitempty"`
 	Cards            []Idea   `json:"cards"`
 }
 
@@ -406,6 +408,13 @@ func ExtractJSON(s string, activeTypes ...[]string) (AnalysisResult, error) {
 			res.ProposedActions = []string{}
 		}
 
+		if disc, ok := rawMap["discarded"]; ok {
+			_ = json.Unmarshal(disc, &res.Discarded)
+		}
+		if dReason, ok := rawMap["discard_reason"]; ok {
+			_ = json.Unmarshal(dReason, &res.DiscardReason)
+		}
+
 		if cardsRaw, ok := rawMap["cards"]; ok {
 			_ = json.Unmarshal(cardsRaw, &res.Cards)
 		} else if ideasRaw, ok := rawMap["ideas"]; ok {
@@ -415,6 +424,12 @@ func ExtractJSON(s string, activeTypes ...[]string) (AnalysisResult, error) {
 			if err := json.Unmarshal([]byte(s), &single); err == nil {
 				res.Cards = []Idea{single}
 			}
+		}
+
+		if res.Discarded || (len(res.Cards) == 0 && res.DiscardReason != "") {
+			res.Discarded = true
+			res.Cards = []Idea{}
+			return res, nil
 		}
 
 		if len(res.Cards) == 0 {
@@ -653,6 +668,8 @@ func PromptForWithTypes(payload capture.Fetched, activeTypes []string, profile .
 Analyze the source and produce a Triage Brief for each distinct idea, tool, or takeaway.
 Return ONLY a valid JSON object matching this schema:
 {
+  "discarded": false,
+  "discard_reason": "optional reason if discarded",
   "cards": [
     {
       "title": "short headline",
@@ -700,6 +717,7 @@ Rules:
 - By default, produce exactly ONE consolidated card per post, thread, or video, uniting all key takeaways and claims into a single coherent brief. Never fragment a single narrative post into multiple cards.
 - Multi-card splitting (card fission) is strictly permitted ONLY if the source explicitly covers distinct, structurally separated standalone topics (e.g., named video chapters or reviews of independent standalone tools/projects).
 - Hard ceiling of at most 3 cards per capture: never create more than 3 cards total, regardless of source length. If content covers many items, summarize them or produce a collection card rather than exceeding 3 cards.
+- Triage Noise Gate: If the captured content is purely engagement bait, discussion farming (e.g. 'thoughts?', 'agree or disagree?', 'which is better?'), follower/comment gates ('comment X to get link'), or promotional hype with zero technical or factual substance, set "discarded": true with a brief "discard_reason", and return an empty "cards": [] array.
 - EXTRACTION NOTES are warnings about what could NOT be read. Never treat notes as content learned. If extraction notes indicate a login wall, paywall, unreadable content, or missing text/transcript, "signals.extraction" MUST be "partial" or "thin", NEVER "full".
 
 TITLE: %s

@@ -9,6 +9,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -401,10 +402,41 @@ func (a *Adapter) HandleCapture(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := a.Service.CaptureShare(ctx, share)
 	if err != nil {
+		if errors.Is(err, port.ErrNoiseGateDiscarded) {
+			_ = a.sendMessage(ctx, "🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance.")
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "card_ids": []int64{}, "discarded": true})
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "card_ids": ids})
+}
+
+func (a *Adapter) sendMessage(ctx context.Context, text string) error {
+	if a.BotToken == "" || a.ChannelID == "" {
+		return nil
+	}
+	payload := discordMessage{Content: text}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	url := fmt.Sprintf("%s/channels/%s/messages", a.apiBase, a.ChannelID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bot "+a.BotToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := a.client.Do(req)
+	if err != nil {
+		a.logf("discord: post message error: %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }

@@ -311,6 +311,9 @@ func (s *testStubService) CaptureShare(ctx context.Context, share capture.Share)
 		}
 		return nil, err
 	}
+	if res.Discarded || (len(res.Cards) == 0 && res.DiscardReason != "") {
+		return nil, port.ErrNoiseGateDiscarded
+	}
 	var ids []int64
 	for _, idea := range res.Cards {
 		card := port.Card{
@@ -1337,6 +1340,83 @@ func TestShareIngestionAnalysisFailedEditsPlaceholder(t *testing.T) {
 	}
 	if !strings.Contains(editMessages[0], "Analysis failed") {
 		t.Errorf("edited message text = %q, want containing 'Analysis failed'", editMessages[0])
+	}
+}
+
+func TestShareIngestionNoiseGateDiscardEditsPlaceholder(t *testing.T) {
+	st := newStubStore()
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(`{
+			"discarded": true,
+			"discard_reason": "filtered by noise gate: engagement bait or promotional hype with zero technical substance",
+			"cards": []
+		}`))
+	}))
+	defer llm.Close()
+	svc := stubService(t, st, llm)
+
+	var (
+		chatActions  []string
+		sendMessages []string
+		editMessages []string
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/sendChatAction"):
+			var body struct {
+				Action string `json:"action"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			chatActions = append(chatActions, body.Action)
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		case strings.HasSuffix(path, "/sendMessage"):
+			var body struct {
+				Text string `json:"text"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			sendMessages = append(sendMessages, body.Text)
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":99}}`))
+		case strings.HasSuffix(path, "/editMessageText"):
+			var body struct {
+				Text string `json:"text"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			editMessages = append(editMessages, body.Text)
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":99}}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		}
+	}))
+	defer srv.Close()
+
+	adapter := &Adapter{Token: "tok", OwnerID: 1, Service: svc, baseURL: srv.URL}
+	svc.Channel = adapter
+
+	adapter.handleMessage(&message{
+		MessageID: 1236,
+		Chat:      &chat{ID: 1},
+		Text:      "https://x.com/hype/status/999",
+	})
+
+	// Exactly one typing action
+	if len(chatActions) != 1 || chatActions[0] != "typing" {
+		t.Fatalf("chatActions = %v, want 1 typing action", chatActions)
+	}
+
+	// Exactly one placeholder message sent
+	if len(sendMessages) != 1 {
+		t.Fatalf("sendMessages count = %d, want exactly 1 placeholder sendMessage", len(sendMessages))
+	}
+
+	// Exactly one editMessageText replacing the placeholder with Noise Gate filter info
+	if len(editMessages) != 1 {
+		t.Fatalf("editMessages count = %d, want exactly 1 editMessageText replacing placeholder with discard notification", len(editMessages))
+	}
+	expectedMsg := "🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance."
+	if editMessages[0] != expectedMsg {
+		t.Errorf("edited message text = %q, want %q", editMessages[0], expectedMsg)
 	}
 }
 

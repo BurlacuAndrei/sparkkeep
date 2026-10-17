@@ -2384,6 +2384,7 @@ func TestService_CardMutationPipeline(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestRetrySubjectCardInPlace(t *testing.T) {
 	st := newStubStore()
 	ch := &stubChannel{}
@@ -2514,5 +2515,33 @@ func TestRetrySubjectCardAllEmptyErrors(t *testing.T) {
 	_, err = svc.Retry(context.Background(), emptyCard.ID)
 	if !errors.Is(err, ErrNothingToReanalyze) {
 		t.Fatalf("expected ErrNothingToReanalyze, got: %v", err)
+	}
+}
+
+func TestCaptureShare_NoiseGateDiscardedCreatesZeroCards(t *testing.T) {
+	st := newStubStore()
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(`{
+			"discarded": true,
+			"discard_reason": "filtered by noise gate: engagement bait or promotional hype with zero technical substance",
+			"cards": []
+		}`))
+	}))
+	defer llm.Close()
+
+	svc := baseSvc(t, st, &stubChannel{}, llm)
+	ids, err := svc.CaptureShare(context.Background(), capture.Share{
+		Kind: capture.KindLink,
+		URL:  "https://x.com/hype/status/123",
+	})
+
+	if !errors.Is(err, ErrNoiseGateDiscarded) {
+		t.Fatalf("expected ErrNoiseGateDiscarded, got: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("expected 0 card IDs, got: %v", ids)
+	}
+	if len(st.cards) != 0 {
+		t.Fatalf("expected 0 cards stored, got: %d", len(st.cards))
 	}
 }

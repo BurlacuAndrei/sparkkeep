@@ -3,12 +3,14 @@ package web
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -278,5 +280,90 @@ func TestMediaUnknownTypeIsAttachment(t *testing.T) {
 	}
 	if got := rec.Header().Get("Content-Disposition"); !strings.Contains(got, "attachment") {
 		t.Errorf("Content-Disposition = %q, want attachment", got)
+	}
+}
+
+func testHandlerWithLLM(t *testing.T, uploadDir string, llmURL string) (http.Handler, *store.Store) {
+	t.Helper()
+	st, err := store.New(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	ctx := t.Context()
+	svc := core.New(ctx, st, config.Config{
+		LLMModel: "stub", LLMBase: llmURL,
+		ASRURL: "", HeadlessEnabled: false,
+		UploadDir: uploadDir,
+	}, t.Logf)
+	cfg := config.Config{UploadDir: uploadDir, MaxUploadMB: 1}
+	return New(st, svc, cfg), st
+}
+
+func TestCaptureNoiseGateDiscard(t *testing.T) {
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(`{
+			"discarded": true,
+			"discard_reason": "engagement bait or promotional hype with zero technical substance",
+			"cards": []
+		}`))
+	}))
+	defer llm.Close()
+
+	h, _ := testHandlerWithLLM(t, t.TempDir(), llm.URL)
+
+	// 1. JSON capture
+	req := httptest.NewRequest("POST", "/api/v1/capture",
+		strings.NewReader(`{"url":"https://x.com/hype/status/123"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("JSON capture code = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		OK        bool    `json:"ok"`
+		CardIDs   []int64 `json:"card_ids"`
+		Discarded bool    `json:"discarded"`
+		Reason    string  `json:"reason"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !out.OK {
+		t.Errorf("out.OK = false, want true")
+	}
+	if !out.Discarded {
+		t.Errorf("out.Discarded = false, want true")
+	}
+	if out.Reason != "engagement bait or promotional hype with zero technical substance" {
+		t.Errorf("out.Reason = %q, want expected discard reason", out.Reason)
+	}
+	if len(out.CardIDs) != 0 {
+		t.Errorf("out.CardIDs = %v, want empty", out.CardIDs)
+	}
+
+	// 2. Multipart form capture
+	body, ct := multipartBody(t, map[string]string{"url": "https://x.com/hype/status/456"}, "", "", "", nil)
+	mreq := httptest.NewRequest("POST", "/api/v1/capture", body)
+	mreq.Header.Set("Content-Type", ct)
+	mrec := httptest.NewRecorder()
+	h.ServeHTTP(mrec, mreq)
+
+	if mrec.Code != http.StatusOK {
+		t.Fatalf("multipart capture code = %d, want 200; body = %s", mrec.Code, mrec.Body.String())
+	}
+	var mout struct {
+		OK        bool    `json:"ok"`
+		CardIDs   []int64 `json:"card_ids"`
+		Discarded bool    `json:"discarded"`
+		Reason    string  `json:"reason"`
+	}
+	if err := json.Unmarshal(mrec.Body.Bytes(), &mout); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !mout.OK || !mout.Discarded || len(mout.CardIDs) != 0 {
+		t.Errorf("multipart response = %+v, want discarded true with 0 card IDs", mout)
 	}
 }

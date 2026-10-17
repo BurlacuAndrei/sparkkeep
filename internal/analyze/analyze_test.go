@@ -1083,3 +1083,84 @@ func TestPromptFor_ConsolidatedSingleCardAndFissionRules(t *testing.T) {
 		t.Errorf("prompt still contains legacy over-splitting rule")
 	}
 }
+
+func TestExtractJSON_NoiseGateDiscard(t *testing.T) {
+	// 1. Valid discard payload with empty cards
+	discardPayload := `{
+		"discarded": true,
+		"discard_reason": "filtered by noise gate: engagement bait or promotional hype with zero technical substance",
+		"cards": []
+	}`
+	res, err := ExtractJSON(discardPayload)
+	if err != nil {
+		t.Fatalf("ExtractJSON returned error for discarded payload: %v", err)
+	}
+	if !res.Discarded {
+		t.Errorf("res.Discarded = false, want true")
+	}
+	if res.DiscardReason != "filtered by noise gate: engagement bait or promotional hype with zero technical substance" {
+		t.Errorf("res.DiscardReason = %q, unexpected", res.DiscardReason)
+	}
+	if len(res.Cards) != 0 {
+		t.Errorf("len(res.Cards) = %d, want 0", len(res.Cards))
+	}
+
+	// 2. Discard payload where LLM also hallucinated cards: Cards must be forced empty
+	hallucinatedCards := `{
+		"discarded": true,
+		"discard_reason": "promotional hype",
+		"cards": [
+			{"title": "Hype Coin", "tldr": "To the moon!", "horizon": "short-term"}
+		]
+	}`
+	resHype, err := ExtractJSON(hallucinatedCards)
+	if err != nil {
+		t.Fatalf("ExtractJSON returned error for discarded payload with cards: %v", err)
+	}
+	if !resHype.Discarded {
+		t.Errorf("resHype.Discarded = false, want true")
+	}
+	if len(resHype.Cards) != 0 {
+		t.Errorf("len(resHype.Cards) = %d, want 0", len(resHype.Cards))
+	}
+
+	// 3. Normal payload: discarded should be false
+	normalPayload := `{
+		"discarded": false,
+		"cards": [
+			{"title": "Real Tech", "tldr": "A solid tool", "horizon": "short-term"}
+		]
+	}`
+	resNorm, err := ExtractJSON(normalPayload)
+	if err != nil {
+		t.Fatalf("ExtractJSON failed on normal payload: %v", err)
+	}
+	if resNorm.Discarded {
+		t.Errorf("resNorm.Discarded = true, want false")
+	}
+	if len(resNorm.Cards) != 1 {
+		t.Errorf("len(resNorm.Cards) = %d, want 1", len(resNorm.Cards))
+	}
+}
+
+func TestPromptFor_TriageNoiseGateRules(t *testing.T) {
+	fixture := capture.Fetched{
+		Kind:  capture.KindLink,
+		Title: "Bait Post",
+		Text:  "Agree or disagree? Comment below!",
+	}
+	prompt := PromptFor(fixture)
+
+	// Schema contains discarded fields
+	if !strings.Contains(prompt, `"discarded": false`) {
+		t.Errorf("prompt schema missing \"discarded\": false")
+	}
+	if !strings.Contains(prompt, `"discard_reason":`) {
+		t.Errorf("prompt schema missing \"discard_reason\"")
+	}
+
+	// Rules contain Noise Gate rule
+	if !strings.Contains(prompt, "Triage Noise Gate: If the captured content is purely engagement bait, discussion farming (e.g. 'thoughts?', 'agree or disagree?', 'which is better?'), follower/comment gates ('comment X to get link'), or promotional hype with zero technical or factual substance, set \"discarded\": true with a brief \"discard_reason\", and return an empty \"cards\": [] array.") {
+		t.Errorf("prompt missing Triage Noise Gate rule")
+	}
+}
