@@ -26,15 +26,16 @@ Most "read-it-later" and bookmarking apps are digital graveyards: you save inter
 **Sparkkeep is not a bookmark manager — it is an Action Engine.**
 
 When you share an idea, tweet, GitHub repository, audio memo, or screenshot from your mobile phone or web browser, Sparkkeep:
-1. **Captures it immutably** with full source provenance tracking.
-2. **Scrapes & transcribes** content automatically (headless Chrome, yt-dlp, Whisper ASR).
-3. **Synthesizes a structured Triage Brief** using your choice of LLM (local Ollama or cloud BYOK).
-4. **Decomposes complex items** into discrete, actionable cards routed to realistic horizons (**Now**, **Next**, **Later**).
-5. **Enables deep, hallucination-free research playbooks** with factual web groundings and citations.
+1. **Captures it immutably** with full source provenance tracking (or seeds user-authored **Subject Cards** without requiring external URLs).
+2. **Filters engagement bait** via an automated Triage Noise Gate so clickbait and spam never pollute your Inbox.
+3. **Scrapes & transcribes** content automatically (headless Chrome, yt-dlp, Whisper ASR).
+4. **Synthesizes a structured Triage Brief** using your choice of LLM (local Ollama or cloud BYOK) with a consolidated single-card default and 3-card fission cap.
+5. **Decomposes complex items** into discrete, actionable cards routed to realistic horizons (**Now**, **Next**, **Later**).
+6. **Enables deep, hallucination-free research playbooks** in **Playbook Studio** with factual web groundings and citations.
 
 ```
  Traditional Bookmarkers:  Save Link ─────────────► Digital Graveyard 💀
- Sparkkeep Engine:         Capture ──► AI Triage ──► Horizon Routing ──► Deep Research ──► Shipped 🚀
+ Sparkkeep Engine:         Capture ──► Noise Gate ──► AI Triage ──► Horizon Routing ──► Deep Research ──► Shipped 🚀
 ```
 
 ---
@@ -57,8 +58,8 @@ Burn through your incoming inbox backlogs with keyboard shortcuts (`1` Now, `2` 
   <img src="docs/assets/triage-deck.png" alt="Swipeable Triage Deck" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
 </p>
 
-### 3. Structured Card Dossier & Action Checklist
-Every card decomposes the captured source into a concrete TL;DR takeaway, why it matters, an interactive checklist of next actions, full source provenance, and direct deep research triggers.
+### 3. Structured Card Dossier, Action Checklist & Subject Cards
+Every card decomposes captured sources into a concrete TL;DR takeaway, why it matters, an interactive checklist of next actions, and direct deep research triggers. User-authored notes are treated as first-class **Subject Cards** with on-demand AI triage synthesis and autonomous research grounding directly on your topic notes without requiring external URLs.
 
 <p align="center">
   <img src="docs/assets/card-modal.png" alt="Card Detail & Action Checklist" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
@@ -78,11 +79,18 @@ Instant, zero-latency full-text search powered by SQLite FTS5. Filter across car
   <img src="docs/assets/omnisearch.png" alt="Omnisearch Cmd+K" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
 </p>
 
-### 6. Weekly Intelligence Digest
-Automated high-level syntheses identifying emergent themes across your captured cards, weekly win velocity, triage clearance rates, and horizon distribution balances.
+### 6. Weekly Intelligence Digest & Multi-Channel Broadcast
+Automated high-level syntheses identifying emergent themes across your captured cards, weekly win velocity, triage clearance rates, and horizon distribution balances. Broadcast your synthesized brief directly to **Telegram**, **Discord**, or **Slack** with a single click.
 
 <p align="center">
   <img src="docs/assets/weekly-digest.png" alt="Weekly Intelligence Digest" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
+
+### 7. Playbook Studio Workspace & Pipeline Timeline
+Design and customize deterministic research workflows in a dedicated, full-width builder canvas. Reorder pipeline steps via an interactive visual timeline, inspect real-time methodological rigor with **5-Pillar Research Health Linter** badges (Grounding, Planning, Fact-Check, Landscape, Decision Verdict), and test prompts safely with zero-cost client-side dry runs.
+
+<p align="center">
+  <img src="docs/assets/playbook-studio.png" alt="Playbook Studio Workspace" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
 </p>
 
 ---
@@ -168,12 +176,13 @@ flowchart TD
 
     subgraph Hub ["Unified Channel Hub"]
         ROUTER["Router & Provenance Tracker<br/>(internal/channel)"]
+        GATE["Triage Noise Gate<br/>(Junk & Bait Filter)"]
     end
 
     subgraph Pipeline ["Capture & Triage Pipeline"]
         SCRAPE["Scraper & Fetcher<br/>(HTTP / Headless Chrome / yt-dlp)"]
         ASR["Whisper ASR Audio Engine"]
-        LLM["LLM Synthesis & Card Splitter<br/>(OpenAI / Ollama / DeepSeek)"]
+        LLM["LLM Synthesis & Fission Policy<br/>(Single-Card Default, Cap 3)"]
     end
 
     subgraph Store ["Embedded Storage Engine"]
@@ -185,10 +194,13 @@ flowchart TD
         REACT["React 19 + TypeScript SPA"]
         KANBAN["Kanban & Horizon Boards"]
         TRIAGE["Swipeable Triage Deck"]
+        STUDIO["Playbook Studio Workspace"]
         SEARCH["Omnisearch (Cmd+K)"]
+        DIGEST["Weekly Intelligence Digest"]
     end
 
-    subgraph Research ["Deterministic Research Playbooks"]
+    subgraph Research ["Deterministic Research Engine"]
+        PLAYBOOKS["Playbook Studio & 5-Pillar Linter"]
         SEARX["SearXNG Search Engine"]
         VERIFY["Claim Verification & Sources"]
         REPORT["Markdown Intelligence Dossier"]
@@ -199,7 +211,8 @@ flowchart TD
     SL --> ROUTER
     WB --> ROUTER
 
-    ROUTER --> SCRAPE
+    ROUTER --> GATE
+    GATE -->|Passed| SCRAPE
     SCRAPE --> ASR
     ASR --> LLM
     LLM --> SQLITE
@@ -207,8 +220,12 @@ flowchart TD
     SQLITE --> REACT
     REACT --> KANBAN
     REACT --> TRIAGE
+    REACT --> STUDIO
     REACT --> SEARCH
+    REACT --> DIGEST
+    STUDIO --> PLAYBOOKS
     KANBAN --> SEARX
+    PLAYBOOKS --> SEARX
     SEARX --> VERIFY
     VERIFY --> REPORT
 ```
@@ -222,7 +239,11 @@ flowchart TD
 | **Zero-DB Single Binary** | Pure Go SQLite (`modernc.org/sqlite`), no CGO, no PostgreSQL, no Redis. | Runs anywhere (Raspberry Pi, NAS, VPS, Mac) in <30MB RAM with zero maintenance. |
 | **Omni-Channel Capture** | Ingest links, notes, images, and voice memos from Telegram, Discord, and Slack. | Never lose an idea on mobile. Capture from the apps you already live in. |
 | **Interactive In-Place Triage** | Telegram inline keyboards & Discord ActionRows let you triage (`→ Doing`, `→ Done`, `Shelve`) directly in chat. | Triage from your notifications without ever opening the web app. |
-| **Dual-View Productivity** | Switch seamlessly between fluid Kanban Boards and a Tinder-style swipeable **Triage Deck**. | Rapidly burn through capture backlogs with zero cognitive friction. |
+| **Triage Noise Gate & Fission Cap** | Ingestion noise gate rejects junk/bait; enforces single-card default with a 3-card max cap. | Prevents social media engagement bait and card explosion from cluttering your Inbox. |
+| **First-Class Subject Cards** | Capture raw ideas without URLs; run on-demand AI triage synthesis and autonomous research. | Freely capture open-ended hypotheses and research them with zero friction. |
+| **Playbook Studio Workspace** | Visual step sequencer, 5-Pillar Research Health Linter, prompt dry runs, and template gallery. | Full freedom to compose custom research workflows while guaranteeing methodological rigor. |
+| **Configurable Card Taxonomy** | Up to 20 user-defined macro Card Types with category-based playbook routing and safe cascading. | Organize domain knowledge your way without classification drift or dead playbooks. |
+| **Dual-View Productivity** | Switch seamlessly between fluid Kanban Boards and a swipeable **Triage Deck**. | Rapidly burn through capture backlogs with minimal cognitive friction. |
 | **Deterministic Deep Research** | Bounded, multi-step investigative playbooks (Ground → Plan → Search → Fact-Check → Verdict). | No hallucinating infinite loops; generates verified reports backed by citations. |
 | **Omnisearch (Cmd+K)** | Instant, keyboard-first full-text search indexed in real-time via SQLite FTS5. | Find any card, snippet, tag, or note across years of captured data in milliseconds. |
 | **Privacy-First BYOK** | Connect local Ollama instances or custom OpenAI-compatible endpoints. | Your thoughts, notes, and research stay entirely on your private hardware. |
@@ -239,37 +260,46 @@ sequenceDiagram
     actor User as Mobile User
     participant Channels as Telegram / Discord / Webhook
     participant Hub as Sparkkeep Engine
-    participant LLM as LLM Analysis (BYOK)
+    participant Gate as Triage Noise Gate
+    participant LLM as LLM Synthesis (BYOK)
     participant DB as SQLite WAL (Local)
 
-    User->>Channels: Shares URL, Tweet, Note, or Audio Memo
+    User->>Channels: Shares URL, Tweet, Note, or Voice Memo
     Channels->>Hub: Inbound Webhook / Long-Poll (Provenance Preserved)
-    Hub->>Hub: Fetch URL Body / Transcribe Audio
-    Hub->>LLM: Generate Structured Triage Brief & Action Items
-    LLM-->>Hub: Return JSON Brief & Cards
-    Hub->>DB: Persist Cards & Index via FTS5
-    Hub->>Channels: Update message with interactive Triage buttons
-    User->>Channels: Tap '→ Doing' or 'Deep Research'
-    Channels->>Hub: Card status updated in real-time
+    Hub->>Gate: Evaluate Engagement Bait & Spam Filter
+    alt Filtered (Engagement Bait / Junk)
+        Gate-->>Hub: Reject & Discard
+        Hub->>Channels: Send discard notice (Inbox kept clean)
+    else Passed Noise Gate
+        Gate-->>Hub: Ingest Content
+        Hub->>Hub: Scrape Body / Transcribe Audio (Whisper)
+        Hub->>LLM: Generate Structured Triage Brief (Single-Card / Cap 3)
+        LLM-->>Hub: Return JSON Brief & Cards
+        Hub->>DB: Persist Cards & Index via FTS5
+        Hub->>Channels: Send interactive Triage keyboard (Now / Next / Shelve)
+        User->>Channels: Tap triage action or Deep Research
+        Channels->>Hub: Card status updated in real-time
+    end
 ```
 
 - **Telegram:** Built-in HTTP long-polling (`getUpdates`) with interactive inline keyboards (`→ Doing`, `→ Done`, `Research`, `Shelve`).
 - **Discord:** Rich Embeds with action color bars and interactive ActionRow button components.
 - **Slack:** Rich Block Kit formatting with header blocks, markdown sections, and interactive action buttons.
-- **Weekly Digest Broadcasts:** Automatic or on-demand digest broadcasts dispatched across all configured channels.
+- **Noise Gate Feedback:** Automatic discard notifications informing users when low-signal hype or spam has been filtered out.
+- **Weekly Digest Broadcasts:** Instant single-click on-demand dispatches and scheduled automated digest broadcasts across all connected channels.
 
 ---
 
-## 🔬 Deterministic Research Playbooks
+## 🔬 Deterministic Research Playbooks & Playbook Studio
 
-Unbounded LLM loops are expensive and hallucinate. Sparkkeep's research engine executes deterministic, reproducible playbooks:
+Unbounded LLM loops are expensive and hallucinate. Sparkkeep combines deterministic, reproducible research playbooks with a visual authoring environment in **Playbook Studio**:
 
 ```
- [1. Ground]       Ingest card context, captured raw text, and metadata
+ [1. Ground]       Ingest card context, captured raw text, or Subject Card notes
       │
  [2. Plan]         Formulate decomposing questions and targeted search queries
       │
- [3. Search]       Execute queries against SearXNG or search endpoints
+ [3. Search]       Execute queries against SearXNG or private search endpoints
       │
  [4. Read & Clip]  Fetch and clip candidate source URLs in parallel
       │
@@ -281,6 +311,19 @@ Unbounded LLM loops are expensive and hallucinate. Sparkkeep's research engine e
       │
  [8. Dossier]      Compile comprehensive Markdown research dossier
 ```
+
+### 5 Pillars of Research Health
+The **Research Health Linter** guides users with non-blocking advisory checks as they compose steps:
+1. **Context Grounding:** Ensures input text, provenance, and claims are seeded into prompts.
+2. **Decomposition & Planning:** Formulates targeted search queries rather than broad questions.
+3. **Fact-Checking & Sources:** Enforces explicit URL citations `[S#]` against extracted web text.
+4. **Market & Landscape:** Evaluates competitors, alternatives, and technical viability.
+5. **Actionable Verdict:** Delivers an unequivocal Pursue, Watch, or Skip verdict with confidence scores.
+
+### Category-Based Playbook Routing
+Playbooks are routed deterministically based on card taxonomy:
+`Explicit User Selection → Card Type Default → Platform Default`
+This ensures books, code repositories, deep tech papers, and business tools automatically trigger the right analytical lenses without fragile tag maintenance.
 
 ---
 
