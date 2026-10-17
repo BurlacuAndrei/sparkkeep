@@ -2384,7 +2384,6 @@ func TestService_CardMutationPipeline(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func TestRetrySubjectCardInPlace(t *testing.T) {
 	st := newStubStore()
 	ch := &stubChannel{}
