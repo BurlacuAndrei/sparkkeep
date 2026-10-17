@@ -137,30 +137,30 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
           border: '1px solid rgba(56, 189, 248, 0.25)',
           borderRadius: 6,
           fontSize: 11,
-          color: '#38bdf8',
+          color: 'var(--accent-blue)',
           margin: '6px 0',
         }}
       >
         {research.status === 'queued' ? (
           <>
-            <Clock size={12} color="#a5b4fc" />
-            <span style={{ fontWeight: 600, color: '#a5b4fc' }}>
+            <Clock size={12} color="var(--accent-indigo)" />
+            <span style={{ fontWeight: 600, color: 'var(--accent-indigo)' }}>
               Queued {research.queue_position ? `(#${research.queue_position})` : ''}
             </span>
           </>
         ) : (
           <>
             <Loader2 size={12} className="spin-slow" />
-            <span style={{ fontWeight: 600 }}>Researching</span>
-            <span style={{ color: '#94a3b8' }}>· {formatElapsed(elapsedSeconds)}</span>
+            <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Researching</span>
+            <span style={{ color: 'var(--text-dim)' }}>· {formatElapsed(elapsedSeconds)}</span>
           </>
         )}
         <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }}>
           {renderedSteps.map((st) => {
-            let dotColor = '#475569';
-            if (st.status === 'done') dotColor = '#34d399';
-            if (st.status === 'running') dotColor = '#38bdf8';
-            if (st.status === 'failed') dotColor = '#f87171';
+            let dotColor = 'var(--border-subtle)';
+            if (st.status === 'done') dotColor = 'var(--color-success-text, #10b981)';
+            if (st.status === 'running') dotColor = 'var(--accent-blue, #0284c7)';
+            if (st.status === 'failed') dotColor = 'var(--color-error-text, #ef4444)';
             return (
               <span
                 key={st.id}
@@ -184,8 +184,8 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
     <div
       className={`research-progress-strip ${className}`}
       style={{
-        background: 'rgba(15, 23, 42, 0.75)',
-        border: '1px solid rgba(56, 189, 248, 0.2)',
+        background: 'var(--surface-sunken)',
+        border: '1px solid var(--border-subtle)',
         borderRadius: 8,
         padding: '12px 14px',
         margin: '12px 0',
@@ -201,13 +201,13 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {isActive ? (
-            <Loader2 size={15} className="spin-slow" color="#38bdf8" />
+            <Loader2 size={15} className="spin-slow" color="var(--accent-blue)" />
           ) : research.status === 'done' ? (
-            <CheckCircle2 size={15} color="#34d399" />
+            <CheckCircle2 size={15} color="var(--color-success-text, #10b981)" />
           ) : (
-            <AlertCircle size={15} color="#f87171" />
+            <AlertCircle size={15} color="var(--color-error-text, #ef4444)" />
           )}
-          <span style={{ fontWeight: 600, fontSize: 13, color: '#f8fafc' }}>
+          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-main)' }}>
             {isActive
               ? research.status === 'queued'
                 ? `Research Queued (Position #${research.queue_position || 1})`
@@ -217,10 +217,10 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
               : 'Research Failed'}
           </span>
           {research.query && (
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>· {research.query}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>· {research.query}</span>
           )}
         </div>
-        <div style={{ fontSize: 12, color: '#94a3b8', fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
           ⏱️ {formatElapsed(elapsedSeconds)}
         </div>
       </div>
@@ -231,9 +231,9 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
             padding: '6px 10px',
             marginBottom: 8,
             borderRadius: 4,
-            background: 'rgba(248, 113, 113, 0.1)',
-            border: '1px solid rgba(248, 113, 113, 0.3)',
-            color: '#f87171',
+            background: 'var(--color-error-bg)',
+            border: '1px solid var(--color-error-border)',
+            color: 'var(--color-error-text)',
             fontSize: 12,
           }}
         >
@@ -249,30 +249,30 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
         }}
       >
         {renderedSteps.map((step) => {
-          let icon = <Clock size={12} color="#64748b" />;
-          let bg = 'rgba(30, 41, 59, 0.5)';
-          let border = 'rgba(51, 65, 85, 0.5)';
-          let textColor = '#64748b';
+          let icon = <Clock size={12} color="var(--text-dim)" />;
+          let bg = 'var(--bg-input, var(--surface-sunken))';
+          let border = 'var(--border-subtle)';
+          let textColor = 'var(--text-dim)';
 
           if (step.status === 'running') {
-            icon = <Loader2 size={12} className="spin-slow" color="#38bdf8" />;
-            bg = 'rgba(56, 189, 248, 0.12)';
-            border = 'rgba(56, 189, 248, 0.4)';
-            textColor = '#38bdf8';
+            icon = <Loader2 size={12} className="spin-slow" color="var(--accent-blue)" />;
+            bg = 'var(--color-info-bg, rgba(56, 189, 248, 0.12))';
+            border = 'var(--color-info-border, rgba(56, 189, 248, 0.4))';
+            textColor = 'var(--accent-blue, #0284c7)';
           } else if (step.status === 'done') {
-            icon = <CheckCircle2 size={12} color="#34d399" />;
-            bg = 'rgba(52, 211, 153, 0.08)';
-            border = 'rgba(52, 211, 153, 0.3)';
-            textColor = '#34d399';
+            icon = <CheckCircle2 size={12} color="var(--color-success-text, #10b981)" />;
+            bg = 'var(--color-success-bg, rgba(52, 211, 153, 0.08))';
+            border = 'var(--color-success-border, rgba(52, 211, 153, 0.3))';
+            textColor = 'var(--color-success-text, #15803d)';
           } else if (step.status === 'failed') {
-            icon = <XCircle size={12} color="#f87171" />;
-            bg = 'rgba(248, 113, 113, 0.12)';
-            border = 'rgba(248, 113, 113, 0.4)';
-            textColor = '#f87171';
+            icon = <XCircle size={12} color="var(--color-error-text, #ef4444)" />;
+            bg = 'var(--color-error-bg, rgba(248, 113, 113, 0.12))';
+            border = 'var(--color-error-border, rgba(248, 113, 113, 0.4))';
+            textColor = 'var(--color-error-text, #b91c1c)';
           } else if (step.status === 'skipped') {
-            icon = <MinusCircle size={12} color="#94a3b8" />;
-            bg = 'rgba(30, 41, 59, 0.3)';
-            textColor = '#64748b';
+            icon = <MinusCircle size={12} color="var(--text-faint)" />;
+            bg = 'var(--surface-sunken)';
+            textColor = 'var(--text-dim)';
           }
 
           return (
@@ -294,7 +294,7 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {icon}
-                <span style={{ fontSize: 11, fontWeight: 500, color: textColor }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: textColor }}>
                   {step.label}
                 </span>
               </div>

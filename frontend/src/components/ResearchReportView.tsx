@@ -67,7 +67,9 @@ const SafeMarkdown: React.FC<{ text: string }> = ({ text }) => {
           <code
             key={i}
             style={{
-              background: 'rgba(51, 65, 85, 0.4)',
+              background: 'var(--surface-sunken)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-main)',
               padding: '2px 5px',
               borderRadius: 4,
               fontSize: '0.9em',
@@ -97,9 +99,9 @@ const SafeMarkdown: React.FC<{ text: string }> = ({ text }) => {
               margin: '0 2px',
               padding: '1px 5px',
               borderRadius: 4,
-              background: 'rgba(56, 189, 248, 0.15)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
-              color: '#38bdf8',
+              background: 'var(--color-info-bg, rgba(56, 189, 248, 0.15))',
+              border: '1px solid var(--color-info-border, rgba(56, 189, 248, 0.3))',
+              color: 'var(--accent-blue, #0284c7)',
               fontSize: '0.85em',
               fontWeight: 600,
               textDecoration: 'none',
@@ -370,7 +372,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
               ))}
             </select>
           ) : (
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>None yet</span>
+            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>None yet</span>
           )}
         </div>
 
@@ -382,11 +384,11 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                 alignItems: 'center',
                 gap: 5,
                 fontSize: 12,
-                color: '#94a3b8',
+                color: 'var(--text-dim)',
               }}
               title="Total tokens consumed in this run"
             >
-              <Coins size={13} color="#fbbf24" />
+              <Coins size={13} color="var(--color-warning-text, #d97706)" />
               <span>{selectedRun.tokens.toLocaleString()} tokens</span>
             </div>
           )}
@@ -457,7 +459,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
         <>
           {/* Quick Section Anchor Pills */}
           <div className="research-anchor-pills">
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', marginRight: 4 }}>Jump to:</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginRight: 4 }}>Jump to:</span>
             {verdict && (
               <button
                 type="button"
@@ -581,20 +583,20 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     gap: 12,
                     padding: '8px 12px',
                     margin: '10px 0',
-                    background: 'rgba(15, 23, 42, 0.6)',
+                    background: 'var(--surface-sunken)',
                     borderRadius: 6,
-                    border: '1px solid rgba(56, 189, 248, 0.2)',
+                    border: '1px solid var(--border-subtle)',
                   }}
                 >
                   {verdict.suggested_horizon && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Compass size={13} color="#38bdf8" />
-                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Suggested Horizon:</span>
+                      <Compass size={13} color="var(--accent-blue)" />
+                      <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 500 }}>Suggested Horizon:</span>
                       <span
                         style={{
                           fontSize: 12,
-                          fontWeight: 600,
-                          color: '#38bdf8',
+                          fontWeight: 700,
+                          color: 'var(--accent-blue, #0284c7)',
                           textTransform: 'capitalize',
                         }}
                       >
@@ -609,7 +611,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       >
                         {appliedHorizon || card.horizon === verdict.suggested_horizon ? (
                           <>
-                            <Check size={11} color="#34d399" />
+                            <Check size={11} color="var(--color-success-text, #10b981)" />
                             <span>Applied</span>
                           </>
                         ) : (
@@ -621,8 +623,8 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
 
                   {verdict.suggested_tags && verdict.suggested_tags.length > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Tag size={13} color="#c084fc" />
-                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Suggested Tags:</span>
+                      <Tag size={13} color="var(--accent-purple)" />
+                      <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 500 }}>Suggested Tags:</span>
                       <div style={{ display: 'flex', gap: 4 }}>
                         {verdict.suggested_tags.map((t) => (
                           <span
@@ -631,8 +633,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                               fontSize: 11,
                               padding: '1px 6px',
                               borderRadius: 4,
-                              background: 'rgba(192, 132, 252, 0.15)',
-                              color: '#c084fc',
+                              background: 'rgba(168, 85, 247, 0.12)',
+                              color: 'var(--accent-purple, #7c3aed)',
+                              border: '1px solid rgba(168, 85, 247, 0.25)',
+                              fontWeight: 600,
                             }}
                           >
                             #{t}
@@ -648,7 +652,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       >
                         {appliedTags ? (
                           <>
-                            <Check size={11} color="#34d399" />
+                            <Check size={11} color="var(--color-success-text, #10b981)" />
                             <span>Applied</span>
                           </>
                         ) : (
@@ -699,17 +703,17 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   </thead>
                   <tbody>
                     {claims.map((cl, idx) => {
-                      let statusIcon = <CheckCircle2 size={14} color="#34d399" />;
-                      let statusColor = '#34d399';
+                      let statusIcon = <CheckCircle2 size={14} color="var(--color-success-text, #16a34a)" />;
+                      let statusColor = 'var(--color-success-text, #16a34a)';
                       let statusText = 'Supported';
 
                       if (cl.status === 'disputed') {
-                        statusIcon = <AlertTriangle size={14} color="#f87171" />;
-                        statusColor = '#f87171';
+                        statusIcon = <AlertTriangle size={14} color="var(--color-error-text, #dc2626)" />;
+                        statusColor = 'var(--color-error-text, #dc2626)';
                         statusText = 'Disputed';
                       } else if (cl.status === 'unverified') {
-                        statusIcon = <HelpCircle size={14} color="#fbbf24" />;
-                        statusColor = '#fbbf24';
+                        statusIcon = <HelpCircle size={14} color="var(--color-warning-text, #d97706)" />;
+                        statusColor = 'var(--color-warning-text, #d97706)';
                         statusText = 'Unverified';
                       }
 
@@ -741,9 +745,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                                   type="button"
                                   onClick={() => scrollToSource(src)}
                                   style={{
-                                    background: 'rgba(56, 189, 248, 0.15)',
-                                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                                    color: '#38bdf8',
+                                    background: 'var(--color-info-bg, rgba(56, 189, 248, 0.15))',
+                                    border: '1px solid var(--color-info-border, rgba(56, 189, 248, 0.3))',
+                                    color: 'var(--accent-blue, #0284c7)',
                                     borderRadius: 4,
                                     padding: '1px 6px',
                                     fontSize: 11,
@@ -844,9 +848,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                                 type="button"
                                 onClick={() => scrollToSource(src)}
                                 style={{
-                                  background: 'rgba(56, 189, 248, 0.15)',
-                                  border: '1px solid rgba(56, 189, 248, 0.3)',
-                                  color: '#38bdf8',
+                                  background: 'var(--color-info-bg, rgba(56, 189, 248, 0.15))',
+                                  border: '1px solid var(--color-info-border, rgba(56, 189, 248, 0.3))',
+                                  color: 'var(--accent-blue, #0284c7)',
                                   borderRadius: 4,
                                   padding: '1px 6px',
                                   fontSize: 11,
@@ -947,7 +951,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       onClick={handleAddSelectedActions}
                       style={{ fontSize: 11, padding: '3px 8px' }}
                     >
-                      <Plus size={11} color="#34d399" />
+                      <Plus size={11} color="var(--color-success-text, #10b981)" />
                       <span>Add Selected</span>
                     </button>
                     <button
@@ -1110,7 +1114,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     </div>
 
                     {s.url && (
-                      <div style={{ fontSize: 11.5, color: '#64748b', wordBreak: 'break-all', marginBottom: 4 }}>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-dim)', wordBreak: 'break-all', marginBottom: 4 }}>
                         {s.url}
                       </div>
                     )}
@@ -1120,7 +1124,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                         style={{
                           margin: '4px 0 0',
                           fontSize: 12,
-                          color: '#94a3b8',
+                          color: 'var(--text-dim)',
                           lineHeight: 1.5,
                           fontStyle: 'italic',
                           display: '-webkit-box',
@@ -1164,7 +1168,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       padding: '6px 12px',
                       fontSize: 12.5,
                       borderRadius: 6,
-                      border: feedbackRating === 'thumbs_up' ? '1px solid #10b981' : '1px solid var(--border-subtle)',
+                      border: feedbackRating === 'thumbs_up' ? '1px solid var(--color-success-border, #10b981)' : '1px solid var(--border-subtle)',
                       background: feedbackRating === 'thumbs_up' ? 'var(--color-success-bg)' : 'transparent',
                       color: feedbackRating === 'thumbs_up' ? 'var(--color-success-text)' : 'var(--text-dim)',
                       display: 'inline-flex',
@@ -1185,7 +1189,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       padding: '6px 12px',
                       fontSize: 12.5,
                       borderRadius: 6,
-                      border: feedbackRating === 'thumbs_down' ? '1px solid #ef4444' : '1px solid var(--border-subtle)',
+                      border: feedbackRating === 'thumbs_down' ? '1px solid var(--color-error-border, #ef4444)' : '1px solid var(--border-subtle)',
                       background: feedbackRating === 'thumbs_down' ? 'var(--color-error-bg)' : 'transparent',
                       color: feedbackRating === 'thumbs_down' ? 'var(--color-error-text)' : 'var(--text-dim)',
                       display: 'inline-flex',

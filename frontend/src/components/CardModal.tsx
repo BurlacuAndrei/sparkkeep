@@ -766,17 +766,17 @@ export const CardModal: React.FC<CardModalProps> = ({
             style={{
               padding: 14,
               borderRadius: 8,
-              background: 'rgba(99, 102, 241, 0.08)',
-              border: '1px solid rgba(99, 102, 241, 0.3)',
+              background: 'var(--surface-sunken)',
+              border: '1px solid var(--border-subtle)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <RefreshCw size={16} className="spin" color="#818cf8" />
+              <RefreshCw size={16} className="spin" color="var(--accent-indigo, #818cf8)" />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#e0e7ff' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
                   Autonomous Deep Research in Progress...
                 </div>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
                   Verifying claims, exploring live web sources, and synthesizing takeaways. This section updates automatically upon completion.
                 </div>
               </div>
@@ -803,17 +803,17 @@ export const CardModal: React.FC<CardModalProps> = ({
                     width: 32,
                     height: 32,
                     borderRadius: 6,
-                    background: 'rgba(192, 132, 252, 0.15)',
+                    background: 'var(--color-info-bg, rgba(192, 132, 252, 0.15))',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
                   }}
                 >
-                  <Sparkles size={16} color="#c084fc" />
+                  <Sparkles size={16} color="var(--accent-purple, #a855f7)" />
                 </div>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <span>Deep Research Report</span>
                     {research.result?.verdict?.recommendation && (
                       <span className={`card-verdict-pill ${research.result.verdict.recommendation}`} style={{ fontSize: 10, padding: '1px 6px' }}>
@@ -821,7 +821,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 2 }}>
                     {research.result?.claims?.length
                       ? `${research.result.claims.length} claims verified & synthesized`
                       : 'Autonomous multi-step analysis completed'}

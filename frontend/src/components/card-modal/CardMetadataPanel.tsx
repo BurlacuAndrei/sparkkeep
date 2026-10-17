@@ -86,14 +86,14 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
       {showSelectors && (
         <div className="rail-section">
           <div className="rail-section-title">
-            <Sliders size={13} color="#818cf8" />
+            <Sliders size={13} color="var(--accent-indigo, #818cf8)" />
             <span>Metadata & Properties</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {/* Status Selector */}
             <div>
-              <label style={{ fontSize: 11, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-main)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
                 Status
               </label>
               <CustomSelect
@@ -107,7 +107,7 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
 
             {/* Type Selector */}
             <div>
-              <label style={{ fontSize: 11, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-main)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
                 Type
               </label>
               <CustomSelect
@@ -121,7 +121,7 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
 
             {/* Horizon Selector */}
             <div>
-              <label style={{ fontSize: 11, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-main)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
                 Horizon
               </label>
               <CustomSelect
@@ -136,7 +136,7 @@ export const CardMetadataPanel: React.FC<CardMetadataPanelProps> = ({
             {/* Worthiness Rating */}
             {card.worthiness?.level && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>Worthiness:</span>
+                <span style={{ fontSize: 11, color: 'var(--text-main)', fontWeight: 600 }}>Worthiness:</span>
                 <span
                   className={`card-worthiness-chip ${card.worthiness.level.toLowerCase()}`}
                   title={card.worthiness.reason || `Worthiness: ${card.worthiness.level}`}
