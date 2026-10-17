@@ -18,9 +18,13 @@ import (
 type mockService struct {
 	updatedID    int64
 	updatedPatch port.CardPatch
+	captureErr   error
 }
 
 func (m *mockService) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
+	if m.captureErr != nil {
+		return nil, m.captureErr
+	}
 	return nil, nil
 }
 
@@ -171,5 +175,40 @@ func TestDiscordHandleInteractionRejectsInvalidSignature(t *testing.T) {
 				t.Errorf("expected no service call, got updated card %d", svc.updatedID)
 			}
 		})
+	}
+}
+
+func TestDiscordHandleCaptureNoiseGateDiscard(t *testing.T) {
+	var sentText string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var msg discordMessage
+		_ = json.NewDecoder(r.Body).Decode(&msg)
+		sentText = msg.Content
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id": "msg_999"}`))
+	}))
+	defer server.Close()
+
+	svc := &mockService{
+		captureErr: port.ErrNoiseGateDiscarded,
+	}
+	adapter := New(Config{
+		BotToken:  "test-token",
+		ChannelID: "123456789",
+	}, svc, "http://localhost:8080", nil)
+	adapter.apiBase = server.URL
+
+	body := []byte(`{"content":"https://x.com/hype/status/123"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/discord/capture", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	adapter.HandleCapture(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d; body = %s", rec.Code, rec.Body.String())
+	}
+	expectedFilterMsg := "🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance."
+	if sentText != expectedFilterMsg {
+		t.Errorf("sentText = %q, want %q", sentText, expectedFilterMsg)
 	}
 }

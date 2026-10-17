@@ -379,7 +379,11 @@ export interface CaptureResult {
   card_ids?: number[];
   cards?: number[];
   error?: string;
+  discarded?: boolean;
+  reason?: string;
 }
+
+export type CaptureResponse = CaptureResult;
 
 export async function captureSpark(params: CaptureParams): Promise<CaptureResult> {
   const token = localStorage.getItem(TOKEN_KEY) || '';

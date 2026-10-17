@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"sparkkeep/internal/capture"
+	"sparkkeep/internal/core"
 )
 
 // capture accepts a paste/paste-or-upload in one multipart request: an
@@ -48,6 +49,15 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 		}
 		ids, err := a.svc.CaptureShare(r.Context(), share)
 		if err != nil {
+			if errors.Is(err, core.ErrNoiseGateDiscarded) {
+				writeJSON(w, http.StatusOK, map[string]any{
+					"ok":        true,
+					"card_ids":  []int64{},
+					"discarded": true,
+					"reason":    "engagement bait or promotional hype with zero technical substance",
+				})
+				return
+			}
 			a.fail(w, err)
 			return
 		}
@@ -114,6 +124,15 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := a.svc.CaptureShare(r.Context(), share)
 	if err != nil {
+		if errors.Is(err, core.ErrNoiseGateDiscarded) {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"ok":        true,
+				"card_ids":  []int64{},
+				"discarded": true,
+				"reason":    "engagement bait or promotional hype with zero technical substance",
+			})
+			return
+		}
 		a.fail(w, err)
 		return
 	}
@@ -152,6 +171,20 @@ func (a *api) captureShare(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := a.svc.CaptureShare(r.Context(), share)
 	if err != nil {
+		if errors.Is(err, core.ErrNoiseGateDiscarded) {
+			if strings.Contains(r.Header.Get("Accept"), "application/json") {
+				writeJSON(w, http.StatusOK, map[string]any{
+					"ok":        true,
+					"card_ids":  []int64{},
+					"cards":     []int64{},
+					"discarded": true,
+					"reason":    "engagement bait or promotional hype with zero technical substance",
+				})
+				return
+			}
+			http.Redirect(w, r, "/?captured=true&discarded=true", http.StatusSeeOther)
+			return
+		}
 		a.fail(w, err)
 		return
 	}

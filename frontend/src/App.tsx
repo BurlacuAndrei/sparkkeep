@@ -235,7 +235,9 @@ function AppContent() {
       const res = await api.captureSpark(params);
       const cardIds = res.card_ids || res.cards || [];
       reloadAll();
-      if (cardIds.length > 0) {
+      if (res.discarded) {
+        showToast('🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance.');
+      } else if (cardIds.length > 0) {
         showToast(`✨ Spark captured & synthesized (${cardIds.length} card${cardIds.length > 1 ? 's' : ''})!`);
         try {
           const newCard = await api.fetchCard(cardIds[0]);

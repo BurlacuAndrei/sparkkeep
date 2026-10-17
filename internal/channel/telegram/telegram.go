@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -869,8 +870,14 @@ func (a *Adapter) handleMessage(m *message) {
 	if a.Service != nil {
 		if _, err := a.Service.CaptureShare(ctx, share); err != nil {
 			a.logf("telegram: capture: %v", err)
+			msg := "❌ Failed to process: " + escapeMarkdown(err.Error())
+			if errors.Is(err, port.ErrNoiseGateDiscarded) {
+				msg = "🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance."
+			}
 			if chatID, msgID, ok := state.claim(); ok {
-				_ = a.editMessageText(ctx, chatID, msgID, "❌ Failed to process: "+escapeMarkdown(err.Error()), 0, nil)
+				_ = a.editMessageText(ctx, chatID, msgID, msg, 0, nil)
+			} else if errors.Is(err, port.ErrNoiseGateDiscarded) {
+				_, _ = a.sendMessageReply(ctx, msg, m.MessageID, 0, nil)
 			}
 		} else {
 			if chatID, msgID, ok := state.claim(); ok {
