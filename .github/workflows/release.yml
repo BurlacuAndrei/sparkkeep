@@ -9,8 +9,32 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    name: Verify Tests Before Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package.json
+
+      - name: Run verification checks
+        run: make check
+
   build-release:
     name: Build Binary (${{ matrix.targetos }}/${{ matrix.arch }})
+    needs: verify
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -59,20 +83,22 @@ jobs:
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: '0'
         run: |
+          mkdir -p dist
           BINARY_NAME="sparkkeep-${{ matrix.targetos }}-${{ matrix.arch }}${{ matrix.ext }}"
           go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "dist/$BINARY_NAME" ./cmd/sparkkeep
 
       - name: Package Release Asset
         shell: bash
         run: |
+          cp LICENSE README.md dist/
           cd dist
           BINARY_NAME="sparkkeep-${{ matrix.targetos }}-${{ matrix.arch }}${{ matrix.ext }}"
           if [ "${{ matrix.targetos }}" = "windows" ]; then
             ARCHIVE_NAME="sparkkeep-${{ github.ref_name }}-${{ matrix.targetos }}-${{ matrix.arch }}.zip"
-            zip -j "$ARCHIVE_NAME" "$BINARY_NAME"
+            zip -j "$ARCHIVE_NAME" "$BINARY_NAME" LICENSE README.md
           else
             ARCHIVE_NAME="sparkkeep-${{ github.ref_name }}-${{ matrix.targetos }}-${{ matrix.arch }}.tar.gz"
-            tar -czvf "$ARCHIVE_NAME" "$BINARY_NAME"
+            tar -czvf "$ARCHIVE_NAME" "$BINARY_NAME" LICENSE README.md
           fi
           echo "ASSET_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
 
@@ -98,12 +124,18 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Generate SHA256 Checksums
+        working-directory: release-assets
+        run: |
+          sha256sum sparkkeep-* > checksums.txt
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             release-assets/*.tar.gz
             release-assets/*.zip
+            release-assets/checksums.txt
           generate_release_notes: true
           draft: false
           prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
