@@ -420,6 +420,9 @@ func ExtractJSON(s string, activeTypes ...[]string) (AnalysisResult, error) {
 		if len(res.Cards) == 0 {
 			return AnalysisResult{}, ErrInvalidResponse
 		}
+		if len(res.Cards) > 3 {
+			res.Cards = res.Cards[:3]
+		}
 		res.Cards = normalizeIdeaCards(res.Cards, activeTypes...)
 		if err := validateCards(res.Cards); err != nil {
 			return AnalysisResult{}, err
@@ -439,6 +442,9 @@ func ExtractJSON(s string, activeTypes ...[]string) (AnalysisResult, error) {
 		var cards []Idea
 		if err := json.Unmarshal([]byte(s), &cards); err != nil {
 			return AnalysisResult{}, ErrInvalidResponse
+		}
+		if len(cards) > 3 {
+			cards = cards[:3]
 		}
 		cards = normalizeIdeaCards(cards, activeTypes...)
 		if err := validateCards(cards); err != nil {
@@ -691,8 +697,9 @@ Rules:
   - "published_at": publication date if mentioned, else omit or empty.
 - "worthiness": "level" ("high", "medium", or "low") and a brief "reason".
 - "references": extract named entities and explicit links.
-- One card per distinct idea, tool, or topic. Never merge distinct ideas; never drop important ones.
-- If the content is a broad directory, roundup, or listicle of many items (>6 items), create a "collection" card containing the curated list, rather than fragmenting into dozens of individual cards.
+- By default, produce exactly ONE consolidated card per post, thread, or video, uniting all key takeaways and claims into a single coherent brief. Never fragment a single narrative post into multiple cards.
+- Multi-card splitting (card fission) is strictly permitted ONLY if the source explicitly covers distinct, structurally separated standalone topics (e.g., named video chapters or reviews of independent standalone tools/projects).
+- Hard ceiling of at most 3 cards per capture: never create more than 3 cards total, regardless of source length. If content covers many items, summarize them or produce a collection card rather than exceeding 3 cards.
 - EXTRACTION NOTES are warnings about what could NOT be read. Never treat notes as content learned. If extraction notes indicate a login wall, paywall, unreadable content, or missing text/transcript, "signals.extraction" MUST be "partial" or "thin", NEVER "full".
 
 TITLE: %s

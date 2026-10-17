@@ -863,10 +863,8 @@ func TestCardTaxonomy_ExtractJSONNormalizesUnlistedTypes(t *testing.T) {
 	jsonPayload := `{
 		"cards": [
 			{"title": "Card 1", "type": "tool", "tldr": "Tool card", "why_care": "Care", "horizon": "short-term"},
-			{"title": "Card 2", "type": "repo", "tldr": "Repo card", "why_care": "Care", "horizon": "short-term"},
-			{"title": "Card 3", "type": "unlisted_thing", "tldr": "Unlisted card", "why_care": "Care", "horizon": "short-term"},
-			{"title": "Card 4", "type": "other", "tldr": "Other card", "why_care": "Care", "horizon": "short-term"},
-			{"title": "Card 5", "type": "ARTICLE", "tldr": "Article uppercase", "why_care": "Care", "horizon": "short-term"}
+			{"title": "Card 2", "type": "unlisted_thing", "tldr": "Unlisted card", "why_care": "Care", "horizon": "short-term"},
+			{"title": "Card 3", "type": "ARTICLE", "tldr": "Article uppercase", "why_care": "Care", "horizon": "short-term"}
 		]
 	}`
 
@@ -876,26 +874,25 @@ func TestCardTaxonomy_ExtractJSONNormalizesUnlistedTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExtractJSON failed: %v", err)
 	}
-	if len(res.Cards) != 5 {
-		t.Fatalf("expected 5 cards, got %d", len(res.Cards))
+	if len(res.Cards) != 3 {
+		t.Fatalf("expected 3 cards, got %d", len(res.Cards))
 	}
 	if res.Cards[0].Type != "tool" {
 		t.Errorf("card 0 expected 'tool', got %q", res.Cards[0].Type)
 	}
-	if res.Cards[1].Type != "repo" {
-		t.Errorf("card 1 expected 'repo', got %q", res.Cards[1].Type)
-	}
 	// unlisted_thing normalized to "other"
-	if res.Cards[2].Type != "other" {
-		t.Errorf("card 2 expected 'other', got %q", res.Cards[2].Type)
-	}
-	// other remains "other"
-	if res.Cards[3].Type != "other" {
-		t.Errorf("card 3 expected 'other', got %q", res.Cards[3].Type)
+	if res.Cards[1].Type != "other" {
+		t.Errorf("card 1 expected 'other', got %q", res.Cards[1].Type)
 	}
 	// ARTICLE lowercased to "article"
-	if res.Cards[4].Type != "article" {
-		t.Errorf("card 4 expected 'article', got %q", res.Cards[4].Type)
+	if res.Cards[2].Type != "article" {
+		t.Errorf("card 2 expected 'article', got %q", res.Cards[2].Type)
+	}
+
+	// verify explicit 'other' remains 'other'
+	resOther, err := ExtractJSON(`{"cards":[{"title":"Card","type":"other","tldr":"Other card","horizon":"short-term"}]}`, active)
+	if err != nil || len(resOther.Cards) != 1 || resOther.Cards[0].Type != "other" {
+		t.Errorf("expected explicit 'other' to remain 'other', got %+v", resOther.Cards)
 	}
 }
 
@@ -995,5 +992,94 @@ func TestCardTaxonomy_PromptForWithTypes(t *testing.T) {
 	nilPrompt := PromptForWithTypes(fixture, nil)
 	if nilPrompt != basePrompt {
 		t.Errorf("PromptForWithTypes(fixture, nil) did not match PromptFor(fixture)")
+	}
+}
+
+func TestExtractJSON_CeilingThreeCards(t *testing.T) {
+	// 1. cards array with 5 cards truncated to 3
+	payload5Cards := `{
+		"cards": [
+			{"title": "Card 1", "tldr": "TLDR 1", "horizon": "short-term"},
+			{"title": "Card 2", "tldr": "TLDR 2", "horizon": "short-term"},
+			{"title": "Card 3", "tldr": "TLDR 3", "horizon": "short-term"},
+			{"title": "Card 4", "tldr": "TLDR 4", "horizon": "short-term"},
+			{"title": "Card 5", "tldr": "TLDR 5", "horizon": "short-term"}
+		]
+	}`
+	res, err := ExtractJSON(payload5Cards)
+	if err != nil {
+		t.Fatalf("ExtractJSON failed: %v", err)
+	}
+	if len(res.Cards) != 3 {
+		t.Fatalf("expected 3 cards after ceiling truncation, got %d", len(res.Cards))
+	}
+	if res.Cards[0].Title != "Card 1" || res.Cards[1].Title != "Card 2" || res.Cards[2].Title != "Card 3" {
+		t.Errorf("expected first 3 cards preserved in order, got: %+v", res.Cards)
+	}
+
+	// 2. bare array with 4 cards truncated to 3
+	payloadBareArr := `[
+		{"title": "Card 1", "tldr": "TLDR 1", "horizon": "short-term"},
+		{"title": "Card 2", "tldr": "TLDR 2", "horizon": "short-term"},
+		{"title": "Card 3", "tldr": "TLDR 3", "horizon": "short-term"},
+		{"title": "Card 4", "tldr": "TLDR 4", "horizon": "short-term"}
+	]`
+	resArr, err := ExtractJSON(payloadBareArr)
+	if err != nil {
+		t.Fatalf("ExtractJSON bare array failed: %v", err)
+	}
+	if len(resArr.Cards) != 3 {
+		t.Fatalf("expected 3 cards after ceiling truncation for bare array, got %d", len(resArr.Cards))
+	}
+
+	// 3. ideas wrapper with 4 cards truncated to 3
+	payloadIdeas := `{
+		"ideas": [
+			{"title": "Idea 1", "tldr": "TLDR 1", "horizon": "short-term"},
+			{"title": "Idea 2", "tldr": "TLDR 2", "horizon": "short-term"},
+			{"title": "Idea 3", "tldr": "TLDR 3", "horizon": "short-term"},
+			{"title": "Idea 4", "tldr": "TLDR 4", "horizon": "short-term"}
+		]
+	}`
+	resIdeas, err := ExtractJSON(payloadIdeas)
+	if err != nil {
+		t.Fatalf("ExtractJSON ideas wrapper failed: %v", err)
+	}
+	if len(resIdeas.Cards) != 3 {
+		t.Fatalf("expected 3 cards after ceiling truncation for ideas, got %d", len(resIdeas.Cards))
+	}
+}
+
+func TestPromptFor_ConsolidatedSingleCardAndFissionRules(t *testing.T) {
+	fixture := capture.Fetched{
+		Kind:  capture.KindLink,
+		Title: "Test Article",
+		Text:  "Sample content",
+	}
+	prompt := PromptFor(fixture)
+
+	// Invariant: default single consolidated card
+	if !strings.Contains(prompt, "By default, produce exactly ONE consolidated card per post, thread, or video, uniting all key takeaways and claims into a single coherent brief.") {
+		t.Errorf("prompt missing single-card default rule")
+	}
+
+	// Invariant: explicitly forbid narrative fragmentation
+	if !strings.Contains(prompt, "Never fragment a single narrative post into multiple cards.") {
+		t.Errorf("prompt missing explicit narrative fragmentation prohibition")
+	}
+
+	// Invariant: strictly permitted splitting condition
+	if !strings.Contains(prompt, "Multi-card splitting (card fission) is strictly permitted ONLY if the source explicitly covers distinct, structurally separated standalone topics (e.g., named video chapters or reviews of independent standalone tools/projects).") {
+		t.Errorf("prompt missing fission restriction rule")
+	}
+
+	// Invariant: hard ceiling of 3 cards
+	if !strings.Contains(prompt, "Hard ceiling of at most 3 cards per capture: never create more than 3 cards total, regardless of source length.") {
+		t.Errorf("prompt missing 3-card hard ceiling rule")
+	}
+
+	// Invariant: old over-splitting rule must be absent
+	if strings.Contains(prompt, "One card per distinct idea, tool, or topic. Never merge distinct ideas; never drop important ones.") {
+		t.Errorf("prompt still contains legacy over-splitting rule")
 	}
 }
