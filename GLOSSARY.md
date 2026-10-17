@@ -55,3 +55,16 @@ _Avoid_: Playbook settings, recipe manager, workflow builder
 **Non-Destructive Taxonomy Cascade**:
 The safeguard policy ensuring that deleting a Card Type detaches it from associated Research Playbooks and falls back gracefully rather than destroying user-created playbooks.
 _Avoid_: Cascade delete, taxonomy wipe, orphaned playbook purge
+
+**Subject Card**:
+A user-authored card created from an open-ended topic, query, or thesis rather than captured from an external media URL.
+_Avoid_: Manual card, scratch card, blank card, note card
+
+**Card Fission**:
+The ingestion policy that splits a single multi-part capture into multiple cards only when distinct, standalone subjects or tools are identified.
+_Avoid_: Card splitting, post fragmentation, multi-card slicing
+
+**Triage Noise Gate**:
+The ingestion filter that identifies zero-signal engagement bait, rhetorical interaction hooks, or pure junk promotion and discards them entirely, preventing unwanted card creation.
+_Avoid_: Spam filter, bait blocker, fluff cleaner
+
