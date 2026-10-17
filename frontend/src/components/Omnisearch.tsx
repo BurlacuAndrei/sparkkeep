@@ -333,7 +333,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const itemEl = document.getElementById(`omni-item-${selectedIndex}`);
-    if (itemEl) {
+    if (itemEl && typeof itemEl.scrollIntoView === 'function') {
       itemEl.scrollIntoView({ block: 'nearest' });
     }
   }, [selectedIndex, isOpen]);

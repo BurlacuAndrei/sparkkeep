@@ -75,9 +75,7 @@ input, textarea, select {
   font-size: 13.5px;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
-textarea,
-select {
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), textarea, select) {
   color: var(--text-main);
   background-color: var(--bg-input);
   border: 1px solid var(--border-input);
@@ -87,16 +85,12 @@ select {
   transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):hover,
-textarea:hover,
-select:hover {
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), textarea, select):hover {
   border-color: var(--border-input-hover);
   background-color: var(--bg-input-hover);
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
-textarea:focus,
-select:focus {
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), textarea, select):focus {
   outline: none;
   border-color: var(--border-input-focus);
   background-color: var(--bg-input-focus);
