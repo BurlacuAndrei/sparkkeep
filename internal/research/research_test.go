@@ -112,10 +112,11 @@ type memoryStore struct {
 	port.Store
 	mu       sync.Mutex
 	progress []struct {
-		status string
-		query  string
-		steps  []port.ResearchStep
-		result *port.ResearchResult
+		status  string
+		query   string
+		steps   []port.ResearchStep
+		sources []port.Source
+		result  *port.ResearchResult
 	}
 	captures map[int64]port.Capture
 	cards    map[int64]port.Card
@@ -146,6 +147,15 @@ func (m *memoryStore) GetCard(_ context.Context, id int64) (port.Card, error) {
 		return port.Card{}, port.ErrNotFound
 	}
 	return card, nil
+}
+
+func (m *memoryStore) ListCardComments(_ context.Context, cardID int64) ([]port.CardComment, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if c, ok := m.cards[cardID]; ok && len(c.Comments) > 0 {
+		return c.Comments, nil
+	}
+	return nil, nil
 }
 
 func (m *memoryStore) GetResearch(_ context.Context, id int64) (port.Research, error) {
@@ -192,17 +202,20 @@ func (m *memoryStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) 
 	return card, nil
 }
 
-func (m *memoryStore) UpdateResearchProgress(_ context.Context, _ int64, status, query string, steps []port.ResearchStep, _ []port.Source, _ *port.ResearchPlan, result *port.ResearchResult, _ int) error {
+func (m *memoryStore) UpdateResearchProgress(_ context.Context, _ int64, status, query string, steps []port.ResearchStep, sources []port.Source, _ *port.ResearchPlan, result *port.ResearchResult, _ int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	stepsCopy := make([]port.ResearchStep, len(steps))
 	copy(stepsCopy, steps)
+	sourcesCopy := make([]port.Source, len(sources))
+	copy(sourcesCopy, sources)
 	m.progress = append(m.progress, struct {
-		status string
-		query  string
-		steps  []port.ResearchStep
-		result *port.ResearchResult
-	}{status: status, query: query, steps: stepsCopy, result: result})
+		status  string
+		query   string
+		steps   []port.ResearchStep
+		sources []port.Source
+		result  *port.ResearchResult
+	}{status: status, query: query, steps: stepsCopy, sources: sourcesCopy, result: result})
 	return nil
 }
 
@@ -1545,4 +1558,158 @@ func TestRunWithPlaybook_NoReportStep_FallbackReportSynthesizer(t *testing.T) {
 	if !strings.Contains(report2, "## Executive Verdict") {
 		t.Errorf("expected verdict section in synthesized report, got:\n%s", report2)
 	}
+}
+
+func TestRun_SubjectCardDeepResearch(t *testing.T) {
+	var searchQueries []string
+	var searchMu sync.Mutex
+
+	searchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		searchMu.Lock()
+		searchQueries = append(searchQueries, q)
+		searchMu.Unlock()
+
+		resURL := fmt.Sprintf("https://example.com/doc-%d", len(searchQueries))
+		fmt.Fprintf(w, `{"results":[{"url":%q}]}`, resURL)
+	}))
+	defer searchServer.Close()
+
+	var planPromptReceived string
+	var mu sync.Mutex
+
+	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+
+		content := ""
+		if strings.Contains(str, "research planning assistant") {
+			mu.Lock()
+			planPromptReceived = str
+			mu.Unlock()
+			content = `{"questions":[
+				{"id":"Q1","question":"DuckDB vs SQLite analytical benchmarks?","query":"duckdb sqlite analytical benchmark query performance","prefer_domains":["duckdb.org","sqlite.org"]},
+				{"id":"Q2","question":"Embedded OLAP vectorized architecture trade-offs?","query":"duckdb vectorized execution engine trade-offs"},
+				{"id":"Q3","question":"Concurrency limitations and counter-perspectives?","query":"duckdb vs sqlite concurrency write locks"}
+			]}`
+		} else if strings.Contains(str, "competitive and technology landscape") {
+			content = `{"landscape":[{"name":"chDB","url":"https://chdb.io","one_liner":"In-process ClickHouse engine","how_it_differs":"Alternative embedded OLAP engine","sources":["S1"]}]}`
+		} else if strings.Contains(str, "research synthesis and executive decision assistant") {
+			content = `{"recommendation":"pursue","for_whom":"data engineers","risks":["write concurrency contention"],"confidence":"high","next_actions":["Benchmark aggregate queries on NVMe","Profile memory footprint with large Parquet batches","Evaluate embedded concurrency constraints"],"suggested_horizon":"short-term","suggested_tags":["embedded-olap","duckdb","sqlite"]}`
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(content))
+	}))
+	defer llmServer.Close()
+
+	runner := stubRunner(llmServer, searchServer.URL)
+	tf := newTraceFetcher()
+	tf.bodies["https://example.com/doc-1"] = "DuckDB outperforms SQLite on vectorized TPC-H queries by 10x-50x."
+	tf.bodies["https://example.com/doc-2"] = "Vectorized query processing processes columnar chunks of 2048 tuples."
+	tf.bodies["https://example.com/doc-3"] = "DuckDB supports multi-reader single-writer semantics; SQLite WAL allows concurrent readers."
+	runner.Fetcher = tf
+
+	ms := newMemoryStore()
+	runner.Store = ms
+
+	subjectCard := port.Card{
+		ID:         77,
+		Title:      "DuckDB vs SQLite for embedded analytical workloads",
+		Summary:    "Investigating performance differences for local analytics queries",
+		SourceNote: "Benchmarking vectorized columnar scans vs B-tree row scans for aggregates",
+		Comments: []port.CardComment{
+			{Content: "Check Parquet scan performance on NVMe"},
+			{Content: "Evaluate write concurrency locks"},
+		},
+		Claims: nil,
+	}
+	ms.cards[77] = subjectCard
+
+	report, err := runner.RunWithID(context.Background(), subjectCard, 501)
+	if err != nil {
+		t.Fatalf("RunWithID on Subject Card failed: %v", err)
+	}
+
+	if strings.TrimSpace(report) == "" {
+		t.Fatal("expected non-empty report synthesized for Subject Card, got empty")
+	}
+
+	// 1. Assert plan prompt formatting
+	mu.Lock()
+	pPrompt := planPromptReceived
+	mu.Unlock()
+
+	if !strings.Contains(pPrompt, "Research Thesis:") {
+		t.Errorf("plan prompt missing 'Research Thesis:', got:\n%s", pPrompt)
+	}
+	if !strings.Contains(pPrompt, "DuckDB vs SQLite for embedded analytical workloads") {
+		t.Errorf("plan prompt missing card title, got:\n%s", pPrompt)
+	}
+	if !strings.Contains(pPrompt, "Investigating performance differences for local analytics queries") {
+		t.Errorf("plan prompt missing summary, got:\n%s", pPrompt)
+	}
+	if !strings.Contains(pPrompt, "Benchmarking vectorized columnar scans vs B-tree row scans for aggregates") {
+		t.Errorf("plan prompt missing source note, got:\n%s", pPrompt)
+	}
+	if !strings.Contains(pPrompt, "User Notes:") || !strings.Contains(pPrompt, "Check Parquet scan performance on NVMe") || !strings.Contains(pPrompt, "Evaluate write concurrency locks") {
+		t.Errorf("plan prompt missing user notes/comments, got:\n%s", pPrompt)
+	}
+	if !strings.Contains(pPrompt, "benchmarks, architecture trade-offs, and counter-perspectives") {
+		t.Errorf("plan prompt missing thesis guidance directive, got:\n%s", pPrompt)
+	}
+
+	// 2. Assert search queries executed
+	searchMu.Lock()
+	queriesLen := len(searchQueries)
+	searchMu.Unlock()
+	if queriesLen != 3 {
+		t.Errorf("expected 3 web searches executed, got %d: %v", queriesLen, searchQueries)
+	}
+
+	// 3. Assert report sections
+	expectedSections := []string{
+		"# Research: DuckDB vs SQLite for embedded analytical workloads",
+		"## Questions & Findings",
+		"## Competitive Landscape & Alternatives",
+		"## Executive Verdict",
+		"## Sources & Citations",
+	}
+	for _, sec := range expectedSections {
+		if !strings.Contains(report, sec) {
+			t.Errorf("report missing section %q:\n%s", sec, report)
+		}
+	}
+
+	// 4. Assert ground step registered user_thesis source
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	foundThesisSource := false
+	foundVerifyClaimsNote := false
+	for _, p := range ms.progress {
+		for _, s := range p.sources {
+			if s.Origin == "user_thesis" && s.Title == "DuckDB vs SQLite for embedded analytical workloads" {
+				foundThesisSource = true
+			}
+		}
+		for _, step := range p.steps {
+			if step.ID == "verify_claims" && step.Note == "No initial claims to verify" {
+				foundVerifyClaimsNote = true
+			}
+		}
+	}
+	if !foundThesisSource {
+		t.Errorf("expected ground step to register user_thesis source in registry")
+	}
+	if !foundVerifyClaimsNote {
+		t.Errorf("expected verify_claims step note 'No initial claims to verify'")
+	}
+
+	// Check final card write-back
+	updatedCard := ms.cards[77]
+	if updatedCard.ResearchVerdict != "pursue" || updatedCard.ResearchConfidence != "high" {
+		t.Errorf("card write-back failed: verdict=%s, confidence=%s", updatedCard.ResearchVerdict, updatedCard.ResearchConfidence)
+	}
+	if len(updatedCard.ProposedActions) != 3 {
+		t.Errorf("card write-back missing proposed actions: %v", updatedCard.ProposedActions)
+	}
+	_ = foundThesisSource
 }

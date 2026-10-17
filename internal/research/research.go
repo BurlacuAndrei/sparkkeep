@@ -568,6 +568,25 @@ func (r *Runner) stepGround(ctx context.Context, state *RunState) error {
 		}
 	}
 
+	if state.Card.CaptureID == nil && state.Capture == nil {
+		if state.Card.Title != "" || state.Card.Summary != "" || state.Card.SourceNote != "" {
+			thesisText := state.Card.Summary
+			if thesisText == "" {
+				thesisText = state.Card.SourceNote
+			}
+			if thesisText == "" {
+				thesisText = state.Card.Title
+			}
+			state.Sources.Add("", state.Card.Title, "user_thesis", thesisText, time.Now())
+		}
+	}
+
+	if len(state.Card.Comments) == 0 && state.Store != nil && state.Card.ID > 0 {
+		if comments, err := state.Store.ListCardComments(ctx, state.Card.ID); err == nil && len(comments) > 0 {
+			state.Card.Comments = comments
+		}
+	}
+
 	if len(state.References) == 0 && len(state.Card.References) > 0 {
 		state.References = state.Card.References
 	}
@@ -620,7 +639,8 @@ func (r *Runner) stepResolveRefs(ctx context.Context, state *RunState) error {
 // 3. plan — decompose into 3-5 sub-questions using research_plan model.
 func (r *Runner) stepPlan(ctx context.Context, state *RunState, cfg port.CustomStepConfig) error {
 	var b strings.Builder
-	b.WriteString(`You are a research planning assistant. Decompose this research topic into 3 to 5 targeted sub-questions to investigate key claims, technical details, alternatives, pricing/open-source viability, and maintenance.
+	if len(state.Card.Claims) == 0 && state.Capture == nil {
+		b.WriteString(`You are a research planning assistant. Decompose this research thesis into 3 targeted investigative web search queries to research and validate the topic, seeking primary documentation, benchmarks, architecture trade-offs, and counter-perspectives.
 Reply with ONLY a strict JSON object with this exact structure:
 {
   "questions": [
@@ -634,50 +654,87 @@ Reply with ONLY a strict JSON object with this exact structure:
 }
 
 `)
-	topicTitle := state.Card.Title
-	if (topicTitle == "" || topicTitle == "Analysis failed") && state.Capture != nil {
-		if state.Capture.Title != "" && state.Capture.Title != "Analysis failed" && state.Capture.Title != "Instagram" {
-			topicTitle = state.Capture.Title
-		} else if state.Capture.Description != "" {
-			desc := state.Capture.Description
-			if len(desc) > 80 {
-				desc = desc[:80] + "..."
-			}
-			topicTitle = desc
-		} else if state.Card.SourceURL != "" {
-			topicTitle = state.Card.SourceURL
+		b.WriteString("Research Thesis:\n")
+		b.WriteString("Title: " + state.Card.Title + "\n")
+		summary := state.Card.TLDR
+		if summary == "" {
+			summary = state.Card.Summary
 		}
-	}
-	b.WriteString("Topic Context:\nTitle: " + topicTitle + "\n")
-	tldr := state.Card.TLDR
-	if tldr == "" {
-		tldr = state.Card.Summary
-	}
-	if (tldr == "" || tldr == "Analysis failed, see source.") && state.Capture != nil {
-		if state.Capture.Description != "" {
-			tldr = state.Capture.Description
-		} else if state.Capture.Text != "" {
+		if summary != "" {
+			b.WriteString("TLDR/Summary: " + summary + "\n")
+		}
+		if state.Card.SourceNote != "" {
+			b.WriteString("Source Note: " + state.Card.SourceNote + "\n")
+		}
+		if len(state.Card.Comments) > 0 {
+			b.WriteString("User Notes:\n")
+			for _, comment := range state.Card.Comments {
+				cText := strings.TrimSpace(comment.Content)
+				if cText != "" {
+					b.WriteString("- " + cText + "\n")
+				}
+			}
+		}
+	} else {
+		b.WriteString(`You are a research planning assistant. Decompose this research topic into 3 to 5 targeted sub-questions to investigate key claims, technical details, alternatives, pricing/open-source viability, and maintenance.
+Reply with ONLY a strict JSON object with this exact structure:
+{
+  "questions": [
+    {
+      "id": "Q1",
+      "question": "Clear question to answer?",
+      "query": "concise web search query",
+      "prefer_domains": ["github.com", "docs.python.org"]
+    }
+  ]
+}
+
+`)
+		topicTitle := state.Card.Title
+		if (topicTitle == "" || topicTitle == "Analysis failed") && state.Capture != nil {
+			if state.Capture.Title != "" && state.Capture.Title != "Analysis failed" && state.Capture.Title != "Instagram" {
+				topicTitle = state.Capture.Title
+			} else if state.Capture.Description != "" {
+				desc := state.Capture.Description
+				if len(desc) > 80 {
+					desc = desc[:80] + "..."
+				}
+				topicTitle = desc
+			} else if state.Card.SourceURL != "" {
+				topicTitle = state.Card.SourceURL
+			}
+		}
+		b.WriteString("Topic Context:\nTitle: " + topicTitle + "\n")
+		tldr := state.Card.TLDR
+		if tldr == "" {
+			tldr = state.Card.Summary
+		}
+		if (tldr == "" || tldr == "Analysis failed, see source.") && state.Capture != nil {
+			if state.Capture.Description != "" {
+				tldr = state.Capture.Description
+			} else if state.Capture.Text != "" {
+				snippet := state.Capture.Text
+				if len(snippet) > 400 {
+					snippet = snippet[:400] + "..."
+				}
+				tldr = snippet
+			}
+		}
+		if tldr != "" {
+			b.WriteString("TL;DR / Summary: " + tldr + "\n")
+		}
+		if len(state.Card.Claims) == 0 && state.Capture != nil && state.Capture.Text != "" {
 			snippet := state.Capture.Text
-			if len(snippet) > 400 {
-				snippet = snippet[:400] + "..."
+			if len(snippet) > 800 {
+				snippet = snippet[:800] + "..."
 			}
-			tldr = snippet
+			b.WriteString("Capture excerpt:\n" + snippet + "\n")
 		}
-	}
-	if tldr != "" {
-		b.WriteString("TL;DR / Summary: " + tldr + "\n")
-	}
-	if len(state.Card.Claims) == 0 && state.Capture != nil && state.Capture.Text != "" {
-		snippet := state.Capture.Text
-		if len(snippet) > 800 {
-			snippet = snippet[:800] + "..."
-		}
-		b.WriteString("Capture excerpt:\n" + snippet + "\n")
-	}
-	if len(state.Card.Claims) > 0 {
-		b.WriteString("Claims:\n")
-		for _, cl := range state.Card.Claims {
-			b.WriteString("- " + cl + "\n")
+		if len(state.Card.Claims) > 0 {
+			b.WriteString("Claims:\n")
+			for _, cl := range state.Card.Claims {
+				b.WriteString("- " + cl + "\n")
+			}
 		}
 	}
 	if len(state.Card.OpenQuestions) > 0 {
@@ -695,7 +752,11 @@ Reply with ONLY a strict JSON object with this exact structure:
 	if existingSources := state.Sources.All(); len(existingSources) > 0 {
 		b.WriteString("Already grounded sources:\n")
 		for _, s := range existingSources {
-			b.WriteString("- " + s.Title + " (" + s.URL + ")\n")
+			u := s.URL
+			if u == "" {
+				u = s.Origin
+			}
+			b.WriteString("- " + s.Title + " (" + u + ")\n")
 		}
 	}
 	if strings.TrimSpace(cfg.Instruction) != "" {
@@ -778,7 +839,14 @@ func (r *Runner) stepSearch(ctx context.Context, state *RunState) error {
 
 	if totalResultsFound == 0 {
 		// If SearXNG returned 0 results but references or capture already produced text, continue!
-		if len(state.Sources.All()) > 0 {
+		hasGroundedEvidence := false
+		for _, s := range state.Sources.All() {
+			if s.Origin != "user_thesis" {
+				hasGroundedEvidence = true
+				break
+			}
+		}
+		if hasGroundedEvidence {
 			state.SetNote("search", "0 search results; continuing with grounded sources")
 			state.StepOutputs["question_urls"] = questionURLs
 			return nil
@@ -883,7 +951,8 @@ func (r *Runner) stepRead(ctx context.Context, state *RunState) error {
 func (r *Runner) stepVerifyClaims(ctx context.Context, state *RunState) error {
 	if len(state.Card.Claims) == 0 {
 		state.Result.Claims = []port.ClaimVerdict{}
-		state.SetNote("verify_claims", "No claims to verify")
+		state.StepOutputs["verify_claims"] = state.Result.Claims
+		state.SetNote("verify_claims", "No initial claims to verify")
 		return nil
 	}
 
@@ -1432,6 +1501,21 @@ func FallbackReportSynthesizer(state *RunState) string {
 				renderedCustom[k] = true
 			}
 		}
+	}
+
+	hasContentSections := sections.Len() > 0
+	hasExternalSources := false
+	if state.Sources != nil {
+		for _, s := range state.Sources.All() {
+			if s.Origin != "user_thesis" {
+				hasExternalSources = true
+				break
+			}
+		}
+	}
+
+	if !hasContentSections && !hasExternalSources {
+		return ""
 	}
 
 	// 6. Render registered sources if present
