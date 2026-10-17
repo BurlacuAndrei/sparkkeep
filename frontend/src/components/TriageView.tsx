@@ -373,9 +373,11 @@ export const TriageView: React.FC<TriageViewProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (mode !== 'deck' || e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
-      if (target && (target.closest('input, textarea, select, [contenteditable="true"]') || target.isContentEditable)) return;
+      if (target && typeof target.closest === 'function') {
+        if (target.closest('input, textarea, select, [contenteditable="true"]') || target.isContentEditable) return;
+      }
       if (document.querySelector('.modal-overlay, .modal-content, .drawer-overlay')) return;
-      const onControl = Boolean(target?.closest('button, a'));
+      const onControl = Boolean(target && typeof target.closest === 'function' && target.closest('button, a'));
       const k = e.key.toLowerCase();
       const code = e.code;
 
@@ -392,7 +394,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
       const is0 = k === '0' || k === 'à' || code === 'Digit0' || code === 'Numpad0';
       const isO = k === 'o' || code === 'KeyO';
 
-      if (k === 'arrowleft' || k === 'x') {
+      if (k === 'arrowleft' || k === 'x' || k === 'escape') {
         e.preventDefault();
         decide('dismiss');
       } else if (k === 'arrowright' || (k === 'enter' && !onControl)) {
