@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
-import { Card, Tag, DigestData, ViewMode } from './types';
+import { Card, Tag, DigestData, ViewMode, Settings } from './types';
 import * as api from './api';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -118,11 +118,25 @@ function AppContent() {
     }
   }, [showToast]);
 
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  const loadSettings = useCallback(async () => {
+    try {
+      const res = await api.getSettings();
+      if (res?.ok && res.settings) {
+        setSettings(res.settings);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const reloadAll = useCallback(() => {
     loadCards();
     loadTags();
+    loadSettings();
     if (viewMode === 'digest') loadDigest();
-  }, [loadCards, loadTags, loadDigest, viewMode]);
+  }, [loadCards, loadTags, loadSettings, loadDigest, viewMode]);
 
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
@@ -424,6 +438,7 @@ function AppContent() {
             onResearch={handleResearch}
             onRetry={handleRetry}
             showToast={showToast}
+            settings={settings}
           />
         </Suspense>
       )}

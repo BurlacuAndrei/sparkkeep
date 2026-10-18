@@ -8,7 +8,9 @@ vi.mock('../../api', async () => {
   return {
     ...actual,
     syncObsidian: vi.fn().mockResolvedValue({ written: 12, vault_path: '/vault' }),
+    testSinkConnection: vi.fn().mockResolvedValue({ ok: true, success: true, message: 'Vault directory is accessible and writable' }),
     testWebhook: vi.fn().mockResolvedValue({ ok: true, status_code: 200 }),
+    getSettings: vi.fn().mockResolvedValue({ ok: true, settings: { obsidian_vault_path: '/vault' } }),
   };
 });
 
@@ -84,5 +86,17 @@ describe('IntegrationsTab Ecosystem Tools', () => {
       expect.stringContaining('javascript:(function()')
     );
     expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Bookmarklet code copied'));
+  });
+
+  it('triggers obsidian connection test when Test Connection is clicked', async () => {
+    const showToast = vi.fn();
+    render(<IntegrationsTab showToast={showToast} />);
+
+    const testBtn = screen.getByRole('button', { name: /Test Connection/i });
+    fireEvent.click(testBtn);
+
+    await waitFor(() => {
+      expect(api.testSinkConnection).toHaveBeenCalledWith('obsidian', expect.any(Object));
+    });
   });
 });

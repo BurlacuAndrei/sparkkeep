@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Card, ResearchItem, Reference, CardComment, Capture } from '../types';
-import { fetchCard, fetchCardResearch, addCardComment, getErrorMessage, fetchCapture, createCard } from '../api';
+import { Card, ResearchItem, Reference, CardComment, Capture, Settings } from '../types';
+import { fetchCard, fetchCardResearch, addCardComment, getErrorMessage, fetchCapture, createCard, getSettings } from '../api';
 import {
   X,
   Sparkles,
@@ -47,6 +47,7 @@ export interface CardModalProps {
   onResearch: (id: number) => void;
   onRetry: (id: number) => void;
   showToast?: (msg: string, onUndo?: () => Promise<void> | void) => void;
+  settings?: Settings | null;
 }
 
 export const CardModal: React.FC<CardModalProps> = ({
@@ -59,7 +60,24 @@ export const CardModal: React.FC<CardModalProps> = ({
   onResearch,
   onRetry,
   showToast,
+  settings,
 }) => {
+  const [activeSettings, setActiveSettings] = useState<Settings | null>(settings || null);
+
+  useEffect(() => {
+    if (settings !== undefined) {
+      setActiveSettings(settings);
+      return;
+    }
+    getSettings()
+      .then((res) => {
+        if (res?.ok && res.settings) {
+          setActiveSettings(res.settings);
+        }
+      })
+      .catch(() => {});
+  }, [settings]);
+
   // Local Form States
   const [title, setTitle] = useState(card.title || '');
   const [tldr, setTldr] = useState(card.tldr || card.executive_summary || card.summary || '');
@@ -1070,6 +1088,7 @@ export const CardModal: React.FC<CardModalProps> = ({
               onDelete={onDelete}
               onClose={onClose}
               showToast={showToast}
+              settings={activeSettings}
             />
           </div>
         </div>

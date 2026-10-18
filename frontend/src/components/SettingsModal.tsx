@@ -91,6 +91,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
 
   const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
   const [hasSlackWebhook, setHasSlackWebhook] = useState(false);
+  const [obsidianVaultPath, setObsidianVaultPath] = useState('');
 
   // Appearance preferences state
 
@@ -151,6 +152,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
       .then(([res, loadedPlaybooks]) => {
         setPlaybooks(loadedPlaybooks || []);
         setHasAuthToken(Boolean(res.settings.has_auth_token));
+        setObsidianVaultPath(res.settings.obsidian_vault_path || '');
         const profs = res.settings.llm_profiles || [];
         if (profs.length > 0) {
           setProfiles(profs);
@@ -904,7 +906,12 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                     aria-labelledby="settings-tab-integrations"
                     style={{ minHeight: 0 }}
                   >
-                    <IntegrationsTab showToast={showToast} authToken={authToken} />
+                    <IntegrationsTab
+                      showToast={showToast}
+                      authToken={authToken}
+                      initialVaultPath={obsidianVaultPath}
+                      onVaultPathChange={setObsidianVaultPath}
+                    />
                   </div>
                 )}
 

@@ -410,5 +410,8 @@ export interface Settings {
   has_slack_webhook?: boolean;
   has_slack_bot_token?: boolean;
   slack_channel_id?: string;
+  obsidian_vault_path?: string;
+  client_intents_enabled?: string;
+  github_repo?: string;
 }
 

@@ -420,6 +420,7 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 	slackWebhook, _ := a.store.GetSetting(ctx, "slack_webhook_url")
 	slackBotToken, _ := a.store.GetSetting(ctx, "slack_bot_token")
 	slackChanID, _ := a.store.GetSetting(ctx, "slack_channel_id")
+	obsidianVaultPath, _ := a.store.GetSetting(ctx, "obsidian_vault_path")
 
 	cardTypes, err := a.store.GetCardTypes(ctx)
 	if err != nil || cardTypes == nil {
@@ -452,6 +453,7 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 			"has_slack_webhook":      slackWebhook != "",
 			"has_slack_bot_token":    slackBotToken != "",
 			"slack_channel_id":       slackChanID,
+			"obsidian_vault_path":    obsidianVaultPath,
 		},
 	})
 }
@@ -483,6 +485,7 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 		SlackWebhookURL   *string            `json:"slack_webhook_url,omitempty"`
 		SlackBotToken     *string            `json:"slack_bot_token,omitempty"`
 		SlackChannelID    *string            `json:"slack_channel_id,omitempty"`
+		ObsidianVaultPath *string            `json:"obsidian_vault_path,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -613,6 +616,9 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if b.SlackChannelID != nil {
 		_ = a.store.SetSetting(ctx, "slack_channel_id", *b.SlackChannelID)
+	}
+	if b.ObsidianVaultPath != nil {
+		_ = a.store.SetSetting(ctx, "obsidian_vault_path", strings.TrimSpace(*b.ObsidianVaultPath))
 	}
 
 	channelsChanged := b.TGToken != nil ||

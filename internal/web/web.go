@@ -105,6 +105,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/v1/cards/{id}/retry", a.retryCard)
 	mux.HandleFunc("POST /api/v1/cards/batch-shelve-stale", a.batchShelveStale)
 	mux.HandleFunc("GET /api/v1/cards/{id}/export.md", a.exportMarkdown)
+	mux.HandleFunc("POST /api/v1/cards/{id}/export/obsidian", a.exportCardObsidian)
 	mux.HandleFunc("GET /api/v1/cards/{id}/research", a.getCardResearch)
 	mux.HandleFunc("GET /api/v1/tags", a.listTags)
 	mux.HandleFunc("GET /api/v1/digest", a.weeklyDigest)
@@ -149,9 +150,15 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("PUT /api/v1/settings", a.patchSettings)
 	mux.HandleFunc("GET /api/v1/license/status", a.getLicenseStatus)
 	mux.HandleFunc("POST /api/v1/export/obsidian", a.syncObsidian)
+	mux.HandleFunc("POST /api/v1/integrations/obsidian/test", a.testObsidianSink)
 	mux.HandleFunc("GET /api/v1/export/library", a.exportLibraryJSON)
 	mux.HandleFunc("GET /api/v1/export/archive.zip", a.exportLibraryZip)
 	mux.HandleFunc("POST /api/v1/webhooks/test", a.testWebhook)
+
+	// Outbox RSS Feed
+	mux.HandleFunc("GET /api/v1/feed.xml", a.serveFeed)
+	mux.HandleFunc("GET /api/v1/integrations/outbox/token", a.getOutboxToken)
+	mux.HandleFunc("POST /api/v1/integrations/outbox/token/regenerate", a.regenerateOutboxToken)
 	return metrics.HTTPMiddleware(securityHeaders(a.authMiddleware(mux)))
 }
 
@@ -190,7 +197,8 @@ func isPublicPath(r *http.Request) bool {
 	case "/health", "/api/v1/health", "/livez", "/readyz", "/metrics",
 		"/api/v1/auth/verify", "/api/v1/setup/status", "/api/v1/setup", "/api/v1/setup/demo",
 		"/manifest.json", "/sw.js", "/icon.svg", "/favicon.svg", "/favicon.ico",
-		"/api/v1/channels/discord/interactions", "/api/v1/channels/openclaw/webhook":
+		"/api/v1/channels/discord/interactions", "/api/v1/channels/openclaw/webhook",
+		"/api/v1/feed.xml":
 		return true
 	}
 	if strings.HasPrefix(p, "/assets/") {

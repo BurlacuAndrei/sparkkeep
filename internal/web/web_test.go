@@ -1852,20 +1852,57 @@ func TestExportMarkdown(t *testing.T) {
 		ProposedActions: []string{"Read the paper", "Prototype a demo"},
 		SourceURL:       "https://example.com/bci", Tags: []string{"ai", "research"},
 	}
-	h := webHandler(st, &core.Service{Logf: t.Logf})
+	h := webHandler(st, &core.Service{Store: st, Logf: t.Logf})
 
 	rr := doJSON(t, h, http.MethodGet, "/api/v1/cards/7/export.md", "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rr.Code)
 	}
-	want := "# [Spark] Neural Interfaces\n\n" +
-		"**Executive Summary:** BCI is mainstreaming.\n" +
-		"**Value Proposition:** Big upside.\n\n" +
-		"### Proposed Actions\n- [ ] Read the paper\n- [ ] Prototype a demo\n\n" +
-		"**Source:** https://example.com/bci\n" +
-		"**Tags:** #ai #research\n"
-	if got := rr.Body.String(); got != want {
-		t.Fatalf("markdown:\ngot:\n%s\nwant:\n%s", got, want)
+	got := rr.Body.String()
+	if !strings.HasPrefix(got, "---\n") {
+		t.Fatalf("expected frontmatter, got:\n%s", got)
+	}
+	if !strings.Contains(got, `title: "Neural Interfaces"`) {
+		t.Fatalf("missing title in frontmatter:\n%s", got)
+	}
+	if !strings.Contains(got, "researched: false") {
+		t.Fatalf("expected researched: false:\n%s", got)
+	}
+	if !strings.Contains(got, "# Neural Interfaces") {
+		t.Fatalf("missing title header:\n%s", got)
+	}
+	if !strings.Contains(got, "## Executive Summary\n\nBCI is mainstreaming.") {
+		t.Fatalf("missing summary:\n%s", got)
+	}
+
+	// Add completed research to card 7 and verify export.md includes research dossier
+	st.researches[101] = port.Research{
+		ID:       101,
+		CardID:   7,
+		Status:   port.ResearchStateDone,
+		Findings: "Neural interfaces demonstrate high signal fidelity on low-power ASIC arrays.",
+		PlaybookSnapshot: &port.Playbook{
+			Name: "Neural Tech Brief",
+		},
+		CreatedAt: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC),
+	}
+
+	rr = doJSON(t, h, http.MethodGet, "/api/v1/cards/7/export.md", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	gotWithResearch := rr.Body.String()
+	if !strings.Contains(gotWithResearch, "researched: true") {
+		t.Fatalf("expected researched: true with completed research:\n%s", gotWithResearch)
+	}
+	if !strings.Contains(gotWithResearch, "## Research Dossier") {
+		t.Fatalf("missing Research Dossier heading:\n%s", gotWithResearch)
+	}
+	if !strings.Contains(gotWithResearch, "**Playbook:** Neural Tech Brief") {
+		t.Fatalf("missing playbook name:\n%s", gotWithResearch)
+	}
+	if !strings.Contains(gotWithResearch, "Neural interfaces demonstrate high signal fidelity") {
+		t.Fatalf("missing research findings:\n%s", gotWithResearch)
 	}
 
 	rr = doJSON(t, h, http.MethodGet, "/api/v1/cards/999/export.md", "")
@@ -2577,7 +2614,7 @@ func TestLicenseStatusAndObsidianExport(t *testing.T) {
 	}
 
 	// Verify markdown file exists on disk
-	notePath := filepath.Join(tempVault, "MIT Feature Card.md")
+	notePath := filepath.Join(tempVault, fmt.Sprintf("%d-MIT Feature Card.md", c.ID))
 	data, err := os.ReadFile(notePath)
 	if err != nil {
 		t.Fatalf("read synced note: %v", err)
@@ -3970,5 +4007,82 @@ func TestSetupDemoAndLibraryExport(t *testing.T) {
 	}
 	if ct := rrZip.Header().Get("Content-Type"); ct != "application/zip" {
 		t.Fatalf("export/archive.zip: Content-Type = %s, want application/zip", ct)
+	}
+}
+
+func TestObsidianSinkEndpoints(t *testing.T) {
+	st := newStubStore()
+	tempVault := filepath.Join(t.TempDir(), "ObsidianVault")
+	_ = st.SetSetting(context.Background(), "obsidian_vault_path", tempVault)
+
+	c, err := st.CreateCard(context.Background(), port.Card{
+		Title:            "Decentralized PKM Workflows",
+		ExecutiveSummary: "Bridging Sparkkeep with Obsidian.",
+		Status:           port.StatusInProgress,
+		Tags:             []string{"pkm", "obsidian"},
+	})
+	if err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+
+	svc := &core.Service{
+		Store: st,
+		Logf:  t.Logf,
+	}
+	h := webHandler(st, svc)
+
+	// 1. Test POST /api/v1/integrations/obsidian/test
+	testBody := fmt.Sprintf(`{"vault_path":%q}`, tempVault)
+	rrTest := doJSON(t, h, http.MethodPost, "/api/v1/integrations/obsidian/test", testBody)
+	if rrTest.Code != http.StatusOK {
+		t.Fatalf("test sink code = %d, want 200", rrTest.Code)
+	}
+	var testResp struct {
+		OK      bool   `json:"ok"`
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rrTest.Body.Bytes(), &testResp); err != nil {
+		t.Fatalf("unmarshal test resp: %v", err)
+	}
+	if !testResp.Success {
+		t.Fatalf("expected test connection to succeed: %s", testResp.Message)
+	}
+
+	// 2. Test single-card export: POST /api/v1/cards/{id}/export/obsidian
+	exportURL := fmt.Sprintf("/api/v1/cards/%d/export/obsidian", c.ID)
+	rrExport := doJSON(t, h, http.MethodPost, exportURL, "")
+	if rrExport.Code != http.StatusOK {
+		t.Fatalf("card export code = %d, want 200, body: %s", rrExport.Code, rrExport.Body.String())
+	}
+	var exportResp struct {
+		OK     bool   `json:"ok"`
+		CardID int64  `json:"card_id"`
+		Sink   string `json:"sink"`
+	}
+	if err := json.Unmarshal(rrExport.Body.Bytes(), &exportResp); err != nil {
+		t.Fatalf("unmarshal export resp: %v", err)
+	}
+	if !exportResp.OK || exportResp.CardID != c.ID || exportResp.Sink != "obsidian" {
+		t.Fatalf("unexpected export response: %+v", exportResp)
+	}
+
+	// Verify the card note was created in vault
+	notePath := filepath.Join(tempVault, fmt.Sprintf("%d-Decentralized PKM Workflows.md", c.ID))
+	content, err := os.ReadFile(notePath)
+	if err != nil {
+		t.Fatalf("read exported note: %v", err)
+	}
+	if !strings.Contains(string(content), "# Decentralized PKM Workflows") {
+		t.Fatalf("unexpected note content: %s", string(content))
+	}
+	if !strings.Contains(string(content), "Bridging Sparkkeep with Obsidian.") {
+		t.Fatalf("missing executive summary in note: %s", string(content))
+	}
+
+	// 3. Test 404 on missing card
+	rrMissing := doJSON(t, h, http.MethodPost, "/api/v1/cards/99999/export/obsidian", "")
+	if rrMissing.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing card, got %d", rrMissing.Code)
 	}
 }

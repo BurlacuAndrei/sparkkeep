@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -18,11 +19,52 @@ import (
 	"sparkkeep/internal/webhook"
 )
 
+func (a *api) exportCardObsidian(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad card id")
+		return
+	}
+	if a.svc == nil {
+		writeErr(w, http.StatusServiceUnavailable, "service unavailable")
+		return
+	}
+	if err := a.svc.ExportCardToSink(r.Context(), port.SinkObsidian, id); err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "card not found")
+			return
+		}
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"card_id": id,
+		"sink":    port.SinkObsidian,
+	})
+}
+
 func (a *api) syncObsidian(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		VaultPath string `json:"vault_path"`
 	}
 	_ = decodeJSON(w, r, &b)
+
+	if a.svc != nil {
+		written, err := a.svc.ExportLibraryToSink(r.Context(), port.SinkObsidian, b.VaultPath)
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+		vaultPath, _ := a.svc.GetObsidianVaultDir(r.Context(), b.VaultPath)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":         true,
+			"written":    written,
+			"vault_path": vaultPath,
+		})
+		return
+	}
+
 	vaultPath := b.VaultPath
 	if vaultPath == "" {
 		vaultPath = filepath.Join(a.uploadDir, "obsidian_vault")
@@ -47,6 +89,29 @@ func (a *api) syncObsidian(w http.ResponseWriter, r *http.Request) {
 		"ok":         true,
 		"written":    written,
 		"vault_path": vaultPath,
+	})
+}
+
+func (a *api) testObsidianSink(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		VaultPath string `json:"vault_path"`
+	}
+	_ = decodeJSON(w, r, &b)
+
+	if a.svc == nil {
+		writeErr(w, http.StatusServiceUnavailable, "service unavailable")
+		return
+	}
+	res, err := a.svc.TestSinkConnection(r.Context(), port.SinkObsidian, b.VaultPath)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      res.Success,
+		"success": res.Success,
+		"message": res.Message,
+		"details": res.Details,
 	})
 }
 

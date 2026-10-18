@@ -16,15 +16,32 @@ import {
   Download,
   FileArchive,
   FileCode,
+  BookOpen,
+  Target,
+  CheckSquare,
+  GitBranch,
+  RefreshCw,
+  Rss,
+  RotateCcw,
+  Link2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import * as api from '../../api';
 
 export interface IntegrationsTabProps {
   showToast: (msg: string) => void;
   authToken?: string;
+  initialVaultPath?: string;
+  onVaultPathChange?: (path: string) => void;
 }
 
-export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast, authToken }) => {
+export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
+  showToast,
+  authToken,
+  initialVaultPath,
+  onVaultPathChange,
+}) => {
   // Extension State & Pairing
   const [extensionInstalled, setExtensionInstalled] = useState(false);
   const [showExtensionGuide, setShowExtensionGuide] = useState(false);
@@ -33,7 +50,9 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast, aut
   // Obsidian Vault state
   const [vaultPath, setVaultPath] = useState('');
   const [syncingObsidian, setSyncingObsidian] = useState(false);
+  const [testingObsidian, setTestingObsidian] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Webhook Test Trigger state
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -43,6 +62,19 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast, aut
 
   // Copy feedback state
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Client App Shortcuts state
+  const [clientIntentsEnabled, setClientIntentsEnabled] = useState<string>('obsidian,todoist');
+  const [githubRepo, setGithubRepo] = useState<string>('');
+  const [savingIntents, setSavingIntents] = useState<string | null>(null);
+
+  // Outbox RSS Feed state
+  const [outboxToken, setOutboxToken] = useState<string>('');
+  const [feedUrl, setFeedUrl] = useState<string>('');
+  const [showFullToken, setShowFullToken] = useState(false);
+  const [loadingToken, setLoadingToken] = useState(false);
+  const [regeneratingToken, setRegeneratingToken] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   const copyToClipboard = (text: string, id: string, label: string) => {
     if (navigator.clipboard) {
@@ -89,10 +121,69 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast, aut
     }, 500);
   };
 
+  /* oxlint-disable react/set-state-in-effect */
+  useEffect(() => {
+    if (initialVaultPath !== undefined) {
+      setVaultPath(initialVaultPath);
+    }
+  }, [initialVaultPath]);
+  /* oxlint-enable react/set-state-in-effect */
+
+  // Load client intents and GitHub repo from settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await api.getSettings();
+        if (res.ok && res.settings) {
+          if (res.settings.client_intents_enabled) {
+            setClientIntentsEnabled(res.settings.client_intents_enabled);
+          }
+          if (res.settings.github_repo) {
+            setGithubRepo(res.settings.github_repo);
+          }
+        }
+      } catch {
+        // Ignore errors, use defaults
+      }
+    };
+    loadSettings();
+  }, []);
+
+  const handleTestObsidian = async () => {
+    setTestingObsidian(true);
+    setTestResult(null);
+    try {
+      if (vaultPath.trim()) {
+        await api.patchSettings({ obsidian_vault_path: vaultPath.trim() }).catch(() => {});
+      }
+      const res = await api.testSinkConnection('obsidian', {
+        vault_path: vaultPath.trim() || undefined,
+      });
+      if (res.ok && res.success) {
+        const msg = res.message || 'Obsidian vault directory is accessible and writable!';
+        setTestResult({ success: true, message: `✅ ${msg}` });
+        showToast(msg);
+      } else {
+        const msg = res.message || 'Obsidian vault connection test failed.';
+        setTestResult({ success: false, message: `❌ ${msg}` });
+        showToast(`Test failed: ${msg}`);
+      }
+    } catch (err: unknown) {
+      const errMsg = api.getErrorMessage(err);
+      setTestResult({ success: false, message: `❌ Error testing vault: ${errMsg}` });
+      showToast(`Error testing vault: ${errMsg}`);
+    } finally {
+      setTestingObsidian(false);
+    }
+  };
+
   const handleSyncObsidian = async () => {
     setSyncingObsidian(true);
     setLastSyncResult(null);
     try {
+      if (vaultPath.trim()) {
+        await api.patchSettings({ obsidian_vault_path: vaultPath.trim() }).catch(() => {});
+      }
       const res = await api.syncObsidian(vaultPath.trim() || undefined);
       const msg = `Synced ${res.written} notes to ${res.vault_path}`;
       setLastSyncResult(`✅ ${msg}`);
@@ -132,6 +223,80 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({ showToast, aut
       showToast(`Webhook request failed: ${errMsg}`);
     } finally {
       setTestingWebhook(false);
+    }
+  };
+
+  const handleLoadOutboxToken = async () => {
+    setLoadingToken(true);
+    setTokenError(null);
+    try {
+      const res = await api.getOutboxFeedToken();
+      if (res.ok && res.token) {
+        setOutboxToken(res.token);
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+        setFeedUrl(`${origin}/api/v1/feed.xml?token=${res.token}`);
+        if (!showFullToken) {
+          setShowFullToken(true);
+        }
+      } else {
+        setTokenError('Failed to load token');
+      }
+    } catch (err: unknown) {
+      setTokenError(api.getErrorMessage(err));
+    } finally {
+      setLoadingToken(false);
+    }
+  };
+
+  const handleRegenerateOutboxToken = async () => {
+    setRegeneratingToken(true);
+    setTokenError(null);
+    try {
+      const res = await api.regenerateOutboxFeedToken();
+      if (res.ok && res.token) {
+        setOutboxToken(res.token);
+        const feedUrl = res.feed_url || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080') + `/api/v1/feed.xml?token=${res.token}`;
+        setFeedUrl(feedUrl);
+        setShowFullToken(true);
+        showToast('✅ New feed token generated!');
+      } else {
+        setTokenError('Failed to regenerate token');
+      }
+    } catch (err: unknown) {
+      setTokenError(api.getErrorMessage(err));
+    } finally {
+      setRegeneratingToken(false);
+    }
+  };
+
+  const handleToggleClientIntent = async (intentId: string) => {
+    setSavingIntents(intentId);
+    const enabled = clientIntentsEnabled.split(',').filter(Boolean);
+    const isEnabled = enabled.includes(intentId);
+    const newEnabled = isEnabled
+      ? enabled.filter((id) => id !== intentId)
+      : [...enabled, intentId];
+    const newValue = newEnabled.join(',');
+    setClientIntentsEnabled(newValue);
+    try {
+      await api.patchSettings({ client_intents_enabled: newValue });
+      showToast(`${intentId} ${isEnabled ? 'disabled' : 'enabled'}`);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
+      // Revert on error
+      setClientIntentsEnabled(clientIntentsEnabled);
+    } finally {
+      setSavingIntents(null);
+    }
+  };
+
+  const handleSaveGithubRepo = async () => {
+    if (!githubRepo.trim()) return;
+    try {
+      await api.patchSettings({ github_repo: githubRepo.trim() });
+      showToast('GitHub repository saved');
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
     }
   };
 
@@ -459,20 +624,32 @@ echo "Saved to Sparkkeep"`;
 
         <div className="setup-form-group">
           <label htmlFor="obsidian-vault-path">Obsidian Vault Directory Path</label>
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <input
               id="obsidian-vault-path"
               type="text"
               value={vaultPath}
-              onChange={(e) => setVaultPath(e.target.value)}
+              onChange={(e) => {
+                setVaultPath(e.target.value);
+                onVaultPathChange?.(e.target.value);
+              }}
               className="setup-input"
               placeholder="/home/user/Documents/ObsidianVault or C:\Users\User\Documents\Vault"
-              style={{ flex: 1, fontFamily: 'var(--font-mono)' }}
+              style={{ flex: 1, minWidth: '240px', fontFamily: 'var(--font-mono)' }}
             />
             <button
               type="button"
+              className="btn-secondary"
+              disabled={testingObsidian || syncingObsidian}
+              onClick={handleTestObsidian}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              <span>{testingObsidian ? 'Testing...' : 'Test Connection'}</span>
+            </button>
+            <button
+              type="button"
               className="setup-btn-primary"
-              disabled={syncingObsidian}
+              disabled={syncingObsidian || testingObsidian}
               onClick={handleSyncObsidian}
               style={{ whiteSpace: 'nowrap' }}
             >
@@ -484,6 +661,28 @@ echo "Saved to Sparkkeep"`;
             Leave blank to use the default configured system vault path. Creates folder structures with tags, executive summaries, and research reports.
           </span>
         </div>
+
+        {testResult && (
+          <div
+            className="setup-info-box"
+            style={{
+              marginTop: '12px',
+              background: testResult.success
+                ? 'rgba(16, 185, 129, 0.1)'
+                : 'rgba(239, 68, 68, 0.1)',
+              borderColor: testResult.success
+                ? 'rgba(16, 185, 129, 0.3)'
+                : 'rgba(239, 68, 68, 0.3)',
+            }}
+          >
+            {testResult.success ? (
+              <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+            ) : (
+              <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+            )}
+            <span style={{ fontSize: '13px' }}>{testResult.message}</span>
+          </div>
+        )}
 
         {lastSyncResult && (
           <div
@@ -606,7 +805,121 @@ echo "Saved to Sparkkeep"`;
         </div>
       </div>
 
-      {/* 7. Universal Inbound Webhook API (cURL) */}
+      {/* 8. Client App Shortcuts */}
+      <div className="settings-section" style={{ marginTop: '28px' }}>
+        <div className="settings-section-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Smartphone size={18} style={{ color: 'var(--accent)' }} />
+            <span className="settings-section-title">Client App Shortcuts</span>
+          </div>
+          <span className="settings-section-desc">
+            Open cards directly in your favorite note-taking and task apps via URI schemes. Enable the apps you use.
+          </span>
+        </div>
+
+        <div className="setup-info-box" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {[
+            { id: 'obsidian', label: 'Obsidian App', icon: BookOpen, uri: 'obsidian://new?name={title}&content={markdown}', color: '#483699' },
+            { id: 'logseq', label: 'Logseq', icon: Bookmark, uri: 'logseq://x-callback-url/quickCapture?title={title}&content={markdown}', color: '#1890ff' },
+            { id: 'things', label: 'Things 3', icon: Target, uri: 'things:///add?title={title}&notes={markdown}', color: '#e67e22' },
+            { id: 'todoist', label: 'Todoist', icon: CheckSquare, uri: 'https://todoist.com/showTask?text={title}&description={markdown}', color: '#e44d2a' },
+          ].map((app) => {
+            const enabled = clientIntentsEnabled.split(',').filter(Boolean).includes(app.id);
+            const Icon = app.icon;
+            return (
+              <div
+                key={app.id}
+                className="setup-form-group"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  marginBottom: 0,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '200px' }}>
+                  <Icon size={18} style={{ color: app.color }} />
+                  <div>
+                    <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>{app.label}</strong>
+                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                      {app.uri}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={enabled ? 'setup-btn-primary' : 'btn-secondary'}
+                  onClick={() => handleToggleClientIntent(app.id)}
+                  disabled={savingIntents === app.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    minWidth: '80px',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {savingIntents === app.id ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                      Saving...
+                    </span>
+                  ) : enabled ? (
+                    <>
+                      <Check size={12} />
+                      <span>Enabled</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Enable</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            );
+          })}
+          <div className="setup-form-group" style={{ marginBottom: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '200px' }}>
+              <GitBranch size={18} style={{ color: '#24292f' }} />
+              <div>
+                <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>GitHub Issues</strong>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                  {'https://github.com/{{owner}}/{{repo}}/issues/new?title={title}&body={markdown}'}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={githubRepo}
+                onChange={(e) => setGithubRepo(e.target.value)}
+                placeholder="owner/repo (e.g., facebook/react)"
+                className="setup-input"
+                style={{ flex: 1, minWidth: '200px', maxWidth: '300px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+              />
+              <button
+                type="button"
+                className="setup-btn-primary"
+                onClick={handleSaveGithubRepo}
+                disabled={!githubRepo.trim()}
+                style={{ whiteSpace: 'nowrap', fontSize: '12px', padding: '6px 14px' }}
+              >
+                Save Repository
+              </button>
+            </div>
+            <span className="setup-hint">
+              Required for GitHub Issues intent. Format: <code style={{ color: 'var(--accent)' }}>owner/repo</code>.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 9. Universal Inbound Webhook API (cURL) */}
       <div className="settings-section" style={{ marginTop: '28px' }}>
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -648,6 +961,134 @@ echo "Saved to Sparkkeep"`;
     "text": "Some optional caption or notes"
   }'`}
           </pre>
+        </div>
+      </div>
+
+      {/* 10. Outbox RSS Feed */}
+      <div className="settings-section" style={{ marginTop: '28px' }}>
+        <div className="settings-section-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Rss size={18} style={{ color: 'var(--accent)' }} />
+            <span className="settings-section-title">Outbox RSS Feed</span>
+          </div>
+          <span className="settings-section-desc">
+            Authenticated, filterable RSS 2.0 feed of your outbox cards with full research dossiers. Use with feed readers, automation tools, or custom dashboards.
+          </span>
+        </div>
+
+        <div className="setup-info-box" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '240px' }}>
+              <Rss size={20} style={{ color: 'var(--accent)' }} />
+              <div>
+                <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>Feed Token</strong>
+                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                  {outboxToken || 'Not generated'}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleLoadOutboxToken}
+                disabled={loadingToken}
+                style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+              >
+                {loadingToken ? 'Loading...' : outboxToken ? 'Show Token' : 'Generate Token'}
+              </button>
+              {outboxToken && !showFullToken && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowFullToken(true)}
+                  style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                >
+                  <Eye size={14} /> Reveal
+                </button>
+              )}
+              {outboxToken && showFullToken && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowFullToken(false)}
+                  style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                >
+                  <EyeOff size={14} /> Hide
+                </button>
+              )}
+              {showFullToken && outboxToken && (
+                <button
+                  type="button"
+                  className="setup-btn-primary"
+                  onClick={() => copyToClipboard(outboxToken, 'outbox-token', 'Feed token')}
+                  style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {copiedId === 'outbox-token' ? <Check size={14} /> : <Copy size={14} />}
+                  <span>{copiedId === 'outbox-token' ? 'Copied' : 'Copy Token'}</span>
+                </button>
+              )}
+              {outboxToken && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleRegenerateOutboxToken}
+                  disabled={regeneratingToken}
+                  style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                >
+                  {regeneratingToken ? (
+                    <RotateCcw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  ) : (
+                    <>
+                      <RotateCcw size={14} />
+                      <span>Regenerate</span>
+                    </>
+                  )}
+                </button>
+              )}
+              {feedUrl && (
+                <button
+                  type="button"
+                  className="setup-btn-primary"
+                  onClick={() => copyToClipboard(feedUrl, 'feed-url', 'Feed URL')}
+                  style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {copiedId === 'feed-url' ? <Check size={14} /> : <Link2 size={14} />}
+                  <span>{copiedId === 'feed-url' ? 'Copied' : 'Copy Feed URL'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {showFullToken && outboxToken && feedUrl && (
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginTop: '4px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '8px' }}>
+                <strong>Feed URL:</strong> <code style={{ color: 'var(--accent)' }}>{feedUrl}</code>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <a href={`${feedUrl}&status=doing,done`} target="_blank" rel="noopener noreferrer" className="filter-link">status=doing,done</a>
+                <a href={`${feedUrl}&type=article`} target="_blank" rel="noopener noreferrer" className="filter-link">type=article</a>
+                <a href={`${feedUrl}&research_only=1`} target="_blank" rel="noopener noreferrer" className="filter-link">research_only=1</a>
+                <a href={`${feedUrl}&limit=50`} target="_blank" rel="noopener noreferrer" className="filter-link">limit=50</a>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: 1.6 }}>
+                <strong>Available filters:</strong>
+                <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px' }}>
+                  <li><code>status</code> — comma-separated: <code>inbox</code>, <code>review</code>, <code>to-do</code>, <code>in-progress</code>, <code>done</code>, <code>shelved</code>, <code>dismissed</code></li>
+                  <li><code>type</code> — comma-separated: <code>article</code>, <code>video</code>, <code>tool</code>, <code>repo</code>, <code>book</code>, <code>guide</code>, <code>product</code>, <code>place</code>, <code>idea</code>, <code>claim</code>, <code>tutorial</code>, <code>paper</code>, <code>company</code>, <code>quote</code>, <code>other</code></li>
+                  <li><code>research_only</code> — <code>1</code> or <code>true</code> to include only cards with completed research</li>
+                  <li><code>since</code> — RFC3339 timestamp (e.g., <code>2024-01-15T00:00:00Z</code>)</li>
+                  <li><code>limit</code> — max items (default 100, max 100)</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {tokenError && (
+            <div style={{ color: 'var(--color-error, #ef4444)', fontSize: '12px', marginTop: '8px' }}>
+              {tokenError}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -238,6 +238,32 @@ export async function syncObsidian(vaultPath?: string): Promise<{ ok: boolean; w
   });
 }
 
+export async function exportCardToSink(
+  cardId: number,
+  sink: string
+): Promise<{ ok: boolean; card_id?: number; sink?: string; message?: string }> {
+  return request<{ ok: boolean; card_id?: number; sink?: string; message?: string }>(
+    `/api/v1/cards/${cardId}/export/${sink}`,
+    {
+      method: 'POST',
+    }
+  );
+}
+
+export async function testSinkConnection(
+  sink: string,
+  params?: Record<string, any>
+): Promise<{ ok: boolean; success: boolean; message: string; details?: Record<string, any> }> {
+  return request<{ ok: boolean; success: boolean; message: string; details?: Record<string, any> }>(
+    `/api/v1/integrations/${sink}/test`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params || {}),
+    }
+  );
+}
+
 export async function testWebhook(url: string, secret?: string): Promise<{ ok: boolean; status_code: number; error?: string }> {
   return request<{ ok: boolean; status_code: number; error?: string }>('/api/v1/webhooks/test', {
     method: 'POST',
@@ -275,6 +301,9 @@ export async function patchSettings(payload: {
   discord_token?: string;
   discord_channel_id?: string;
   slack_webhook_url?: string;
+  obsidian_vault_path?: string;
+  client_intents_enabled?: string;
+  github_repo?: string;
 }): Promise<{ ok: boolean }> {
   return request('/api/v1/settings', {
     method: 'PATCH',
@@ -402,6 +431,16 @@ export async function updateQuietWindow(cfg: QuietWindowConfig): Promise<void> {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(cfg),
+  });
+}
+
+export async function getOutboxFeedToken(): Promise<{ ok: boolean; token: string }> {
+  return request<{ ok: boolean; token: string }>('/api/v1/integrations/outbox/token');
+}
+
+export async function regenerateOutboxFeedToken(): Promise<{ ok: boolean; token: string; feed_url?: string }> {
+  return request<{ ok: boolean; token: string; feed_url?: string }>('/api/v1/integrations/outbox/token/regenerate', {
+    method: 'POST',
   });
 }
 

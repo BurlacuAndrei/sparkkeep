@@ -57,6 +57,9 @@ func TestCardToMarkdown(t *testing.T) {
 	if !strings.Contains(md, `title: "Build Micro-SaaS in Go"`) {
 		t.Fatalf("missing title in frontmatter")
 	}
+	if !strings.Contains(md, "researched: false") {
+		t.Fatalf("expected researched: false in frontmatter")
+	}
 	if !strings.Contains(md, "- \"golang\"") {
 		t.Fatalf("missing tags in frontmatter")
 	}
@@ -65,6 +68,55 @@ func TestCardToMarkdown(t *testing.T) {
 	}
 	if !strings.Contains(md, "- [ ] Setup SQLite") {
 		t.Fatalf("missing action checkbox")
+	}
+	if strings.Contains(md, "## Research Dossier") {
+		t.Fatalf("unexpected Research Dossier section for unresearched card")
+	}
+}
+
+func TestCardExportToMarkdown_WithResearch(t *testing.T) {
+	finishedTime := time.Date(2026, 10, 6, 9, 15, 0, 0, time.UTC)
+	exp := port.CardExport{
+		Card: port.Card{
+			ID:               99,
+			Title:            "Vector Search Architectures",
+			ExecutiveSummary: "Evaluating vector databases against SQLite.",
+			Horizon:          "short-term",
+			Status:           "done",
+			CreatedAt:        time.Date(2026, 10, 6, 8, 0, 0, 0, time.UTC),
+			UpdatedAt:        time.Date(2026, 10, 6, 9, 30, 0, 0, time.UTC),
+		},
+		Research: &port.Research{
+			ID:       12,
+			CardID:   99,
+			Status:   "done",
+			Findings: "SQLite FTS5 outperforms dense embeddings on keyword-heavy local lookups.",
+			PlaybookSnapshot: &port.Playbook{
+				Name: "Deep Architecture Review",
+			},
+			CreatedAt: time.Date(2026, 10, 6, 8, 30, 0, 0, time.UTC),
+			Steps: []port.ResearchStep{
+				{ID: "step-1", Status: "done", StartedAt: time.Date(2026, 10, 6, 8, 35, 0, 0, time.UTC), FinishedAt: finishedTime},
+			},
+		},
+	}
+
+	md := CardExportToMarkdown(exp)
+
+	if !strings.Contains(md, "researched: true") {
+		t.Fatalf("expected researched: true in frontmatter")
+	}
+	if !strings.Contains(md, "## Research Dossier") {
+		t.Fatalf("missing Research Dossier heading")
+	}
+	if !strings.Contains(md, "**Playbook:** Deep Architecture Review") {
+		t.Fatalf("missing Playbook name in research dossier")
+	}
+	if !strings.Contains(md, "**Completed:** "+finishedTime.Format(time.RFC3339)) {
+		t.Fatalf("missing Completed timestamp in research dossier")
+	}
+	if !strings.Contains(md, "SQLite FTS5 outperforms dense embeddings on keyword-heavy local lookups.") {
+		t.Fatalf("missing findings content in research dossier")
 	}
 }
 
@@ -101,13 +153,96 @@ func TestSyncCardsToVault(t *testing.T) {
 		t.Fatalf("written = %d, want 2", written)
 	}
 
-	// Verify files exist
-	file1 := filepath.Join(vaultPath, "Note One.md")
+	// Verify files exist with deterministic <id>-<title>.md prefix
+	file1 := filepath.Join(vaultPath, "1-Note One.md")
 	content, err := os.ReadFile(file1)
 	if err != nil {
 		t.Fatalf("read note 1: %v", err)
 	}
 	if !strings.Contains(string(content), "# Note One") {
 		t.Fatalf("unexpected note 1 content: %s", string(content))
+	}
+
+	file2 := filepath.Join(vaultPath, "2-Note Two.md")
+	if _, err := os.Stat(file2); err != nil {
+		t.Fatalf("note 2 missing: %v", err)
+	}
+}
+
+func TestSyncCardExport_TitleChangeIdempotency(t *testing.T) {
+	tempDir := t.TempDir()
+	vaultPath := filepath.Join(tempDir, "ObsidianVault")
+
+	expOriginal := port.CardExport{
+		Card: port.Card{
+			ID:        55,
+			Title:     "Original Title",
+			Summary:   "Summary text",
+			Horizon:   "short-term",
+			Status:    "inbox",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+	}
+
+	p1, err := SyncCardExport(vaultPath, expOriginal)
+	if err != nil {
+		t.Fatalf("SyncCardExport initial: %v", err)
+	}
+	expectedOriginalFile := filepath.Join(vaultPath, "55-Original Title.md")
+	if p1 != expectedOriginalFile {
+		t.Fatalf("expected p1 %s, got %s", expectedOriginalFile, p1)
+	}
+	if _, err := os.Stat(expectedOriginalFile); err != nil {
+		t.Fatalf("original file does not exist: %v", err)
+	}
+
+	// Now modify title and export again
+	expModified := port.CardExport{
+		Card: port.Card{
+			ID:        55,
+			Title:     "Brand New Refined Title",
+			Summary:   "Updated summary",
+			Horizon:   "short-term",
+			Status:    "inbox",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+	}
+
+	p2, err := SyncCardExport(vaultPath, expModified)
+	if err != nil {
+		t.Fatalf("SyncCardExport modified: %v", err)
+	}
+	expectedModifiedFile := filepath.Join(vaultPath, "55-Brand New Refined Title.md")
+	if p2 != expectedModifiedFile {
+		t.Fatalf("expected p2 %s, got %s", expectedModifiedFile, p2)
+	}
+
+	// Verify old file was cleanly removed
+	if _, err := os.Stat(expectedOriginalFile); !os.IsNotExist(err) {
+		t.Fatalf("expected old file %s to be deleted, but it still exists", expectedOriginalFile)
+	}
+	// Verify new file exists
+	if _, err := os.Stat(expectedModifiedFile); err != nil {
+		t.Fatalf("expected new file %s to exist: %v", expectedModifiedFile, err)
+	}
+}
+
+func TestTestVaultDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	validVault := filepath.Join(tempDir, "valid_vault")
+
+	if err := TestVaultDirectory(validVault); err != nil {
+		t.Fatalf("expected validVault to pass, got: %v", err)
+	}
+	// Directory should have been created
+	if info, err := os.Stat(validVault); err != nil || !info.IsDir() {
+		t.Fatalf("expected validVault dir to be created")
+	}
+
+	// Empty path should fail
+	if err := TestVaultDirectory(""); err == nil {
+		t.Fatalf("expected error for empty vault path")
 	}
 }

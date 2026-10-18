@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Card, ResearchItem } from '../../types';
-import { getErrorMessage } from '../../api';
+import { Card, ResearchItem, Settings } from '../../types';
+import { getErrorMessage, exportCardToSink } from '../../api';
 import {
   ExternalLink,
   FileText,
@@ -16,11 +16,16 @@ import {
   RotateCcw,
   Sparkles,
   MoreHorizontal,
+  FolderSync,
+  BookOpen,
+  Bookmark,
+  Target,
 } from 'lucide-react';
 
 export interface CardHeaderActionsProps {
   card: Card;
   research?: ResearchItem | null;
+  settings?: Settings | null;
   status: string;
   isFailed?: boolean;
   onStatusTransition: (newStatus: string) => void;
@@ -32,6 +37,7 @@ export interface CardHeaderActionsProps {
   onCopyMarkdown?: () => Promise<void> | void;
   onDownloadMarkdown?: () => Promise<void> | void;
   onAddToTodoist?: () => Promise<void> | void;
+  onExportToObsidian?: (id: number) => Promise<void> | void;
   onSpinOff?: () => Promise<void> | void;
   onDelete?: (id: number) => void;
   onClose: () => void;
@@ -41,6 +47,7 @@ export interface CardHeaderActionsProps {
 export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
   card,
   research,
+  settings,
   status,
   isFailed = Boolean(card.analysis_failed || card.title === 'Analysis failed'),
   onStatusTransition,
@@ -52,6 +59,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
   onCopyMarkdown,
   onDownloadMarkdown,
   onAddToTodoist,
+  onExportToObsidian,
   onSpinOff,
   onDelete,
   onClose,
@@ -122,6 +130,79 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
       const q = new URLSearchParams({ text: card.title, description: md });
       window.open(`https://todoist.com/showTask?${q.toString()}`, '_blank', 'noopener');
       showToast?.('Opening Todoist with this spark...');
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
+    }
+  };
+
+  const handleExportToObsidian = async () => {
+    if (onExportToObsidian) {
+      await onExportToObsidian(card.id);
+      return;
+    }
+    try {
+      await exportCardToSink(card.id, 'obsidian');
+      showToast?.('Sent to Obsidian Vault');
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
+    }
+  };
+
+  const handleOpenInObsidian = async () => {
+    try {
+      const md = await fetchMarkdown();
+      const q = new URLSearchParams({ name: card.title, content: md });
+      window.open(`obsidian://new?${q.toString()}`, '_blank', 'noopener');
+      showToast?.('Opening in Obsidian...');
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
+    }
+  };
+
+  const handleOpenInLogseq = async () => {
+    try {
+      const md = await fetchMarkdown();
+      const q = new URLSearchParams({ title: card.title, content: md });
+      window.open(`logseq://x-callback-url/quickCapture?${q.toString()}`, '_blank', 'noopener');
+      showToast?.('Opening in Logseq...');
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
+    }
+  };
+
+  const handleOpenInThings = async () => {
+    try {
+      const md = await fetchMarkdown();
+      const q = new URLSearchParams({ title: card.title, notes: md });
+      window.open(`things:///add?${q.toString()}`, '_blank', 'noopener');
+      showToast?.('Opening in Things 3...');
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
+    }
+  };
+
+  const handleOpenInTodoist = async () => {
+    try {
+      const md = await fetchMarkdown();
+      const q = new URLSearchParams({ text: card.title, description: md });
+      window.open(`https://todoist.com/showTask?${q.toString()}`, '_blank', 'noopener');
+      showToast?.('Opening in Todoist...');
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
+    }
+  };
+
+  const handleOpenInGitHub = async () => {
+    const repo = settings?.github_repo;
+    if (!repo) {
+      showToast?.('GitHub repository not configured in settings');
+      return;
+    }
+    try {
+      const md = await fetchMarkdown();
+      const q = new URLSearchParams({ title: card.title, body: md });
+      window.open(`https://github.com/${repo}/issues/new?${q.toString()}`, '_blank', 'noopener');
+      showToast?.('Opening GitHub Issues...');
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -329,6 +410,106 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
               <CheckSquare size={13} color="#e879f9" />
               <span>Add to Todoist</span>
             </button>
+
+            {settings?.obsidian_vault_path && (
+              <button
+                type="button"
+                className="card-context-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  handleExportToObsidian();
+                }}
+              >
+                <FolderSync size={13} color="#a855f7" />
+                <span>Send to Obsidian Vault</span>
+              </button>
+            )}
+
+            {(() => {
+              const enabledIntents = settings?.client_intents_enabled?.split(',').filter(Boolean) || [];
+              const items: React.ReactNode[] = [];
+              if (enabledIntents.includes('obsidian')) {
+                items.push(
+                  <button
+                    key="obsidian"
+                    type="button"
+                    className="card-context-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      handleOpenInObsidian();
+                    }}
+                  >
+                    <BookOpen size={13} color="#483699" />
+                    <span>Open in Obsidian App</span>
+                  </button>
+                );
+              }
+              if (enabledIntents.includes('logseq')) {
+                items.push(
+                  <button
+                    key="logseq"
+                    type="button"
+                    className="card-context-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      handleOpenInLogseq();
+                    }}
+                  >
+                    <Bookmark size={13} color="#1890ff" />
+                    <span>Open in Logseq</span>
+                  </button>
+                );
+              }
+              if (enabledIntents.includes('things')) {
+                items.push(
+                  <button
+                    key="things"
+                    type="button"
+                    className="card-context-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      handleOpenInThings();
+                    }}
+                  >
+                    <Target size={13} color="#e67e22" />
+                    <span>Open in Things 3</span>
+                  </button>
+                );
+              }
+              if (enabledIntents.includes('todoist')) {
+                items.push(
+                  <button
+                    key="todoist"
+                    type="button"
+                    className="card-context-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      handleOpenInTodoist();
+                    }}
+                  >
+                    <CheckSquare size={13} color="#e44d2a" />
+                    <span>Open in Todoist</span>
+                  </button>
+                );
+              }
+              if (enabledIntents.includes('github') && settings?.github_repo) {
+                items.push(
+                  <button
+                    key="github"
+                    type="button"
+                    className="card-context-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      handleOpenInGitHub();
+                    }}
+                  >
+                    <GitBranch size={13} color="#24292f" />
+                    <span>Open in GitHub Issues</span>
+                  </button>
+                );
+              }
+              return items;
+            })()}
 
             <div className="card-context-divider" />
 

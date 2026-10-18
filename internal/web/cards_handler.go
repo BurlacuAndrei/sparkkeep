@@ -9,6 +9,7 @@ import (
 
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/core"
+	"sparkkeep/internal/obsidian"
 	"sparkkeep/internal/port"
 )
 
@@ -357,43 +358,50 @@ func (a *api) batchShelveStale(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "shelved_count": n})
 }
 
-// exportMarkdown renders a card as a markdown briefing — the payload for a
-// one-click task-manager capture or a clipboard paste.
+// exportMarkdown renders a card as an Obsidian-compatible markdown note, including research dossier if present.
 func (a *api) exportMarkdown(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "bad id")
 		return
 	}
-	card, err := a.store.GetCard(r.Context(), id)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	summary := card.ExecutiveSummary
-	if summary == "" {
-		summary = card.Summary
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "# [Spark] %s\n\n**Executive Summary:** %s\n", card.Title, summary)
-	if card.ValueProposition != "" {
-		fmt.Fprintf(&b, "**Value Proposition:** %s\n", card.ValueProposition)
-	}
-	if len(card.ProposedActions) > 0 {
-		b.WriteString("\n### Proposed Actions\n")
-		for _, act := range card.ProposedActions {
-			fmt.Fprintf(&b, "- [ ] %s\n", act)
+	var exp port.CardExport
+	if a.svc != nil {
+		var err error
+		exp, err = a.svc.BuildCardExport(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, port.ErrNotFound) {
+				writeErr(w, http.StatusNotFound, "card not found")
+				return
+			}
+			a.fail(w, err)
+			return
 		}
+	} else {
+		card, err := a.store.GetCard(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, port.ErrNotFound) {
+				writeErr(w, http.StatusNotFound, "card not found")
+				return
+			}
+			a.fail(w, err)
+			return
+		}
+		var latestDone *port.Research
+		if history, herr := a.store.ListResearchByCard(r.Context(), id); herr == nil && len(history) > 0 {
+			for i := len(history) - 1; i >= 0; i-- {
+				if history[i].Status == port.ResearchStateDone || history[i].Status == "done" {
+					latestDone = &history[i]
+					break
+				}
+			}
+		}
+		exp = port.CardExport{Card: card, Research: latestDone}
 	}
-	b.WriteString("\n")
-	if card.SourceURL != "" {
-		fmt.Fprintf(&b, "**Source:** %s\n", card.SourceURL)
-	}
-	if len(card.Tags) > 0 {
-		fmt.Fprintf(&b, "**Tags:** #%s\n", strings.Join(card.Tags, " #"))
-	}
+
+	md := obsidian.CardExportToMarkdown(exp)
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	fmt.Fprint(w, b.String())
+	fmt.Fprint(w, md)
 }
 
 func (a *api) getCardResearch(w http.ResponseWriter, r *http.Request) {

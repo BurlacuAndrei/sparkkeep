@@ -1,6 +1,7 @@
 package obsidian
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,8 +31,9 @@ func SanitizeFilename(id int64, title string) string {
 	return clean + ".md"
 }
 
-// CardToMarkdown converts a Card into an Obsidian-compatible Markdown note with YAML frontmatter.
-func CardToMarkdown(c port.Card) string {
+// CardExportToMarkdown converts a CardExport bundle (Card + Research) into an Obsidian note.
+func CardExportToMarkdown(exp port.CardExport) string {
+	c := exp.Card
 	var sb strings.Builder
 
 	// YAML Frontmatter
@@ -51,6 +53,7 @@ func CardToMarkdown(c port.Card) string {
 	}
 	sb.WriteString(fmt.Sprintf("created_at: %s\n", c.CreatedAt.Format(time.RFC3339)))
 	sb.WriteString(fmt.Sprintf("updated_at: %s\n", c.UpdatedAt.Format(time.RFC3339)))
+	sb.WriteString(fmt.Sprintf("researched: %t\n", exp.Research != nil))
 	sb.WriteString("---\n\n")
 
 	// Title
@@ -103,34 +106,128 @@ func CardToMarkdown(c port.Card) string {
 		sb.WriteString("\n")
 	}
 
+	// Completed Research Dossier
+	if exp.Research != nil {
+		playbookName := ""
+		if exp.Research.PlaybookSnapshot != nil && exp.Research.PlaybookSnapshot.Name != "" {
+			playbookName = exp.Research.PlaybookSnapshot.Name
+		}
+		if playbookName == "" {
+			playbookName = "Deep Research"
+		}
+
+		completedAt := exp.Research.CreatedAt
+		for _, s := range exp.Research.Steps {
+			if !s.FinishedAt.IsZero() && s.FinishedAt.After(completedAt) {
+				completedAt = s.FinishedAt
+			}
+		}
+
+		sb.WriteString("## Research Dossier\n\n")
+		sb.WriteString(fmt.Sprintf("**Playbook:** %s\n", playbookName))
+		sb.WriteString(fmt.Sprintf("**Completed:** %s\n\n", completedAt.Format(time.RFC3339)))
+		if strings.TrimSpace(exp.Research.Findings) != "" {
+			sb.WriteString(strings.TrimSpace(exp.Research.Findings))
+			sb.WriteString("\n\n")
+		}
+	}
+
 	return sb.String()
 }
 
-// SyncCard writes a single note into the target vault directory.
-func SyncCard(vaultDir string, c port.Card) (string, error) {
+// CardToMarkdown converts a Card into an Obsidian-compatible Markdown note with YAML frontmatter.
+func CardToMarkdown(c port.Card) string {
+	return CardExportToMarkdown(port.CardExport{Card: c})
+}
+
+// SyncCardExport writes a single CardExport bundle atomically into vaultDir and cleans up any old title files for this card.
+func SyncCardExport(vaultDir string, exp port.CardExport) (string, error) {
 	if err := os.MkdirAll(vaultDir, 0755); err != nil {
 		return "", fmt.Errorf("obsidian: mkdir %s: %w", vaultDir, err)
 	}
 
-	filename := SanitizeFilename(c.ID, c.Title)
-	filePath := filepath.Join(vaultDir, filename)
+	clean := SanitizeFilename(exp.Card.ID, exp.Card.Title)
+	filename := fmt.Sprintf("%d-%s", exp.Card.ID, clean)
+	targetPath := filepath.Join(vaultDir, filename)
 
-	content := CardToMarkdown(c)
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		return "", fmt.Errorf("obsidian: write %s: %w", filePath, err)
+	content := CardExportToMarkdown(exp)
+
+	// Write to a temporary file in vaultDir first for atomic replacement.
+	tmpFile, err := os.CreateTemp(vaultDir, fmt.Sprintf(".%d-*.tmp", exp.Card.ID))
+	if err != nil {
+		return "", fmt.Errorf("obsidian: create temp in %s: %w", vaultDir, err)
+	}
+	tmpPath := tmpFile.Name()
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("obsidian: write temp %s: %w", tmpPath, err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("obsidian: close temp %s: %w", tmpPath, err)
 	}
 
-	return filePath, nil
+	// Clean up any existing <card.ID>-*.md files if the title has changed.
+	matches, _ := filepath.Glob(filepath.Join(vaultDir, fmt.Sprintf("%d-*.md", exp.Card.ID)))
+	for _, m := range matches {
+		if m != targetPath {
+			_ = os.Remove(m)
+		}
+	}
+
+	if err := os.Rename(tmpPath, targetPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("obsidian: rename %s to %s: %w", tmpPath, targetPath, err)
+	}
+
+	return targetPath, nil
+}
+
+// SyncCard writes a single note into the target vault directory.
+func SyncCard(vaultDir string, c port.Card) (string, error) {
+	return SyncCardExport(vaultDir, port.CardExport{Card: c})
+}
+
+// SyncCardExports batches multiple CardExport bundles into the vault directory.
+func SyncCardExports(vaultDir string, exports []port.CardExport) ([]string, error) {
+	var paths []string
+	for _, exp := range exports {
+		path, err := SyncCardExport(vaultDir, exp)
+		if err != nil {
+			return paths, err
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
 }
 
 // SyncCards batches cards into the vault directory.
 func SyncCards(vaultDir string, cards []port.Card) (int, error) {
-	written := 0
-	for _, c := range cards {
-		if _, err := SyncCard(vaultDir, c); err != nil {
-			return written, err
-		}
-		written++
+	exports := make([]port.CardExport, len(cards))
+	for i, c := range cards {
+		exports[i] = port.CardExport{Card: c}
 	}
-	return written, nil
+	paths, err := SyncCardExports(vaultDir, exports)
+	return len(paths), err
+}
+
+// TestVaultDirectory tests that vaultDir exists or can be created and is writable.
+func TestVaultDirectory(vaultDir string) error {
+	vaultDir = strings.TrimSpace(vaultDir)
+	if vaultDir == "" {
+		return errors.New("obsidian vault directory path is required")
+	}
+	if err := os.MkdirAll(vaultDir, 0755); err != nil {
+		return fmt.Errorf("obsidian: cannot create vault directory %s: %w", vaultDir, err)
+	}
+	probeFile, err := os.CreateTemp(vaultDir, ".sparkkeep_probe_*")
+	if err != nil {
+		return fmt.Errorf("obsidian: vault directory %s is not writable: %w", vaultDir, err)
+	}
+	probePath := probeFile.Name()
+	_ = probeFile.Close()
+	_ = os.Remove(probePath)
+	return nil
 }

@@ -27,6 +27,8 @@ import (
 	"sparkkeep/internal/asr"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
+	"sparkkeep/internal/feed"
+	"sparkkeep/internal/obsidian"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
 	"sparkkeep/internal/webhook"
@@ -1564,4 +1566,218 @@ func (s *Service) notify(ctx context.Context, n port.Notification) error {
 		return s.Channel.Notify(ctx, n)
 	}
 	return nil
+}
+
+// BuildCardExport fetches a card by ID and attaches its latest completed research dossier if present.
+func (s *Service) BuildCardExport(ctx context.Context, cardID int64) (port.CardExport, error) {
+	if s.Store == nil {
+		return port.CardExport{}, errors.New("core: store is not initialized")
+	}
+	card, err := s.Store.GetCard(ctx, cardID)
+	if err != nil {
+		return port.CardExport{}, err
+	}
+
+	var latestDone *port.Research
+	history, err := s.Store.ListResearchByCard(ctx, cardID)
+	if err == nil && len(history) > 0 {
+		for i := len(history) - 1; i >= 0; i-- {
+			if history[i].Status == port.ResearchStateDone || history[i].Status == "done" {
+				latestDone = &history[i]
+				break
+			}
+		}
+	}
+
+	return port.CardExport{
+		Card:     card,
+		Research: latestDone,
+	}, nil
+}
+
+// BuildLibraryExports retrieves all non-shelved cards bundled with their latest completed research dossiers.
+func (s *Service) BuildLibraryExports(ctx context.Context) ([]port.CardExport, error) {
+	if s.Store == nil {
+		return nil, errors.New("core: store is not initialized")
+	}
+	cards, err := s.Store.ListCards(ctx, port.CardFilter{Limit: 100000})
+	if err != nil {
+		return nil, err
+	}
+
+	var exports []port.CardExport
+	for _, c := range cards {
+		if c.Status == port.StatusShelved {
+			continue
+		}
+		var latestDone *port.Research
+		history, _ := s.Store.ListResearchByCard(ctx, c.ID)
+		for i := len(history) - 1; i >= 0; i-- {
+			if history[i].Status == port.ResearchStateDone || history[i].Status == "done" {
+				latestDone = &history[i]
+				break
+			}
+		}
+		exports = append(exports, port.CardExport{
+			Card:     c,
+			Research: latestDone,
+		})
+	}
+	return exports, nil
+}
+
+// GetObsidianVaultDir resolves the effective Obsidian vault directory from override, settings, or system default.
+func (s *Service) GetObsidianVaultDir(ctx context.Context, override string) (string, error) {
+	if strings.TrimSpace(override) != "" {
+		return strings.TrimSpace(override), nil
+	}
+	if s.Store != nil {
+		if val, err := s.Store.GetSetting(ctx, "obsidian_vault_path"); err == nil && strings.TrimSpace(val) != "" {
+			return strings.TrimSpace(val), nil
+		}
+	}
+	uploadDir := s.UploadDir
+	if uploadDir == "" && s.Config.UploadDir != "" {
+		uploadDir = s.Config.UploadDir
+	}
+	if uploadDir != "" {
+		return filepath.Join(uploadDir, "obsidian_vault"), nil
+	}
+	return "./data/obsidian_vault", nil
+}
+
+// ExportCardToSink pushes a single card bundle to the specified knowledge sink.
+func (s *Service) ExportCardToSink(ctx context.Context, sink string, cardID int64) error {
+	switch sink {
+	case port.SinkObsidian:
+		vaultDir, err := s.GetObsidianVaultDir(ctx, "")
+		if err != nil {
+			return err
+		}
+		exp, err := s.BuildCardExport(ctx, cardID)
+		if err != nil {
+			return err
+		}
+		_, err = obsidian.SyncCardExport(vaultDir, exp)
+		return err
+	case port.SinkNotion, port.SinkJoplin:
+		return fmt.Errorf("sink %q not yet implemented", sink)
+	default:
+		return fmt.Errorf("unsupported sink: %s", sink)
+	}
+}
+
+// ExportLibraryToSink bulk exports all active non-shelved cards to the specified knowledge sink.
+func (s *Service) ExportLibraryToSink(ctx context.Context, sink string, overrideVault string) (int, error) {
+	switch sink {
+	case port.SinkObsidian:
+		vaultDir, err := s.GetObsidianVaultDir(ctx, overrideVault)
+		if err != nil {
+			return 0, err
+		}
+		exports, err := s.BuildLibraryExports(ctx)
+		if err != nil {
+			return 0, err
+		}
+		paths, err := obsidian.SyncCardExports(vaultDir, exports)
+		return len(paths), err
+	case port.SinkNotion, port.SinkJoplin:
+		return 0, fmt.Errorf("sink %q not yet implemented", sink)
+	default:
+		return 0, fmt.Errorf("unsupported sink: %s", sink)
+	}
+}
+
+// TestSinkConnection tests accessibility and write permissions for a knowledge sink.
+func (s *Service) TestSinkConnection(ctx context.Context, sink string, overrideVault string) (port.SinkTestResult, error) {
+	switch sink {
+	case port.SinkObsidian:
+		vaultDir, err := s.GetObsidianVaultDir(ctx, overrideVault)
+		if err != nil {
+			return port.SinkTestResult{
+				Success: false,
+				Message: fmt.Sprintf("Failed to resolve vault directory: %v", err),
+			}, nil
+		}
+		if err := obsidian.TestVaultDirectory(vaultDir); err != nil {
+			return port.SinkTestResult{
+				Success: false,
+				Message: err.Error(),
+				Details: map[string]any{"vault_path": vaultDir},
+			}, nil
+		}
+		return port.SinkTestResult{
+			Success: true,
+			Message: fmt.Sprintf("Obsidian vault directory %q is accessible and writable", vaultDir),
+			Details: map[string]any{"vault_path": vaultDir},
+		}, nil
+	case port.SinkNotion, port.SinkJoplin:
+		return port.SinkTestResult{
+			Success: false,
+			Message: fmt.Sprintf("sink %q not yet implemented", sink),
+		}, nil
+	default:
+		return port.SinkTestResult{
+			Success: false,
+			Message: fmt.Sprintf("unsupported sink: %s", sink),
+		}, nil
+	}
+}
+
+// GetOutboxFeedToken returns the plaintext feed token, generating one if it doesn't exist
+func (s *Service) GetOutboxFeedToken(ctx context.Context) (string, error) {
+	if s.Store == nil {
+		return "", errors.New("core: store is not initialized")
+	}
+
+	// Check if token exists
+	storedHash, err := s.Store.GetSetting(ctx, "outbox_feed_token")
+	if err == nil && storedHash != "" {
+		// Token exists but we only have the hash - we can't return the plaintext
+		// This should only be called when user explicitly wants to see/regenerate
+		return "", errors.New("token exists but plaintext not available; regenerate to get new token")
+	}
+
+	// Generate new token
+	token, err := feed.GenerateFeedToken()
+	if err != nil {
+		return "", err
+	}
+
+	// Hash and store
+	hash, err := feed.HashFeedToken(token)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.Store.SetSetting(ctx, "outbox_feed_token", hash); err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+// RegenerateOutboxFeedToken generates a new feed token and stores its bcrypt hash
+func (s *Service) RegenerateOutboxFeedToken(ctx context.Context) (string, error) {
+	if s.Store == nil {
+		return "", errors.New("core: store is not initialized")
+	}
+
+	// Generate new token
+	token, err := feed.GenerateFeedToken()
+	if err != nil {
+		return "", err
+	}
+
+	// Hash and store
+	hash, err := feed.HashFeedToken(token)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.Store.SetSetting(ctx, "outbox_feed_token", hash); err != nil {
+		return "", err
+	}
+
+	return token, nil
 }
