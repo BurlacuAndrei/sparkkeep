@@ -1,0 +1,3 @@
+# 0005. One-Way Stateless Knowledge Sinks
+
+External PKM integrations (Obsidian, Notion, Joplin) are modeled as one-way, statelessly idempotent Knowledge Sinks orchestrated by `internal/core/Service` rather than two-way sync engines or direct HTTP handler helpers. Each sink derives deterministic item identifiers (file prefix for Obsidian, SHA-256 32-char hex IDs for Joplin, and a `Sparkkeep ID` database property query for Notion) to upsert cards and completed Research Dossiers in place without introducing local sync-mapping tables in SQLite. This ensures safe, repeatable exports to external personal knowledge bases while keeping Sparkkeep's local storage schema decoupled from external entity lifecycles.

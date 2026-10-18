@@ -68,3 +68,14 @@ _Avoid_: Card splitting, post fragmentation, multi-card slicing
 The ingestion filter that identifies zero-signal engagement bait, rhetorical interaction hooks, or pure junk promotion and discards them entirely, preventing unwanted card creation.
 _Avoid_: Spam filter, bait blocker, fluff cleaner
 
+**Knowledge Sink**:
+An external personal knowledge management system (such as Obsidian, Notion, or Joplin) that receives one-way, idempotent outbound card and research dossier exports from Sparkkeep.
+_Avoid_: Two-way sync, connector, integration
+
+**Client Intent**:
+A client-dispatched URI scheme or pre-filled web URL that hands off a card directly from the browser to a local or web application without server-side credentials.
+_Avoid_: Native plugin, desktop bridge
+
+**Outbox Feed**:
+An authenticated, filterable syndication feed exposing curated cards and completed research dossiers to external readers and automation tools.
+_Avoid_: Public RSS, inbound feed
