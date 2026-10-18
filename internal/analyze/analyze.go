@@ -721,7 +721,7 @@ Rules:
 - By default, produce exactly ONE consolidated card per post, thread, or video, uniting all key takeaways and claims into a single coherent brief. Never fragment a single narrative post into multiple cards.
 - Multi-card splitting (card fission) is strictly permitted ONLY if the source explicitly covers distinct, structurally separated standalone topics (e.g., named video chapters or reviews of independent standalone tools/projects).
 - Hard ceiling of at most 3 cards per capture: never create more than 3 cards total, regardless of source length. If content covers many items, summarize them or produce a collection card rather than exceeding 3 cards.
-- Triage Noise Gate: If the captured content is purely engagement bait, discussion farming (e.g. 'thoughts?', 'agree or disagree?', 'which is better?'), follower/comment gates ('comment X to get link'), or promotional hype with zero technical or factual substance, set "discarded": true with a brief "discard_reason", and return an empty "cards": [] array.
+- Triage Noise Gate: If the captured content is purely engagement bait, discussion farming (e.g. 'thoughts?', 'agree or disagree?', 'which is better?'), follower/comment gates ('comment X to get link'), or promotional hype with zero technical or factual substance, set "discarded": true with a brief "discard_reason", and return an empty "cards": [] array. In multi-slide or carousel captures (e.g. marked with [Slide X of Y]), the first slide (cover hook) and final slide/caption are frequently promotional hooks, discussion farming, or follower/comment gates (e.g., 'comment X to get links', 'follow for more'). Do NOT discard the capture if the middle slides contain concrete tools, technical architectures, actionable code, or substantive takeaways. Extract the substantive ideas from the legitimate slides and ignore the intro/outro bait. Only set 'discarded': true if ALL slides, captions, and text lack technical or factual substance.
 - EXTRACTION NOTES are warnings about what could NOT be read. Never treat notes as content learned. If extraction notes indicate a login wall, paywall, unreadable content, or missing text/transcript, "signals.extraction" MUST be "partial" or "thin", NEVER "full".
 
 TITLE: %s
@@ -736,7 +736,7 @@ EXTRACTION NOTES: %s`,
 		typeRule,
 		clip(payload.Title, 300), clip(payload.Description, 600),
 		clip(payload.Text, 4000), clip(payload.Caption, 2000),
-		clip(transcript, 6000), clip(digest, 2000), notes)
+		clip(transcript, 6000), clip(digest, 5000), notes)
 
 	if len(profile) > 0 && profile[0] != nil && !profile[0].IsEmpty() {
 		if block := FormatProfileBlock(profile[0]); block != "" {

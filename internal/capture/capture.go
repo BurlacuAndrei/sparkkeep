@@ -63,6 +63,7 @@ type Fetched struct {
 	Caption     string
 	Transcript  string
 	ImageDigest string
+	Files       []File
 	// Notes are extraction warnings, never content. Anything we could not
 	// read lands here so the analyzer can qualify the card instead of
 	// inventing content from a login wall or an error page.
@@ -275,11 +276,15 @@ func (c Capture) MediaMeta(share Share) Fetched {
 	out, err := exec.CommandContext(ctx, bin, args...).Output()
 	if err != nil {
 		f.Notes = append(f.Notes, "metadata unavailable")
-		if embed := InstagramEmbedURL(share.URL); embed != "" && f.Caption == "" {
-			if caption := c.embedCaption(embed); caption != "" {
+		if embed := InstagramEmbedURL(share.URL); embed != "" {
+			caption, files := c.fetchInstagramEmbed(embed)
+			if caption != "" && f.Caption == "" {
 				f.Caption = caption
-			} else {
+			} else if f.Caption == "" {
 				f.Notes = append(f.Notes, "instagram caption unavailable")
+			}
+			if len(files) > 0 {
+				f.Files = files
 			}
 		}
 		// Fallback to headless browser if yt-dlp failed (no-op when disabled)
@@ -298,6 +303,15 @@ func (c Capture) MediaMeta(share Share) Fetched {
 		return f
 	}
 	f.Title, f.Description = meta.Title, meta.Description
+	if embed := InstagramEmbedURL(share.URL); embed != "" && len(f.Files) == 0 {
+		caption, files := c.fetchInstagramEmbed(embed)
+		if caption != "" && f.Caption == "" {
+			f.Caption = caption
+		}
+		if len(files) > 0 {
+			f.Files = files
+		}
+	}
 	return f
 }
 

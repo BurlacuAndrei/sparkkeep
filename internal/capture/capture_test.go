@@ -415,3 +415,107 @@ func TestHeadlessDisabledMediaMetaNeverExecsChrome(t *testing.T) {
 		t.Error("MediaMeta Err = nil, want the yt-dlp failure reported")
 	}
 }
+
+func TestInstagramEmbedURL(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"https://instagram.com/p/C_abc123", "https://www.instagram.com/p/C_abc123/embed/captioned/"},
+		{"https://www.instagram.com/p/C_abc123/", "https://www.instagram.com/p/C_abc123/embed/captioned/"},
+		{"https://m.instagram.com/reel/xyz987?igsh=123", "https://www.instagram.com/reel/xyz987/embed/captioned/"},
+		{"https://www.instagram.com/reels/def456/", "https://www.instagram.com/reel/def456/embed/captioned/"},
+		{"https://instagram.com/tv/ghi789", "https://www.instagram.com/tv/ghi789/embed/captioned/"},
+		{"https://twitter.com/user/status/123", ""},
+		{"https://example.com/p/ABC123/", ""},
+		{"https://youtube.com/watch?v=x", ""},
+		{"", ""},
+		{"not a url", ""},
+	}
+
+	for _, tc := range cases {
+		got := InstagramEmbedURL(tc.input)
+		if got != tc.want {
+			t.Errorf("InstagramEmbedURL(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestExtractInstagramImageURLs(t *testing.T) {
+	htmlSample := `
+<html>
+<body>
+  <div class="Caption">A great carousel post</div>
+  <img class="EmbeddedMediaImage" src="https://cdninstagram.com/low.jpg" srcset="https://cdninstagram.com/low.jpg 320w, https://cdninstagram.com/high.jpg 1080w, https://cdninstagram.com/med.jpg 640w" />
+  <script>
+    var data = {"display_url": "https:\/\/cdninstagram.com\/slide2.jpg"};
+  </script>
+</body>
+</html>`
+
+	urls := ExtractInstagramImageURLs(htmlSample)
+	if len(urls) != 2 {
+		t.Fatalf("ExtractInstagramImageURLs returned %d urls, want 2: %v", len(urls), urls)
+	}
+	if urls[0] != "https://cdninstagram.com/high.jpg" {
+		t.Errorf("urls[0] = %q, want highest resolution https://cdninstagram.com/high.jpg", urls[0])
+	}
+	if urls[1] != "https://cdninstagram.com/slide2.jpg" {
+		t.Errorf("urls[1] = %q, want https://cdninstagram.com/slide2.jpg", urls[1])
+	}
+}
+
+func TestMediaMetaInstagramEmbedExtraction(t *testing.T) {
+	embedHTML := `
+<html>
+<body>
+  <div class="Caption">Check out these tools: 1) Go 2) SQLite</div>
+  <img class="EmbeddedMediaImage" src="https://cdninstagram.com/slide1.jpg" />
+  <img class="EmbeddedMediaImage" src="https://cdninstagram.com/slide2.jpg" />
+</body>
+</html>`
+
+	oldClient := httpClient
+	httpClient = &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if strings.Contains(r.URL.Path, "embed/captioned") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
+					Body:       io.NopCloser(strings.NewReader(embedHTML)),
+					Request:    r,
+				}, nil
+			}
+			// Image download
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body:       io.NopCloser(strings.NewReader("FAKEJPEG")),
+				Request:    r,
+			}, nil
+		}),
+	}
+	defer func() { httpClient = oldClient }()
+
+	// Failed yt-dlp triggers embed fallback
+	script := filepath.Join(t.TempDir(), "fake-ytdlp")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	c := Capture{HeadlessEnabled: false, YtDlpBin: script}
+	f := c.MediaMeta(Share{Kind: KindLink, URL: "https://instagram.com/p/C_abc123"})
+	if f.Caption != "Check out these tools: 1) Go 2) SQLite" {
+		t.Errorf("Caption = %q, want extracted caption", f.Caption)
+	}
+	if len(f.Files) != 2 {
+		t.Fatalf("Files count = %d, want 2 slide images", len(f.Files))
+	}
+	if f.Files[0].Name != "slide-1.jpg" || string(f.Files[0].Data) != "FAKEJPEG" {
+		t.Errorf("Files[0] = %+v", f.Files[0])
+	}
+	if f.Files[1].Name != "slide-2.jpg" || string(f.Files[1].Data) != "FAKEJPEG" {
+		t.Errorf("Files[1] = %+v", f.Files[1])
+	}
+}

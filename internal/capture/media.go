@@ -2,6 +2,7 @@ package capture
 
 import (
 	"context"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -98,7 +100,7 @@ func isDigits(s string) bool {
 }
 
 var (
-	igRe        = regexp.MustCompile(`(?i)^(?:https?://)?(?:www\.)?instagram\.com/(p|reel|reels|tv)/([A-Za-z0-9_-]+)`)
+	igRe        = regexp.MustCompile(`(?i)^(?:https?://)?(?:www\.|m\.)?instagram\.com/(p|reel|reels|tv)/([A-Za-z0-9_-]+)`)
 	igCaptionRe = regexp.MustCompile(`(?is)<div[^>]*class="[^"]*Caption\b[^"]*"[^>]*>(.*?)</div>`)
 	igOGDescRe  = regexp.MustCompile(`(?is)<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']*)["']`)
 	igOGDescRe2 = regexp.MustCompile(`(?is)<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:description["']`)
@@ -115,7 +117,11 @@ func InstagramEmbedURL(rawURL string) string {
 	if m == nil {
 		return ""
 	}
-	return "https://www.instagram.com/" + m[1] + "/" + m[2] + "/embed/captioned/"
+	kind := strings.ToLower(m[1])
+	if kind == "reels" {
+		kind = "reel"
+	}
+	return "https://www.instagram.com/" + kind + "/" + m[2] + "/embed/captioned/"
 }
 
 // ExtractInstagramCaption pulls the caption out of a rendered embed page.
@@ -138,6 +144,103 @@ func ExtractInstagramCaption(page string) string {
 		}
 	}
 	return ""
+}
+
+// ExtractInstagramImageURLs extracts slide image URLs from an Instagram embed HTML page.
+// It checks <img> elements with EmbeddedMediaImage (selecting the highest resolution
+// candidate from srcset when available) and display_url fields in embedded JSON.
+func ExtractInstagramImageURLs(page string) []string {
+	var candidates []string
+	seen := make(map[string]bool)
+
+	addURL := func(raw string) {
+		u := strings.TrimSpace(html.UnescapeString(strings.ReplaceAll(raw, `\/`, "/")))
+		if u == "" || seen[u] {
+			return
+		}
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			return
+		}
+		seen[u] = true
+		candidates = append(candidates, u)
+	}
+
+	imgRe := regexp.MustCompile(`(?is)<img\b[^>]*>`)
+	classRe := regexp.MustCompile(`(?is)\bclass=["']([^"']+)["']`)
+	srcRe := regexp.MustCompile(`(?is)\bsrc=["']([^"']+)["']`)
+	srcsetRe := regexp.MustCompile(`(?is)\bsrcset=["']([^"']+)["']`)
+
+	for _, imgTag := range imgRe.FindAllString(page, -1) {
+		classMatch := classRe.FindStringSubmatch(imgTag)
+		isMediaImage := false
+		if classMatch != nil && strings.Contains(classMatch[1], "EmbeddedMediaImage") {
+			isMediaImage = true
+		}
+		if !isMediaImage && !strings.Contains(imgTag, "EmbeddedMediaImage") {
+			continue
+		}
+
+		if sm := srcsetRe.FindStringSubmatch(imgTag); sm != nil && strings.TrimSpace(sm[1]) != "" {
+			bestURL := pickHighestFromSrcset(sm[1])
+			if bestURL != "" {
+				addURL(bestURL)
+				continue
+			}
+		}
+
+		if sm := srcRe.FindStringSubmatch(imgTag); sm != nil && strings.TrimSpace(sm[1]) != "" {
+			addURL(sm[1])
+		}
+	}
+
+	displayURLRe := regexp.MustCompile(`"display_url"\s*:\s*"([^"]+)"`)
+	for _, m := range displayURLRe.FindAllStringSubmatch(page, -1) {
+		addURL(m[1])
+	}
+
+	if len(candidates) == 0 {
+		for _, imgTag := range imgRe.FindAllString(page, -1) {
+			if strings.Contains(imgTag, "cdninstagram.com") || strings.Contains(imgTag, "fbcdn.net") {
+				if sm := srcRe.FindStringSubmatch(imgTag); sm != nil {
+					addURL(sm[1])
+				}
+			}
+		}
+	}
+
+	if len(candidates) > 10 {
+		candidates = candidates[:10]
+	}
+	return candidates
+}
+
+func pickHighestFromSrcset(srcset string) string {
+	parts := strings.Split(srcset, ",")
+	var bestURL string
+	maxDim := -1
+	dimRe := regexp.MustCompile(`(\d+)[wx]`)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		fields := strings.Fields(part)
+		if len(fields) == 0 {
+			continue
+		}
+		u := fields[0]
+		dim := 0
+		if len(fields) > 1 {
+			if m := dimRe.FindStringSubmatch(fields[1]); m != nil {
+				dim, _ = strconv.Atoi(m[1])
+			}
+		}
+		if dim > maxDim || bestURL == "" {
+			maxDim = dim
+			bestURL = u
+		}
+	}
+	return bestURL
 }
 
 // applyHeadless folds headless-extraction output into f. A detected login or
@@ -227,24 +330,67 @@ func (c Capture) Subtitles(share Share) string {
 	return strings.Join(cues, "\n")
 }
 
-// embedCaption best-effort-fetches an Instagram captioned-embed page and
-// returns its caption. Returns "" on any failure; the caller emits a Note.
-func (c Capture) embedCaption(embedURL string) string {
+// fetchInstagramEmbed best-effort-fetches an Instagram captioned-embed page,
+// extracts its caption, and downloads up to 10 slide image files.
+func (c Capture) fetchInstagramEmbed(embedURL string) (string, []File) {
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, embedURL, nil)
 	if err != nil {
-		return ""
+		return "", nil
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return ""
+		return "", nil
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if err != nil {
-		return ""
+		return "", nil
 	}
-	return ExtractInstagramCaption(string(body))
+	htmlStr := string(body)
+	caption := ExtractInstagramCaption(htmlStr)
+	imageURLs := ExtractInstagramImageURLs(htmlStr)
+
+	var files []File
+	for i, imgURL := range imageURLs {
+		if len(files) >= 10 {
+			break
+		}
+		imgReq, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
+		if err != nil {
+			continue
+		}
+		imgResp, err := httpClient.Do(imgReq)
+		if err != nil {
+			continue
+		}
+		if imgResp.StatusCode != http.StatusOK {
+			imgResp.Body.Close()
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(imgResp.Body, 10<<20))
+		imgResp.Body.Close()
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		mime := imgResp.Header.Get("Content-Type")
+		if mime == "" || !strings.HasPrefix(mime, "image/") {
+			mime = "image/jpeg"
+		}
+		files = append(files, File{
+			Name: fmt.Sprintf("slide-%d.jpg", i+1),
+			Mime: mime,
+			Data: data,
+		})
+	}
+	return caption, files
+}
+
+// embedCaption best-effort-fetches an Instagram captioned-embed page and
+// returns its caption. Returns "" on any failure; the caller emits a Note.
+func (c Capture) embedCaption(embedURL string) string {
+	caption, _ := c.fetchInstagramEmbed(embedURL)
+	return caption
 }

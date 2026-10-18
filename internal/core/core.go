@@ -380,13 +380,18 @@ func (s *Service) Capture(ctx context.Context, raw string) ([]int64, error) {
 // degrades into a stored "Analysis failed" card so the source + retry
 // button survive. All cards are stored even if a later notify fails.
 func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
+	var existingCap *port.Capture
 	sourceURL := strings.TrimSpace(share.URL)
 	if sourceURL != "" && s.Store != nil {
-		if existingCap, err := s.Store.GetCaptureBySourceURL(ctx, sourceURL); err == nil {
-			if derr := s.handleDuplicate(ctx, existingCap, share.Caption); derr != nil {
-				s.Logf("core: duplicate handle: %v", derr)
+		if capRec, err := s.Store.GetCaptureBySourceURL(ctx, sourceURL); err == nil {
+			if _, cardErr := s.Store.GetCardBySourceURL(ctx, sourceURL); cardErr == nil {
+				if derr := s.handleDuplicate(ctx, capRec, share.Caption); derr != nil {
+					s.Logf("core: duplicate handle: %v", derr)
+				}
+				return []int64{}, nil
 			}
-			return []int64{}, nil
+			// If no card exists (e.g. previous attempt was discarded by noise gate), allow re-triage!
+			existingCap = &capRec
 		} else if existingCard, err := s.Store.GetCardBySourceURL(ctx, sourceURL); err == nil {
 			cap := port.Capture{
 				SourceURL: existingCard.SourceURL,
@@ -401,17 +406,36 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 
 	fetched := s.resolve(ctx, share)
 
-	capRow, cerr := s.persistCapture(ctx, share, fetched)
-	if cerr != nil {
-		if errors.Is(cerr, port.ErrConflict) {
-			if existingCap, gerr := s.Store.GetCaptureBySourceURL(ctx, sourceURL); gerr == nil {
-				if derr := s.handleDuplicate(ctx, existingCap, share.Caption); derr != nil {
-					s.Logf("core: duplicate handle on conflict: %v", derr)
-				}
-				return []int64{}, nil
-			}
+	var capRow port.Capture
+	if existingCap != nil {
+		capRow = *existingCap
+		capRow.Title = clipRunes(fetched.Title, 1000)
+		capRow.Description = clipRunes(fetched.Description, 5000)
+		capRow.Text = clipRunes(fetched.Text, 20000)
+		capRow.Caption = clipRunes(fetched.Caption, 5000)
+		capRow.Transcript = clipRunes(fetched.Transcript, 50000)
+		capRow.ImageDigest = clipRunes(fetched.ImageDigest, 5000)
+		capRow.Notes = fetched.Notes
+		if _, uerr := s.Store.UpdateCapture(ctx, capRow); uerr != nil {
+			s.Logf("core: update existing capture %d: %v", capRow.ID, uerr)
 		}
-		s.Logf("core: persist capture %s: %v", share.URL, cerr)
+	} else {
+		var cerr error
+		capRow, cerr = s.persistCapture(ctx, share, fetched)
+		if cerr != nil {
+			if errors.Is(cerr, port.ErrConflict) || strings.Contains(cerr.Error(), "UNIQUE constraint failed") {
+				if exCap, gerr := s.Store.GetCaptureBySourceURL(ctx, sourceURL); gerr == nil {
+					if _, cardErr := s.Store.GetCardBySourceURL(ctx, sourceURL); cardErr == nil {
+						if derr := s.handleDuplicate(ctx, exCap, share.Caption); derr != nil {
+							s.Logf("core: duplicate handle on conflict: %v", derr)
+						}
+						return []int64{}, nil
+					}
+					capRow = exCap
+				}
+			}
+			s.Logf("core: persist capture %s: %v", share.URL, cerr)
+		}
 	}
 
 	llmClient := s.clientFor(analyze.RoleTriage)
@@ -436,7 +460,14 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 		return s.failCard(ctx, fetched, share.URL, capRow.ID)
 	}
 	if res.Discarded || (len(res.Cards) == 0 && res.DiscardReason != "") {
-		return nil, ErrNoiseGateDiscarded
+		reason := res.DiscardReason
+		if reason == "" {
+			reason = "engagement bait or promotional hype with zero technical substance"
+		}
+		return nil, &port.NoiseGateError{
+			Reason:    reason,
+			CaptureID: capRow.ID,
+		}
 	}
 	if len(res.Cards) == 0 {
 		return []int64{}, nil
@@ -730,6 +761,9 @@ var ErrNothingToReanalyze = errors.New("nothing to re-analyze")
 // ErrNoiseGateDiscarded is returned when the triage noise gate filters out engagement bait or hype.
 var ErrNoiseGateDiscarded = port.ErrNoiseGateDiscarded
 
+// NoiseGateError aliases the port.NoiseGateError error wrapper.
+type NoiseGateError = port.NoiseGateError
+
 func hasUsableContent(c port.Capture) bool {
 	return strings.TrimSpace(c.Text) != "" ||
 		strings.TrimSpace(c.Transcript) != "" ||
@@ -975,6 +1009,91 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 	return createdCards, nil
 }
 
+// ForceCapture loads a capture by ID, generates a fallback card in StatusInbox
+// (bypassing the noise gate), persists the card, and returns it.
+func (s *Service) ForceCapture(ctx context.Context, captureID int64) (*port.Card, error) {
+	if s.Store == nil {
+		return nil, errors.New("core: no store configured")
+	}
+	cap, err := s.Store.GetCapture(ctx, captureID)
+	if err != nil {
+		return nil, err
+	}
+	if cap.SourceURL != "" {
+		if existing, err := s.Store.GetCardBySourceURL(ctx, cap.SourceURL); err == nil {
+			return &existing, nil
+		}
+	}
+
+	title := strings.TrimSpace(cap.Title)
+	if title == "" {
+		if cap.SourceURL != "" {
+			title = cap.SourceURL
+		} else {
+			title = "Captured content"
+		}
+	}
+	summary := strings.TrimSpace(cap.Description)
+	if summary == "" {
+		summary = strings.TrimSpace(cap.Text)
+	}
+	if summary == "" {
+		summary = strings.TrimSpace(cap.Caption)
+	}
+	if summary == "" {
+		summary = strings.TrimSpace(cap.ImageDigest)
+	}
+	if summary == "" {
+		summary = "Manual capture override"
+	}
+	if len([]rune(summary)) > 1000 {
+		summary = string([]rune(summary)[:1000])
+	}
+
+	cardType := port.CardTypeIdea
+	switch cap.Kind {
+	case capture.KindImage:
+		cardType = port.CardTypeOther
+	case capture.KindVideo:
+		cardType = port.CardTypeVideo
+	case capture.KindLink:
+		cardType = port.CardTypeArticle
+	}
+
+	cID := captureID
+	card := port.Card{
+		CaptureID:        &cID,
+		Title:            title,
+		Summary:          summary,
+		TLDR:             summary,
+		WhyCare:          "User kept capture despite noise gate filter.",
+		Status:           port.StatusInbox,
+		Horizon:          port.HorizonShortTerm,
+		SourceURL:        cap.SourceURL,
+		SourceNote:       cap.Caption,
+		Type:             cardType,
+		Tags:             []string{},
+		References:       []port.Reference{},
+		Claims:           []string{},
+		OpenQuestions:    []string{},
+		Signals:          port.Signals{Extraction: "full", SourceQuality: "unknown"},
+		Worthiness:       port.Worthiness{Level: "medium", Reason: "User override"},
+		ExecutiveSummary: summary,
+		ValueProposition: "User kept capture despite noise gate filter.",
+		ProposedActions:  []string{},
+		SourceChannel:    cap.SourceChannel,
+	}
+
+	created, err := s.Store.CreateCard(ctx, card)
+	if err != nil {
+		return nil, err
+	}
+	if s.Webhook != nil {
+		s.Webhook.Dispatch(ctx, webhook.EventCardCreated, created)
+	}
+	return &created, nil
+}
+
 // resolve turns a share into a Fetched. Link and text shares go through the
 // fetcher; media shares are read locally. Nothing here fails hard — every
 // unreadable input becomes a Note so a card is still produced.
@@ -991,11 +1110,73 @@ func (s *Service) resolve(ctx context.Context, share capture.Share) capture.Fetc
 					f.Notes = append(f.Notes, "no transcript available")
 				}
 			}
+			var imageFiles []capture.File
+			for _, file := range f.Files {
+				if strings.HasPrefix(strings.ToLower(file.Mime), "image/") || capture.KindForMime(file.Mime) == capture.KindImage {
+					imageFiles = append(imageFiles, file)
+				}
+			}
+			if len(imageFiles) == 0 {
+				for _, file := range share.Files {
+					if strings.HasPrefix(strings.ToLower(file.Mime), "image/") || capture.KindForMime(file.Mime) == capture.KindImage {
+						imageFiles = append(imageFiles, file)
+					}
+				}
+			}
+			if len(imageFiles) > 10 {
+				imageFiles = imageFiles[:10]
+			}
+			if len(imageFiles) > 0 && f.ImageDigest == "" {
+				digest, notes := s.describeImages(ctx, imageFiles)
+				if digest != "" {
+					f.ImageDigest = digest
+				}
+				if len(notes) > 0 {
+					f.Notes = append(f.Notes, notes...)
+				}
+			}
 		}
 		return f
 	default:
 		return s.resolveMedia(ctx, share)
 	}
+}
+
+// describeImages reads a list of image files (up to 10) with the vision model and formats slide digests.
+func (s *Service) describeImages(ctx context.Context, files []capture.File) (string, []string) {
+	if len(files) == 0 {
+		return "", nil
+	}
+	describer := s.describerForVision()
+	if describer == nil {
+		return "", []string{"image unreadable"}
+	}
+	var digests []string
+	for _, file := range files {
+		digest, err := describer.Describe(ctx, file, "")
+		if err != nil {
+			s.Logf("core: vision %s: %v", file.Name, err)
+			continue
+		}
+		digest = strings.TrimSpace(digest)
+		if digest != "" {
+			digests = append(digests, digest)
+		}
+	}
+	if len(digests) == 0 {
+		return "", []string{"image unreadable"}
+	}
+	if len(digests) == 1 {
+		return digests[0], nil
+	}
+	var b strings.Builder
+	for i, d := range digests {
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b, "[Slide %d of %d]: %s", i+1, len(digests), d)
+	}
+	return b.String(), nil
 }
 
 // resolveMedia reads image, audio, video, and file payloads.
@@ -1019,18 +1200,25 @@ func (s *Service) resolveMedia(ctx context.Context, share capture.Share) capture
 	}
 
 	if share.Kind == capture.KindImage {
-		describer := s.describerForVision()
-		if describer == nil {
-			f.Notes = append(f.Notes, "image unreadable")
-			return f
+		var imageFiles []capture.File
+		for _, fl := range share.Files {
+			if strings.HasPrefix(strings.ToLower(fl.Mime), "image/") || capture.KindForMime(fl.Mime) == capture.KindImage {
+				imageFiles = append(imageFiles, fl)
+			}
 		}
-		digest, err := describer.Describe(ctx, file, "")
-		if err != nil {
-			s.Logf("core: vision %s: %v", file.Name, err)
-			f.Notes = append(f.Notes, "image unreadable")
-			return f
+		if len(imageFiles) == 0 && len(share.Files) > 0 {
+			imageFiles = []capture.File{share.Files[0]}
 		}
-		f.ImageDigest = digest
+		if len(imageFiles) > 10 {
+			imageFiles = imageFiles[:10]
+		}
+		digest, notes := s.describeImages(ctx, imageFiles)
+		if digest != "" {
+			f.ImageDigest = digest
+		}
+		if len(notes) > 0 {
+			f.Notes = append(f.Notes, notes...)
+		}
 		return f
 	}
 
@@ -1337,6 +1525,9 @@ func mergeFetched(a, b capture.Fetched) capture.Fetched {
 	}
 	if b.Kind != "" {
 		a.Kind = b.Kind
+	}
+	if len(b.Files) > 0 {
+		a.Files = b.Files
 	}
 	if len(b.Notes) > 0 {
 		a.Notes = append(a.Notes, b.Notes...)

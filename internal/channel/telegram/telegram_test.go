@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -312,7 +313,7 @@ func (s *testStubService) CaptureShare(ctx context.Context, share capture.Share)
 		return nil, err
 	}
 	if res.Discarded || (len(res.Cards) == 0 && res.DiscardReason != "") {
-		return nil, port.ErrNoiseGateDiscarded
+		return nil, &port.NoiseGateError{Reason: res.DiscardReason}
 	}
 	var ids []int64
 	for _, idea := range res.Cards {
@@ -453,6 +454,24 @@ func (s *testStubService) GetPlaybook(ctx context.Context, id int64) (port.Playb
 		return port.Playbook{}, port.ErrNotFound
 	}
 	return s.Store.GetPlaybook(ctx, id)
+}
+
+func (s *testStubService) ForceCapture(ctx context.Context, captureID int64) (*port.Card, error) {
+	if s.Store == nil {
+		return nil, port.ErrNotFound
+	}
+	card := port.Card{
+		Title:     fmt.Sprintf("Forced Card %d", captureID),
+		Summary:   "Recovered content",
+		TLDR:      "Recovered content",
+		Status:    port.StatusInbox,
+		CaptureID: &captureID,
+	}
+	created, err := s.Store.CreateCard(ctx, card)
+	if err != nil {
+		return nil, err
+	}
+	return &created, nil
 }
 
 var _ Service = (*testStubService)(nil)
@@ -1414,9 +1433,8 @@ func TestShareIngestionNoiseGateDiscardEditsPlaceholder(t *testing.T) {
 	if len(editMessages) != 1 {
 		t.Fatalf("editMessages count = %d, want exactly 1 editMessageText replacing placeholder with discard notification", len(editMessages))
 	}
-	expectedMsg := "🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance."
-	if editMessages[0] != expectedMsg {
-		t.Errorf("edited message text = %q, want %q", editMessages[0], expectedMsg)
+	if !strings.Contains(editMessages[0], "🚫 Filtered: Discarded engagement bait") {
+		t.Errorf("edited message text = %q, want containing '🚫 Filtered: Discarded engagement bait'", editMessages[0])
 	}
 }
 
@@ -1719,5 +1737,242 @@ func TestReactionAndReplyAfterRestart(t *testing.T) {
 	}
 	if !strings.Contains(cardAfterReply.SourceNote, "extra note") {
 		t.Errorf("sourceNote = %q, want containing 'extra note'", cardAfterReply.SourceNote)
+	}
+}
+
+type captureSpyService struct {
+	testStubService
+	mu     sync.Mutex
+	shares []capture.Share
+	done   chan struct{}
+}
+
+func (s *captureSpyService) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
+	s.mu.Lock()
+	s.shares = append(s.shares, share)
+	s.mu.Unlock()
+	if s.done != nil {
+		select {
+		case s.done <- struct{}{}:
+		default:
+		}
+	}
+	return []int64{1}, nil
+}
+
+func (s *captureSpyService) getShares() []capture.Share {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	copied := make([]capture.Share, len(s.shares))
+	copy(copied, s.shares)
+	return copied
+}
+
+func TestMediaGroupAggregation(t *testing.T) {
+	st := newStubStore()
+	doneCh := make(chan struct{}, 1)
+	spy := &captureSpyService{testStubService: testStubService{Store: st}, done: doneCh}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/getFile"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":     true,
+				"result": map[string]any{"file_path": "photo.jpg"},
+			})
+		case strings.Contains(path, "/file/bot"):
+			_, _ = w.Write([]byte("fake_image_data"))
+		case strings.HasSuffix(path, "/sendChatAction"), strings.HasSuffix(path, "/editMessageText"):
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		case strings.HasSuffix(path, "/sendMessage"):
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":99}}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		}
+	}))
+	defer srv.Close()
+
+	adapter := &Adapter{
+		Token:          "tok",
+		OwnerID:        1,
+		Service:        spy,
+		baseURL:        srv.URL,
+		MediaGroupWait: 50 * time.Millisecond,
+	}
+
+	adapter.handleMessage(&message{
+		MessageID:    101,
+		Chat:         &chat{ID: 1},
+		MediaGroupID: "album123",
+		Photo:        []photoSize{{FileID: "photo1"}},
+	})
+	adapter.handleMessage(&message{
+		MessageID:    102,
+		Chat:         &chat{ID: 1},
+		MediaGroupID: "album123",
+		Photo:        []photoSize{{FileID: "photo2"}},
+	})
+	adapter.handleMessage(&message{
+		MessageID:    103,
+		Chat:         &chat{ID: 1},
+		MediaGroupID: "album123",
+		Caption:      "Slide album caption",
+		Photo:        []photoSize{{FileID: "photo3"}},
+	})
+
+	select {
+	case <-doneCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for media group aggregation")
+	}
+
+	shares := spy.getShares()
+	if len(shares) != 1 {
+		t.Fatalf("expected 1 aggregated share, got %d", len(shares))
+	}
+	share := shares[0]
+	if share.Kind != capture.KindImage {
+		t.Errorf("expected KindImage, got %s", share.Kind)
+	}
+	if len(share.Files) != 3 {
+		t.Errorf("expected 3 files, got %d", len(share.Files))
+	}
+	if share.Caption != "Slide album caption" {
+		t.Errorf("expected caption %q, got %q", "Slide album caption", share.Caption)
+	}
+}
+
+func TestHandleForceCaptureCallback(t *testing.T) {
+	st := newStubStore()
+	spy := &captureSpyService{testStubService: testStubService{Store: st}}
+
+	var editedText string
+	var editedButtons [][]button
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/editMessageText"):
+			var body struct {
+				Text        string `json:"text"`
+				ReplyMarkup struct {
+					InlineKeyboard [][]button `json:"inline_keyboard"`
+				} `json:"reply_markup"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			editedText = body.Text
+			editedButtons = body.ReplyMarkup.InlineKeyboard
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":42}}`))
+		case strings.HasSuffix(path, "/answerCallbackQuery"):
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		}
+	}))
+	defer srv.Close()
+
+	adapter := &Adapter{
+		Token:   "tok",
+		OwnerID: 1,
+		Service: spy,
+		baseURL: srv.URL,
+	}
+
+	adapter.handleCallback(&callbackQuery{
+		ID:   "cb_force_1",
+		From: &user{ID: 1},
+		Data: "force_capture:99",
+		Message: &message{
+			MessageID: 55,
+			Chat:      &chat{ID: 1},
+		},
+	})
+
+	card, err := st.GetCard(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetCard(1) failed: %v", err)
+	}
+	if card.Title != "Forced Card 99" {
+		t.Errorf("expected card title 'Forced Card 99', got %q", card.Title)
+	}
+
+	if !strings.Contains(editedText, "Forced Card 99") {
+		t.Errorf("expected edited text to contain 'Forced Card 99', got %q", editedText)
+	}
+	if len(editedButtons) == 0 {
+		t.Errorf("expected cardButtons on edited message, got none")
+	}
+}
+
+type noiseGateDiscardStubService struct {
+	testStubService
+	errToReturn error
+}
+
+func (s *noiseGateDiscardStubService) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
+	return nil, s.errToReturn
+}
+
+func TestNoiseGateDiscardWithKeepAnywayButton(t *testing.T) {
+	st := newStubStore()
+	var editMessages []string
+	var editButtons [][][]button
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/sendChatAction"):
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		case strings.HasSuffix(path, "/sendMessage"):
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":88}}`))
+		case strings.HasSuffix(path, "/editMessageText"):
+			var body struct {
+				Text        string `json:"text"`
+				ReplyMarkup struct {
+					InlineKeyboard [][]button `json:"inline_keyboard"`
+				} `json:"reply_markup"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			editMessages = append(editMessages, body.Text)
+			editButtons = append(editButtons, body.ReplyMarkup.InlineKeyboard)
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":88}}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+		}
+	}))
+	defer srv.Close()
+
+	discardSvc := &noiseGateDiscardStubService{
+		testStubService: testStubService{Store: st},
+		errToReturn: &port.NoiseGateError{
+			Reason:    "pure marketing hype with 0 substance",
+			CaptureID: 123,
+		},
+	}
+	adapter := &Adapter{
+		Token:   "tok",
+		OwnerID: 1,
+		Service: discardSvc,
+		baseURL: srv.URL,
+	}
+
+	adapter.handleMessage(&message{
+		MessageID: 77,
+		Chat:      &chat{ID: 1},
+		Text:      "https://example.com/hype-bait",
+	})
+
+	if len(editMessages) != 1 {
+		t.Fatalf("expected 1 edit message, got %d", len(editMessages))
+	}
+	if !strings.Contains(editMessages[0], "pure marketing hype with 0 substance") {
+		t.Errorf("expected edit message to contain discard reason, got %q", editMessages[0])
+	}
+	if len(editButtons) != 1 || len(editButtons[0]) != 1 || len(editButtons[0][0]) != 1 {
+		t.Fatalf("expected 'Keep Anyway' button, got %+v", editButtons)
+	}
+	btn := editButtons[0][0][0]
+	if btn.Text != "📥 Keep Anyway" || btn.CallbackData != "force_capture:123" {
+		t.Errorf("unexpected button: %+v", btn)
 	}
 }

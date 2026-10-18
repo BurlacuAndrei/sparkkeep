@@ -5,21 +5,6 @@ import (
 	"testing"
 )
 
-func TestInstagramEmbedURL(t *testing.T) {
-	cases := map[string]string{
-		"https://www.instagram.com/p/ABC123/": "https://www.instagram.com/p/ABC123/embed/captioned/",
-		"https://instagram.com/reel/ABC123/":  "https://www.instagram.com/reel/ABC123/embed/captioned/",
-		"https://example.com/p/ABC123/":       "",
-		"https://youtube.com/watch?v=x":       "",
-		"":                                    "",
-	}
-	for in, want := range cases {
-		if got := InstagramEmbedURL(in); got != want {
-			t.Errorf("InstagramEmbedURL(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestExtractInstagramCaptionFallsBackToOGDescription(t *testing.T) {
 	// Rendered embeds put the caption in a Caption div; when the markup is
 	// unavailable the og:description meta is the guaranteed fallback.

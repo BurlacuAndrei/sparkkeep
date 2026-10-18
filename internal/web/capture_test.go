@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -365,5 +366,71 @@ func TestCaptureNoiseGateDiscard(t *testing.T) {
 	}
 	if !mout.OK || !mout.Discarded || len(mout.CardIDs) != 0 {
 		t.Errorf("multipart response = %+v, want discarded true with 0 card IDs", mout)
+	}
+}
+
+func TestCaptureMultipleImageUploadsSetsKindImage(t *testing.T) {
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(`[
+			{"title":"Multi Image Idea","summary":"extracted from slides","horizon":"short-term","tags":[],"links":[]}
+		]`))
+	}))
+	defer llm.Close()
+
+	uploadDir := t.TempDir()
+	h, st := testHandlerWithLLM(t, uploadDir, llm.URL)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for i, name := range []string{"slide1.png", "slide2.jpg"} {
+		mime := "image/png"
+		if strings.HasSuffix(name, ".jpg") {
+			mime = "image/jpeg"
+		}
+		partHeader := make(map[string][]string)
+		partHeader["Content-Disposition"] = []string{fmt.Sprintf(`form-data; name="file"; filename=%q`, name)}
+		partHeader["Content-Type"] = []string{mime}
+		part, err := mw.CreatePart(partHeader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = part.Write([]byte(fmt.Sprintf("imagedata%d", i+1)))
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/capture", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		OK      bool    `json:"ok"`
+		CardIDs []int64 `json:"card_ids"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !out.OK || len(out.CardIDs) != 1 {
+		t.Fatalf("out = %+v, want OK with 1 card ID", out)
+	}
+
+	card, err := st.GetCard(context.Background(), out.CardIDs[0])
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if card.CaptureID == nil {
+		t.Fatalf("expected card to have CaptureID")
+	}
+	cap, err := st.GetCapture(context.Background(), *card.CaptureID)
+	if err != nil {
+		t.Fatalf("GetCapture: %v", err)
+	}
+	if cap.Kind != "image" {
+		t.Errorf("cap.Kind = %q, want 'image'", cap.Kind)
 	}
 }

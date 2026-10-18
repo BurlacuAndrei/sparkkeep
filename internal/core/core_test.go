@@ -183,7 +183,7 @@ func (s *stubStore) CreateCapture(_ context.Context, c port.Capture) (port.Captu
 	if c.SourceURL != "" {
 		for _, existing := range s.captures {
 			if existing.SourceURL == c.SourceURL {
-				return port.Capture{}, fmt.Errorf("UNIQUE constraint failed: idx_captures_source")
+				return port.Capture{}, fmt.Errorf("%w: UNIQUE constraint failed: idx_captures_source", port.ErrConflict)
 			}
 		}
 	}
@@ -591,15 +591,30 @@ type stubFetcher struct {
 	subtitles    func(s capture.Share) string
 }
 
-func (f stubFetcher) Recognize(raw string) capture.Share    { return f.recognize(raw) }
-func (f stubFetcher) Fetch(s capture.Share) capture.Fetched { return f.fetch(s) }
+func (f stubFetcher) Recognize(raw string) capture.Share {
+	if f.recognize == nil {
+		return capture.Share{Kind: capture.KindText, Caption: raw}
+	}
+	return f.recognize(raw)
+}
+func (f stubFetcher) Fetch(s capture.Share) capture.Fetched {
+	if f.fetch == nil {
+		return capture.Fetched{Kind: s.Kind, URL: s.URL, Caption: s.Caption}
+	}
+	return f.fetch(s)
+}
 func (f stubFetcher) FetchWithContext(ctx context.Context, s capture.Share) capture.Fetched {
 	if f.fetchWithCtx != nil {
 		return f.fetchWithCtx(ctx, s)
 	}
-	return f.fetch(s)
+	return f.Fetch(s)
 }
-func (f stubFetcher) MediaMeta(s capture.Share) capture.Fetched { return f.mediaMeta(s) }
+func (f stubFetcher) MediaMeta(s capture.Share) capture.Fetched {
+	if f.mediaMeta == nil {
+		return capture.Fetched{Kind: s.Kind, URL: s.URL, Caption: s.Caption}
+	}
+	return f.mediaMeta(s)
+}
 func (f stubFetcher) Subtitles(s capture.Share) string {
 	if f.subtitles == nil {
 		return ""
@@ -658,6 +673,9 @@ func researchLLM() *httptest.Server {
 
 // analyzeClient returns a real client pointed at the stub server.
 func analyzeClient(llm *httptest.Server) *analyze.Client {
+	if llm == nil {
+		return nil
+	}
 	return analyze.New(config.Config{LLMBase: llm.URL, LLMModel: "stub"}, llm.Client())
 }
 
@@ -730,6 +748,19 @@ type fakeVision struct{ digest string }
 
 func (f *fakeVision) Describe(ctx context.Context, img capture.File, hint string) (string, error) {
 	return f.digest, nil
+}
+
+type fakeVisionMulti struct {
+	digests map[string]string
+}
+
+func (f *fakeVisionMulti) Describe(ctx context.Context, img capture.File, hint string) (string, error) {
+	if f.digests != nil {
+		if d, ok := f.digests[img.Name]; ok {
+			return d, nil
+		}
+	}
+	return "diagram: " + img.Name, nil
 }
 
 // fakeASR returns a canned transcript.
@@ -2585,5 +2616,186 @@ func TestPurgeOldUploads(t *testing.T) {
 	}
 	if _, err := os.Stat(fresh); err != nil {
 		t.Errorf("expected fresh file to exist")
+	}
+}
+
+func TestMultiImageVisionSlideDigest(t *testing.T) {
+	spy := &promptSpy{}
+	st := newStubStore()
+	s := baseSvc(t, st, &stubChannel{}, spy.server(t))
+	s.Fetcher = stubFetcher{}
+	s.Vision = &fakeVisionMulti{
+		digests: map[string]string{
+			"slide1.jpg": "First slide architecture overview",
+			"slide2.jpg": "Second slide database schema",
+		},
+	}
+
+	ids, err := s.CaptureShare(context.Background(), capture.Share{
+		Kind: capture.KindImage,
+		Files: []capture.File{
+			{Name: "slide1.jpg", Mime: "image/jpeg", Data: []byte("img1")},
+			{Name: "slide2.jpg", Mime: "image/jpeg", Data: []byte("img2")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CaptureShare: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want 1 card", ids)
+	}
+
+	prompt := spy.last()
+	if !strings.Contains(prompt, "[Slide 1 of 2]: First slide architecture overview") {
+		t.Errorf("prompt missing slide 1 digest:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "[Slide 2 of 2]: Second slide database schema") {
+		t.Errorf("prompt missing slide 2 digest:\n%s", prompt)
+	}
+
+	if len(st.captures) != 1 {
+		t.Fatalf("captures = %d, want 1", len(st.captures))
+	}
+	for _, cap := range st.captures {
+		if !strings.Contains(cap.ImageDigest, "[Slide 1 of 2]: First slide architecture overview") {
+			t.Errorf("stored capture missing slide 1 digest: %s", cap.ImageDigest)
+		}
+	}
+}
+
+func TestKindLinkWithImagesRunsVisionOCR(t *testing.T) {
+	spy := &promptSpy{}
+	st := newStubStore()
+	s := baseSvc(t, st, &stubChannel{}, spy.server(t))
+	s.Fetcher = stubFetcher{
+		recognize: capture.Recognize,
+		mediaMeta: func(sh capture.Share) capture.Fetched {
+			return capture.Fetched{
+				Kind:  capture.KindLink,
+				URL:   sh.URL,
+				Title: "Instagram Carousel",
+				Files: []capture.File{
+					{Name: "slide1.jpg", Mime: "image/jpeg", Data: []byte("slide1")},
+					{Name: "slide2.jpg", Mime: "image/jpeg", Data: []byte("slide2")},
+				},
+			}
+		},
+	}
+	s.Vision = &fakeVisionMulti{
+		digests: map[string]string{
+			"slide1.jpg": "Slide 1: Hook and title",
+			"slide2.jpg": "Slide 2: Go concurrent worker pool pattern",
+		},
+	}
+
+	ids, err := s.CaptureShare(context.Background(), capture.Share{
+		Kind: capture.KindLink,
+		URL:  "https://www.instagram.com/p/Cxyz123/",
+	})
+	if err != nil {
+		t.Fatalf("CaptureShare: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want 1 card", ids)
+	}
+
+	prompt := spy.last()
+	if !strings.Contains(prompt, "[Slide 1 of 2]: Slide 1: Hook and title") {
+		t.Errorf("prompt missing slide 1 OCR:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "[Slide 2 of 2]: Slide 2: Go concurrent worker pool pattern") {
+		t.Errorf("prompt missing slide 2 OCR:\n%s", prompt)
+	}
+}
+
+func TestCaptureShareReTriageWhenNoCardExists(t *testing.T) {
+	spy := &promptSpy{}
+	st := newStubStore()
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, spy.server(t))
+	s.Fetcher = stubFetcher{
+		recognize: capture.Recognize,
+		mediaMeta: func(sh capture.Share) capture.Fetched {
+			return capture.Fetched{
+				Kind:  capture.KindLink,
+				URL:   sh.URL,
+				Title: "Previously Discarded Reel",
+				Text:  "Technical substance in caption",
+			}
+		},
+	}
+
+	targetURL := "https://www.instagram.com/reel/Cxyz999/"
+	cap, err := st.CreateCapture(context.Background(), port.Capture{
+		Kind:      capture.KindLink,
+		SourceURL: targetURL,
+		Title:     "Previously Discarded Reel",
+	})
+	if err != nil {
+		t.Fatalf("CreateCapture: %v", err)
+	}
+
+	ids, err := s.CaptureShare(context.Background(), capture.Share{
+		Kind: capture.KindLink,
+		URL:  targetURL,
+	})
+	if err != nil {
+		t.Fatalf("CaptureShare: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %v, want 1 card created", ids)
+	}
+	for _, n := range ch.notifies {
+		if n.Kind == "duplicate" {
+			t.Errorf("unexpected duplicate notification sent")
+		}
+	}
+	card, err := st.GetCard(context.Background(), ids[0])
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if card.CaptureID == nil || *card.CaptureID != cap.ID {
+		t.Errorf("card captureID = %v, want %d (reused existing capture)", card.CaptureID, cap.ID)
+	}
+}
+
+func TestForceCapture(t *testing.T) {
+	st := newStubStore()
+	s := baseSvc(t, st, &stubChannel{}, nil)
+
+	cap, err := st.CreateCapture(context.Background(), port.Capture{
+		Kind:        capture.KindImage,
+		SourceURL:   "https://www.instagram.com/p/Cxyz777/",
+		Title:       "Instagram Tech Carousel",
+		Description: "Detailed step-by-step tutorial on distributed systems",
+		ImageDigest: "[Slide 1 of 2]: Slide 1\n\n[Slide 2 of 2]: Slide 2",
+	})
+	if err != nil {
+		t.Fatalf("CreateCapture: %v", err)
+	}
+
+	card, err := s.ForceCapture(context.Background(), cap.ID)
+	if err != nil {
+		t.Fatalf("ForceCapture: %v", err)
+	}
+	if card == nil {
+		t.Fatalf("expected non-nil card")
+	}
+	if card.Title != "Instagram Tech Carousel" {
+		t.Errorf("card title = %q, want 'Instagram Tech Carousel'", card.Title)
+	}
+	if card.Status != port.StatusInbox {
+		t.Errorf("card status = %q, want %q", card.Status, port.StatusInbox)
+	}
+	if card.CaptureID == nil || *card.CaptureID != cap.ID {
+		t.Errorf("card captureID = %v, want %d", card.CaptureID, cap.ID)
+	}
+
+	card2, err := s.ForceCapture(context.Background(), cap.ID)
+	if err != nil {
+		t.Fatalf("ForceCapture second call: %v", err)
+	}
+	if card2.ID != card.ID {
+		t.Errorf("second call created new card %d, want existing card %d", card2.ID, card.ID)
 	}
 }

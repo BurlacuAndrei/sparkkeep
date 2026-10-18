@@ -3,6 +3,7 @@ package port
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -26,6 +27,24 @@ var ErrInvalidPlaybook = errors.New("invalid playbook")
 
 // ErrNoiseGateDiscarded is returned when the triage noise gate filters out engagement bait or hype.
 var ErrNoiseGateDiscarded = errors.New("filtered by noise gate: engagement bait or promotional hype with zero technical substance")
+
+// NoiseGateError wraps a noise gate discard reason and associated capture ID.
+// It implements Is(ErrNoiseGateDiscarded) so standard errors.Is checks succeed.
+type NoiseGateError struct {
+	Reason    string
+	CaptureID int64
+}
+
+func (e *NoiseGateError) Error() string {
+	if e.Reason != "" {
+		return fmt.Sprintf("filtered by noise gate: %s", e.Reason)
+	}
+	return "filtered by noise gate: engagement bait or promotional hype with zero technical substance"
+}
+
+func (e *NoiseGateError) Is(target error) bool {
+	return target == ErrNoiseGateDiscarded
+}
 
 // CardStore provides CRUD and relationship operations for cards, tags, and comments.
 type CardStore interface {

@@ -50,11 +50,16 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 		ids, err := a.svc.CaptureShare(r.Context(), share)
 		if err != nil {
 			if errors.Is(err, core.ErrNoiseGateDiscarded) {
+				reason := "engagement bait or promotional hype with zero technical substance"
+				var nge *core.NoiseGateError
+				if errors.As(err, &nge) && nge.Reason != "" {
+					reason = nge.Reason
+				}
 				writeJSON(w, http.StatusOK, map[string]any{
 					"ok":        true,
 					"card_ids":  []int64{},
 					"discarded": true,
-					"reason":    "engagement bait or promotional hype with zero technical substance",
+					"reason":    reason,
 				})
 				return
 			}
@@ -115,6 +120,17 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 		kind := capture.KindFile
 		if len(files) == 1 {
 			kind = capture.KindForMime(files[0].Mime)
+		} else {
+			allImages := true
+			for _, file := range files {
+				if capture.KindForMime(file.Mime) != capture.KindImage {
+					allImages = false
+					break
+				}
+			}
+			if allImages {
+				kind = capture.KindImage
+			}
 		}
 		share = capture.Share{Kind: kind, Files: files}
 	default:
@@ -125,11 +141,16 @@ func (a *api) capture(w http.ResponseWriter, r *http.Request) {
 	ids, err := a.svc.CaptureShare(r.Context(), share)
 	if err != nil {
 		if errors.Is(err, core.ErrNoiseGateDiscarded) {
+			reason := "engagement bait or promotional hype with zero technical substance"
+			var nge *core.NoiseGateError
+			if errors.As(err, &nge) && nge.Reason != "" {
+				reason = nge.Reason
+			}
 			writeJSON(w, http.StatusOK, map[string]any{
 				"ok":        true,
 				"card_ids":  []int64{},
 				"discarded": true,
-				"reason":    "engagement bait or promotional hype with zero technical substance",
+				"reason":    reason,
 			})
 			return
 		}

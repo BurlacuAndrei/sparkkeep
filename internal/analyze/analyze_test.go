@@ -1163,4 +1163,21 @@ func TestPromptFor_TriageNoiseGateRules(t *testing.T) {
 	if !strings.Contains(prompt, "Triage Noise Gate: If the captured content is purely engagement bait, discussion farming (e.g. 'thoughts?', 'agree or disagree?', 'which is better?'), follower/comment gates ('comment X to get link'), or promotional hype with zero technical or factual substance, set \"discarded\": true with a brief \"discard_reason\", and return an empty \"cards\": [] array.") {
 		t.Errorf("prompt missing Triage Noise Gate rule")
 	}
+
+	// Contains multi-slide guidance
+	multiSlideGuidance := "In multi-slide or carousel captures (e.g. marked with [Slide X of Y]), the first slide (cover hook) and final slide/caption are frequently promotional hooks, discussion farming, or follower/comment gates (e.g., 'comment X to get links', 'follow for more'). Do NOT discard the capture if the middle slides contain concrete tools, technical architectures, actionable code, or substantive takeaways."
+	if !strings.Contains(prompt, multiSlideGuidance) {
+		t.Errorf("prompt missing multi-slide guidance: %s", prompt)
+	}
+
+	// Multi-slide digest up to 5000 characters is preserved
+	longDigest := strings.Repeat("A", 4500)
+	fixtureWithDigest := capture.Fetched{
+		Kind:        capture.KindImage,
+		ImageDigest: longDigest,
+	}
+	promptWithDigest := PromptFor(fixtureWithDigest)
+	if !strings.Contains(promptWithDigest, longDigest) {
+		t.Errorf("prompt truncated 4500-char image digest, want full digest preserved")
+	}
 }

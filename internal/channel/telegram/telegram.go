@@ -38,6 +38,7 @@ var _ port.ChannelAdapter = (*Adapter)(nil)
 // Service abstracts the orchestration methods consumed by the Telegram adapter.
 type Service interface {
 	CaptureShare(ctx context.Context, share capture.Share) ([]int64, error)
+	ForceCapture(ctx context.Context, captureID int64) (*port.Card, error)
 	Retry(ctx context.Context, cardID int64) ([]port.Card, error)
 	GoResearch(ctx context.Context, cardID int64, playbookID ...*int64)
 	SendMorningDigest(ctx context.Context) error
@@ -70,16 +71,29 @@ type Adapter struct {
 	DigestPushHour    int
 	BaseURL           string // optional: httptest server in tests or custom proxy, else apiBase
 
+	// MediaGroupWait configures the buffer delay for album aggregation (default: 600ms).
+	MediaGroupWait time.Duration
+
 	baseURL      string           // unexported: httptest server in tests, else apiBase
 	httpc        *http.Client     // unexported: default client unless tests override
 	msgCard      map[int64]int64  // bot message_id → card_id, for reactions
 	researchMsgs map[int64]msgRef // card_id → original message, for restoring buttons
+	mediaGroups  map[string]*mediaGroupBuffer
+	mediaGroupMu sync.Mutex
 	msgMu        sync.Mutex
 	offsetP      string        // unexported: offset file override for tests
 	sem          chan struct{} // concurrency limiter
 
 	lastDigestSent string     // "2006-01-02" of the last scheduled digest
 	digestMu       sync.Mutex // guards lastDigestSent
+}
+
+type mediaGroupBuffer struct {
+	chatID   int64
+	groupID  string
+	messages []*message
+	timer    *time.Timer
+	firstMsg *message
 }
 
 // ID implements port.ChannelAdapter.
@@ -692,6 +706,7 @@ type message struct {
 	Chat           *chat       `json:"chat"`
 	Text           string      `json:"text"`
 	Caption        string      `json:"caption"`
+	MediaGroupID   string      `json:"media_group_id"`
 	ReplyToMessage *message    `json:"reply_to_message"` // organize-by-reply target
 	Photo          []photoSize `json:"photo"`
 	Voice          *voiceNote  `json:"voice"`
@@ -803,6 +818,11 @@ func (a *Adapter) handleMessage(m *message) {
 		return // owner lock: single-user bot ignores everyone else
 	}
 
+	if m.MediaGroupID != "" {
+		a.bufferMediaGroup(m)
+		return
+	}
+
 	switch commandOf(m.Text) {
 	case "digest", "weekly":
 		a.sendDigest(ctx)
@@ -871,13 +891,183 @@ func (a *Adapter) handleMessage(m *message) {
 		if _, err := a.Service.CaptureShare(ctx, share); err != nil {
 			a.logf("telegram: capture: %v", err)
 			msg := "❌ Failed to process: " + escapeMarkdown(err.Error())
+			var buttons [][]button
 			if errors.Is(err, port.ErrNoiseGateDiscarded) {
-				msg = "🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance."
+				reason := "engagement bait or promotional hype with zero technical substance"
+				var capID int64
+				var nge *port.NoiseGateError
+				if errors.As(err, &nge) {
+					if nge.Reason != "" {
+						reason = nge.Reason
+					}
+					capID = nge.CaptureID
+				}
+				msg = fmt.Sprintf("🚫 Filtered: Discarded engagement bait (%s)", escapeMarkdown(reason))
+				if capID > 0 {
+					buttons = [][]button{{
+						{Text: "📥 Keep Anyway", CallbackData: fmt.Sprintf("force_capture:%d", capID)},
+					}}
+				}
 			}
 			if chatID, msgID, ok := state.claim(); ok {
-				_ = a.editMessageText(ctx, chatID, msgID, msg, 0, nil)
+				_ = a.editMessageText(ctx, chatID, msgID, msg, 0, buttons)
 			} else if errors.Is(err, port.ErrNoiseGateDiscarded) {
-				_, _ = a.sendMessageReply(ctx, msg, m.MessageID, 0, nil)
+				_, _ = a.sendMessageReply(ctx, msg, m.MessageID, 0, buttons)
+			}
+		} else {
+			if chatID, msgID, ok := state.claim(); ok {
+				_ = a.editMessageText(ctx, chatID, msgID, "No actionable content found.", 0, nil)
+			}
+		}
+	}
+}
+
+func (a *Adapter) bufferMediaGroup(m *message) {
+	a.mediaGroupMu.Lock()
+	defer a.mediaGroupMu.Unlock()
+	if a.mediaGroups == nil {
+		a.mediaGroups = make(map[string]*mediaGroupBuffer)
+	}
+	key := fmt.Sprintf("%d:%s", m.Chat.ID, m.MediaGroupID)
+	buf, exists := a.mediaGroups[key]
+	waitDur := a.MediaGroupWait
+	if waitDur <= 0 {
+		waitDur = 600 * time.Millisecond
+	}
+	if exists {
+		buf.messages = append(buf.messages, m)
+		if buf.timer != nil {
+			buf.timer.Stop()
+		}
+		buf.timer = time.AfterFunc(waitDur, func() {
+			a.flushMediaGroup(key)
+		})
+		return
+	}
+	buf = &mediaGroupBuffer{
+		chatID:   m.Chat.ID,
+		groupID:  m.MediaGroupID,
+		messages: []*message{m},
+		firstMsg: m,
+	}
+	buf.timer = time.AfterFunc(waitDur, func() {
+		a.flushMediaGroup(key)
+	})
+	a.mediaGroups[key] = buf
+}
+
+func (a *Adapter) flushMediaGroup(key string) {
+	a.mediaGroupMu.Lock()
+	buf, ok := a.mediaGroups[key]
+	if !ok {
+		a.mediaGroupMu.Unlock()
+		return
+	}
+	delete(a.mediaGroups, key)
+	a.mediaGroupMu.Unlock()
+
+	a.processMediaGroup(buf)
+}
+
+func (a *Adapter) processMediaGroup(buf *mediaGroupBuffer) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	var allFiles []capture.File
+	var captions []string
+
+	for i, m := range buf.messages {
+		if c := strings.TrimSpace(m.Caption); c != "" {
+			if !slices.Contains(captions, c) {
+				captions = append(captions, c)
+			}
+		}
+		if text := strings.TrimSpace(m.Text); text != "" {
+			if !slices.Contains(captions, text) {
+				captions = append(captions, text)
+			}
+		}
+		if fID, name, mime, ok := firstMedia(m); ok {
+			data, err := a.downloadFile(fID)
+			if err != nil {
+				a.logf("telegram: download media group %s (%d): %v", fID, i, err)
+				continue
+			}
+			allFiles = append(allFiles, capture.File{
+				Name: name,
+				Mime: mime,
+				Data: data,
+			})
+		}
+	}
+
+	if len(allFiles) == 0 && len(captions) == 0 {
+		return
+	}
+
+	mergedCaption := strings.Join(captions, "\n")
+	kind := capture.KindImage
+	for _, f := range allFiles {
+		if capture.KindForMime(f.Mime) != capture.KindImage {
+			kind = capture.KindFile
+			break
+		}
+	}
+
+	share := capture.Share{
+		Kind:                kind,
+		Caption:             mergedCaption,
+		Files:               allFiles,
+		SourceChannel:       "telegram",
+		SourceChannelChatID: strconv.FormatInt(buf.chatID, 10),
+		SourceChannelMsgID:  strconv.FormatInt(buf.firstMsg.MessageID, 10),
+	}
+
+	_ = a.sendChatAction(ctx, buf.chatID, "typing")
+	label := placeholderLabel(share, buf.firstMsg)
+	var placeholderText string
+	if label != "" {
+		placeholderText = fmt.Sprintf("📥 Processing %s...", escapeMarkdown(label))
+	} else {
+		placeholderText = "📥 Processing album..."
+	}
+	placeholderMsgID, err := a.sendMessageReply(ctx, placeholderText, buf.firstMsg.MessageID, 0, nil)
+	if err != nil {
+		a.logf("telegram: send placeholder for media group: %v", err)
+	}
+
+	state := &placeholderState{
+		chatID:    buf.chatID,
+		messageID: placeholderMsgID,
+	}
+	ctx = context.WithValue(ctx, placeholderContextKey{}, state)
+
+	if a.Service != nil {
+		if _, err := a.Service.CaptureShare(ctx, share); err != nil {
+			a.logf("telegram: capture media group: %v", err)
+			msg := "❌ Failed to process: " + escapeMarkdown(err.Error())
+			var buttons [][]button
+			if errors.Is(err, port.ErrNoiseGateDiscarded) {
+				reason := "engagement bait or promotional hype with zero technical substance"
+				var capID int64
+				var nge *port.NoiseGateError
+				if errors.As(err, &nge) {
+					if nge.Reason != "" {
+						reason = nge.Reason
+					}
+					capID = nge.CaptureID
+				}
+				msg = fmt.Sprintf("🚫 Filtered: Discarded engagement bait (%s)", escapeMarkdown(reason))
+				if capID > 0 {
+					buttons = [][]button{{
+						{Text: "📥 Keep Anyway", CallbackData: fmt.Sprintf("force_capture:%d", capID)},
+					}}
+				}
+			}
+			if chatID, msgID, ok := state.claim(); ok {
+				_ = a.editMessageText(ctx, chatID, msgID, msg, 0, buttons)
+			} else if errors.Is(err, port.ErrNoiseGateDiscarded) {
+				_, _ = a.sendMessageReply(ctx, msg, buf.firstMsg.MessageID, 0, buttons)
 			}
 		} else {
 			if chatID, msgID, ok := state.claim(); ok {
@@ -1193,12 +1383,22 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 	if cb.From == nil || cb.From.ID != a.OwnerID {
 		return
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	if strings.HasPrefix(cb.Data, "force_capture:") {
+		capIDStr := strings.TrimPrefix(cb.Data, "force_capture:")
+		capID, err := strconv.ParseInt(capIDStr, 10, 64)
+		if err == nil {
+			a.handleForceCapture(ctx, capID, cb)
+			return
+		}
+	}
+
 	id, action, ok := parseCallback(cb.Data)
 	if !ok {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
 	switch {
 	case action == "dismiss":
 		a.setStatus(ctx, id, port.StatusDismissed, cb)
@@ -1305,6 +1505,23 @@ func (a *Adapter) handleResearchCallback(ctx context.Context, cardID int64, acti
 		a.trackResearchMessage(cardID, cb.Message.Chat.ID, cb.Message.MessageID)
 	}
 	a.Service.GoResearch(context.WithoutCancel(ctx), cardID, explicitPID)
+}
+
+func (a *Adapter) handleForceCapture(ctx context.Context, captureID int64, cb *callbackQuery) {
+	if a.Service == nil {
+		a.ackCallback(cb.ID, "")
+		return
+	}
+	card, err := a.Service.ForceCapture(ctx, captureID)
+	if err != nil {
+		a.logf("telegram: ForceCapture(%d): %v", captureID, err)
+		a.ackCallback(cb.ID, "Failed to create card")
+		return
+	}
+	a.ackCallback(cb.ID, "Card saved!")
+	if cb.Message != nil && cb.Message.Chat != nil && card != nil {
+		_ = a.editMessageText(ctx, cb.Message.Chat.ID, cb.Message.MessageID, cardCaption(*card), card.ID, cardButtons(card.ID, false))
+	}
 }
 
 func parseCallback(data string) (id int64, action string, ok bool) {

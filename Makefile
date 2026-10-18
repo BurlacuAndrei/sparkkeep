@@ -24,7 +24,7 @@ check: fmt vet
 	if [ "$$GO_VER" != "$$PKG_VER" ]; then \
 		echo "❌ Version drift: version.go ($$GO_VER) != frontend/package.json ($$PKG_VER)"; exit 1; \
 	fi
-	cd frontend && npm run lint && npm test && npm run build
+	cd frontend && npm install && npm run lint && npm test && npm run build
 	@git diff --quiet -- internal/web/dist || (echo "❌ internal/web/dist is out of sync with frontend. Run 'npm run build' and commit the distribution bundle." && exit 1)
 	go test -race ./...
 
