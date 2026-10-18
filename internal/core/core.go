@@ -538,7 +538,6 @@ func (s *Service) handleDuplicateCard(ctx context.Context, card port.Card) error
 	return s.handleDuplicate(ctx, cap, card.SourceNote)
 }
 
-
 func cardFromIdea(idea analyze.Idea, res analyze.AnalysisResult, url, note string) port.Card {
 	tldr := idea.TLDR
 	whyCare := idea.WhyCare

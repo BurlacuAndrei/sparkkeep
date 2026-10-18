@@ -1,0 +1,21 @@
+name: Welcome First-Time Contributors
+
+on:
+  pull_request_target:
+    types: [opened]
+  issues:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: "👋 Welcome to Sparkkeep! Thank you for opening your first issue. Our team reviews issues regularly."
+          pr-message: "🎉 Welcome to Sparkkeep! Thank you for contributing your first Pull Request. Please make sure all CI invariants pass (`make check`) before requesting review."

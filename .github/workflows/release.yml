@@ -29,6 +29,25 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package.json
 
+      - name: Verify Version Consistency
+        shell: bash
+        run: |
+          GO_VER=$(grep -oE 'Version = "[0-9]+\.[0-9]+\.[0-9]+"' version.go | cut -d'"' -f2)
+          PKG_VER=$(node -p "require('./frontend/package.json').version")
+          echo "Root version.go: $GO_VER"
+          echo "Frontend package.json: $PKG_VER"
+          if [ "$GO_VER" != "$PKG_VER" ]; then
+            echo "::error::Version drift! version.go ($GO_VER) != frontend/package.json ($PKG_VER)"
+            exit 1
+          fi
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG_VER="${GITHUB_REF_NAME#v}"
+            if [ "$TAG_VER" != "$GO_VER" ]; then
+              echo "::error::Tag ($TAG_VER) does not match version.go ($GO_VER)"
+              exit 1
+            fi
+          fi
+
       - name: Run verification checks
         run: make check
 

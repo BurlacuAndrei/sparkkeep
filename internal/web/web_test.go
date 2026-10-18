@@ -821,7 +821,7 @@ func (s *stubStore) GetCardIDByChannelMessage(_ context.Context, _, _ string) (i
 }
 
 func (s *stubStore) Ping(_ context.Context) error { return nil }
-func (s *stubStore) Close() error                  { return nil }
+func (s *stubStore) Close() error                 { return nil }
 
 func (s *stubStore) researchFor(cardID int64) bool {
 	s.mu.Lock()

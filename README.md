@@ -7,12 +7,19 @@
 </p>
 
 <p align="center">
+  <!-- Core Build & Security Status -->
   <a href="https://github.com/BurlacuAndrei/sparkkeep/actions/workflows/ci.yml"><img src="https://github.com/BurlacuAndrei/sparkkeep/actions/workflows/ci.yml/badge.svg" alt="CI Status" /></a>
   <a href="https://github.com/BurlacuAndrei/sparkkeep/actions/workflows/docker.yml"><img src="https://github.com/BurlacuAndrei/sparkkeep/actions/workflows/docker.yml/badge.svg" alt="Docker Build" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
-  <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/BurlacuAndrei/sparkkeep" alt="Go Version" /></a>
+  <a href="https://github.com/BurlacuAndrei/sparkkeep/actions/workflows/scorecard.yml"><img src="https://github.com/BurlacuAndrei/sparkkeep/actions/workflows/scorecard.yml/badge.svg" alt="OpenSSF Scorecard" /></a>
+  <br />
+  <!-- Release & Distribution -->
   <a href="https://github.com/BurlacuAndrei/sparkkeep/releases"><img src="https://img.shields.io/github/v/release/BurlacuAndrei/sparkkeep?include_prereleases&color=7928CA" alt="Release" /></a>
   <a href="https://github.com/BurlacuAndrei/sparkkeep/pkgs/container/sparkkeep"><img src="https://img.shields.io/badge/Container-ghcr.io-success" alt="Container" /></a>
+  <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/BurlacuAndrei/sparkkeep" alt="Go Version" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+  <br />
+  <!-- Community & Support -->
+  <a href="https://github.com/BurlacuAndrei/sparkkeep/discussions"><img src="https://img.shields.io/badge/Community-Discussions-blueviolet?logo=github" alt="Discussions" /></a>
   <a href="https://ko-fi.com/andreiburlacu"><img src="https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-ff5e5b?logo=ko-fi&logoColor=white" alt="Ko-fi" /></a>
   <a href="https://github.com/sponsors/BurlacuAndrei"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=github-sponsors&logoColor=white" alt="GitHub Sponsor" /></a>
 </p>

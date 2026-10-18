@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"sparkkeep"
 	"sparkkeep/internal/channel"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
@@ -25,7 +26,7 @@ import (
 	"sparkkeep/internal/web"
 )
 
-var version = "dev"
+var version = sparkkeep.Version
 
 func printUsage() {
 	fmt.Printf("Sparkkeep %s — Self-Hosted Capture & Action Engine\n\n", version)

@@ -1,0 +1,23 @@
+changelog:
+  categories:
+    - title: "🚀 Features & Architecture"
+      labels:
+        - "feature"
+        - "enhancement"
+    - title: "🐛 Bug Fixes & Reliability"
+      labels:
+        - "fix"
+        - "bug"
+    - title: "⚡ Performance & Benchmarks"
+      labels:
+        - "performance"
+        - "perf"
+    - title: "🛡️ Security & Observability"
+      labels:
+        - "security"
+        - "ops"
+    - title: "🧰 Maintenance & Dependencies"
+      labels:
+        - "chore"
+        - "dependencies"
+        - "documentation"
