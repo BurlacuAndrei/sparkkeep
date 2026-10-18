@@ -192,6 +192,44 @@ export async function submitSetup(payload: { auth_token?: string; llm_base?: str
   return data;
 }
 
+export async function submitDemoSetup(passphrase?: string): Promise<{ ok: boolean; token?: string; demo?: boolean }> {
+  const res = await fetch('/api/v1/setup/demo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ auth_token: passphrase || '' }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || 'Failed to initialize demo mode');
+  }
+  if (data.token) {
+    localStorage.setItem(TOKEN_KEY, data.token);
+  }
+  return data;
+}
+
+export async function downloadLibraryExport(format: 'json' | 'zip'): Promise<void> {
+  const token = localStorage.getItem(TOKEN_KEY) || '';
+  const url = `/api/v1/export/${format === 'zip' ? 'archive.zip' : 'library'}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Export failed: HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = `sparkkeep-${format === 'zip' ? 'archive.zip' : 'library.json'}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(downloadUrl);
+}
+
 export async function syncObsidian(vaultPath?: string): Promise<{ ok: boolean; written: number; vault_path: string }> {
   return request<{ ok: boolean; written: number; vault_path: string }>('/api/v1/export/obsidian', {
     method: 'POST',

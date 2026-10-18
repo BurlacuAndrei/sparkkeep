@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Inbox, LayoutList, Layers3, PartyPopper, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, HelpCircle, Inbox, LayoutList, Layers3, PartyPopper, Sparkles, X } from 'lucide-react';
 import { Card } from '../types';
 import * as api from '../api';
 import { SwipeCard, DeckExit, DeckIntent, DragSignal, DECK_EXIT_MS } from './triage/SwipeCard';
 import { ResearchTray } from './triage/ResearchTray';
 import { TriageList } from './triage/TriageList';
+import { KeyboardShortcutsModal } from './triage/KeyboardShortcutsModal';
 import {
   HORIZONS,
   Horizon,
@@ -62,6 +63,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
   const [expanded, setExpanded] = useState(false);
   const [signal, setSignal] = useState<DragSignal>({ direction: null, strength: 0, horizon: null });
   const [stats, setStats] = useState({ kept: 0, dismissed: 0, researched: 0 });
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
   const orderRef = useRef<number[]>([]);
   const cardsRef = useRef<Card[]>(cards);
@@ -381,6 +383,12 @@ export const TriageView: React.FC<TriageViewProps> = ({
       const k = e.key.toLowerCase();
       const code = e.code;
 
+      if (k === '?' || (k === '/' && e.shiftKey)) {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+        return;
+      }
+
       if (k === 'z') {
         e.preventDefault();
         undoLast();
@@ -505,6 +513,16 @@ export const TriageView: React.FC<TriageViewProps> = ({
             <LayoutList size={13} /> List
           </button>
         </div>
+        <button
+          type="button"
+          className="deck-shortcuts-trigger"
+          onClick={() => setIsShortcutsOpen(true)}
+          title="Keyboard Shortcuts (?)"
+          aria-label="Keyboard Shortcuts"
+        >
+          <HelpCircle size={14} />
+          <kbd>?</kbd>
+        </button>
       </header>
 
       {mode === 'list' ? (
@@ -648,9 +666,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
             </button>
           </div>
           <p className="deck-hints">
-            Drag the card · <kbd>1</kbd>
-            <kbd>2</kbd>
-            <kbd>3</kbd> keep into a horizon · <kbd>Space</kbd> more · <kbd>0</kbd> open details
+            Drag the card · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> keep into a horizon · <kbd>Space</kbd> more · <kbd>0</kbd> open details · <button type="button" className="deck-hints-btn" onClick={() => setIsShortcutsOpen(true)}>Press <kbd>?</kbd> for shortcuts</button>
           </p>
         </>
       )}
@@ -664,6 +680,11 @@ export const TriageView: React.FC<TriageViewProps> = ({
           if (cancelPending(id)) showToast?.('Research cancelled — card is back on top');
         }}
         onPullForward={pullForward}
+      />
+
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
     </div>
   );

@@ -3936,3 +3936,39 @@ func TestSecurityHeaders(t *testing.T) {
 		t.Errorf("Strict-Transport-Security = %q with X-Forwarded-Proto: https, want max-age=31536000", got)
 	}
 }
+
+func TestSetupDemoAndLibraryExport(t *testing.T) {
+	st := newStubStore()
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	// 1. POST /api/v1/setup/demo
+	rrDemo := doJSON(t, h, http.MethodPost, "/api/v1/setup/demo", `{"auth_token":"testdemo"}`)
+	if rrDemo.Code != http.StatusOK {
+		t.Fatalf("setup/demo: status = %d, want 200", rrDemo.Code)
+	}
+
+	// 2. GET /api/v1/export/library (with auth)
+	reqLib := httptest.NewRequest(http.MethodGet, "/api/v1/export/library", nil)
+	reqLib.Header.Set("Authorization", "Bearer testdemo")
+	rrLib := httptest.NewRecorder()
+	h.ServeHTTP(rrLib, reqLib)
+	if rrLib.Code != http.StatusOK {
+		t.Fatalf("export/library: status = %d, want 200, body: %s", rrLib.Code, rrLib.Body.String())
+	}
+	if !strings.Contains(rrLib.Body.String(), "Vector Embeddings vs SQLite FTS5") {
+		t.Fatalf("export/library: expected demo cards in payload: %s", rrLib.Body.String())
+	}
+
+	// 3. GET /api/v1/export/archive.zip (with auth)
+	reqZip := httptest.NewRequest(http.MethodGet, "/api/v1/export/archive.zip", nil)
+	reqZip.Header.Set("Authorization", "Bearer testdemo")
+	rrZip := httptest.NewRecorder()
+	h.ServeHTTP(rrZip, reqZip)
+	if rrZip.Code != http.StatusOK {
+		t.Fatalf("export/archive.zip: status = %d, want 200", rrZip.Code)
+	}
+	if ct := rrZip.Header().Get("Content-Type"); ct != "application/zip" {
+		t.Fatalf("export/archive.zip: Content-Type = %s, want application/zip", ct)
+	}
+}

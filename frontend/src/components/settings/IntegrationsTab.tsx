@@ -13,6 +13,9 @@ import {
   Check,
   Globe,
   Sparkles,
+  Download,
+  FileArchive,
+  FileCode,
 } from 'lucide-react';
 import * as api from '../../api';
 
@@ -505,7 +508,41 @@ echo "Saved to Sparkkeep"`;
         )}
       </div>
 
-      {/* 6. Webhooks & Test Triggers */}
+      {/* 6. Data Sovereignty & Browser Downloads */}
+      <div className="settings-section" style={{ marginTop: '28px' }}>
+        <div className="settings-section-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Download size={18} style={{ color: 'var(--accent)' }} />
+            <span className="settings-section-title">Data Sovereignty & Full Library Export</span>
+          </div>
+          <span className="settings-section-desc">
+            Download your entire library directly in your browser. Zero vendor lock-in guaranteed.
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+          <button
+            type="button"
+            className="setup-btn-secondary"
+            onClick={() => api.downloadLibraryExport('json')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 14px', borderRadius: '10px', cursor: 'pointer' }}
+          >
+            <FileCode size={15} />
+            <span>Download Full Library (.JSON)</span>
+          </button>
+          <button
+            type="button"
+            className="setup-btn-secondary"
+            onClick={() => api.downloadLibraryExport('zip')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 14px', borderRadius: '10px', cursor: 'pointer' }}
+          >
+            <FileArchive size={15} />
+            <span>Download Markdown Archive (.ZIP)</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 7. Webhooks & Test Triggers */}
       <div className="settings-section" style={{ marginTop: '28px' }}>
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

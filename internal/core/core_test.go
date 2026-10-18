@@ -50,6 +50,8 @@ func newStubStore() *stubStore {
 	}
 }
 
+func (s *stubStore) Ping(_ context.Context) error { return nil }
+
 func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error) {
 	s.nextCard++
 	c.ID = s.nextCard

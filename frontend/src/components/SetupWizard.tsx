@@ -26,6 +26,18 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const handleLaunchDemo = async () => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await api.submitDemoSetup(authToken.trim() || undefined);
+      onComplete();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to launch demo mode');
+      setSubmitting(false);
+    }
+  };
+
   const handleStep1Next = () => {
     setError(null);
     if (!authToken.trim()) {
@@ -169,6 +181,46 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
             <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '4px 0 8px 0' }} />
 
+            <div className="demo-mode-callout" style={{
+              background: 'rgba(168, 85, 247, 0.08)',
+              border: '1px solid rgba(168, 85, 247, 0.25)',
+              borderRadius: '12px',
+              padding: '12px 14px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '13px', color: '#c084fc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Sparkles size={14} /> Quick Exploration Mode
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>
+                  Explore Sparkkeep immediately with sample cards & deep research findings. No API keys required.
+                </div>
+              </div>
+              <button
+                type="button"
+                id="setup-launch-demo"
+                onClick={handleLaunchDemo}
+                disabled={submitting}
+                style={{
+                  background: 'linear-gradient(135deg, #9333ea, #7928ca)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  padding: '7px 12px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {submitting ? 'Launching...' : '⚡ Launch Demo'}
+              </button>
+            </div>
+
             <div className="setup-section-intro">
               <Shield className="section-icon" size={20} />
               <div>
@@ -231,6 +283,46 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         {/* Step 2: BYOK AI Configuration */}
         {step === 2 && (
           <div className="setup-body">
+            <div className="demo-mode-callout" style={{
+              background: 'rgba(168, 85, 247, 0.08)',
+              border: '1px solid rgba(168, 85, 247, 0.25)',
+              borderRadius: '12px',
+              padding: '12px 14px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '13px', color: '#c084fc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Sparkles size={14} /> Skip API Configuration
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>
+                  Don't have an API key right now? Launch Demo Mode with pre-populated samples.
+                </div>
+              </div>
+              <button
+                type="button"
+                id="setup-launch-demo-step2"
+                onClick={handleLaunchDemo}
+                disabled={submitting}
+                style={{
+                  background: 'linear-gradient(135deg, #9333ea, #7928ca)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  padding: '7px 12px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {submitting ? 'Launching...' : '⚡ Launch Demo'}
+              </button>
+            </div>
+
             <div className="setup-section-intro">
               <Cpu className="section-icon" size={20} />
               <div>

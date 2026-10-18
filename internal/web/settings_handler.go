@@ -196,6 +196,55 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": effectiveTok})
 }
 
+func (a *api) setupDemo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var b struct {
+		AuthToken string `json:"auth_token"`
+	}
+	_ = decodeJSON(w, r, &b)
+
+	pass := b.AuthToken
+	if pass == "" {
+		pass = "sparkkeep"
+	}
+	if len(pass) > 72 {
+		writeErr(w, http.StatusBadRequest, "passphrase too long (max 72 bytes)")
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	if err := a.store.SetSetting(ctx, "auth_token", string(hash)); err != nil {
+		a.fail(w, err)
+		return
+	}
+	_ = a.store.SetSetting(ctx, "setup_completed", "true")
+	_ = a.store.SetSetting(ctx, "llm_model", "llama3.2-demo")
+	_ = a.store.SetSetting(ctx, "llm_base", "http://localhost:11434/v1")
+
+	// Seed showcase dataset
+	if a.svc != nil {
+		if err := a.svc.SeedDemoData(ctx); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+
+	session, err := a.newSession()
+	if err == nil {
+		setAuthCookie(w, r, session)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":    true,
+		"token": a.authToken,
+		"demo":  true,
+	})
+}
+
 // LLMProfile represents a configured LLM endpoint and model.
 // API keys are never exposed in plaintext.
 type LLMProfile struct {
