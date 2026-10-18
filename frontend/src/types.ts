@@ -411,6 +411,7 @@ export interface Settings {
   has_slack_bot_token?: boolean;
   slack_channel_id?: string;
   obsidian_vault_path?: string;
+  obsidian_auto_export?: boolean;
   notion_token?: string;
   notion_database_id?: string;
   notion_auto_export?: boolean;

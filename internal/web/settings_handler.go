@@ -421,6 +421,7 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 	slackBotToken, _ := a.store.GetSetting(ctx, "slack_bot_token")
 	slackChanID, _ := a.store.GetSetting(ctx, "slack_channel_id")
 	obsidianVaultPath, _ := a.store.GetSetting(ctx, "obsidian_vault_path")
+	obsidianAutoExport, _ := a.store.GetSetting(ctx, "obsidian_auto_export")
 
 	cardTypes, err := a.store.GetCardTypes(ctx)
 	if err != nil || cardTypes == nil {
@@ -454,6 +455,7 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 			"has_slack_bot_token":    slackBotToken != "",
 			"slack_channel_id":       slackChanID,
 			"obsidian_vault_path":    obsidianVaultPath,
+			"obsidian_auto_export":   obsidianAutoExport == "true",
 		},
 	})
 }
@@ -461,31 +463,32 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var b struct {
-		CardTypes         *[]string          `json:"card_types,omitempty"`
-		AuthToken         *string            `json:"auth_token,omitempty"`
-		LLMBase           *string            `json:"llm_base,omitempty"`
-		LLMKey            *string            `json:"llm_key,omitempty"`
-		LLMModel          *string            `json:"llm_model,omitempty"`
-		LLMProfiles       *[]llmProfileInput `json:"llm_profiles,omitempty"`
-		DefaultProfileID  *string            `json:"default_profile_id,omitempty"`
-		LLMRoles          *map[string]string `json:"llm_roles,omitempty"`
-		LLMTokenCaps      *map[string]int    `json:"llm_token_caps,omitempty"`
-		DefaultPlaybookID *int64             `json:"default_playbook_id,omitempty"`
-		UserProfile       *port.UserProfile  `json:"user_profile,omitempty"`
-		TGToken           *string            `json:"tg_token,omitempty"`
-		TGChatID          *string            `json:"tg_chat_id,omitempty"`
-		OpenClawURL       *string            `json:"openclaw_url,omitempty"`
-		OpenClawToken     *string            `json:"openclaw_token,omitempty"`
-		OpenClawChannel   *string            `json:"openclaw_channel,omitempty"`
-		OpenClawTarget    *string            `json:"openclaw_target,omitempty"`
-		OpenClawEnabled   *bool              `json:"openclaw_enabled,omitempty"`
-		DiscordToken      *string            `json:"discord_token,omitempty"`
-		DiscordChannelID  *string            `json:"discord_channel_id,omitempty"`
-		DiscordPublicKey  *string            `json:"discord_public_key,omitempty"`
-		SlackWebhookURL   *string            `json:"slack_webhook_url,omitempty"`
-		SlackBotToken     *string            `json:"slack_bot_token,omitempty"`
-		SlackChannelID    *string            `json:"slack_channel_id,omitempty"`
-		ObsidianVaultPath *string            `json:"obsidian_vault_path,omitempty"`
+		CardTypes          *[]string          `json:"card_types,omitempty"`
+		AuthToken          *string            `json:"auth_token,omitempty"`
+		LLMBase            *string            `json:"llm_base,omitempty"`
+		LLMKey             *string            `json:"llm_key,omitempty"`
+		LLMModel           *string            `json:"llm_model,omitempty"`
+		LLMProfiles        *[]llmProfileInput `json:"llm_profiles,omitempty"`
+		DefaultProfileID   *string            `json:"default_profile_id,omitempty"`
+		LLMRoles           *map[string]string `json:"llm_roles,omitempty"`
+		LLMTokenCaps       *map[string]int    `json:"llm_token_caps,omitempty"`
+		DefaultPlaybookID  *int64             `json:"default_playbook_id,omitempty"`
+		UserProfile        *port.UserProfile  `json:"user_profile,omitempty"`
+		TGToken            *string            `json:"tg_token,omitempty"`
+		TGChatID           *string            `json:"tg_chat_id,omitempty"`
+		OpenClawURL        *string            `json:"openclaw_url,omitempty"`
+		OpenClawToken      *string            `json:"openclaw_token,omitempty"`
+		OpenClawChannel    *string            `json:"openclaw_channel,omitempty"`
+		OpenClawTarget     *string            `json:"openclaw_target,omitempty"`
+		OpenClawEnabled    *bool              `json:"openclaw_enabled,omitempty"`
+		DiscordToken       *string            `json:"discord_token,omitempty"`
+		DiscordChannelID   *string            `json:"discord_channel_id,omitempty"`
+		DiscordPublicKey   *string            `json:"discord_public_key,omitempty"`
+		SlackWebhookURL    *string            `json:"slack_webhook_url,omitempty"`
+		SlackBotToken      *string            `json:"slack_bot_token,omitempty"`
+		SlackChannelID     *string            `json:"slack_channel_id,omitempty"`
+		ObsidianVaultPath  *string            `json:"obsidian_vault_path,omitempty"`
+		ObsidianAutoExport *bool              `json:"obsidian_auto_export,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -619,6 +622,13 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if b.ObsidianVaultPath != nil {
 		_ = a.store.SetSetting(ctx, "obsidian_vault_path", strings.TrimSpace(*b.ObsidianVaultPath))
+	}
+	if b.ObsidianAutoExport != nil {
+		val := "false"
+		if *b.ObsidianAutoExport {
+			val = "true"
+		}
+		_ = a.store.SetSetting(ctx, "obsidian_auto_export", val)
 	}
 
 	channelsChanged := b.TGToken != nil ||

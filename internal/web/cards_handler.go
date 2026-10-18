@@ -205,6 +205,7 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
+	oldStatus := card.Status
 	patch := port.CardPatch{
 		Title:              b.Title,
 		Status:             b.Status,
@@ -239,6 +240,10 @@ func (a *api) patchCard(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			a.fail(w, err)
 			return
+		}
+		// Trigger auto-export on status transition into doing/done states
+		if a.svc != nil && b.Status != nil && oldStatus != *b.Status {
+			a.svc.TriggerAutoExportOnStatusChange(r.Context(), card, oldStatus, *b.Status)
 		}
 	}
 	if b.Tags != nil {

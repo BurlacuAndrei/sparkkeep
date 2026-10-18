@@ -336,6 +336,7 @@ export async function patchSettings(payload: {
   discord_channel_id?: string;
   slack_webhook_url?: string;
   obsidian_vault_path?: string;
+  obsidian_auto_export?: boolean;
   notion_token?: string;
   notion_database_id?: string;
   notion_auto_export?: boolean;

@@ -54,6 +54,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
 
   // Obsidian Vault state
   const [vaultPath, setVaultPath] = useState('');
+  const [obsidianAutoExport, setObsidianAutoExport] = useState(false);
   const [syncingObsidian, setSyncingObsidian] = useState(false);
   const [testingObsidian, setTestingObsidian] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState<string | null>(null);
@@ -194,6 +195,9 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
           if (res.settings.notion_auto_export !== undefined) {
             setNotionAutoExport(res.settings.notion_auto_export);
           }
+          if (res.settings.obsidian_auto_export !== undefined) {
+            setObsidianAutoExport(res.settings.obsidian_auto_export);
+          }
         }
       } catch {
         // Ignore errors, use defaults
@@ -247,6 +251,17 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
       showToast(`Error syncing to vault: ${errMsg}`);
     } finally {
       setSyncingObsidian(false);
+    }
+  };
+
+  const handleSaveObsidianAutoExport = async () => {
+    try {
+      await api.patchSettings({ obsidian_auto_export: obsidianAutoExport });
+      showToast(`Obsidian auto-export ${obsidianAutoExport ? 'enabled' : 'disabled'}`);
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
+      // Revert on error
+      setObsidianAutoExport(!obsidianAutoExport);
     }
   };
 
@@ -837,6 +852,26 @@ echo "Saved to Sparkkeep"`;
           </div>
           <span className="setup-hint">
             Leave blank to use the default configured system vault path. Creates folder structures with tags, executive summaries, and research reports.
+          </span>
+        </div>
+
+        <div className="setup-form-group" style={{ marginTop: '16px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 500 }}>
+            <input
+              type="checkbox"
+              checked={obsidianAutoExport}
+              onChange={() => {
+                setObsidianAutoExport(!obsidianAutoExport);
+                handleSaveObsidianAutoExport();
+              }}
+              style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
+            />
+            <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+              Auto-export on status change & research completion
+            </span>
+          </label>
+          <span className="setup-hint" style={{ marginTop: '6px', display: 'block' }}>
+            When enabled, cards transitioning to To-Do, In Progress, or Done — and cards with completed research — are automatically exported to your Obsidian vault.
           </span>
         </div>
 

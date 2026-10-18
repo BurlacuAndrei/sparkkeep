@@ -52,10 +52,37 @@ func (a *api) exportLibraryJSON(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) exportLibraryZip(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	cards, err := a.store.ListCards(ctx, port.CardFilter{Limit: 100000})
-	if err != nil {
-		a.fail(w, err)
-		return
+	var exports []port.CardExport
+	if a.svc != nil {
+		var err error
+		exports, err = a.svc.BuildLibraryExports(ctx)
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+	} else {
+		cards, err := a.store.ListCards(ctx, port.CardFilter{Limit: 100000})
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+		for _, c := range cards {
+			if c.Status == port.StatusShelved {
+				continue
+			}
+			var latestDone *port.Research
+			history, _ := a.store.ListResearchByCard(ctx, c.ID)
+			for i := len(history) - 1; i >= 0; i-- {
+				if history[i].Status == port.ResearchStateDone || history[i].Status == "done" {
+					latestDone = &history[i]
+					break
+				}
+			}
+			exports = append(exports, port.CardExport{
+				Card:     c,
+				Research: latestDone,
+			})
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/zip")
@@ -64,7 +91,8 @@ func (a *api) exportLibraryZip(w http.ResponseWriter, r *http.Request) {
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 
-	for _, c := range cards {
+	for _, exp := range exports {
+		c := exp.Card
 		folder := "Inbox"
 		switch c.Status {
 		case port.StatusInProgress:
@@ -81,7 +109,7 @@ func (a *api) exportLibraryZip(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		md := obsidian.CardToMarkdown(c)
+		md := obsidian.CardExportToMarkdown(exp)
 		_, _ = f.Write([]byte(md))
 	}
 }

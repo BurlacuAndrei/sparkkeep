@@ -85,6 +85,12 @@ type Service struct {
 	researchMu        sync.Mutex
 	ctx               context.Context
 	mu                sync.RWMutex
+
+	// Auto-export settings (populated from store on demand)
+	autoExportMu       sync.RWMutex
+	autoExportObsidian bool
+	autoExportNotion   bool
+	autoExportJoplin   bool
 }
 
 func (s *Service) now() time.Time {
@@ -756,6 +762,7 @@ func (s *Service) executeResearch(ctx context.Context, row port.Research, card p
 	if s.Webhook != nil {
 		s.Webhook.Dispatch(ctx, webhook.EventResearchCompleted, row)
 	}
+	s.TriggerAutoExportOnResearchComplete(ctx, card.ID)
 	return nil
 }
 
@@ -1934,4 +1941,83 @@ func (s *Service) RegenerateOutboxFeedToken(ctx context.Context) (string, error)
 	}
 
 	return token, nil
+}
+
+// loadAutoExportSettings reads auto-export toggles from the store.
+func (s *Service) loadAutoExportSettings(ctx context.Context) {
+	if s.Store == nil {
+		return
+	}
+	s.autoExportMu.Lock()
+	defer s.autoExportMu.Unlock()
+
+	if v, _ := s.Store.GetSetting(ctx, "obsidian_auto_export"); v == "true" {
+		s.autoExportObsidian = true
+	}
+	if v, _ := s.Store.GetSetting(ctx, "notion_auto_export"); v == "true" {
+		s.autoExportNotion = true
+	}
+	if v, _ := s.Store.GetSetting(ctx, "joplin_auto_export"); v == "true" {
+		s.autoExportJoplin = true
+	}
+}
+
+// TriggerAutoExportOnStatusChange fires when card status enters doing/done states.
+// Exported so web handlers can call it after a successful status update.
+func (s *Service) TriggerAutoExportOnStatusChange(ctx context.Context, card port.Card, oldStatus, newStatus string) {
+	doingStates := map[string]bool{
+		port.StatusToDo:       true,
+		port.StatusInProgress: true,
+		port.StatusDone:       true,
+	}
+	if !doingStates[newStatus] || doingStates[oldStatus] {
+		return // Only trigger on transition INTO doing/done
+	}
+	s.loadAutoExportSettings(ctx)
+	s.autoExportCard(ctx, card.ID)
+}
+
+// TriggerAutoExportOnResearchComplete fires when research completes.
+// Exported so core.executeResearch can call it after marking research done.
+func (s *Service) TriggerAutoExportOnResearchComplete(ctx context.Context, cardID int64) {
+	s.loadAutoExportSettings(ctx)
+	s.autoExportCard(ctx, cardID)
+}
+
+// autoExportCard runs exports to all enabled sinks with 15s timeout.
+func (s *Service) autoExportCard(ctx context.Context, cardID int64) {
+	s.autoExportMu.RLock()
+	obsidian := s.autoExportObsidian
+	notion := s.autoExportNotion
+	joplin := s.autoExportJoplin
+	s.autoExportMu.RUnlock()
+
+	if !obsidian && !notion && !joplin {
+		return
+	}
+
+	// Run detached with 15s timeout
+	exportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+
+	s.WG.Add(1)
+	go func() {
+		defer s.WG.Done()
+
+		if obsidian {
+			if err := s.ExportCardToSink(exportCtx, port.SinkObsidian, cardID); err != nil {
+				s.Logf("auto-export obsidian card %d: %v", cardID, err)
+			}
+		}
+		if notion {
+			if err := s.ExportCardToSink(exportCtx, port.SinkNotion, cardID); err != nil {
+				s.Logf("auto-export notion card %d: %v", cardID, err)
+			}
+		}
+		if joplin {
+			if err := s.ExportCardToSink(exportCtx, port.SinkJoplin, cardID); err != nil {
+				s.Logf("auto-export joplin card %d: %v", cardID, err)
+			}
+		}
+	}()
 }
