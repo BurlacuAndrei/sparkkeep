@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { IntegrationsTab } from './IntegrationsTab';
 import * as api from '../../api';
 
@@ -92,7 +92,9 @@ describe('IntegrationsTab Ecosystem Tools', () => {
     const showToast = vi.fn();
     render(<IntegrationsTab showToast={showToast} />);
 
-    const testBtn = screen.getByRole('button', { name: /Test Connection/i });
+    // Find the Obsidian section's Test Connection button by looking near the Obsidian heading
+    const obsidianSection = screen.getByText('Obsidian Vault Export').closest('.settings-section') as HTMLElement;
+    const testBtn = within(obsidianSection).getByRole('button', { name: /Test Connection/i });
     fireEvent.click(testBtn);
 
     await waitFor(() => {

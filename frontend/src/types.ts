@@ -411,7 +411,16 @@ export interface Settings {
   has_slack_bot_token?: boolean;
   slack_channel_id?: string;
   obsidian_vault_path?: string;
+  notion_token?: string;
+  notion_database_id?: string;
+  notion_auto_export?: boolean;
   client_intents_enabled?: string;
   github_repo?: string;
+  joplin_mode?: "server" | "clipper";
+  joplin_base_url?: string;
+  joplin_token?: string;
+  joplin_email?: string;
+  joplin_password?: string;
+  joplin_auto_export?: boolean;
 }
 

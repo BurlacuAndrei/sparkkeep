@@ -28,6 +28,8 @@ import (
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/feed"
+	"sparkkeep/internal/joplin"
+	"sparkkeep/internal/notion"
 	"sparkkeep/internal/obsidian"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
@@ -1660,8 +1662,59 @@ func (s *Service) ExportCardToSink(ctx context.Context, sink string, cardID int6
 		}
 		_, err = obsidian.SyncCardExport(vaultDir, exp)
 		return err
-	case port.SinkNotion, port.SinkJoplin:
-		return fmt.Errorf("sink %q not yet implemented", sink)
+	case port.SinkJoplin:
+		modeStr, _ := s.Store.GetSetting(ctx, "joplin_mode")
+		baseURL, _ := s.Store.GetSetting(ctx, "joplin_base_url")
+		token, _ := s.Store.GetSetting(ctx, "joplin_token")
+		email, _ := s.Store.GetSetting(ctx, "joplin_email")
+		password, _ := s.Store.GetSetting(ctx, "joplin_password")
+
+		mode := joplin.ModeServer
+		if modeStr == "clipper" {
+			mode = joplin.ModeClipper
+		}
+		if baseURL == "" {
+			if mode == joplin.ModeClipper {
+				baseURL = "http://127.0.0.1:41184"
+			} else {
+				return fmt.Errorf("joplin: base_url required")
+			}
+		}
+
+		client := joplin.NewClient(joplin.Config{
+			Mode:     mode,
+			BaseURL:  baseURL,
+			Token:    token,
+			Email:    email,
+			Password: password,
+		})
+
+		if _, err := client.EnsureNotebook(ctx); err != nil {
+			return err
+		}
+
+		exp, err := s.BuildCardExport(ctx, cardID)
+		if err != nil {
+			return err
+		}
+		_, err = client.UpsertCardExport(ctx, exp)
+		return err
+	case port.SinkNotion:
+		token, _ := s.Store.GetSetting(ctx, "notion_token")
+		dbID, _ := s.Store.GetSetting(ctx, "notion_database_id")
+		if token == "" || dbID == "" {
+			return fmt.Errorf("notion: token and database_id required")
+		}
+		client := notion.NewClient(notion.Config{Token: token, DatabaseID: dbID})
+		if err := client.EnsureDatabaseSchema(ctx); err != nil {
+			return err
+		}
+		exp, err := s.BuildCardExport(ctx, cardID)
+		if err != nil {
+			return err
+		}
+		_, err = client.UpsertCardExport(ctx, exp)
+		return err
 	default:
 		return fmt.Errorf("unsupported sink: %s", sink)
 	}
@@ -1681,8 +1734,72 @@ func (s *Service) ExportLibraryToSink(ctx context.Context, sink string, override
 		}
 		paths, err := obsidian.SyncCardExports(vaultDir, exports)
 		return len(paths), err
-	case port.SinkNotion, port.SinkJoplin:
-		return 0, fmt.Errorf("sink %q not yet implemented", sink)
+	case port.SinkJoplin:
+		modeStr, _ := s.Store.GetSetting(ctx, "joplin_mode")
+		baseURL, _ := s.Store.GetSetting(ctx, "joplin_base_url")
+		token, _ := s.Store.GetSetting(ctx, "joplin_token")
+		email, _ := s.Store.GetSetting(ctx, "joplin_email")
+		password, _ := s.Store.GetSetting(ctx, "joplin_password")
+
+		mode := joplin.ModeServer
+		if modeStr == "clipper" {
+			mode = joplin.ModeClipper
+		}
+		if baseURL == "" {
+			if mode == joplin.ModeClipper {
+				baseURL = "http://127.0.0.1:41184"
+			} else {
+				return 0, fmt.Errorf("joplin: base_url required")
+			}
+		}
+
+		client := joplin.NewClient(joplin.Config{
+			Mode:     mode,
+			BaseURL:  baseURL,
+			Token:    token,
+			Email:    email,
+			Password: password,
+		})
+
+		if _, err := client.EnsureNotebook(ctx); err != nil {
+			return 0, err
+		}
+
+		exports, err := s.BuildLibraryExports(ctx)
+		if err != nil {
+			return 0, err
+		}
+
+		count := 0
+		for _, exp := range exports {
+			if _, err := client.UpsertCardExport(ctx, exp); err != nil {
+				return count, err
+			}
+			count++
+		}
+		return count, nil
+	case port.SinkNotion:
+		token, _ := s.Store.GetSetting(ctx, "notion_token")
+		dbID, _ := s.Store.GetSetting(ctx, "notion_database_id")
+		if token == "" || dbID == "" {
+			return 0, fmt.Errorf("notion: token and database_id required")
+		}
+		client := notion.NewClient(notion.Config{Token: token, DatabaseID: dbID})
+		if err := client.EnsureDatabaseSchema(ctx); err != nil {
+			return 0, err
+		}
+		exports, err := s.BuildLibraryExports(ctx)
+		if err != nil {
+			return 0, err
+		}
+		count := 0
+		for _, exp := range exports {
+			if _, err := client.UpsertCardExport(ctx, exp); err != nil {
+				return count, err
+			}
+			count++
+		}
+		return count, nil
 	default:
 		return 0, fmt.Errorf("unsupported sink: %s", sink)
 	}
@@ -1711,11 +1828,48 @@ func (s *Service) TestSinkConnection(ctx context.Context, sink string, overrideV
 			Message: fmt.Sprintf("Obsidian vault directory %q is accessible and writable", vaultDir),
 			Details: map[string]any{"vault_path": vaultDir},
 		}, nil
-	case port.SinkNotion, port.SinkJoplin:
-		return port.SinkTestResult{
-			Success: false,
-			Message: fmt.Sprintf("sink %q not yet implemented", sink),
-		}, nil
+	case port.SinkJoplin:
+		modeStr, _ := s.Store.GetSetting(ctx, "joplin_mode")
+		baseURL, _ := s.Store.GetSetting(ctx, "joplin_base_url")
+		token, _ := s.Store.GetSetting(ctx, "joplin_token")
+		email, _ := s.Store.GetSetting(ctx, "joplin_email")
+		password, _ := s.Store.GetSetting(ctx, "joplin_password")
+
+		mode := joplin.ModeServer
+		if modeStr == "clipper" {
+			mode = joplin.ModeClipper
+		}
+		if baseURL == "" {
+			if mode == joplin.ModeClipper {
+				baseURL = "http://127.0.0.1:41184"
+			} else {
+				return port.SinkTestResult{
+					Success: false,
+					Message: "joplin: base_url required for server mode",
+				}, nil
+			}
+		}
+
+		client := joplin.NewClient(joplin.Config{
+			Mode:     mode,
+			BaseURL:  baseURL,
+			Token:    token,
+			Email:    email,
+			Password: password,
+		})
+
+		return client.TestConnection(ctx)
+	case port.SinkNotion:
+		token, _ := s.Store.GetSetting(ctx, "notion_token")
+		dbID, _ := s.Store.GetSetting(ctx, "notion_database_id")
+		if token == "" || dbID == "" {
+			return port.SinkTestResult{
+				Success: false,
+				Message: "notion: token and database_id required",
+			}, nil
+		}
+		client := notion.NewClient(notion.Config{Token: token, DatabaseID: dbID})
+		return client.TestConnection(ctx)
 	default:
 		return port.SinkTestResult{
 			Success: false,

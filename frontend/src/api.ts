@@ -238,6 +238,40 @@ export async function syncObsidian(vaultPath?: string): Promise<{ ok: boolean; w
   });
 }
 
+export async function syncJoplin(): Promise<{ ok: boolean; written: number; sink: string }> {
+  return request<{ ok: boolean; written: number; sink: string }>('/api/v1/export/joplin', {
+    method: 'POST',
+  });
+}
+
+export async function testJoplinConnection(): Promise<{ ok: boolean; success: boolean; message: string; details?: Record<string, any> }> {
+  return request<{ ok: boolean; success: boolean; message: string; details?: Record<string, any> }>(
+    '/api/v1/integrations/joplin/test',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }
+  );
+}
+
+export async function syncNotion(): Promise<{ ok: boolean; written: number; sink: string }> {
+  return request<{ ok: boolean; written: number; sink: string }>('/api/v1/export/notion', {
+    method: 'POST',
+  });
+}
+
+export async function testNotionConnection(): Promise<{ ok: boolean; success: boolean; message: string; details?: Record<string, any> }> {
+  return request<{ ok: boolean; success: boolean; message: string; details?: Record<string, any> }>(
+    '/api/v1/integrations/notion/test',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }
+  );
+}
+
 export async function exportCardToSink(
   cardId: number,
   sink: string
@@ -302,8 +336,17 @@ export async function patchSettings(payload: {
   discord_channel_id?: string;
   slack_webhook_url?: string;
   obsidian_vault_path?: string;
+  notion_token?: string;
+  notion_database_id?: string;
+  notion_auto_export?: boolean;
   client_intents_enabled?: string;
   github_repo?: string;
+  joplin_mode?: "server" | "clipper";
+  joplin_base_url?: string;
+  joplin_token?: string;
+  joplin_email?: string;
+  joplin_password?: string;
+  joplin_auto_export?: boolean;
 }): Promise<{ ok: boolean }> {
   return request('/api/v1/settings', {
     method: 'PATCH',

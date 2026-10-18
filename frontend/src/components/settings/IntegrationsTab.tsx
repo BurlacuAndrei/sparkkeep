@@ -26,6 +26,11 @@ import {
   Link2,
   Eye,
   EyeOff,
+  Database,
+  Monitor,
+  HardDrive,
+  Save,
+  Brain,
 } from 'lucide-react';
 import * as api from '../../api';
 
@@ -75,6 +80,27 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
   const [loadingToken, setLoadingToken] = useState(false);
   const [regeneratingToken, setRegeneratingToken] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
+
+  // Joplin Knowledge Sink state
+  const [joplinMode, setJoplinMode] = useState<"server" | "clipper">("clipper");
+  const [joplinBaseUrl, setJoplinBaseUrl] = useState<string>('http://127.0.0.1:41184');
+  const [joplinToken, setJoplinToken] = useState<string>('');
+  const [joplinEmail, setJoplinEmail] = useState<string>('');
+  const [joplinPassword, setJoplinPassword] = useState<string>('');
+  const [joplinAutoExport, setJoplinAutoExport] = useState(false);
+  const [testingJoplin, setTestingJoplin] = useState(false);
+  const [syncingJoplin, setSyncingJoplin] = useState(false);
+  const [joplinTestResult, setJoplinTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [joplinSyncResult, setJoplinSyncResult] = useState<string | null>(null);
+
+  // Notion Knowledge Sink state
+  const [notionToken, setNotionToken] = useState<string>('');
+  const [notionDatabaseId, setNotionDatabaseId] = useState<string>('');
+  const [notionAutoExport, setNotionAutoExport] = useState(false);
+  const [testingNotion, setTestingNotion] = useState(false);
+  const [syncingNotion, setSyncingNotion] = useState(false);
+  const [notionTestResult, setNotionTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [notionSyncResult, setNotionSyncResult] = useState<string | null>(null);
 
   const copyToClipboard = (text: string, id: string, label: string) => {
     if (navigator.clipboard) {
@@ -140,6 +166,33 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
           }
           if (res.settings.github_repo) {
             setGithubRepo(res.settings.github_repo);
+          }
+          if (res.settings.joplin_mode) {
+            setJoplinMode(res.settings.joplin_mode);
+          }
+          if (res.settings.joplin_base_url) {
+            setJoplinBaseUrl(res.settings.joplin_base_url);
+          }
+          if (res.settings.joplin_token) {
+            setJoplinToken(res.settings.joplin_token);
+          }
+          if (res.settings.joplin_email) {
+            setJoplinEmail(res.settings.joplin_email);
+          }
+          if (res.settings.joplin_password) {
+            setJoplinPassword(res.settings.joplin_password);
+          }
+          if (res.settings.joplin_auto_export !== undefined) {
+            setJoplinAutoExport(res.settings.joplin_auto_export);
+          }
+          if (res.settings.notion_token) {
+            setNotionToken(res.settings.notion_token);
+          }
+          if (res.settings.notion_database_id) {
+            setNotionDatabaseId(res.settings.notion_database_id);
+          }
+          if (res.settings.notion_auto_export !== undefined) {
+            setNotionAutoExport(res.settings.notion_auto_export);
           }
         }
       } catch {
@@ -266,6 +319,131 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
       setTokenError(api.getErrorMessage(err));
     } finally {
       setRegeneratingToken(false);
+    }
+  };
+
+  const handleTestJoplin = async () => {
+    setTestingJoplin(true);
+    setJoplinTestResult(null);
+    try {
+      await handleSaveJoplinSettings();
+      const res = await api.testJoplinConnection();
+      if (res.ok && res.success) {
+        const msg = res.message || 'Joplin connection successful!';
+        setJoplinTestResult({ success: true, message: `✅ ${msg}` });
+        showToast(msg);
+      } else {
+        const msg = res.message || 'Joplin connection test failed.';
+        setJoplinTestResult({ success: false, message: `❌ ${msg}` });
+        showToast(`Test failed: ${msg}`);
+      }
+    } catch (err: unknown) {
+      const errMsg = api.getErrorMessage(err);
+      setJoplinTestResult({ success: false, message: `❌ Error testing Joplin: ${errMsg}` });
+      showToast(`Error testing Joplin: ${errMsg}`);
+    } finally {
+      setTestingJoplin(false);
+    }
+  };
+
+  const handleSyncJoplin = async () => {
+    setSyncingJoplin(true);
+    setJoplinSyncResult(null);
+    try {
+      await handleSaveJoplinSettings();
+      const res = await api.syncJoplin();
+      if (res.ok) {
+        const msg = `Synced ${res.written} notes to Joplin`;
+        setJoplinSyncResult(`✅ ${msg}`);
+        showToast(`📓 ${msg}`);
+      } else {
+        setJoplinSyncResult(`❌ Sync failed`);
+        showToast('Sync failed');
+      }
+    } catch (err: unknown) {
+      const errMsg = api.getErrorMessage(err);
+      setJoplinSyncResult(`❌ Error syncing to Joplin: ${errMsg}`);
+      showToast(`Error syncing to Joplin: ${errMsg}`);
+    } finally {
+      setSyncingJoplin(false);
+    }
+  };
+
+  const handleSaveJoplinSettings = async () => {
+    try {
+      await api.patchSettings({
+        joplin_mode: joplinMode,
+        joplin_base_url: joplinBaseUrl.trim() || undefined,
+        joplin_token: joplinToken.trim() || undefined,
+        joplin_email: joplinEmail.trim() || undefined,
+        joplin_password: joplinPassword.trim() || undefined,
+        joplin_auto_export: joplinAutoExport,
+      });
+      showToast('Joplin settings saved');
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
+      throw err;
+    }
+  };
+
+  const handleTestNotion = async () => {
+    setTestingNotion(true);
+    setNotionTestResult(null);
+    try {
+      await handleSaveNotionSettings();
+      const res = await api.testNotionConnection();
+      if (res.ok && res.success) {
+        const msg = res.message || 'Notion connection successful!';
+        setNotionTestResult({ success: true, message: `✅ ${msg}` });
+        showToast(msg);
+      } else {
+        const msg = res.message || 'Notion connection test failed.';
+        setNotionTestResult({ success: false, message: `❌ ${msg}` });
+        showToast(`Test failed: ${msg}`);
+      }
+    } catch (err: unknown) {
+      const errMsg = api.getErrorMessage(err);
+      setNotionTestResult({ success: false, message: `❌ Error testing Notion: ${errMsg}` });
+      showToast(`Error testing Notion: ${errMsg}`);
+    } finally {
+      setTestingNotion(false);
+    }
+  };
+
+  const handleSyncNotion = async () => {
+    setSyncingNotion(true);
+    setNotionSyncResult(null);
+    try {
+      await handleSaveNotionSettings();
+      const res = await api.syncNotion();
+      if (res.ok) {
+        const msg = `Synced ${res.written} notes to Notion`;
+        setNotionSyncResult(`✅ ${msg}`);
+        showToast(`📓 ${msg}`);
+      } else {
+        setNotionSyncResult(`❌ Sync failed`);
+        showToast('Sync failed');
+      }
+    } catch (err: unknown) {
+      const errMsg = api.getErrorMessage(err);
+      setNotionSyncResult(`❌ Error syncing to Notion: ${errMsg}`);
+      showToast(`Error syncing to Notion: ${errMsg}`);
+    } finally {
+      setSyncingNotion(false);
+    }
+  };
+
+  const handleSaveNotionSettings = async () => {
+    try {
+      await api.patchSettings({
+        notion_token: notionToken.trim() || undefined,
+        notion_database_id: notionDatabaseId.trim() || undefined,
+        notion_auto_export: notionAutoExport,
+      });
+      showToast('Notion settings saved');
+    } catch (err: unknown) {
+      showToast(api.getErrorMessage(err));
+      throw err;
     }
   };
 
@@ -1089,6 +1267,387 @@ echo "Saved to Sparkkeep"`;
               {tokenError}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* 11. Joplin Knowledge Sink */}
+      <div className="settings-section" style={{ marginTop: '28px' }}>
+        <div className="settings-section-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Database size={18} style={{ color: 'var(--accent)' }} />
+            <span className="settings-section-title">Joplin Knowledge Sink</span>
+          </div>
+          <span className="settings-section-desc">
+            Sync your Sparkkeep library to Joplin via Self-Hosted Server or Desktop Clipper API. Notes use deterministic IDs for idempotent upserts.
+          </span>
+        </div>
+
+        <div className="setup-form-group">
+          <label>Mode</label>
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="joplin-mode"
+                value="server"
+                checked={joplinMode === "server"}
+                onChange={() => {
+                  setJoplinMode("server");
+                  if (!joplinBaseUrl || joplinBaseUrl === 'http://127.0.0.1:41184') {
+                    setJoplinBaseUrl('https://joplin.example.com');
+                  }
+                }}
+              />
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Database size={14} style={{ color: '#e85d04' }} />
+                Self-Hosted Server
+              </span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="joplin-mode"
+                value="clipper"
+                checked={joplinMode === "clipper"}
+                onChange={() => {
+                  setJoplinMode("clipper");
+                  setJoplinBaseUrl('http://127.0.0.1:41184');
+                }}
+              />
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Monitor size={14} style={{ color: '#4a90d9' }} />
+                Desktop Clipper API
+              </span>
+            </label>
+          </div>
+          <span className="setup-hint">
+            Server mode requires email/password for authentication. Clipper mode requires only the clipper token (Joplin Desktop must be running with Clipper plugin enabled).
+          </span>
+        </div>
+
+        <div className="setup-form-group">
+          <label htmlFor="joplin-base-url">Base URL</label>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <input
+              id="joplin-base-url"
+              type="url"
+              value={joplinBaseUrl}
+              onChange={(e) => setJoplinBaseUrl(e.target.value)}
+              className="setup-input"
+              placeholder={joplinMode === "server" ? "https://joplin.example.com" : "http://127.0.0.1:41184"}
+              style={{ flex: 1, minWidth: '240px', fontFamily: 'var(--font-mono)' }}
+            />
+          </div>
+          <span className="setup-hint">
+            {joplinMode === "server"
+              ? "Your self-hosted Joplin Server URL (e.g., https://joplin.yourdomain.com)"
+              : "Joplin Desktop Clipper API endpoint (default: http://127.0.0.1:41184)"}
+          </span>
+        </div>
+
+        {joplinMode === "server" && (
+          <div>
+            <div className="setup-form-group">
+              <label htmlFor="joplin-email">Email (Server Mode)</label>
+              <input
+                id="joplin-email"
+                type="email"
+                value={joplinEmail}
+                onChange={(e) => setJoplinEmail(e.target.value)}
+                className="setup-input"
+                placeholder="admin@joplin.example.com"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              />
+              <span className="setup-hint">Email used to authenticate with Joplin Server.</span>
+            </div>
+
+            <div className="setup-form-group">
+              <label htmlFor="joplin-password">Password (Server Mode)</label>
+              <input
+                id="joplin-password"
+                type="password"
+                value={joplinPassword}
+                onChange={(e) => setJoplinPassword(e.target.value)}
+                className="setup-input"
+                placeholder="••••••••"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              />
+              <span className="setup-hint">Password for Joplin Server authentication. Used only to obtain a session token.</span>
+            </div>
+          </div>
+        )}
+
+        {joplinMode === "clipper" && (
+          <div className="setup-form-group">
+            <label htmlFor="joplin-token">Clipper Token (Desktop Mode)</label>
+            <input
+              id="joplin-token"
+              type="password"
+              value={joplinToken}
+              onChange={(e) => setJoplinToken(e.target.value)}
+              className="setup-input"
+              placeholder="••••••••"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            />
+            <span className="setup-hint">
+              Token from Joplin Desktop → Options → Web Clipper → "Authorization token". Joplin must be running with the Web Clipper service enabled.
+            </span>
+          </div>
+        )}
+
+        <div className="setup-form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={joplinAutoExport}
+              onChange={(e) => setJoplinAutoExport(e.target.checked)}
+            />
+            <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+              Auto-export on card changes (requires Ticket 06 background sync)
+            </span>
+          </label>
+          <span className="setup-hint" style={{ marginLeft: 'auto', fontSize: '11px' }}>
+            When enabled, new/updated cards are automatically synced to Joplin.
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={testingJoplin || syncingJoplin}
+            onClick={handleTestJoplin}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {testingJoplin ? 'Testing...' : 'Test Connection'}
+          </button>
+          <button
+            type="button"
+            className="setup-btn-primary"
+            disabled={syncingJoplin || testingJoplin}
+            onClick={handleSyncJoplin}
+            style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <HardDrive size={14} />
+            <span>{syncingJoplin ? 'Syncing...' : 'Sync Library Now'}</span>
+          </button>
+          <button
+            type="button"
+            className="setup-btn-secondary"
+            onClick={handleSaveJoplinSettings}
+            style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Save size={14} />
+            <span>Save Settings</span>
+          </button>
+        </div>
+
+        {joplinTestResult && (
+          <div
+            className="setup-info-box"
+            style={{
+              marginTop: '12px',
+              background: joplinTestResult.success
+                ? 'rgba(16, 185, 129, 0.1)'
+                : 'rgba(239, 68, 68, 0.1)',
+              borderColor: joplinTestResult.success
+                ? 'rgba(16, 185, 129, 0.3)'
+                : 'rgba(239, 68, 68, 0.3)',
+            }}
+          >
+            {joplinTestResult.success ? (
+              <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+            ) : (
+              <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+            )}
+            <span style={{ fontSize: '13px' }}>{joplinTestResult.message}</span>
+          </div>
+        )}
+
+        {joplinSyncResult && (
+          <div
+            className={`setup-info-box`}
+            style={{
+              marginTop: '12px',
+              background: joplinSyncResult.startsWith('✅')
+                ? 'rgba(16, 185, 129, 0.1)'
+                : 'rgba(239, 68, 68, 0.1)',
+              borderColor: joplinSyncResult.startsWith('✅')
+                ? 'rgba(16, 185, 129, 0.3)'
+                : 'rgba(239, 68, 68, 0.3)',
+            }}
+          >
+            {joplinSyncResult.startsWith('✅') ? (
+              <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+            ) : (
+              <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+            )}
+            <span style={{ fontSize: '13px' }}>{joplinSyncResult}</span>
+          </div>
+        )}
+
+        <div className="setup-info-box" style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
+          <strong>How it works:</strong>
+          <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', lineHeight: 1.7 }}>
+            <li>Notes are created in a <strong>Sparkkeep</strong> notebook (auto-created).</li>
+            <li>Each card gets a deterministic 32-char hex ID: <code>{`sha256("sparkkeep:card:{id}")[:32]`}</code> — re-syncing updates the same note.</li>
+            <li>Tags are synced as Joplin tags with deterministic IDs.</li>
+            <li>Markdown includes: Title, Executive Summary, Value Proposition, Proposed Actions (as checkboxes), References, Research Dossier.</li>
+            <li><strong>E2EE note:</strong> Target notebook must have End-to-End Encryption disabled in Joplin (Settings → Encryption).</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* 12. Notion Knowledge Sink */}
+      <div className="settings-section" style={{ marginTop: '28px' }}>
+        <div className="settings-section-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Brain size={18} style={{ color: 'var(--accent)' }} />
+            <span className="settings-section-title">Notion Knowledge Sink</span>
+          </div>
+          <span className="settings-section-desc">
+            Sync your Sparkkeep library to a Notion database with rich block rendering, auto-provisioned schema, and idempotent upserts via Sparkkeep ID.
+          </span>
+        </div>
+
+        <div className="setup-form-group">
+          <label htmlFor="notion-token">Integration Token</label>
+          <input
+            id="notion-token"
+            type="password"
+            value={notionToken}
+            onChange={(e) => setNotionToken(e.target.value)}
+            className="setup-input"
+            placeholder="secret_..."
+            style={{ fontFamily: 'var(--font-mono)' }}
+          />
+          <span className="setup-hint">
+            Create an Internal Integration at{' '}
+            <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener noreferrer">
+              notion.so/my-integrations
+            </a>{' '}
+            , then share your target database with the integration.
+          </span>
+        </div>
+
+        <div className="setup-form-group">
+          <label htmlFor="notion-database-id">Database ID</label>
+          <input
+            id="notion-database-id"
+            type="text"
+            value={notionDatabaseId}
+            onChange={(e) => setNotionDatabaseId(e.target.value)}
+            className="setup-input"
+            placeholder="32-char database ID from Notion URL"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          />
+          <span className="setup-hint">
+            Found in the database URL:{' '}
+            <code>{`https://notion.so/workspace/<DATABASE_ID>?v=...`}</code> {' '}
+            — the 32-char segment before <code>?v=</code>.
+          </span>
+        </div>
+
+        <div className="setup-form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={notionAutoExport}
+              onChange={(e) => setNotionAutoExport(e.target.checked)}
+            />
+            <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+              Auto-export on card changes (requires Ticket 06 background sync)
+            </span>
+          </label>
+          <span className="setup-hint" style={{ marginLeft: 'auto', fontSize: '11px' }}>
+            When enabled, new/updated cards are automatically synced to Notion.
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={testingNotion || syncingNotion}
+            onClick={handleTestNotion}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {testingNotion ? 'Testing...' : 'Test Connection'}
+          </button>
+          <button
+            type="button"
+            className="setup-btn-primary"
+            disabled={syncingNotion || testingNotion}
+            onClick={handleSyncNotion}
+            style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <HardDrive size={14} />
+            <span>{syncingNotion ? 'Syncing...' : 'Sync Library Now'}</span>
+          </button>
+          <button
+            type="button"
+            className="setup-btn-secondary"
+            onClick={handleSaveNotionSettings}
+            style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Save size={14} />
+            <span>Save Settings</span>
+          </button>
+        </div>
+
+        {notionTestResult && (
+          <div
+            className="setup-info-box"
+            style={{
+              marginTop: '12px',
+              background: notionTestResult.success
+                ? 'rgba(16, 185, 129, 0.1)'
+                : 'rgba(239, 68, 68, 0.1)',
+              borderColor: notionTestResult.success
+                ? 'rgba(16, 185, 129, 0.3)'
+                : 'rgba(239, 68, 68, 0.3)',
+            }}
+          >
+            {notionTestResult.success ? (
+              <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+            ) : (
+              <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+            )}
+            <span style={{ fontSize: '13px' }}>{notionTestResult.message}</span>
+          </div>
+        )}
+
+        {notionSyncResult && (
+          <div
+            className={`setup-info-box`}
+            style={{
+              marginTop: '12px',
+              background: notionSyncResult.startsWith('✅')
+                ? 'rgba(16, 185, 129, 0.1)'
+                : 'rgba(239, 68, 68, 0.1)',
+              borderColor: notionSyncResult.startsWith('✅')
+                ? 'rgba(16, 185, 129, 0.3)'
+                : 'rgba(239, 68, 68, 0.3)',
+            }}
+          >
+            {notionSyncResult.startsWith('✅') ? (
+              <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+            ) : (
+              <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+            )}
+            <span style={{ fontSize: '13px' }}>{notionSyncResult}</span>
+          </div>
+        )}
+
+        <div className="setup-info-box" style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
+          <strong>How it works:</strong>
+          <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', lineHeight: 1.7 }}>
+            <li>Database properties are auto-provisioned: Sparkkeep ID (number), Card Type, Horizon, Status, Tags, Source URL, Created At, Updated At, Researched.</li>
+            <li>Upsert is idempotent via <strong>Sparkkeep ID</strong> property — re-syncing updates the same page.</li>
+            <li>Content rendered as Notion blocks: headings, paragraphs, lists, checkboxes, code blocks, callouts for Research Dossier.</li>
+            <li>Long text auto-chunked at 2,000 chars; blocks batched at 100 per API call.</li>
+            <li>Rate limits handled with exponential backoff.</li>
+          </ul>
         </div>
       </div>
     </div>

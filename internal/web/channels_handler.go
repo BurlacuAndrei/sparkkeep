@@ -115,6 +115,126 @@ func (a *api) testObsidianSink(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (a *api) testJoplinSink(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil {
+		writeErr(w, http.StatusServiceUnavailable, "service unavailable")
+		return
+	}
+	res, err := a.svc.TestSinkConnection(r.Context(), port.SinkJoplin, "")
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      res.Success,
+		"success": res.Success,
+		"message": res.Message,
+		"details": res.Details,
+	})
+}
+
+func (a *api) syncJoplin(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil {
+		writeErr(w, http.StatusServiceUnavailable, "service unavailable")
+		return
+	}
+	written, err := a.svc.ExportLibraryToSink(r.Context(), port.SinkJoplin, "")
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"written": written,
+		"sink":    port.SinkJoplin,
+	})
+}
+
+func (a *api) exportCardJoplin(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad card id")
+		return
+	}
+	if a.svc == nil {
+		writeErr(w, http.StatusServiceUnavailable, "service unavailable")
+		return
+	}
+	if err := a.svc.ExportCardToSink(r.Context(), port.SinkJoplin, id); err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "card not found")
+			return
+		}
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"card_id": id,
+		"sink":    port.SinkJoplin,
+	})
+}
+
+func (a *api) testNotionSink(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil {
+		writeErr(w, http.StatusServiceUnavailable, "service unavailable")
+		return
+	}
+	res, err := a.svc.TestSinkConnection(r.Context(), port.SinkNotion, "")
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      res.Success,
+		"success": res.Success,
+		"message": res.Message,
+		"details": res.Details,
+	})
+}
+
+func (a *api) syncNotion(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil {
+		writeErr(w, http.StatusServiceUnavailable, "service unavailable")
+		return
+	}
+	written, err := a.svc.ExportLibraryToSink(r.Context(), port.SinkNotion, "")
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"written": written,
+		"sink":    port.SinkNotion,
+	})
+}
+
+func (a *api) exportCardNotion(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad card id")
+		return
+	}
+	if a.svc == nil {
+		writeErr(w, http.StatusServiceUnavailable, "service unavailable")
+		return
+	}
+	if err := a.svc.ExportCardToSink(r.Context(), port.SinkNotion, id); err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "card not found")
+			return
+		}
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"card_id": id,
+		"sink":    port.SinkNotion,
+	})
+}
+
 func (a *api) testWebhook(w http.ResponseWriter, r *http.Request) {
 	if a.svc == nil || a.svc.Webhook == nil {
 		writeErr(w, http.StatusServiceUnavailable, "webhook dispatcher not available")
