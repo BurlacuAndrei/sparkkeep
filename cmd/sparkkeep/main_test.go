@@ -131,3 +131,94 @@ func TestBackupCLI(t *testing.T) {
 		t.Fatalf("backup over existing file: code=0 out=%q, want non-zero", out)
 	}
 }
+
+func TestRestoreCLI(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "sparkkeep.db")
+	backupFile := filepath.Join(tempDir, "valid_backup.db")
+
+	run := func(args ...string) (string, int) {
+		t.Helper()
+		cmd := exec.Command(binPath, args...)
+		cmd.Env = cliEnv(dbPath)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			return string(out), 0
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return string(out), exitErr.ExitCode()
+		}
+		t.Fatalf("run %v: %v", args, err)
+		return "", -1
+	}
+
+	// 1. Missing backup file arg
+	if _, code := run("restore"); code == 0 {
+		t.Fatal("restore with missing arg: want non-zero exit code")
+	}
+
+	// 2. Nonexistent backup file
+	if _, code := run("restore", filepath.Join(tempDir, "missing.db")); code == 0 {
+		t.Fatal("restore nonexistent file: want non-zero exit code")
+	}
+
+	// 3. Corrupt backup file (fails pre-flight check)
+	corruptFile := filepath.Join(tempDir, "corrupt.db")
+	if err := os.WriteFile(corruptFile, []byte("this is not a valid sqlite database"), 0644); err != nil {
+		t.Fatalf("write corrupt file: %v", err)
+	}
+	if out, code := run("restore", corruptFile); code == 0 || !strings.Contains(out, "integrity check failed") {
+		t.Fatalf("restore corrupt file: code=%d out=%q, want non-zero and integrity failure", code, out)
+	}
+
+	// 4. Create and populate valid database
+	if _, code := run("auth", "set-passphrase", "initial_secret"); code != 0 {
+		t.Fatal("set-passphrase failed")
+	}
+
+	// Insert test card directly
+	db, err := sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	_, err = db.Exec(`INSERT INTO cards (title, summary, status, horizon, created_at, updated_at) VALUES ('Restore Test Card', 'Restore test summary', 'inbox', 'short-term', datetime('now'), datetime('now'))`)
+	if err != nil {
+		t.Fatalf("insert card: %v", err)
+	}
+	db.Close()
+
+	// Backup database
+	if out, code := run("backup", backupFile); code != 0 {
+		t.Fatalf("backup failed: %s", out)
+	}
+
+	// Mutate live database
+	db, err = sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	_, _ = db.Exec(`DELETE FROM cards`)
+	db.Close()
+
+	// Restore from backup
+	out, code := run("restore", backupFile)
+	if code != 0 || !strings.Contains(out, "Successfully restored") {
+		t.Fatalf("restore: code=%d out=%q, want exit 0 and success message", code, out)
+	}
+
+	// Verify restored card data
+	db, err = sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("open restored db: %v", err)
+	}
+	defer db.Close()
+
+	var cardCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cards WHERE title = 'Restore Test Card'`).Scan(&cardCount); err != nil {
+		t.Fatalf("query restored cards: %v", err)
+	}
+	if cardCount != 1 {
+		t.Fatalf("expected 1 restored card, got %d", cardCount)
+	}
+}

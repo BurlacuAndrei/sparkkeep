@@ -3,6 +3,7 @@ package netguard
 import (
 	"net"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -42,5 +43,32 @@ func TestDialContextRefusesMetadata(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "169.254.169.254") {
 		t.Fatalf("Control error %q does not name the blocked address", err)
+	}
+}
+
+func TestDialContextChainsNextControl(t *testing.T) {
+	called := false
+	d := &net.Dialer{
+		Control: func(network, address string, c syscall.RawConn) error {
+			called = true
+			return nil
+		},
+	}
+	DialContext(d)
+
+	// Blocked address should not call next Control
+	if err := d.Control("tcp", "169.254.169.254:80", nil); err == nil {
+		t.Fatal("expected blocked metadata error")
+	}
+	if called {
+		t.Fatal("expected next Control NOT to be called on blocked address")
+	}
+
+	// Allowed address should call next Control
+	if err := d.Control("tcp", "127.0.0.1:8080", nil); err != nil {
+		t.Fatalf("unexpected error on allowed address: %v", err)
+	}
+	if !called {
+		t.Fatal("expected next Control to be called for allowed address")
 	}
 }
