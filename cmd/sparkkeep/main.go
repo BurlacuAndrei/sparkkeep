@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -36,6 +37,7 @@ func printUsage() {
 	fmt.Println("  sparkkeep auth set-passphrase <p>  Set or update master passphrase (hashed with bcrypt)")
 	fmt.Println("  sparkkeep auth generate-token      Generate a new static API token for integrations")
 	fmt.Println("  sparkkeep backup [output-file]     Snapshot the SQLite database (VACUUM INTO)")
+	fmt.Println("  sparkkeep restore <backup-file>    Restore database from snapshot with pre-flight check")
 	fmt.Println()
 }
 
@@ -129,6 +131,95 @@ func handleBackup(args []string) {
 	fmt.Printf("✓ Backed up %s to %s\n", dbPath, out)
 }
 
+func handleRestore(args []string) {
+	if len(args) == 0 || strings.TrimSpace(args[0]) == "" {
+		fmt.Fprintln(os.Stderr, "Usage: sparkkeep restore <backup-file>")
+		os.Exit(1)
+	}
+	srcPath := args[0]
+	info, err := os.Stat(srcPath)
+	if err != nil {
+		log.Fatalf("restore: backup file %s: %v", srcPath, err)
+	}
+	if info.Size() == 0 {
+		log.Fatalf("restore: backup file %s is empty", srcPath)
+	}
+
+	srcDB, err := sql.Open("sqlite", "file:"+srcPath+"?mode=ro")
+	if err != nil {
+		log.Fatalf("restore: cannot open backup %s: %v", srcPath, err)
+	}
+	defer srcDB.Close()
+
+	var quickCheck string
+	if err := srcDB.QueryRow("PRAGMA quick_check").Scan(&quickCheck); err != nil || quickCheck != "ok" {
+		log.Fatalf("restore: backup integrity check failed (%s): %v", quickCheck, err)
+	}
+
+	var cardCount, capCount, schemaVer int
+	if err := srcDB.QueryRow("SELECT COUNT(*) FROM cards").Scan(&cardCount); err != nil {
+		log.Fatalf("restore: backup is missing valid cards table: %v", err)
+	}
+	_ = srcDB.QueryRow("SELECT COUNT(*) FROM captures").Scan(&capCount)
+	_ = srcDB.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&schemaVer)
+
+	srcDB.Close()
+
+	targetPath := config.DBPath()
+
+	if _, err := os.Stat(targetPath); err == nil {
+		bakPath := targetPath + ".pre-restore-" + time.Now().UTC().Format("20060102-150405") + ".bak"
+		if err := copyFile(targetPath, bakPath); err != nil {
+			log.Fatalf("restore: failed creating safety backup %s: %v", bakPath, err)
+		}
+		fmt.Printf("ℹ Saved pre-restore safety snapshot to %s\n", bakPath)
+
+		_ = os.Remove(targetPath + "-wal")
+		_ = os.Remove(targetPath + "-shm")
+	}
+
+	tmpTarget := targetPath + ".restore.tmp"
+	if err := copyFile(srcPath, tmpTarget); err != nil {
+		log.Fatalf("restore: failed to stage restore file: %v", err)
+	}
+	if err := os.Rename(tmpTarget, targetPath); err != nil {
+		_ = os.Remove(tmpTarget)
+		log.Fatalf("restore: atomic replacement failed: %v", err)
+	}
+
+	resDB, err := sql.Open("sqlite", "file:"+targetPath+"?mode=ro")
+	if err != nil {
+		log.Fatalf("restore: failed opening restored database: %v", err)
+	}
+	defer resDB.Close()
+
+	var postCheck string
+	if err := resDB.QueryRow("PRAGMA quick_check").Scan(&postCheck); err != nil || postCheck != "ok" {
+		log.Fatalf("restore: post-restore integrity check failed: %v", err)
+	}
+
+	fmt.Printf("✓ Successfully restored %s from %s\n", targetPath, srcPath)
+	fmt.Printf("  • Cards restored:    %d\n", cardCount)
+	fmt.Printf("  • Captures restored: %d\n", capCount)
+	fmt.Printf("  • Schema version:    v%d\n", schemaVer)
+	fmt.Printf("  • Database integrity: OK\n")
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -143,6 +234,9 @@ func main() {
 			return
 		case "backup":
 			handleBackup(os.Args[2:])
+			return
+		case "restore":
+			handleRestore(os.Args[2:])
 			return
 		case "server":
 			// run daemon below

@@ -115,5 +115,6 @@ type Store interface {
 	SettingsStore
 	MetricsStore
 	ChannelMessageStore
+	Ping(ctx context.Context) error
 	Close() error
 }

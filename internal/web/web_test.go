@@ -820,7 +820,8 @@ func (s *stubStore) GetCardIDByChannelMessage(_ context.Context, _, _ string) (i
 	return 0, port.ErrNotFound
 }
 
-func (s *stubStore) Close() error { return nil }
+func (s *stubStore) Ping(_ context.Context) error { return nil }
+func (s *stubStore) Close() error                  { return nil }
 
 func (s *stubStore) researchFor(cardID int64) bool {
 	s.mu.Lock()
@@ -1030,6 +1031,33 @@ func TestHealth(t *testing.T) {
 	}
 	if body["ok"] != true {
 		t.Fatalf("body = %v, want ok:true", body)
+	}
+}
+
+func TestProbesAndMetrics(t *testing.T) {
+	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
+
+	// /livez
+	rrLive := doJSON(t, h, http.MethodGet, "/livez", "")
+	if rrLive.Code != http.StatusOK {
+		t.Fatalf("/livez: status = %d, want 200", rrLive.Code)
+	}
+
+	// /readyz
+	rrReady := doJSON(t, h, http.MethodGet, "/readyz", "")
+	if rrReady.Code != http.StatusOK {
+		t.Fatalf("/readyz: status = %d, want 200", rrReady.Code)
+	}
+
+	// /metrics
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rrMetrics := httptest.NewRecorder()
+	h.ServeHTTP(rrMetrics, req)
+	if rrMetrics.Code != http.StatusOK {
+		t.Fatalf("/metrics: status = %d, want 200", rrMetrics.Code)
+	}
+	if !strings.Contains(rrMetrics.Body.String(), "sparkkeep_uptime_seconds") {
+		t.Fatalf("/metrics: missing sparkkeep_uptime_seconds in %s", rrMetrics.Body.String())
 	}
 }
 

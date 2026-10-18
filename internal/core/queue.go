@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sparkkeep/internal/channel/telegram"
+	"sparkkeep/internal/metrics"
 	"sparkkeep/internal/port"
 )
 
@@ -306,7 +307,9 @@ func (s *Service) ProcessNextQueued(ctx context.Context, asOf time.Time) (bool, 
 		s.Logf("core: failed to set card %d research_state to running: %v", card.ID, cerr)
 	}
 
+	start := time.Now()
 	err = s.executeResearch(ctx, runningItem, card)
+	metrics.RecordQueueTask("research", time.Since(start), err)
 	return true, err
 }
 

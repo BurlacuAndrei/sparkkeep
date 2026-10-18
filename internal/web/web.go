@@ -21,6 +21,7 @@ import (
 
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/core"
+	"sparkkeep/internal/metrics"
 	"sparkkeep/internal/port"
 )
 
@@ -92,6 +93,9 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /favicon.ico", serveEmbedded("dist/favicon.svg", "image/svg+xml"))
 	mux.HandleFunc("GET /health", a.health)
 	mux.HandleFunc("GET /api/v1/health", a.health)
+	mux.HandleFunc("GET /livez", a.livez)
+	mux.HandleFunc("GET /readyz", a.readyz)
+	mux.HandleFunc("GET /metrics", a.prometheusMetrics)
 	mux.HandleFunc("GET /api/v1/cards", a.listCards)
 	mux.HandleFunc("POST /api/v1/cards", a.createCard)
 	mux.HandleFunc("GET /api/v1/cards/{id}", a.getCard)
@@ -145,7 +149,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/license/status", a.getLicenseStatus)
 	mux.HandleFunc("POST /api/v1/export/obsidian", a.syncObsidian)
 	mux.HandleFunc("POST /api/v1/webhooks/test", a.testWebhook)
-	return securityHeaders(a.authMiddleware(mux))
+	return metrics.HTTPMiddleware(securityHeaders(a.authMiddleware(mux)))
 }
 
 // csp is the Content-Security-Policy sent on every response. 'unsafe-inline'
@@ -180,8 +184,9 @@ func securityHeaders(next http.Handler) http.Handler {
 func isPublicPath(r *http.Request) bool {
 	p := r.URL.Path
 	switch p {
-	case "/api/v1/health", "/api/v1/auth/verify", "/api/v1/setup/status", "/api/v1/setup", "/manifest.json", "/sw.js", "/icon.svg",
-		"/favicon.svg", "/favicon.ico",
+	case "/health", "/api/v1/health", "/livez", "/readyz", "/metrics",
+		"/api/v1/auth/verify", "/api/v1/setup/status", "/api/v1/setup", "/api/v1/setup/demo",
+		"/manifest.json", "/sw.js", "/icon.svg", "/favicon.svg", "/favicon.ico",
 		"/api/v1/channels/discord/interactions", "/api/v1/channels/openclaw/webhook":
 		return true
 	}
