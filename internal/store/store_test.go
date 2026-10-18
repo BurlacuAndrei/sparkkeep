@@ -32,8 +32,8 @@ func TestMigrate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 21 {
-		t.Fatalf("version = %d, want 21", version)
+	if version != 22 {
+		t.Fatalf("version = %d, want 22", version)
 	}
 	if _, err := s.db.Exec(`SELECT 1 FROM cards LIMIT 1`); err != nil {
 		t.Fatalf("cards table: %v", err)
@@ -1185,8 +1185,8 @@ func TestMigrationBackfill(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 21 {
-		t.Fatalf("version = %d, want 21", version)
+	if version != 22 {
+		t.Fatalf("version = %d, want 22", version)
 	}
 
 	// Verify backfilled captures exist
@@ -1298,8 +1298,8 @@ func TestTriageBriefMigration(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 21 {
-		t.Fatalf("version = %d, want 21", version)
+	if version != 22 {
+		t.Fatalf("version = %d, want 22", version)
 	}
 
 	// 4. Verify the seeded legacy card backfilled tldr and why_care
@@ -2572,8 +2572,8 @@ func TestCardsFTSMigrationPopulate(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("schema_version: %v", err)
 	}
-	if version != 21 {
-		t.Fatalf("version = %d, want 21", version)
+	if version != 22 {
+		t.Fatalf("version = %d, want 22", version)
 	}
 
 	// 4. Verify the pre-migration legacy card was backfilled into cards_fts

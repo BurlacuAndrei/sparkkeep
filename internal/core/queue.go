@@ -455,7 +455,9 @@ func (s *Service) StartQueueWorker(parentCtx context.Context) {
 					if ctx.Err() != nil {
 						return
 					}
-					processed, err := s.ProcessNextQueued(ctx, s.now())
+					jobCtx, jobCancel := context.WithTimeout(ctx, 15*time.Minute)
+					processed, err := s.ProcessNextQueued(jobCtx, s.now())
+					jobCancel()
 					if err != nil {
 						s.Logf("core: queue worker %d error: %v", workerID, err)
 					}

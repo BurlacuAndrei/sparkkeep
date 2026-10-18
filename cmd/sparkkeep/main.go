@@ -186,7 +186,10 @@ func main() {
 	srv := &http.Server{
 		Handler:           web.New(st, svc, cfg),
 		Addr:              cfg.HTTPAddr,
-		ReadHeaderTimeout: 15 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	logger("sparkkeep: listening on %s (version %s)", cfg.HTTPAddr, version)
 

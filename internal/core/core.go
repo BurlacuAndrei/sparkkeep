@@ -403,7 +403,7 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 
 	capRow, cerr := s.persistCapture(ctx, share, fetched)
 	if cerr != nil {
-		if errors.Is(cerr, port.ErrConflict) || isUniqueConstraint(cerr) {
+		if errors.Is(cerr, port.ErrConflict) {
 			if existingCap, gerr := s.Store.GetCaptureBySourceURL(ctx, sourceURL); gerr == nil {
 				if derr := s.handleDuplicate(ctx, existingCap, share.Caption); derr != nil {
 					s.Logf("core: duplicate handle on conflict: %v", derr)
@@ -538,19 +538,6 @@ func (s *Service) handleDuplicateCard(ctx context.Context, card port.Card) error
 	return s.handleDuplicate(ctx, cap, card.SourceNote)
 }
 
-func isUniqueConstraint(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, port.ErrConflict) {
-		return true
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "UNIQUE constraint failed") ||
-		strings.Contains(msg, "unique constraint") ||
-		strings.Contains(msg, "idx_cards_source") ||
-		strings.Contains(msg, "idx_captures_source")
-}
 
 func cardFromIdea(idea analyze.Idea, res analyze.AnalysisResult, url, note string) port.Card {
 	tldr := idea.TLDR

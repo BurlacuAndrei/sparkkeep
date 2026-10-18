@@ -436,21 +436,24 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
 }
 
 // fail maps a store/service error to the envelope: ErrNotFound → 404, ErrBuiltinReadOnly → 403,
-// ErrInvalidPlaybook → 400, else 500.
+// ErrInvalidPlaybook → 400, ErrConflict → 409, ErrResearchActive → 409, ErrNoiseGateDiscarded → 422, else 500.
 func (a *api) fail(w http.ResponseWriter, err error) {
-	if errors.Is(err, port.ErrNotFound) {
+	switch {
+	case errors.Is(err, port.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not found")
-		return
-	}
-	if errors.Is(err, port.ErrBuiltinReadOnly) {
+	case errors.Is(err, port.ErrConflict):
+		writeErr(w, http.StatusConflict, err.Error())
+	case errors.Is(err, port.ErrResearchActive):
+		writeErr(w, http.StatusConflict, "research already running")
+	case errors.Is(err, port.ErrBuiltinReadOnly):
 		writeErr(w, http.StatusForbidden, "builtin playbook is read-only")
-		return
-	}
-	if errors.Is(err, port.ErrInvalidPlaybook) {
+	case errors.Is(err, port.ErrInvalidPlaybook):
 		writeErr(w, http.StatusBadRequest, err.Error())
-		return
+	case errors.Is(err, port.ErrNoiseGateDiscarded):
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+	default:
+		writeErr(w, http.StatusInternalServerError, err.Error())
 	}
-	writeErr(w, http.StatusInternalServerError, err.Error())
 }
 
 // writeJSON writes the {ok:..., ...} envelope as application/json.
@@ -462,17 +465,4 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{"ok": false, "error": msg})
-}
-
-func isUniqueConstraint(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, port.ErrConflict) {
-		return true
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "UNIQUE constraint failed") ||
-		strings.Contains(msg, "unique constraint") ||
-		strings.Contains(msg, "idx_cards_source")
 }

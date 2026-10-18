@@ -794,6 +794,9 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 	query, args := b.build()
 	res, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
+		if isUniqueConstraint(err) {
+			return port.Card{}, fmt.Errorf("%w: %v", port.ErrConflict, err)
+		}
 		return port.Card{}, err
 	}
 	if n, err := res.RowsAffected(); err != nil || n == 0 {

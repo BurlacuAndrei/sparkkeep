@@ -68,7 +68,7 @@ func (s *stubStore) CreateCard(_ context.Context, c port.Card) (port.Card, error
 	if c.SourceURL != "" {
 		for _, existing := range s.cards {
 			if existing.SourceURL == c.SourceURL {
-				return port.Card{}, fmt.Errorf("UNIQUE constraint failed: idx_cards_source")
+				return port.Card{}, fmt.Errorf("%w: UNIQUE constraint failed: idx_cards_source", port.ErrConflict)
 			}
 		}
 	}
@@ -114,7 +114,7 @@ func (s *stubStore) CreateCapture(_ context.Context, c port.Capture) (port.Captu
 	if c.SourceURL != "" {
 		for _, existing := range s.captures {
 			if existing.SourceURL == c.SourceURL {
-				return port.Capture{}, fmt.Errorf("UNIQUE constraint failed: idx_captures_source")
+				return port.Capture{}, fmt.Errorf("%w: UNIQUE constraint failed: idx_captures_source", port.ErrConflict)
 			}
 		}
 	}

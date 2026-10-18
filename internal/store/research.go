@@ -510,9 +510,29 @@ func (s *Store) BatchQueueResearch(ctx context.Context, cardIDs []int64, playboo
 	return queued, nil
 }
 
+func (s *Store) getActiveResearchCardIDs(ctx context.Context) (map[int64]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT card_id FROM research WHERE status IN ('queued', 'running')`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	active := make(map[int64]bool)
+	for rows.Next() {
+		var cid int64
+		if err := rows.Scan(&cid); err == nil {
+			active[cid] = true
+		}
+	}
+	return active, rows.Err()
+}
+
 func (s *Store) FindCardsForRule(ctx context.Context, filter port.ResearchRuleFilter, maxCards int, asOf time.Time) ([]port.Card, error) {
 	if maxCards <= 0 {
 		maxCards = 10
+	}
+	activeCardIDs, err := s.getActiveResearchCardIDs(ctx)
+	if err != nil {
+		return nil, err
 	}
 	allCards, err := s.ListCards(ctx, port.CardFilter{
 		Status: filter.Status,
@@ -527,7 +547,7 @@ func (s *Store) FindCardsForRule(ctx context.Context, filter port.ResearchRuleFi
 			break
 		}
 		// Skip if card already has active or queued research
-		if active, err := s.HasActiveResearch(ctx, c.ID); err == nil && active {
+		if activeCardIDs[c.ID] {
 			continue
 		}
 		if filter.Status != "" && !strings.EqualFold(c.Status, filter.Status) {

@@ -113,7 +113,7 @@ func (a *api) createCard(w http.ResponseWriter, r *http.Request) {
 		ProposedActions:  b.ProposedActions,
 	})
 	if err != nil {
-		if errors.Is(err, port.ErrConflict) || isUniqueConstraint(err) {
+		if errors.Is(err, port.ErrConflict) {
 			if existing, gerr := a.store.GetCardBySourceURL(r.Context(), b.SourceURL); gerr == nil {
 				writeErr(w, http.StatusConflict, "already captured: "+existing.Title)
 				return
