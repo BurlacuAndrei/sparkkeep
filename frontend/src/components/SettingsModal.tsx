@@ -31,6 +31,7 @@ import {
 export interface SettingsModalProps {
   onClose: () => void;
   showToast: (msg: string) => void;
+  initialTab?: SettingsTab | null;
 }
 
 export type SettingsTab =
@@ -57,8 +58,8 @@ interface SettingsBaseline {
   discordChannelId: string;
 }
 
-export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
+export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'appearance');
   const bodyRef = React.useRef<HTMLDivElement>(null);
 
   // Card Taxonomy state

@@ -353,6 +353,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
   };
 
   const [exportCopied, setExportCopied] = useState(false);
+  const [exportCopyFlash, setExportCopyFlash] = useState(false);
 
   // Handle Markdown Export
   const handleExportMarkdown = () => {
@@ -409,6 +410,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
       .then(() => {
         showToast?.('📋 Markdown digest copied to clipboard!');
         setExportCopied(true);
+        setExportCopyFlash(true);
+        setTimeout(() => setExportCopyFlash(false), 600);
         setTimeout(() => setExportCopied(false), 2000);
       })
       .catch(() => {
@@ -561,13 +564,33 @@ export const DigestView: React.FC<DigestViewProps> = ({
 
           <button
             type="button"
-            className={`digest-btn digest-btn-export ${exportCopied ? 'copied' : ''}`}
+            className={`digest-btn digest-btn-export ${exportCopied ? 'copied' : ''} ${exportCopyFlash ? 'flash' : ''}`}
             onClick={handleExportMarkdown}
             title="Copy Markdown for Obsidian / Notion / Logseq"
             disabled={exportCopied}
+            style={{ position: 'relative', overflow: 'visible' }}
           >
             <FileText size={13} />
-            <span>{exportCopied ? '✅ Copied!' : 'Export Markdown'}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              {exportCopied ? (
+                <>
+                  <CheckCircle2 size={13} color="#34d399" style={{ animation: 'popIn 0.2s ease-out' }} />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                'Export Markdown'
+              )}
+            </span>
+            {exportCopyFlash && (
+              <div style={{
+                position: 'absolute',
+                inset: '-2px',
+                borderRadius: 'inherit',
+                border: '2px solid #34d399',
+                animation: 'copyFlash 0.6s ease-out',
+                pointerEvents: 'none',
+              }} />
+            )}
           </button>
         </div>
       </div>

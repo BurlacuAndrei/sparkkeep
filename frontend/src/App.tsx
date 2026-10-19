@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { Card, Tag, DigestData, ViewMode, Settings } from './types';
+import { SettingsTab } from './components/SettingsModal';
 import * as api from './api';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -70,6 +71,7 @@ function AppContent() {
   const [isSetupNeeded, setIsSetupNeeded] = useState(false);
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | null>(null);
 
   const showToast = useCallback((msg: string, onUndo?: () => Promise<void> | void) => {
     if (msg === 'unauthorized' || msg === 'HTTP 401') {
@@ -353,7 +355,7 @@ function AppContent() {
           onViewModeChange={setViewMode}
           onOpenNewCard={() => setIsNewModalOpen(true)}
           flashMessage={toast?.message || ''}
-          onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+          onOpenSettingsModal={(tab?: SettingsTab) => { setSettingsInitialTab(tab || null); setIsSettingsModalOpen(true); }}
           triageCount={triageCount}
           allCards={cards}
           tags={tags}
@@ -469,9 +471,11 @@ function AppContent() {
           <SettingsModal
             onClose={() => {
               setIsSettingsModalOpen(false);
+              setSettingsInitialTab(null);
               reloadAll();
             }}
             showToast={showToast}
+            initialTab={settingsInitialTab}
           />
         </Suspense>
       )}

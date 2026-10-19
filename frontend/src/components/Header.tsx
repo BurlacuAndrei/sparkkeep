@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Sparkles, Calendar, Layers, Zap, Settings, Coffee, BookOpen, Plug, RefreshCw, RotateCcw, Copy, Eye, EyeOff, Rss, Globe, Database, BookOpen as BookOpenIcon, HardDrive } from 'lucide-react';
 import { Omnisearch } from './Omnisearch';
 import { Card, Tag, ViewMode, Settings as SettingsType } from '../types';
+import { SettingsTab } from './SettingsModal';
 import * as api from '../api';
 
 interface HeaderProps {
@@ -9,7 +10,7 @@ interface HeaderProps {
   onViewModeChange: (mode: ViewMode) => void;
   onOpenNewCard: () => void;
   flashMessage: string;
-  onOpenSettingsModal: () => void;
+  onOpenSettingsModal: (tab?: SettingsTab) => void;
   triageCount?: number;
   allCards: Card[];
   tags: Tag[];
@@ -330,10 +331,10 @@ export const Header: React.FC<HeaderProps> = ({
                           <button
                             type="button"
                             className="setup-btn-primary"
-                            onClick={() => { setIntegrationsOpen(false); onOpenSettingsModal(); }}
+                            onClick={() => { setIntegrationsOpen(false); onOpenSettingsModal('integrations'); }}
                             style={{ fontSize: '12px', padding: '6px 12px' }}
                           >
-                            Open Settings
+                            Open Settings → Integrations
                           </button>
                         </div>
                       );
@@ -429,59 +430,71 @@ export const Header: React.FC<HeaderProps> = ({
                       )}
                       {outboxToken && (
                         <>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <div style={{ flex: 1, minWidth: '120px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                              {showOutboxToken ? outboxToken : '••••••••••••••••'}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, minWidth: '80px' }}>Feed Token</span>
+                                <div style={{ flex: 1, minWidth: '120px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                                  {showOutboxToken ? outboxToken : '••••••••••••••••'}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', marginLeft: '88px' }}>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  onClick={() => setShowOutboxToken(!showOutboxToken)}
+                                  style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap' }}
+                                >
+                                  {showOutboxToken ? <EyeOff size={12} /> : <Eye size={12} />}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  onClick={() => copyToClipboard(outboxToken)}
+                                  style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  <Copy size={12} /> Copy Token
+                                </button>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, minWidth: '80px' }}>Feed URL</span>
+                                <div style={{ flex: 1, minWidth: '120px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                                  {typeof window !== 'undefined' ? `${window.location.origin}/api/v1/feed.xml?token=${outboxToken}` : 'feed.xml?token=…'}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', marginLeft: '88px' }}>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  onClick={() => copyToClipboard(typeof window !== 'undefined' ? `${window.location.origin}/api/v1/feed.xml?token=${outboxToken}` : '')}
+                                  style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  <Globe size={12} /> Copy URL
+                                </button>
+                              </div>
                             </div>
                             <button
                               type="button"
                               className="btn-secondary"
-                              onClick={() => setShowOutboxToken(!showOutboxToken)}
-                              style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap' }}
+                              onClick={handleRegenerateOutboxToken}
+                              disabled={regeneratingOutboxToken}
+                              style={{ fontSize: '11px', padding: '5px 10px', width: '100%', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}
                             >
-                              {showOutboxToken ? <EyeOff size={12} /> : <Eye size={12} />}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              onClick={() => copyToClipboard(outboxToken)}
-                              style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <Copy size={12} /> Copy Token
-                            </button>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <div style={{ flex: 1, minWidth: '120px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                              {typeof window !== 'undefined' ? `${window.location.origin}/api/v1/feed.xml?token=${outboxToken}` : 'feed.xml?token=…'}
-                            </div>
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              onClick={() => copyToClipboard(typeof window !== 'undefined' ? `${window.location.origin}/api/v1/feed.xml?token=${outboxToken}` : '')}
-                              style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <Globe size={12} /> Copy URL
+                              {regeneratingOutboxToken ? (
+                                <>
+                                  <RotateCcw size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                                  Regenerating…
+                                </>
+                              ) : (
+                                <>
+                                  <RotateCcw size={11} />
+                                  Regenerate Token
+                                </>
+                              )}
                             </button>
                           </div>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={handleRegenerateOutboxToken}
-                            disabled={regeneratingOutboxToken}
-                            style={{ fontSize: '11px', padding: '5px 10px', width: '100%', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}
-                          >
-                            {regeneratingOutboxToken ? (
-                              <>
-                                <RotateCcw size={11} style={{ animation: 'spin 1s linear infinite' }} />
-                                Regenerating…
-                              </>
-                            ) : (
-                              <>
-                                <RotateCcw size={11} />
-                                Regenerate Token
-                              </>
-                            )}
-                          </button>
                         </>
                       )}
                     </div>
@@ -495,7 +508,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           className="btn-secondary icon-only-btn"
-          onClick={onOpenSettingsModal}
+          onClick={() => onOpenSettingsModal()}
           title="Settings & Integrations"
           aria-label="Settings"
         >
