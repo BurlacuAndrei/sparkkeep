@@ -36,10 +36,10 @@ export interface SettingsModalProps {
 export type SettingsTab =
   | 'appearance'
   | 'profile'
+  | 'integrations'
   | 'ai'
   | 'schedule'
   | 'channels'
-  | 'integrations'
   | 'security';
 
 const DEFAULT_CARD_TYPES = ['article', 'video', 'book', 'guide', 'product', 'place', 'idea', 'quote'];
@@ -520,6 +520,18 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
               <span>About me</span>
             </button>
             <button
+              id="settings-tab-integrations"
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'integrations'}
+              aria-controls="settings-panel-integrations"
+              className={`settings-tab-btn ${activeTab === 'integrations' ? 'active' : ''}`}
+              onClick={() => setActiveTab('integrations')}
+            >
+              <Plug size={15} />
+              <span>Integrations</span>
+            </button>
+            <button
               id="settings-tab-ai"
               type="button"
               role="tab"
@@ -554,18 +566,6 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
             >
               <MessageSquare size={15} />
               <span>Channels & Alerts</span>
-            </button>
-            <button
-              id="settings-tab-integrations"
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'integrations'}
-              aria-controls="settings-panel-integrations"
-              className={`settings-tab-btn ${activeTab === 'integrations' ? 'active' : ''}`}
-              onClick={() => setActiveTab('integrations')}
-            >
-              <Plug size={15} />
-              <span>Integrations & API</span>
             </button>
             <button
               id="settings-tab-security"
@@ -898,7 +898,7 @@ export function SettingsModal({ onClose, showToast }: SettingsModalProps) {
                   </div>
                 )}
 
-                {/* TAB 7: Integrations & API */}
+                {/* TAB 3: Integrations */}
                 {activeTab === 'integrations' && (
                   <div
                     id="settings-panel-integrations"

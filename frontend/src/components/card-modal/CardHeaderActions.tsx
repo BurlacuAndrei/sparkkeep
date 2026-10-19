@@ -369,8 +369,42 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           className={`icon-btn ${menuOpen ? 'active' : ''}`}
           onClick={() => setMenuOpen(!menuOpen)}
           title="More actions"
+          style={{ position: 'relative' }}
         >
           <MoreHorizontal size={14} />
+          {(() => {
+            if (!settings) return null;
+            const sinkCount = [
+              settings.obsidian_vault_path,
+              (settings.notion_token && settings.notion_database_id),
+              ((settings.joplin_token || settings.joplin_email) && settings.joplin_base_url),
+            ].filter(Boolean).length;
+            if (sinkCount === 0) return null;
+            return (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-2px',
+                  right: '-2px',
+                  minWidth: '16px',
+                  height: '16px',
+                  borderRadius: '8px',
+                  background: 'var(--accent, #8b5cf6)',
+                  color: 'white',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 3px',
+                  border: '2px solid var(--bg-primary, #0d0d14)',
+                }}
+                title={`${sinkCount} integration${sinkCount > 1 ? 's' : ''} configured`}
+              >
+                {sinkCount}
+              </span>
+            );
+          })()}
         </button>
 
         {menuOpen && (

@@ -97,14 +97,14 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
     const card = document.querySelector('.settings-modal-card');
     expect(card).not.toBeNull();
 
-    // Check all 7 sidebar navigation tabs are present
+    // Check all 7 sidebar navigation tabs are present (new order: Integrations moved to 3rd)
     const tabs = [
       'Appearance & Preferences',
       'About me',
+      'Integrations',
       'AI Engine',
       'Scheduled Research',
       'Channels & Alerts',
-      'Integrations & API',
       'Security & Access',
     ];
 
