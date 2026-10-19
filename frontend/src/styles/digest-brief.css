@@ -272,12 +272,24 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-main);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 
 .digest-btn-export:hover:not(:disabled) {
   background: var(--bg-surface-elevated);
   border-color: var(--border-hover);
   transform: translateY(-1px);
+}
+
+.digest-btn-export.copied {
+  background: #065f46;
+  border-color: #10b981;
+  color: #d1fae5;
+}
+
+.digest-btn-export.copied:hover {
+  background: #064e3b;
+  transform: none;
 }
 
 .digest-btn:disabled {

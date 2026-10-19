@@ -352,6 +352,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
     handleSendDigest(channelId);
   };
 
+  const [exportCopied, setExportCopied] = useState(false);
+
   // Handle Markdown Export
   const handleExportMarkdown = () => {
     const mdLines: string[] = [];
@@ -406,6 +408,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
       .writeText(fullMd)
       .then(() => {
         showToast?.('📋 Markdown digest copied to clipboard!');
+        setExportCopied(true);
+        setTimeout(() => setExportCopied(false), 2000);
       })
       .catch(() => {
         showToast?.('Could not copy to clipboard');
@@ -557,12 +561,13 @@ export const DigestView: React.FC<DigestViewProps> = ({
 
           <button
             type="button"
-            className="digest-btn digest-btn-export"
+            className={`digest-btn digest-btn-export ${exportCopied ? 'copied' : ''}`}
             onClick={handleExportMarkdown}
             title="Copy Markdown for Obsidian / Notion / Logseq"
+            disabled={exportCopied}
           >
             <FileText size={13} />
-            <span>Export Markdown</span>
+            <span>{exportCopied ? '✅ Copied!' : 'Export Markdown'}</span>
           </button>
         </div>
       </div>
