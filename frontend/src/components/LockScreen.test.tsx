@@ -1,11 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LockScreen } from './LockScreen';
+import { LocaleProvider } from '../i18n';
 
 describe('LockScreen', () => {
   it('renders lock screen heading and input field', () => {
     const onUnlock = vi.fn().mockResolvedValue(true);
-    render(<LockScreen onUnlock={onUnlock} />);
+    render(
+      <LocaleProvider locale="en">
+        <LockScreen onUnlock={onUnlock} />
+      </LocaleProvider>
+    );
 
     expect(screen.getByRole('main', { name: /Unlock Sparkkeep/i })).toBeDefined();
     expect(screen.getByText('Sparkkeep')).toBeDefined();
@@ -16,7 +21,11 @@ describe('LockScreen', () => {
 
   it('toggles password visibility with eye button', () => {
     const onUnlock = vi.fn().mockResolvedValue(true);
-    render(<LockScreen onUnlock={onUnlock} />);
+    render(
+      <LocaleProvider locale="en">
+        <LockScreen onUnlock={onUnlock} />
+      </LocaleProvider>
+    );
 
     const input = screen.getByLabelText(/Master Passphrase/i) as HTMLInputElement;
     expect(input.type).toBe('password');
@@ -34,7 +43,11 @@ describe('LockScreen', () => {
 
   it('calls onUnlock and handles incorrect passphrase error', async () => {
     const onUnlock = vi.fn().mockResolvedValue(false);
-    render(<LockScreen onUnlock={onUnlock} />);
+    render(
+      <LocaleProvider locale="en">
+        <LockScreen onUnlock={onUnlock} />
+      </LocaleProvider>
+    );
 
     const input = screen.getByLabelText(/Master Passphrase/i);
     fireEvent.change(input, { target: { value: 'wrong_secret' } });
@@ -52,7 +65,11 @@ describe('LockScreen', () => {
 
   it('calls onUnlock on successful passphrase submission', async () => {
     const onUnlock = vi.fn().mockResolvedValue(true);
-    render(<LockScreen onUnlock={onUnlock} />);
+    render(
+      <LocaleProvider locale="en">
+        <LockScreen onUnlock={onUnlock} />
+      </LocaleProvider>
+    );
 
     const input = screen.getByLabelText(/Master Passphrase/i);
     fireEvent.change(input, { target: { value: 'correct_master_token' } });

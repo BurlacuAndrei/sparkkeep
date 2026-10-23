@@ -6,12 +6,12 @@ import type { PluralCategory } from '../types';
 
 describe('pluralCategory', () => {
   const cases: [number, PluralCategory, PluralCategory][] = [
-    [0, 'other', 'other'],
+    [0, 'few', 'other'],
     [1, 'one', 'one'],
     [2, 'few', 'other'],
     [19, 'few', 'other'],
     [20, 'other', 'other'],
-    [101, 'other', 'other'],
+    [101, 'few', 'other'],
     [120, 'other', 'other'],
   ];
 
@@ -31,6 +31,14 @@ describe('translatePlural', () => {
     expect(translatePlural(ro, 'ro', 'cards.count', 1)).toBe('1 card');
     expect(translatePlural(ro, 'ro', 'cards.count', 5)).toBe('5 carduri');
     expect(translatePlural(ro, 'ro', 'cards.count', 20)).toBe('20 de carduri');
+    expect(translatePlural(ro, 'ro', 'cards.count', 0)).toBe('0 carduri');
+    expect(translatePlural(ro, 'ro', 'cards.count', 101)).toBe('101 carduri');
+    expect(translatePlural(ro, 'ro', 'cards.count', 120)).toBe('120 de carduri');
+  });
+
+  it('keeps English at one and other for every count', () => {
+    expect(translatePlural(en, 'en', 'cards.count', 0)).toBe('0 cards');
+    expect(translatePlural(en, 'en', 'cards.count', 101)).toBe('101 cards');
   });
 
   it('selects English one and other forms', () => {

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Card, Tag, ViewMode } from '../types';
 import * as api from '../api';
+import { useLocale } from '../i18n';
 import '../styles/omnisearch.css';
 
 interface OmnisearchProps {
@@ -71,6 +72,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
   onOpenNewCard,
   onOpenSettingsModal,
 }) => {
+  const { t, tp } = useLocale();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -206,49 +208,49 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
       {
         kind: 'command',
         id: 'cmd-triage',
-        title: 'Triage Deck',
-        subtitle: 'Review incoming sparks & make keep/dismiss decisions',
+        title: t('shell.omnisearch.command.triage.title'),
+        subtitle: t('shell.omnisearch.command.triage.desc'),
         icon: <Zap size={14} strokeWidth={2} />,
-        badge: triageCount && triageCount > 0 ? `${triageCount} unreviewed` : undefined,
+        badge: triageCount && triageCount > 0 ? tp('shell.omnisearch.unreviewed', triageCount) : undefined,
         execute: () => onViewModeChange('triage'),
       },
       {
         kind: 'command',
         id: 'cmd-boards',
-        title: 'Execution Boards',
-        subtitle: 'Kanban view grouped by Horizon: Now, Next, Later',
+        title: t('shell.omnisearch.command.boards.title'),
+        subtitle: t('shell.omnisearch.command.boards.desc'),
         icon: <Layers size={14} strokeWidth={2} />,
         execute: () => onViewModeChange('boards'),
       },
       {
         kind: 'command',
         id: 'cmd-digest',
-        title: 'Weekly Digest',
-        subtitle: 'Synthesized timeline, themes & briefings',
+        title: t('shell.omnisearch.command.digest.title'),
+        subtitle: t('shell.omnisearch.command.digest.desc'),
         icon: <Calendar size={14} strokeWidth={2} />,
         execute: () => onViewModeChange('digest'),
       },
       {
         kind: 'command',
         id: 'cmd-playbooks',
-        title: 'Playbook Studio',
-        subtitle: 'Design and customize multi-step AI research playbooks',
+        title: t('shell.omnisearch.command.playbooks.title'),
+        subtitle: t('shell.omnisearch.command.playbooks.desc'),
         icon: <BookOpen size={14} strokeWidth={2} />,
         execute: () => onViewModeChange('playbooks'),
       },
       {
         kind: 'command',
         id: 'cmd-new',
-        title: 'New Spark / Capture',
-        subtitle: 'Capture a quick thought, note, or article link',
+        title: t('shell.omnisearch.command.capture.title'),
+        subtitle: t('shell.omnisearch.command.capture.desc'),
         icon: <Plus size={14} strokeWidth={2} />,
         execute: onOpenNewCard,
       },
       {
         kind: 'command',
         id: 'cmd-settings',
-        title: 'Settings & Models',
-        subtitle: 'Configure LLMs, channels & preferences',
+        title: t('shell.omnisearch.command.settings.title'),
+        subtitle: t('shell.omnisearch.command.settings.desc'),
         icon: <Settings size={14} strokeWidth={2} />,
         execute: onOpenSettingsModal,
       },
@@ -281,8 +283,9 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
       kind: 'card',
       id: `card-${c.id}`,
       card: c,
-      title: c.title || 'Untitled Spark',
-      subtitle: c.tldr || c.summary || c.executive_summary || c.why_care || 'No briefing details available',
+      title: c.title || t('shell.omnisearch.untitled'),
+      subtitle:
+        c.tldr || c.summary || c.executive_summary || c.why_care || t('shell.omnisearch.noBriefing'),
       horizon: c.horizon || 'short-term',
       status: c.status || 'inbox',
       researchState: c.research_state,
@@ -293,17 +296,17 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
     // 3. Matching Tags
     let matchedTags: Tag[] = [];
     if (trimmed) {
-      matchedTags = tags.filter((t) => t.name.toLowerCase().includes(trimmed)).slice(0, 5);
+      matchedTags = tags.filter((tag) => tag.name.toLowerCase().includes(trimmed)).slice(0, 5);
     } else {
       matchedTags = tags.slice(0, 4);
     }
 
-    const tagsResult: TagNavItem[] = matchedTags.map((t) => ({
+    const tagsResult: TagNavItem[] = matchedTags.map((tag) => ({
       kind: 'tag',
-      id: `tag-${t.name}`,
-      name: t.name,
-      count: t.count,
-      execute: () => onSelectTag(t.name),
+      id: `tag-${tag.name}`,
+      name: tag.name,
+      count: tag.count,
+      execute: () => onSelectTag(tag.name),
     }));
 
     // Flatten all items for unified keyboard navigation
@@ -326,6 +329,8 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
     onOpenSettingsModal,
     onSelectCard,
     onSelectTag,
+    t,
+    tp,
   ]);
 
 
@@ -374,9 +379,9 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
   };
 
   const getHorizonLabel = (h: string) => {
-    if (h === 'short-term') return 'Now';
-    if (h === 'medium-term') return 'Next';
-    if (h === 'long-term') return 'Later';
+    if (h === 'short-term') return t('shell.omnisearch.horizonNow');
+    if (h === 'medium-term') return t('shell.omnisearch.horizonNext');
+    if (h === 'long-term') return t('shell.omnisearch.horizonLater');
     return h;
   };
 
@@ -400,7 +405,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
           id="q"
           type="search"
           className="search-input"
-          placeholder="Search briefings, tags, sparks, or commands…"
+          placeholder={t('shell.omnisearch.placeholder')}
           value={query}
           onChange={(e) => {
             const val = e.target.value;
@@ -435,13 +440,13 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
               setSelectedIndex(0);
               inputRef.current?.focus();
             }}
-            title="Clear search"
-            aria-label="Clear search"
+            title={t('shell.omnisearch.clear')}
+            aria-label={t('shell.omnisearch.clear')}
           >
             <X size={13} strokeWidth={2} />
           </button>
         ) : (
-          <div className="search-kbd-badge" title={`Press ${shortcutLabel} or / to search`}>
+          <div className="search-kbd-badge" title={t('shell.omnisearch.hint', { shortcut: shortcutLabel })}>
             <kbd>{shortcutLabel}</kbd>
           </div>
         )}
@@ -449,17 +454,15 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
 
       {/* Floating Omnisearch Results Popover */}
       {isOpen && (
-        <div className="omnisearch-popover" role="dialog" aria-label="Omnisearch results">
+        <div className="omnisearch-popover" role="dialog" aria-label={t('shell.omnisearch.resultsAria')}>
           <div ref={resultsRef} className="omnisearch-results">
             {navItems.length === 0 ? (
               <div className="omnisearch-empty">
                 <FileText size={28} strokeWidth={1.5} color="#6b7280" />
                 <div className="omnisearch-empty-title">
-                  No matches found for &ldquo;{query}&rdquo;
+                  {t('shell.omnisearch.emptyTitle', { query })}
                 </div>
-                <div className="omnisearch-empty-desc">
-                  Try another keyword, or create a new spark with this title.
-                </div>
+                <div className="omnisearch-empty-desc">{t('shell.omnisearch.emptyDesc')}</div>
                 <button
                   type="button"
                   className="omnisearch-empty-create-btn"
@@ -469,7 +472,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
                   }}
                 >
                   <Plus size={13} />
-                  <span>Create spark &ldquo;{query}&rdquo;</span>
+                  <span>{t('shell.omnisearch.create', { query })}</span>
                 </button>
               </div>
             ) : (
@@ -478,7 +481,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
                 {commands.length > 0 && (
                   <div className="omnisearch-section">
                     <div className="omnisearch-section-header">
-                      <span>{query ? 'Commands & Navigation' : 'Quick Views & Actions'}</span>
+                      <span>{query ? t('shell.omnisearch.commands') : t('shell.omnisearch.quick')}</span>
                       <span className="omnisearch-section-count">{commands.length}</span>
                     </div>
                     {commands.map((cmd) => {
@@ -506,7 +509,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
                           </div>
                           <div className="omnisearch-item-right">
                             <div className="omnisearch-key-hint">
-                              <kbd>↵ Jump</kbd>
+                              <kbd>{t('shell.omnisearch.jump')}</kbd>
                             </div>
                           </div>
                         </div>
@@ -519,7 +522,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
                 {cardItems.length > 0 && (
                   <div className="omnisearch-section">
                     <div className="omnisearch-section-header">
-                      <span>{query ? 'Matching Sparks' : 'Recent Sparks'}</span>
+                      <span>{query ? t('shell.omnisearch.matchingSparks') : t('shell.omnisearch.recentSparks')}</span>
                       <span className="omnisearch-section-count">{cardItems.length}</span>
                     </div>
                     {cardItems.map((c) => {
@@ -546,7 +549,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
                                 </span>
                                 {c.researchState === 'running' && (
                                   <span className="omnisearch-badge research">
-                                    <Sparkles size={10} /> Researching
+                                    <Sparkles size={10} /> {t('shell.omnisearch.researching')}
                                   </span>
                                 )}
                                 {c.researchVerdict && (
@@ -562,7 +565,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
                           </div>
                           <div className="omnisearch-item-right">
                             <div className="omnisearch-key-hint">
-                              <kbd>↵ Open</kbd>
+                              <kbd>{t('shell.omnisearch.open')}</kbd>
                             </div>
                           </div>
                         </div>
@@ -575,7 +578,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
                 {tagItems.length > 0 && (
                   <div className="omnisearch-section">
                     <div className="omnisearch-section-header">
-                      <span>{query ? 'Matching Tags' : 'Browse by Tag'}</span>
+                      <span>{query ? t('shell.omnisearch.matchingTags') : t('shell.omnisearch.browseTags')}</span>
                       <span className="omnisearch-section-count">{tagItems.length}</span>
                     </div>
                     {tagItems.map((tag) => {
@@ -598,18 +601,18 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
                                 <span className="omnisearch-item-title">#{tag.name}</span>
                                 {tag.count !== undefined && (
                                   <span className="omnisearch-badge done">
-                                    {tag.count} {tag.count === 1 ? 'spark' : 'sparks'}
+                                    {tp('shell.omnisearch.sparks', tag.count)}
                                   </span>
                                 )}
                               </div>
                               <span className="omnisearch-item-subtitle">
-                                Filter execution boards by #{tag.name}
+                                {t('shell.omnisearch.filterBoard', { tag: tag.name })}
                               </span>
                             </div>
                           </div>
                           <div className="omnisearch-item-right">
                             <div className="omnisearch-key-hint">
-                              <kbd>↵ Filter</kbd>
+                              <kbd>{t('shell.omnisearch.filter')}</kbd>
                             </div>
                           </div>
                         </div>
@@ -625,16 +628,16 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
           <div className="omnisearch-footer">
             <div className="omnisearch-footer-hints">
               <span className="omnisearch-footer-hint">
-                <kbd>↑</kbd> <kbd>↓</kbd> Navigate
+                <kbd>↑</kbd> <kbd>↓</kbd> {t('shell.omnisearch.navigate')}
               </span>
               <span className="omnisearch-footer-hint">
-                <kbd>↵</kbd> Select / Open
+                <kbd>↵</kbd> {t('shell.omnisearch.selectOpen')}
               </span>
               <span className="omnisearch-footer-hint">
-                <kbd>Esc</kbd> Close
+                <kbd>Esc</kbd> {t('shell.omnisearch.close')}
               </span>
             </div>
-            <span>Sparkkeep Omnisearch</span>
+            <span>{t('shell.omnisearch.brand')}</span>
           </div>
         </div>
       )}

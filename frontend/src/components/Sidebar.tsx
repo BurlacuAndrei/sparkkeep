@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tag } from '../types';
 import { Tag as TagIcon, Coffee, ChevronLeft } from 'lucide-react';
+import { useLocale } from '../i18n';
 
 interface SidebarProps {
   selectedTag: string;
@@ -17,6 +18,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   onToggleCollapse,
 }) => {
+  const { t } = useLocale();
+
   if (isCollapsed) {
     return (
       <div className="sidebar-collapse-container" style={{ width: 0 }}>
@@ -24,10 +27,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           type="button"
           className={`sidebar-vertical-tab ${selectedTag ? 'has-active-tag' : ''}`}
           onClick={onToggleCollapse}
-          title={selectedTag ? `Filtered by #${selectedTag}. Click to expand tags.` : 'Expand tags panel'}
+          title={selectedTag ? t('shell.sidebar.filteredBy', { tag: selectedTag }) : t('shell.sidebar.expand')}
         >
           <span className="tag-glyph">#</span>
-          <span className="tag-label">TAGS{selectedTag ? ` · ${selectedTag}` : ''}</span>
+          <span className="tag-label">{t('shell.sidebar.tagsTab')}{selectedTag ? ` · ${selectedTag}` : ''}</span>
         </button>
       </div>
     );
@@ -40,7 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span className="filter-title">
               <TagIcon size={13} strokeWidth={1.5} style={{ display: 'inline', marginRight: 5 }} />
-              Tags
+              {t('shell.sidebar.tags')}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {selectedTag && (
@@ -48,14 +51,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onClick={() => onTagSelect('')}
                   style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 11, cursor: 'pointer' }}
                 >
-                  Clear
+                  {t('common.clear')}
                 </button>
               )}
               <button
                 type="button"
                 className="sidebar-collapse-btn"
                 onClick={onToggleCollapse}
-                title="Collapse sidebar"
+                title={t('shell.sidebar.collapse')}
               >
                 <ChevronLeft size={16} strokeWidth={2} />
               </button>
@@ -63,18 +66,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div className="tag-cloud chips" id="rail-tags">
             {tags.length === 0 ? (
-              <span style={{ fontSize: 12, color: '#64748b' }}>No tags yet</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}>{t('shell.sidebar.noTags')}</span>
             ) : (
-              tags.map((t) => (
+              tags.map((tag) => (
                 <button
-                  key={t.name}
+                  key={tag.name}
                   type="button"
-                  className={`tag-chip chip ${selectedTag === t.name ? 'active' : ''}`}
-                  data-tag={t.name}
-                  onClick={() => onTagSelect(selectedTag === t.name ? '' : t.name)}
+                  className={`tag-chip chip ${selectedTag === tag.name ? 'active' : ''}`}
+                  data-tag={tag.name}
+                  onClick={() => onTagSelect(selectedTag === tag.name ? '' : tag.name)}
                 >
-                  <span>#{t.name}</span>
-                  <span className="count">{t.count}</span>
+                  <span>#{tag.name}</span>
+                  <span className="count">{tag.count}</span>
                 </button>
               ))
             )}
@@ -87,12 +90,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             target="_blank"
             rel="noopener noreferrer"
             className="sidebar-support-link"
-            title="Buy me a coffee on Ko-fi"
+            title={t('shell.sidebar.supportTitle')}
           >
             <div className="sidebar-support-icon">
               <Coffee size={14} strokeWidth={2} />
             </div>
-            <span className="sidebar-support-text">Buy me a coffee</span>
+            <span className="sidebar-support-text">{t('shell.sidebar.support')}</span>
           </a>
         </div>
       </aside>

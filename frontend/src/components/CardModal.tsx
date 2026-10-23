@@ -65,18 +65,17 @@ export const CardModal: React.FC<CardModalProps> = ({
   showToast,
   settings,
 }) => {
-  const [activeSettings, setActiveSettings] = useState<Settings | null>(settings || null);
+  // Settings arrive from the parent when it has them; otherwise fetch once.
+  const [fetchedSettings, setFetchedSettings] = useState<Settings | null>(null);
+  const activeSettings = settings !== undefined ? settings : fetchedSettings;
   const { t, tp } = useLocale();
 
   useEffect(() => {
-    if (settings !== undefined) {
-      setActiveSettings(settings);
-      return;
-    }
+    if (settings !== undefined) return;
     getSettings()
       .then((res) => {
         if (res?.ok && res.settings) {
-          setActiveSettings(res.settings);
+          setFetchedSettings(res.settings);
         }
       })
       .catch(() => {});

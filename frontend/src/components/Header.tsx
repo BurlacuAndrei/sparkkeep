@@ -4,6 +4,7 @@ import { Omnisearch } from './Omnisearch';
 import { Card, Tag, ViewMode, Settings as SettingsType } from '../types';
 import { SettingsTab } from './SettingsModal';
 import * as api from '../api';
+import { useLocale } from '../i18n';
 
 interface HeaderProps {
   viewMode: ViewMode;
@@ -30,6 +31,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectCard,
   onSelectTag,
 }) => {
+  const { t, tp } = useLocale();
   // Global keyboard shortcut to open new spark: 'c' or 'n'
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -103,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleSyncSink = async (sink: 'obsidian' | 'notion' | 'joplin') => {
     setSyncingSink(sink);
-    setSyncResults(prev => ({ ...prev, [sink]: { success: false, message: 'Syncing...' } }));
+    setSyncResults(prev => ({ ...prev, [sink]: { success: false, message: t('common.syncing') } }));
     try {
       let res;
       if (sink === 'obsidian') {
@@ -113,7 +115,7 @@ export const Header: React.FC<HeaderProps> = ({
       } else {
         res = await api.syncJoplin();
       }
-      const msg = `Synced ${res.written} notes`;
+      const msg = tp('shell.header.syncedNotes', res.written);
       setSyncResults(prev => ({ ...prev, [sink]: { success: true, message: `✅ ${msg}` } }));
     } catch (err: unknown) {
       const errMsg = api.getErrorMessage(err);
@@ -175,9 +177,9 @@ export const Header: React.FC<HeaderProps> = ({
   const getConfiguredSinks = (settings: SettingsType | null) => {
     if (!settings) return [];
     const sinks = [];
-    if (settings.obsidian_vault_path) sinks.push({ id: 'obsidian', label: 'Obsidian Vault', icon: BookOpenIcon, color: '#483699', autoExport: settings.obsidian_auto_export });
-    if (settings.notion_token && settings.notion_database_id) sinks.push({ id: 'notion', label: 'Notion Database', icon: Database, color: '#000000', autoExport: settings.notion_auto_export });
-    if ((settings.joplin_token || settings.joplin_email) && settings.joplin_base_url) sinks.push({ id: 'joplin', label: 'Joplin', icon: HardDrive, color: '#2e7d32', autoExport: settings.joplin_auto_export });
+    if (settings.obsidian_vault_path) sinks.push({ id: 'obsidian', label: t('shell.header.sinkObsidian'), icon: BookOpenIcon, color: '#483699', autoExport: settings.obsidian_auto_export });
+    if (settings.notion_token && settings.notion_database_id) sinks.push({ id: 'notion', label: t('shell.header.sinkNotion'), icon: Database, color: '#000000', autoExport: settings.notion_auto_export });
+    if ((settings.joplin_token || settings.joplin_email) && settings.joplin_base_url) sinks.push({ id: 'joplin', label: t('shell.header.sinkJoplin'), icon: HardDrive, color: '#2e7d32', autoExport: settings.joplin_auto_export });
     return sinks;
   };
 
@@ -185,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({
     // For now, we don't persist last sync time; show from syncResults or "Never"
     const result = syncResults[sink];
     if (result) return result.message;
-    return 'Never synced';
+    return t('shell.header.neverSynced');
   };
 
   return (
@@ -195,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div
           className="brand"
           onClick={() => onViewModeChange('boards')}
-          title="Sparkkeep (Execution Boards)"
+          title={t('shell.header.brandTitle')}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
@@ -210,15 +212,15 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="brand-title">sparkkeep</span>
         </div>
 
-        <nav className="nav-tabs" aria-label="Main Navigation">
+        <nav className="nav-tabs" aria-label={t('shell.header.navAria')}>
           <button
             type="button"
             className={`nav-tab ${viewMode === 'triage' ? 'active' : ''}`}
             onClick={() => onViewModeChange('triage')}
-            title="Idea Funnel & Triage Deck"
+            title={t('shell.header.triageTitle')}
           >
             <Zap size={13} strokeWidth={1.75} />
-            <span>Triage</span>
+            <span>{t('shell.header.triage')}</span>
             {typeof triageCount === 'number' && triageCount > 0 && (
               <span className="nav-tab-badge">
                 {triageCount}
@@ -229,30 +231,30 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             className={`nav-tab ${viewMode === 'boards' ? 'active' : ''}`}
             onClick={() => onViewModeChange('boards')}
-            title="Execution Boards"
+            title={t('shell.header.boardsTitle')}
           >
             <Layers size={13} strokeWidth={1.75} />
-            <span>Boards</span>
+            <span>{t('shell.header.boards')}</span>
           </button>
           <button
             id="digest-btn"
             type="button"
             className={`nav-tab ${viewMode === 'digest' ? 'active on' : ''}`}
             onClick={() => onViewModeChange(viewMode === 'digest' ? 'boards' : 'digest')}
-            title="Weekly Digest Timeline"
+            title={t('shell.header.digestTitle')}
           >
             <Calendar size={13} strokeWidth={1.75} />
-            <span>Digest</span>
+            <span>{t('shell.header.digest')}</span>
           </button>
           <button
             id="playbooks-btn"
             type="button"
             className={`nav-tab ${viewMode === 'playbooks' ? 'active' : ''}`}
             onClick={() => onViewModeChange('playbooks')}
-            title="Playbook Studio"
+            title={t('shell.header.playbooksTitle')}
           >
             <BookOpen size={13} strokeWidth={1.75} />
-            <span>Playbooks</span>
+            <span>{t('shell.header.playbooks')}</span>
           </button>
         </nav>
       </div>
@@ -278,8 +280,8 @@ export const Header: React.FC<HeaderProps> = ({
           target="_blank"
           rel="noopener noreferrer"
           className="btn-secondary icon-only-btn header-support-btn"
-          title="Buy me a coffee on Ko-fi"
-          aria-label="Buy me a coffee on Ko-fi"
+          title={t('shell.header.supportTitle')}
+          aria-label={t('shell.header.supportTitle')}
           style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <Coffee size={14} strokeWidth={1.75} />
@@ -291,8 +293,8 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             className={`btn-secondary icon-only-btn ${integrationsOpen ? 'active' : ''}`}
             onClick={handleToggleIntegrations}
-            title="Integrations & Sync"
-            aria-label="Integrations"
+            title={t('shell.header.integrationsTitle')}
+            aria-label={t('shell.header.integrations')}
             aria-expanded={integrationsOpen}
             aria-haspopup="true"
           >
@@ -323,7 +325,7 @@ export const Header: React.FC<HeaderProps> = ({
               role="menu"
             >
               {loadingIntegrations ? (
-                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-dim)' }}>Loading integrations…</div>
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-dim)' }}>{t('shell.header.integrationsLoading')}</div>
               ) : (
                 <>
                   {(() => {
@@ -332,15 +334,15 @@ export const Header: React.FC<HeaderProps> = ({
                       return (
                         <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-dim)' }}>
                           <Plug size={24} style={{ marginBottom: '8px', opacity: 0.5 }} />
-                          <div style={{ fontWeight: 500, marginBottom: '4px' }}>No Knowledge Sinks configured</div>
-                          <div style={{ fontSize: '12px', marginBottom: '12px' }}>Configure Obsidian, Notion, or Joplin in Settings → Integrations</div>
+                          <div style={{ fontWeight: 500, marginBottom: '4px' }}>{t('shell.header.noSinks')}</div>
+                          <div style={{ fontSize: '12px', marginBottom: '12px' }}>{t('shell.header.noSinksHint')}</div>
                           <button
                             type="button"
                             className="setup-btn-primary"
                             onClick={() => { setIntegrationsOpen(false); onOpenSettingsModal('integrations'); }}
                             style={{ fontSize: '12px', padding: '6px 12px' }}
                           >
-                            Open Settings → Integrations
+                            {t('shell.header.openIntegrations')}
                           </button>
                         </div>
                       );
@@ -371,7 +373,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 disabled={isToggling}
                                 style={{ width: '14px', height: '14px', accentColor: 'var(--accent)' }}
                               />
-                              <span>Auto-export on promote/complete</span>
+                              <span>{t('shell.header.autoExport')}</span>
                             </label>
                             <button
                               type="button"
@@ -383,12 +385,12 @@ export const Header: React.FC<HeaderProps> = ({
                               {isSyncing ? (
                                 <>
                                   <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />
-                                  Syncing…
+                                  {t('common.syncing')}
                                 </>
                               ) : (
                                 <>
                                   <RefreshCw size={11} />
-                                  Sync Now
+                                  {t('shell.header.syncNow')}
                                 </>
                               )}
                             </button>
@@ -417,10 +419,10 @@ export const Header: React.FC<HeaderProps> = ({
                   <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginTop: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                       <Rss size={16} style={{ color: 'var(--accent)' }} />
-                      <strong style={{ fontSize: '12px', color: 'var(--text-main)' }}>Outbox RSS Feed</strong>
+                      <strong style={{ fontSize: '12px', color: 'var(--text-main)' }}>{t('shell.header.outboxTitle')}</strong>
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '8px' }}>
-                      Authenticated feed for readers & automation (FreshRSS, n8n, Readwise Reader)
+                      {t('shell.header.outboxDesc')}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {!outboxToken && !loadingOutboxToken && (
@@ -431,14 +433,14 @@ export const Header: React.FC<HeaderProps> = ({
                           disabled={loadingOutboxToken}
                           style={{ fontSize: '12px', padding: '6px 10px', width: '100%', justifyContent: 'center' }}
                         >
-                          {loadingOutboxToken ? 'Loading…' : 'Generate / Load Feed Token'}
+                          {loadingOutboxToken ? t('common.loading') : t('shell.header.loadToken')}
                         </button>
                       )}
                       {outboxToken && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
                             <span style={{ fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
-                              Feed Token
+                              {t('shell.header.feedToken')}
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                               <code
@@ -450,8 +452,8 @@ export const Header: React.FC<HeaderProps> = ({
                                 type="button"
                                 className="btn-secondary"
                                 onClick={() => setShowOutboxToken(!showOutboxToken)}
-                                title={showOutboxToken ? 'Hide token' : 'Show token'}
-                                aria-label={showOutboxToken ? 'Hide feed token' : 'Show feed token'}
+                                title={showOutboxToken ? t('shell.header.hideToken') : t('shell.header.showToken')}
+                                aria-label={showOutboxToken ? t('shell.header.hideFeedToken') : t('shell.header.showFeedToken')}
                                 style={{ padding: '4px 6px', flexShrink: 0 }}
                               >
                                 {showOutboxToken ? <EyeOff size={12} /> : <Eye size={12} />}
@@ -460,8 +462,8 @@ export const Header: React.FC<HeaderProps> = ({
                                 type="button"
                                 className="btn-secondary"
                                 onClick={() => copyToClipboard(outboxToken)}
-                                title="Copy token"
-                                aria-label="Copy feed token"
+                                title={t('shell.header.copyToken')}
+                                aria-label={t('shell.header.copyFeedToken')}
                                 style={{ padding: '4px 6px', flexShrink: 0 }}
                               >
                                 <Copy size={12} />
@@ -471,7 +473,7 @@ export const Header: React.FC<HeaderProps> = ({
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
                             <span style={{ fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
-                              Feed URL
+                              {t('shell.header.feedUrl')}
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                               <code
@@ -484,8 +486,8 @@ export const Header: React.FC<HeaderProps> = ({
                                 type="button"
                                 className="btn-secondary"
                                 onClick={() => copyToClipboard(outboxFeedUrl)}
-                                title="Copy URL"
-                                aria-label="Copy feed URL"
+                                title={t('shell.header.copyUrl')}
+                                aria-label={t('shell.header.copyFeedUrl')}
                                 style={{ padding: '4px 6px', flexShrink: 0 }}
                               >
                                 <Globe size={12} />
@@ -503,12 +505,12 @@ export const Header: React.FC<HeaderProps> = ({
                             {regeneratingOutboxToken ? (
                               <>
                                 <RotateCcw size={11} style={{ animation: 'spin 1s linear infinite' }} />
-                                Regenerating…
+                                {t('shell.header.regenerating')}
                               </>
                             ) : (
                               <>
                                 <RotateCcw size={11} />
-                                Regenerate Token
+                                {t('shell.header.regenerate')}
                               </>
                             )}
                           </button>
@@ -526,8 +528,8 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           className="btn-secondary icon-only-btn"
           onClick={() => onOpenSettingsModal()}
-          title="Settings & Integrations"
-          aria-label="Settings"
+          title={t('shell.header.settingsTitle')}
+          aria-label={t('shell.header.settings')}
         >
           <Settings size={14} strokeWidth={1.75} />
         </button>
@@ -537,10 +539,10 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           className="btn-primary new-card-cta"
           onClick={onOpenNewCard}
-          title="Capture New Spark (C)"
+          title={t('shell.header.newSparkTitle')}
         >
           <Sparkles size={14} strokeWidth={2} />
-          <span>New Spark</span>
+          <span>{t('shell.header.newSpark')}</span>
         </button>
       </div>
 

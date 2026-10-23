@@ -1,4 +1,5 @@
 import { Card, Capture, Tag, DigestData, DigestSynthesisResult, ResearchItem, CardFilter, LLMProfileInput, Playbook, StepLibraryTemplate, UserProfile, PipelineMetrics, ResearchRule, QuietWindowConfig, ChannelInfo, Settings } from './types';
+import { translateCurrent } from './i18n';
 
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
@@ -22,7 +23,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
-  return 'An unexpected error occurred';
+  return translateCurrent('errors.unexpected');
 }
 
 export async function fetchCards(filter: CardFilter = {}): Promise<Card[]> {
@@ -184,7 +185,7 @@ export async function submitSetup(payload: { auth_token?: string; llm_base?: str
   });
   const data = await res.json();
   if (!res.ok || !data.ok) {
-    throw new Error(data.error || 'Failed to complete setup');
+    throw new Error(data.error || translateCurrent('errors.setupFailed'));
   }
   if (data.token) {
     localStorage.setItem(TOKEN_KEY, data.token);
@@ -200,7 +201,7 @@ export async function submitDemoSetup(passphrase?: string): Promise<{ ok: boolea
   });
   const data = await res.json();
   if (!res.ok || !data.ok) {
-    throw new Error(data.error || 'Failed to initialize demo mode');
+    throw new Error(data.error || translateCurrent('errors.demoFailed'));
   }
   if (data.token) {
     localStorage.setItem(TOKEN_KEY, data.token);
@@ -217,7 +218,7 @@ export async function downloadLibraryExport(format: 'json' | 'zip'): Promise<voi
     },
   });
   if (!res.ok) {
-    throw new Error(`Export failed: HTTP ${res.status}`);
+    throw new Error(translateCurrent('errors.exportFailed', { status: res.status }));
   }
   const blob = await res.blob();
   const downloadUrl = window.URL.createObjectURL(blob);

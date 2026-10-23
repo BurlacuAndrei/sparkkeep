@@ -769,7 +769,11 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
     }
   };
 
-  const bookmarkletCode = `javascript:(function(){const u=encodeURIComponent(window.location.href);const t=encodeURIComponent(document.title);fetch('${currentOrigin}/api/v1/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:window.location.href,text:document.title})}).then(r=>{if(r.ok){alert('⚡ Saved to Sparkkeep: '+document.title);}else{alert('Sparkkeep capture failed (HTTP '+r.status+')');}}).catch(e=>alert('Capture error: '+e));})();`;
+  // Alert text is translated at copy time; JSON.stringify keeps quotes safe in the payload.
+  const bookmarkletSaved = JSON.stringify(t('settings.integrations.bookmarklet.savedAlert'));
+  const bookmarkletFailed = JSON.stringify(t('settings.integrations.bookmarklet.failedAlert'));
+  const bookmarkletError = JSON.stringify(t('settings.integrations.bookmarklet.errorAlert'));
+  const bookmarkletCode = `javascript:(function(){const u=encodeURIComponent(window.location.href);const t=encodeURIComponent(document.title);fetch('${currentOrigin}/api/v1/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:window.location.href,text:document.title})}).then(r=>{if(r.ok){alert(${bookmarkletSaved}+': '+document.title);}else{alert(${bookmarkletFailed}+' (HTTP '+r.status+')');}}).catch(e=>alert(${bookmarkletError}+': '+e));})();`;
 
   const raycastScript = `#!/bin/bash
 

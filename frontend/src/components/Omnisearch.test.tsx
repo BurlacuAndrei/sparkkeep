@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Omnisearch } from './Omnisearch';
 import { Card, Tag } from '../types';
+import { LocaleProvider } from '../i18n';
+
+const renderOmnisearch = (ui: React.ReactElement) =>
+  render(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 vi.mock('../api', () => ({
   fetchCards: vi.fn().mockResolvedValue([]),
@@ -52,7 +56,7 @@ describe('Omnisearch Component & Search Layout', () => {
   };
 
   it('renders search input with magnifying glass icon and suggestion placeholder', () => {
-    const { container } = render(<Omnisearch {...defaultProps} />);
+    const { container } = renderOmnisearch(<Omnisearch {...defaultProps} />);
 
     const searchWrapper = container.querySelector('.search-wrapper');
     expect(searchWrapper).toBeTruthy();
@@ -70,7 +74,7 @@ describe('Omnisearch Component & Search Layout', () => {
   });
 
   it('opens popover results on focus and displays command items', () => {
-    render(<Omnisearch {...defaultProps} />);
+    renderOmnisearch(<Omnisearch {...defaultProps} />);
 
     const input = screen.getByPlaceholderText('Search briefings, tags, sparks, or commands…');
     fireEvent.focus(input);
@@ -81,7 +85,7 @@ describe('Omnisearch Component & Search Layout', () => {
   });
 
   it('shows clear button when query is entered and clears on click', async () => {
-    const { container } = render(<Omnisearch {...defaultProps} />);
+    const { container } = renderOmnisearch(<Omnisearch {...defaultProps} />);
 
     const input = screen.getByPlaceholderText('Search briefings, tags, sparks, or commands…') as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'Agent' } });
@@ -101,7 +105,7 @@ describe('Omnisearch Component & Search Layout', () => {
 
   it('invokes navigation callback when selecting a command from the popover', () => {
     const onViewModeChange = vi.fn();
-    render(<Omnisearch {...defaultProps} onViewModeChange={onViewModeChange} />);
+    renderOmnisearch(<Omnisearch {...defaultProps} onViewModeChange={onViewModeChange} />);
 
     const input = screen.getByPlaceholderText('Search briefings, tags, sparks, or commands…');
     fireEvent.focus(input);

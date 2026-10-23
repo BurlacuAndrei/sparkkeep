@@ -4,6 +4,13 @@ import { Sparkles, Shield, Cpu, ArrowRight, CheckCircle2, Lock, AlertCircle, Eye
 import * as api from '../api';
 import { ThemeSelector } from './ThemeSelector';
 import { useTheme } from '../context/ThemeContext';
+import { useLocale } from '../i18n';
+
+// Short names keep the review row compact ("Dark Mode", "System (Light)").
+const THEME_SHORT_KEYS = {
+  dark: 'shell.setup.review.themeDark',
+  light: 'shell.setup.review.themeLight',
+} as const;
 
 interface SetupWizardProps {
   onComplete: () => void;
@@ -11,6 +18,7 @@ interface SetupWizardProps {
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const { theme, resolvedTheme } = useTheme();
+  const { t } = useLocale();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [authToken, setAuthToken] = useState('');
   const [confirmToken, setConfirmToken] = useState('');
@@ -33,7 +41,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       await api.submitDemoSetup(authToken.trim() || undefined);
       onComplete();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to launch demo mode');
+      setError(err instanceof Error ? err.message : t('shell.setup.demoFailed'));
       setSubmitting(false);
     }
   };
@@ -41,15 +49,15 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const handleStep1Next = () => {
     setError(null);
     if (!authToken.trim()) {
-      setError('Please provide an access passphrase or master token.');
+      setError(t('shell.setup.auth.required'));
       return;
     }
     if (authToken.length < 6) {
-      setError('Access token must be at least 6 characters long.');
+      setError(t('shell.setup.auth.tooShort'));
       return;
     }
     if (authToken !== confirmToken) {
-      setError('Passphrases do not match.');
+      setError(t('shell.setup.auth.mismatch'));
       return;
     }
     setStep(2);
@@ -58,11 +66,11 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const handleStep2Next = () => {
     setError(null);
     if (!llmBase.trim()) {
-      setError('LLM API Base URL is required.');
+      setError(t('shell.setup.ai.baseUrlRequired'));
       return;
     }
     if (!llmModel.trim()) {
-      setError('Model Name is required.');
+      setError(t('shell.setup.ai.modelRequired'));
       return;
     }
     setStep(3);
@@ -128,32 +136,30 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           <div className="setup-logo-badge">
             <Sparkles className="setup-logo-icon" size={28} />
           </div>
-          <h1 className="setup-title">Welcome to Sparkkeep</h1>
-          <p className="setup-subtitle">
-            Configure your private self-hosted instance in 3 quick steps.
-          </p>
+          <h1 className="setup-title">{t('shell.setup.title')}</h1>
+          <p className="setup-subtitle">{t('shell.setup.subtitle')}</p>
         </div>
 
         {/* Progress Stepper */}
         <div className="setup-stepper">
           <div className={`step-item ${step >= 1 ? 'active' : ''} ${step > 1 ? 'done' : ''}`}>
             <div className="step-circle">{step > 1 ? <CheckCircle2 size={16} /> : '1'}</div>
-            <span className="step-label">Look & Auth</span>
+            <span className="step-label">{t('shell.setup.stepLookAuth')}</span>
           </div>
           <div className="step-line" />
           <div className={`step-item ${step >= 2 ? 'active' : ''} ${step > 2 ? 'done' : ''}`}>
             <div className="step-circle">{step > 2 ? <CheckCircle2 size={16} /> : '2'}</div>
-            <span className="step-label">AI Engine</span>
+            <span className="step-label">{t('shell.setup.stepAiEngine')}</span>
           </div>
           <div className="step-line" />
           <div className={`step-item ${step >= 3 ? 'active' : ''} ${step > 3 ? 'done' : ''}`}>
             <div className="step-circle">{step > 3 ? <CheckCircle2 size={16} /> : '3'}</div>
-            <span className="step-label">Integrations</span>
+            <span className="step-label">{t('shell.setup.stepIntegrations')}</span>
           </div>
           <div className="step-line" />
           <div className={`step-item ${step === 4 ? 'active' : ''}`}>
             <div className="step-circle">4</div>
-            <span className="step-label">Launch</span>
+            <span className="step-label">{t('shell.setup.stepLaunch')}</span>
           </div>
         </div>
 
@@ -172,8 +178,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             <div className="setup-section-intro">
               <Palette className="section-icon" size={20} />
               <div>
-                <h3>Visual Appearance</h3>
-                <p>Choose your workspace look. Your preference takes effect immediately.</p>
+                <h3>{t('shell.setup.visual.title')}</h3>
+                <p>{t('shell.setup.visual.desc')}</p>
               </div>
             </div>
 
@@ -194,10 +200,10 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: '13px', color: '#c084fc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Sparkles size={14} /> Quick Exploration Mode
+                  <Sparkles size={14} /> {t('shell.setup.demo.title')}
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>
-                  Explore Sparkkeep immediately with sample cards & deep research findings. No API keys required.
+                  {t('shell.setup.demo.desc')}
                 </div>
               </div>
               <button
@@ -217,25 +223,25 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                   whiteSpace: 'nowrap'
                 }}
               >
-                {submitting ? 'Launching...' : '⚡ Launch Demo'}
+                {submitting ? t('shell.setup.demo.launching') : t('shell.setup.demo.launch')}
               </button>
             </div>
 
             <div className="setup-section-intro">
               <Shield className="section-icon" size={20} />
               <div>
-                <h3>Master Access Token</h3>
-                <p>Create a password or token to protect your dashboard and API.</p>
+                <h3>{t('shell.setup.auth.title')}</h3>
+                <p>{t('shell.setup.auth.desc')}</p>
               </div>
             </div>
 
             <div className="setup-form-group">
-              <label htmlFor="auth-token-input">Master Passphrase / Token</label>
+              <label htmlFor="auth-token-input">{t('shell.setup.auth.passphraseLabel')}</label>
               <div className="setup-input-wrapper">
                 <input
                   id="auth-token-input"
                   type={showToken ? 'text' : 'password'}
-                  placeholder="Enter a secure passphrase..."
+                  placeholder={t('shell.setup.auth.passphrasePlaceholder')}
                   value={authToken}
                   onChange={(e) => setAuthToken(e.target.value)}
                   className="setup-input"
@@ -253,11 +259,11 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             </div>
 
             <div className="setup-form-group">
-              <label htmlFor="confirm-token-input">Confirm Passphrase</label>
+              <label htmlFor="confirm-token-input">{t('shell.setup.auth.confirmLabel')}</label>
               <input
                 id="confirm-token-input"
                 type={showToken ? 'text' : 'password'}
-                placeholder="Re-type your passphrase..."
+                placeholder={t('shell.setup.auth.confirmPlaceholder')}
                 value={confirmToken}
                 onChange={(e) => setConfirmToken(e.target.value)}
                 className="setup-input"
@@ -266,15 +272,13 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
             <div className="setup-info-box">
               <Lock size={16} />
-              <span>
-                This token is stored only in your local SQLite database. All sessions will authenticate against it.
-              </span>
+              <span>{t('shell.setup.auth.info')}</span>
             </div>
 
             <div className="setup-actions">
               <div />
               <button type="button" className="setup-btn-primary" onClick={handleStep1Next}>
-                Continue <ArrowRight size={16} />
+                {t('common.continue')} <ArrowRight size={16} />
               </button>
             </div>
           </div>
@@ -296,10 +300,10 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: '13px', color: '#c084fc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Sparkles size={14} /> Skip API Configuration
+                  <Sparkles size={14} /> {t('shell.setup.demo.skipTitle')}
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>
-                  Don't have an API key right now? Launch Demo Mode with pre-populated samples.
+                  {t('shell.setup.demo.skipDesc')}
                 </div>
               </div>
               <button
@@ -319,21 +323,21 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                   whiteSpace: 'nowrap'
                 }}
               >
-                {submitting ? 'Launching...' : '⚡ Launch Demo'}
+                {submitting ? t('shell.setup.demo.launching') : t('shell.setup.demo.launch')}
               </button>
             </div>
 
             <div className="setup-section-intro">
               <Cpu className="section-icon" size={20} />
               <div>
-                <h3>AI Model Integration (BYOK)</h3>
-                <p>Configure your AI API Base URL, Model Name, and API Key.</p>
+                <h3>{t('shell.setup.ai.title')}</h3>
+                <p>{t('shell.setup.ai.desc')}</p>
               </div>
             </div>
 
             {/* API Base URL */}
             <div className="setup-form-group">
-              <label htmlFor="llm-base-input">API Base URL</label>
+              <label htmlFor="llm-base-input">{t('shell.setup.ai.baseUrlLabel')}</label>
               <input
                 id="llm-base-input"
                 type="text"
@@ -346,20 +350,20 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
             {/* Model Name */}
             <div className="setup-form-group">
-              <label htmlFor="llm-model-input">Model Name</label>
+              <label htmlFor="llm-model-input">{t('shell.setup.ai.modelLabel')}</label>
               <input
                 id="llm-model-input"
                 type="text"
                 value={llmModel}
                 onChange={(e) => setLlmModel(e.target.value)}
                 className="setup-input"
-                placeholder="e.g. gpt-4o or llama-3.2"
+                placeholder={t('shell.setup.ai.modelPlaceholder')}
               />
             </div>
 
             {/* API Key */}
             <div className="setup-form-group">
-              <label htmlFor="llm-key-input">API Key (Optional for some local providers)</label>
+              <label htmlFor="llm-key-input">{t('shell.setup.ai.keyLabel')}</label>
               <div className="setup-input-wrapper">
                 <input
                   id="llm-key-input"
@@ -382,10 +386,10 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
             <div className="setup-actions">
               <button type="button" className="setup-btn-secondary" onClick={() => setStep(1)}>
-                Back
+                {t('common.back')}
               </button>
               <button type="button" className="setup-btn-primary" onClick={handleStep2Next}>
-                Continue <ArrowRight size={16} />
+                {t('common.continue')} <ArrowRight size={16} />
               </button>
             </div>
           </div>
@@ -397,8 +401,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             <div className="setup-section-intro">
               <Sparkles className="section-icon" size={20} />
               <div>
-                <h3>Capture Channels & Messengers (Optional)</h3>
-                <p>Capture links, audio notes, and receive briefings across your favorite chat apps.</p>
+                <h3>{t('shell.setup.channels.title')}</h3>
+                <p>{t('shell.setup.channels.desc')}</p>
               </div>
             </div>
 
@@ -423,14 +427,16 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Telegram Bot
+                    {t('shell.setup.channels.telegram')}
                   </span>
                   <span className={`settings-badge ${tgToken.trim() ? 'success' : 'neutral'}`} style={{ fontSize: '10px', padding: '1px 6px' }}>
-                    {tgToken.trim() ? 'Token Entered' : 'Direct Bot'}
+                    {tgToken.trim()
+                      ? t('shell.setup.channels.telegramTokenEntered')
+                      : t('shell.setup.channels.telegramDirect')}
                   </span>
                 </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                  Interactive inline buttons and instant voice note transcription
+                  {t('shell.setup.channels.telegramDesc')}
                 </span>
               </div>
 
@@ -444,14 +450,14 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Universal Inbound Webhook
+                    {t('shell.setup.channels.webhook')}
                   </span>
                   <span className="settings-badge neutral" style={{ fontSize: '10px', padding: '1px 6px' }}>
-                    Mobile Capture
+                    {t('shell.setup.channels.webhookBadge')}
                   </span>
                 </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                  iOS Shortcuts, Android Share Sheet, cURL &amp; automation platforms
+                  {t('shell.setup.channels.webhookDesc')}
                 </span>
               </div>
 
@@ -465,14 +471,14 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Discord &amp; Slack
+                    {t('shell.setup.channels.discord')}
                   </span>
                   <span className="settings-badge neutral" style={{ fontSize: '10px', padding: '1px 6px' }}>
-                    Team Webhook
+                    {t('shell.setup.channels.discordBadge')}
                   </span>
                 </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                  Server embeds and Block Kit cards in dedicated channels
+                  {t('shell.setup.channels.discordDesc')}
                 </span>
               </div>
 
@@ -486,40 +492,45 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Configure Later
+                    {t('shell.setup.channels.later')}
                   </span>
                   <span className="settings-badge success" style={{ fontSize: '10px', padding: '1px 6px' }}>
-                    Quick Start
+                    {t('shell.setup.channels.laterBadge')}
                   </span>
                 </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                  Setup any messenger anytime under Settings → Channels &amp; Alerts
+                  {t('shell.setup.channels.laterDesc')}
                 </span>
               </div>
             </div>
 
             {/* Telegram Bot Input */}
             <div className="setup-form-group">
-              <label htmlFor="tg-token-input">Telegram Bot Token (Optional)</label>
+              <label htmlFor="tg-token-input">{t('shell.setup.channels.tokenLabel')}</label>
               <input
                 id="tg-token-input"
                 type="password"
                 value={tgToken}
                 onChange={(e) => setTgToken(e.target.value)}
                 className="setup-input"
-                placeholder="Enter BotFather Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)"
+                placeholder={t('shell.setup.channels.tokenPlaceholder')}
               />
               <span className="setup-hint">
-                To capture via Telegram, create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{color: 'var(--accent)'}}>@BotFather</a>. You can also skip this and configure Telegram or the Universal Inbound Webhook later.
+                {t('shell.setup.channels.tokenHintBefore')}{' '}
+                <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{color: 'var(--accent)'}}>@BotFather</a>
+                {t('shell.setup.channels.tokenHintAfter')}
               </span>
             </div>
 
             <div className="setup-actions">
               <button type="button" className="setup-btn-secondary" onClick={() => setStep(2)}>
-                Back
+                {t('common.back')}
               </button>
               <button type="button" className="setup-btn-primary" onClick={handleStep3Next}>
-                {tgToken.trim() ? 'Continue with Telegram' : 'Skip & Continue'} <ArrowRight size={16} />
+                {tgToken.trim()
+                  ? t('shell.setup.channels.continueWithTelegram')
+                  : t('shell.setup.channels.skipContinue')}{' '}
+                <ArrowRight size={16} />
               </button>
             </div>
           </div>
@@ -531,41 +542,49 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             <div className="setup-section-intro">
               <CheckCircle2 className="section-icon success" size={20} />
               <div>
-                <h3>Ready to Launch</h3>
-                <p>Review your configuration before initializing your database.</p>
+                <h3>{t('shell.setup.review.title')}</h3>
+                <p>{t('shell.setup.review.desc')}</p>
               </div>
             </div>
 
             <div className="setup-summary-card">
               <div className="summary-row">
-                <span className="summary-key">Appearance Theme</span>
-                <span className="summary-value" style={{ textTransform: 'capitalize' }}>
-                  {theme === 'system' ? `System (${resolvedTheme})` : `${theme} Mode`}
+                <span className="summary-key">{t('shell.setup.review.theme')}</span>
+                <span className="summary-value">
+                  {theme === 'system'
+                    ? t('shell.setup.review.themeSystem', {
+                        theme: t(THEME_SHORT_KEYS[resolvedTheme]),
+                      })
+                    : t('shell.setup.review.themeMode', {
+                        theme: t(THEME_SHORT_KEYS[theme]),
+                      })}
                 </span>
               </div>
               <div className="summary-row">
-                <span className="summary-key">Access Protection</span>
-                <span className="summary-value badge-success">Enabled (Custom Passphrase)</span>
+                <span className="summary-key">{t('shell.setup.review.protection')}</span>
+                <span className="summary-value badge-success">{t('shell.setup.review.protectionValue')}</span>
               </div>
               <div className="summary-row">
-                <span className="summary-key">Base URL</span>
+                <span className="summary-key">{t('shell.setup.review.baseUrl')}</span>
                 <span className="summary-value code">{llmBase}</span>
               </div>
               <div className="summary-row">
-                <span className="summary-key">Selected Model</span>
+                <span className="summary-key">{t('shell.setup.review.model')}</span>
                 <span className="summary-value code">{llmModel}</span>
               </div>
               <div className="summary-row">
-                <span className="summary-key">API Key Provided</span>
-                <span className="summary-value">{llmKey ? 'Yes' : 'No'}</span>
+                <span className="summary-key">{t('shell.setup.review.apiKey')}</span>
+                <span className="summary-value">{llmKey ? t('common.yes') : t('common.no')}</span>
               </div>
               <div className="summary-row">
-                <span className="summary-key">Telegram Bot</span>
-                <span className="summary-value">{tgToken ? 'Configured' : 'Skipped'}</span>
+                <span className="summary-key">{t('shell.setup.review.telegram')}</span>
+                <span className="summary-value">
+                  {tgToken ? t('shell.setup.review.configured') : t('shell.setup.review.skipped')}
+                </span>
               </div>
               <div className="summary-row">
-                <span className="summary-key">Storage Location</span>
-                <span className="summary-value">Local SQLite DB (Persistent)</span>
+                <span className="summary-key">{t('shell.setup.review.storage')}</span>
+                <span className="summary-value">{t('shell.setup.review.storageValue')}</span>
               </div>
             </div>
 
@@ -576,7 +595,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 disabled={submitting}
                 onClick={() => setStep(3)}
               >
-                Back
+                {t('common.back')}
               </button>
               <button
                 type="button"
@@ -584,7 +603,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 disabled={submitting}
                 onClick={handleFinish}
               >
-                {submitting ? 'Initializing Sparkkeep...' : 'Complete Setup & Open Dashboard'}
+                {submitting
+                  ? t('shell.setup.review.initializing')
+                  : t('shell.setup.review.complete')}
               </button>
             </div>
           </div>

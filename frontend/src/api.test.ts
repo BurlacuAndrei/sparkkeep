@@ -1,11 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchCards, createCard, getErrorMessage, TOKEN_KEY } from './api';
 import type { Card } from './types';
+import { resetActiveLocale } from './i18n';
+import { en } from './i18n/en';
+import { translate } from './i18n/translate';
 
 describe('api', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    resetActiveLocale();
   });
 
   describe('fetchCards', () => {
@@ -146,11 +153,12 @@ describe('api', () => {
     });
 
     it('handles getErrorMessage for various error types', () => {
+      const fallback = translate(en, 'errors.unexpected');
       expect(getErrorMessage(new Error('Network failure'))).toBe('Network failure');
       expect(getErrorMessage('Raw string error')).toBe('Raw string error');
-      expect(getErrorMessage(null)).toBe('An unexpected error occurred');
-      expect(getErrorMessage(undefined)).toBe('An unexpected error occurred');
-      expect(getErrorMessage({ code: 500 })).toBe('An unexpected error occurred');
+      expect(getErrorMessage(null)).toBe(fallback);
+      expect(getErrorMessage(undefined)).toBe(fallback);
+      expect(getErrorMessage({ code: 500 })).toBe(fallback);
     });
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Sidebar } from './Sidebar';
+import { LocaleProvider } from '../i18n';
 
 describe('Sidebar', () => {
   const dummyTags = [
@@ -17,13 +18,15 @@ describe('Sidebar', () => {
     const onTagSelect = vi.fn();
 
     render(
-      <Sidebar
-        tags={dummyTags}
-        selectedTag=""
-        onTagSelect={onTagSelect}
-        isCollapsed={true}
-        onToggleCollapse={onToggleCollapse}
-      />
+      <LocaleProvider locale="en">
+        <Sidebar
+          tags={dummyTags}
+          selectedTag=""
+          onTagSelect={onTagSelect}
+          isCollapsed={true}
+          onToggleCollapse={onToggleCollapse}
+        />
+      </LocaleProvider>
     );
 
     const verticalTab = screen.getByRole('button', { name: /TAGS/i });
@@ -39,13 +42,15 @@ describe('Sidebar', () => {
     const onTagSelect = vi.fn();
 
     render(
-      <Sidebar
-        tags={dummyTags}
-        selectedTag="ai"
-        onTagSelect={onTagSelect}
-        isCollapsed={true}
-        onToggleCollapse={onToggleCollapse}
-      />
+      <LocaleProvider locale="en">
+        <Sidebar
+          tags={dummyTags}
+          selectedTag="ai"
+          onTagSelect={onTagSelect}
+          isCollapsed={true}
+          onToggleCollapse={onToggleCollapse}
+        />
+      </LocaleProvider>
     );
 
     const verticalTab = screen.getByRole('button', { name: /TAGS · ai/i });
@@ -58,13 +63,15 @@ describe('Sidebar', () => {
     const onTagSelect = vi.fn();
 
     render(
-      <Sidebar
-        tags={dummyTags}
-        selectedTag=""
-        onTagSelect={onTagSelect}
-        isCollapsed={false}
-        onToggleCollapse={onToggleCollapse}
-      />
+      <LocaleProvider locale="en">
+        <Sidebar
+          tags={dummyTags}
+          selectedTag=""
+          onTagSelect={onTagSelect}
+          isCollapsed={false}
+          onToggleCollapse={onToggleCollapse}
+        />
+      </LocaleProvider>
     );
 
     expect(screen.getByText('#ai')).toBeDefined();
@@ -75,5 +82,77 @@ describe('Sidebar', () => {
 
     fireEvent.click(collapseBtn);
     expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Sidebar Romanian locale', () => {
+  it('renders translated tag panel, clear action, and support link', () => {
+    const onToggleCollapse = vi.fn();
+    const onTagSelect = vi.fn();
+
+    render(
+      <LocaleProvider locale="ro">
+        <Sidebar
+          tags={[{ name: 'ai', count: 5 }]}
+          selectedTag="ai"
+          onTagSelect={onTagSelect}
+          isCollapsed={false}
+          onToggleCollapse={onToggleCollapse}
+        />
+      </LocaleProvider>
+    );
+
+    expect(screen.getByText('Etichete')).toBeDefined();
+    expect(screen.getByText('Golește')).toBeDefined();
+    expect(screen.getByTitle('Restrânge bara laterală')).toBeDefined();
+    expect(screen.getByText('Cumpără-mi o cafea')).toBeDefined();
+  });
+
+  it('renders the populated tag list in Romanian', () => {
+    render(
+      <LocaleProvider locale="ro">
+        <Sidebar
+          tags={[{ name: 'ai', count: 5 }]}
+          selectedTag=""
+          onTagSelect={vi.fn()}
+          isCollapsed={false}
+          onToggleCollapse={vi.fn()}
+        />
+      </LocaleProvider>
+    );
+
+    expect(screen.getByText('#ai')).toBeDefined();
+  });
+
+  it('renders the empty state in Romanian', () => {
+    render(
+      <LocaleProvider locale="ro">
+        <Sidebar
+          tags={[]}
+          selectedTag=""
+          onTagSelect={vi.fn()}
+          isCollapsed={false}
+          onToggleCollapse={vi.fn()}
+        />
+      </LocaleProvider>
+    );
+
+    expect(screen.getByText('Încă nicio etichetă')).toBeDefined();
+  });
+
+  it('renders the collapsed tab in Romanian', () => {
+    render(
+      <LocaleProvider locale="ro">
+        <Sidebar
+          tags={[]}
+          selectedTag=""
+          onTagSelect={vi.fn()}
+          isCollapsed={true}
+          onToggleCollapse={vi.fn()}
+        />
+      </LocaleProvider>
+    );
+
+    expect(screen.getByRole('button', { name: /ETICHETE/i })).toBeDefined();
   });
 });

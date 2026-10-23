@@ -14,6 +14,7 @@ import type {
   PluralBaseKey,
   TranslateFn,
   TranslatePluralFn,
+  TranslationKey,
   TranslationVars,
 } from './types';
 
@@ -89,6 +90,21 @@ export function formatDate(value: Date | string | number, locale: Locale): strin
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
+/**
+ * Locale for code that runs outside React (api.ts error fallbacks).
+ * Seeded from detection and kept in sync by `LocaleProvider`.
+ */
+let activeLocale: Locale = detectLocale();
+
+/** Test helper: drop the locale a rendered provider may have left behind. */
+export function resetActiveLocale(): void {
+  activeLocale = detectLocale();
+}
+
+export function translateCurrent(key: TranslationKey, vars?: TranslationVars): string {
+  return translate(catalogs[activeLocale], key, vars);
+}
+
 export interface LocaleProviderProps {
   children: ReactNode;
   /** Initial locale, overriding detection. */
@@ -96,15 +112,25 @@ export interface LocaleProviderProps {
 }
 
 export function LocaleProvider({ children, locale: initialLocale }: LocaleProviderProps) {
-  const [locale, setLocaleState] = useState<Locale>(() => initialLocale ?? detectLocale());
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    const initial = initialLocale ?? detectLocale();
+    activeLocale = initial;
+    return initial;
+  });
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
       document.documentElement.lang = locale;
     }
+    activeLocale = locale;
+    // Reset on unmount so module state cannot leak into the next test or mount.
+    return () => {
+      resetActiveLocale();
+    };
   }, [locale]);
 
   const setLocale = useCallback((next: Locale) => {
+    activeLocale = next;
     setLocaleState(next);
     try {
       localStorage.setItem(LOCALE_STORAGE_KEY, next);

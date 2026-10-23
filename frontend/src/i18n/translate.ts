@@ -46,15 +46,17 @@ export function translate(
 }
 
 /**
- * Plural category for a count. Romanian groups 2..19 separately ("carduri"),
- * everything else uses the "other" form ("de carduri"). English only splits 1.
+ * Plural category for a count. Romanian puts 0 and every count whose last two
+ * digits are 1..19 in the "few" form ("0 carduri", "101 carduri"), everything
+ * else uses "other" ("120 de carduri"); 1 keeps its own form. English only
+ * splits 1.
  */
 export function pluralCategory(locale: Locale, count: number): PluralCategory {
   const n = Math.abs(count);
   if (locale === 'ro') {
     if (n === 1) return 'one';
     const mod100 = n % 100;
-    if (mod100 >= 2 && mod100 <= 19) return 'few';
+    if (n === 0 || (mod100 >= 1 && mod100 <= 19)) return 'few';
     return 'other';
   }
   return n === 1 ? 'one' : 'other';

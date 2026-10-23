@@ -13,13 +13,15 @@ import { LockScreen } from './components/LockScreen';
 import { Bell } from 'lucide-react';
 import { CardActionsProvider } from './context/CardActionsContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { LocaleProvider } from './i18n';
+import { LocaleProvider, useLocale } from './i18n';
+import { statusLabel } from './utils/cardEnumLabels';
 
 const SettingsModal = React.lazy(() => import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal })));
 const CardModal = React.lazy(() => import('./components/CardModal').then((m) => ({ default: m.CardModal })));
 const NewCardModal = React.lazy(() => import('./components/NewCardModal').then((m) => ({ default: m.NewCardModal })));
 
 function AppContent() {
+  const { t, tp } = useLocale();
   const [cards, setCards] = useState<Card[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [digest, setDigest] = useState<DigestData | null>(null);
@@ -193,10 +195,10 @@ function AppContent() {
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('captured') !== 'true') return;
     // oxlint-disable-next-line react/set-state-in-effect
-    showToast('Captured new spark from Share Sheet!');
+    showToast(t('shell.toasts.capturedFromShare'));
     window.history.replaceState({}, '', window.location.pathname);
     reloadAll();
-  }, [showToast, reloadAll]);
+  }, [showToast, reloadAll, t]);
 
   // Card status change with 5-second undo support
   const handleStatusChange = async (id: number, newStatus: string) => {
@@ -206,17 +208,20 @@ function AppContent() {
       await api.updateCard(id, { status: newStatus as any });
       reloadAll();
       if (prevStatus && prevStatus !== newStatus) {
-        showToast(`Moved card #${id} → ${newStatus}`, async () => {
-          try {
-            await api.updateCard(id, { status: prevStatus as any });
-            reloadAll();
-            showToast(`Reverted card #${id} back to ${prevStatus}`);
-          } catch (err: unknown) {
-            showToast(api.getErrorMessage(err));
+        showToast(
+          t('cards.board.moved', { id, label: statusLabel(t, newStatus) }),
+          async () => {
+            try {
+              await api.updateCard(id, { status: prevStatus as any });
+              reloadAll();
+              showToast(t('shell.toasts.reverted', { id, status: statusLabel(t, prevStatus) }));
+            } catch (err: unknown) {
+              showToast(api.getErrorMessage(err));
+            }
           }
-        });
+        );
       } else {
-        showToast(`Updated card #${id} → ${newStatus}`);
+        showToast(t('shell.toasts.updated', { id, status: statusLabel(t, newStatus) }));
       }
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
@@ -227,8 +232,11 @@ function AppContent() {
   const handleResearch = async (id: number, playbookId?: number) => {
     try {
       const res = await api.triggerResearch(id, playbookId);
-      const pbName = res.playbook?.name ? ` with "${res.playbook.name}"` : '';
-      showToast(`Research queued for card #${id}${pbName}`);
+      showToast(
+        res.playbook?.name
+          ? t('shell.toasts.researchQueuedWithPlaybook', { id, playbook: res.playbook.name })
+          : t('research.queued', { id })
+      );
       reloadAll();
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
@@ -239,7 +247,7 @@ function AppContent() {
   const handleRetry = async (id: number) => {
     try {
       const updated = await api.retryCard(id);
-      showToast(`Retried extraction for card #${id}`);
+      showToast(t('shell.toasts.retried', { id }));
       reloadAll();
       if (selectedCard && selectedCard.id === id && updated) {
         setSelectedCard(updated);
@@ -256,9 +264,9 @@ function AppContent() {
       const cardIds = res.card_ids || res.cards || [];
       reloadAll();
       if (res.discarded) {
-        showToast('🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance.');
+        showToast(t('shell.toasts.discarded'));
       } else if (cardIds.length > 0) {
-        showToast(`✨ Spark captured & synthesized (${cardIds.length} card${cardIds.length > 1 ? 's' : ''})!`);
+        showToast(tp('shell.toasts.captured', cardIds.length));
         try {
           const newCard = await api.fetchCard(cardIds[0]);
           setSelectedCard(newCard);
@@ -266,7 +274,7 @@ function AppContent() {
           // Ignore if immediate fetch fails
         }
       } else {
-        showToast('Link recognized! (Already captured or merged into existing card)');
+        showToast(t('shell.toasts.linkRecognized'));
       }
       return cardIds;
     } catch (err: unknown) {
@@ -280,7 +288,7 @@ function AppContent() {
   const handleCreateCard = async (newCard: Partial<Card>) => {
     try {
       await api.createCard(newCard);
-      showToast('Spark captured successfully!');
+      showToast(t('shell.toasts.created'));
       reloadAll();
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
@@ -291,7 +299,7 @@ function AppContent() {
   const handleUpdateCard = async (id: number, patch: Partial<Card>) => {
     try {
       await api.updateCard(id, patch);
-      showToast(`Saved changes to card #${id}`);
+      showToast(t('shell.toasts.saved', { id }));
       reloadAll();
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
@@ -302,7 +310,7 @@ function AppContent() {
   const handleDeleteCard = async (id: number) => {
     try {
       await api.deleteCard(id);
-      showToast(`Deleted card #${id}`);
+      showToast(t('shell.toasts.deleted', { id }));
       setSelectedCard(null);
       reloadAll();
     } catch (err: unknown) {
@@ -506,7 +514,7 @@ function AppContent() {
                 cursor: 'pointer',
               }}
             >
-              Undo
+              {t('common.undo')}
             </button>
           )}
         </div>
