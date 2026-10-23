@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { ThemeSelector } from './ThemeSelector';
 import { ThemeProvider } from '../context/ThemeContext';
+import { LocaleProvider } from '../i18n';
+
+const render = (ui: ReactElement) => rtlRender(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 describe('ThemeSelector', () => {
   beforeEach(() => {
@@ -29,8 +33,7 @@ describe('ThemeSelector', () => {
       </ThemeProvider>
     );
 
-    expect(screen.getByRole('radiogroup', { name: 'Interface theme selector' })).toBeDefined();
-    expect(screen.getByRole('radio', { name: /Dark Mode/i })).toBeDefined();
+    expect(screen.getByRole('radiogroup', { name: 'Interface theme selector' })).toBeDefined();    expect(screen.getByRole('radio', { name: /Dark Mode/i })).toBeDefined();
     expect(screen.getByRole('radio', { name: /Light Mode/i })).toBeDefined();
     expect(screen.getByRole('radio', { name: /System Default/i })).toBeDefined();
   });

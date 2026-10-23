@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { UserProfileTab } from './UserProfileTab';
 import { PROFILE_ARCHETYPES } from './constants';
+import { LocaleProvider } from '../../i18n';
+
+const render = (ui: ReactElement) => rtlRender(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 describe('UserProfileTab Persona Archetypes & Customization', () => {
   const defaultProps = {
@@ -25,8 +29,13 @@ describe('UserProfileTab Persona Archetypes & Customization', () => {
     render(<UserProfileTab {...defaultProps} />);
 
     expect(screen.getByText(/Starter Archetypes \/ Domain Presets/i)).toBeDefined();
-    for (const arch of PROFILE_ARCHETYPES) {
-      expect(screen.getByText(arch.badge)).toBeDefined();
+    for (const badge of [
+      '🚀 Founder / Operator',
+      '📈 Finance & Markets',
+      '🌾 AgTech & Bioeconomy',
+      '⚡ Systems & AI',
+    ]) {
+      expect(screen.getByText(badge)).toBeDefined();
     }
   });
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SetupWizard } from './SetupWizard';
 import { ThemeProvider } from '../context/ThemeContext';
+import { LocaleProvider } from '../i18n';
 import * as api from '../api';
 
 vi.mock('../api', async () => {
@@ -21,7 +22,9 @@ describe('SetupWizard', () => {
   const renderWizard = (onComplete = vi.fn()) => {
     return render(
       <ThemeProvider defaultTheme="dark">
-        <SetupWizard onComplete={onComplete} />
+        <LocaleProvider locale="en">
+          <SetupWizard onComplete={onComplete} />
+        </LocaleProvider>
       </ThemeProvider>
     );
   };

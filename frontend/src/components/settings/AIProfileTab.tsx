@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import * as api from '../../api';
 import { LLMProfile, LLMProfileInput } from '../../types';
+import { useLocale } from '../../i18n';
 import { CustomSelect } from '../CustomSelect';
 import {
   ROLE_DEFINITIONS,
@@ -50,6 +51,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
   onError,
   onDirtyChange,
 }) => {
+  const { t, formatNumber } = useLocale();
   // Add/Edit Profile Form state
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
@@ -119,7 +121,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
           is_default: p.id === profile.id,
         }))
       );
-      showToast(`Switched active default model to "${profile.name || profile.model}".`);
+      showToast(t('settings.ai.toast.switchedDefault', { name: profile.name || profile.model }));
       onDirtyChange?.();
     } catch (err: unknown) {
       if (onError) onError(api.getErrorMessage(err));
@@ -130,7 +132,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
 
   const handleDeleteProfile = async (profile: LLMProfile) => {
     if (profile.is_default) {
-      if (onError) onError('Cannot delete the active default model. Set another model as default first.');
+      if (onError) onError(t('settings.validation.cannotDeleteDefault'));
       return;
     }
     if (onError) onError(null);
@@ -159,7 +161,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
         llm_roles: newRoles,
       });
       setProfiles(remaining);
-      showToast(`Removed model "${profile.name || profile.model}".`);
+      showToast(t('settings.ai.toast.removed', { name: profile.name || profile.model }));
       onDirtyChange?.();
     } catch (err: unknown) {
       if (onError) onError(api.getErrorMessage(err));
@@ -180,7 +182,11 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
     try {
       await api.patchSettings({ llm_roles: newRoles });
       const roleDef = ROLE_DEFINITIONS.find((r) => r.key === roleKey);
-      showToast(`Assigned model for ${roleDef ? roleDef.label : roleKey}.`);
+      showToast(
+        t('settings.ai.toast.assignedRole', {
+          role: roleDef ? t(roleDef.labelKey) : roleKey,
+        })
+      );
       onDirtyChange?.();
     } catch (err: unknown) {
       if (onError) onError(api.getErrorMessage(err));
@@ -197,7 +203,12 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
     try {
       await api.patchSettings({ llm_token_caps: newCaps });
       const roleDef = ROLE_DEFINITIONS.find((r) => r.key === roleKey);
-      showToast(`Updated token cap for ${roleDef ? roleDef.label : roleKey} to ${validCap}.`);
+      showToast(
+        t('settings.ai.toast.tokenCapUpdated', {
+          role: roleDef ? t(roleDef.labelKey) : roleKey,
+          cap: validCap,
+        })
+      );
       onDirtyChange?.();
     } catch (err: unknown) {
       if (onError) onError(api.getErrorMessage(err));
@@ -212,11 +223,11 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
     const trimmedKey = formKey.trim();
 
     if (!trimmedBase) {
-      setFormError('API Base URL is required.');
+      setFormError(t('settings.validation.baseUrlRequired'));
       return;
     }
     if (!trimmedModel) {
-      setFormError('Model name is required.');
+      setFormError(t('settings.validation.modelRequired'));
       return;
     }
 
@@ -279,7 +290,11 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
 
       setIsFormOpen(false);
       setEditingProfileId(null);
-      showToast(editingProfileId ? `Updated model "${trimmedName}".` : `Added model "${trimmedName}".`);
+      showToast(
+        editingProfileId
+          ? t('settings.ai.toast.updated', { name: trimmedName })
+          : t('settings.ai.toast.added', { name: trimmedName })
+      );
       onDirtyChange?.();
     } catch (err: unknown) {
       setFormError(api.getErrorMessage(err));
@@ -295,10 +310,10 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
         <div className="settings-status-card">
           <div className="settings-status-info">
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="settings-status-title">Active AI Provider</span>
+              <span className="settings-status-title">{t('settings.ai.status.title')}</span>
               {defaultProfile && (
                 <span className="llm-badge-default">
-                  <Sparkles size={11} /> DEFAULT
+                  <Sparkles size={11} /> {t('settings.ai.status.defaultBadge')}
                 </span>
               )}
             </div>
@@ -309,17 +324,17 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                   <span style={{ fontFamily: 'var(--font-mono)' }}>{defaultProfile.model}</span>
                 </>
               ) : (
-                'No default model configured'
+                t('settings.ai.status.noDefault')
               )}
             </span>
           </div>
           <span className={`settings-badge ${defaultProfile?.has_key ? 'success' : 'neutral'}`}>
             {defaultProfile?.has_key ? (
               <>
-                <CheckCircle2 size={12} /> Key Configured
+                <CheckCircle2 size={12} /> {t('settings.ai.status.keyConfigured')}
               </>
             ) : (
-              'No Key / Local'
+              t('settings.ai.status.noKey')
             )}
           </span>
         </div>
@@ -328,7 +343,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
         <div className="llm-header-row">
           <div className="llm-header-title">
             <Server size={16} />
-            <span>Configured Models</span>
+            <span>{t('settings.ai.models.title')}</span>
             <span className="llm-count-badge">{profiles.length}</span>
           </div>
           {!isFormOpen && (
@@ -338,7 +353,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
               onClick={handleOpenAddForm}
             >
               <Plus size={14} />
-              <span>Add Model</span>
+              <span>{t('settings.ai.models.add')}</span>
             </button>
           )}
         </div>
@@ -348,7 +363,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
           <div className="llm-form-card">
             <div className="llm-form-header">
               <span className="llm-form-title">
-                {editingProfileId ? 'Edit Model Profile' : 'Add Model Profile'}
+                {editingProfileId ? t('settings.ai.form.editTitle') : t('settings.ai.form.addTitle')}
               </span>
               <button
                 type="button"
@@ -358,7 +373,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                   setEditingProfileId(null);
                   setFormError(null);
                 }}
-                aria-label="Cancel"
+                aria-label={t('common.cancel')}
               >
                 <X size={16} />
               </button>
@@ -373,7 +388,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
 
             {/* Preset Templates */}
             <div className="setup-form-group">
-              <label htmlFor="ai-preset-select">Provider Preset Template</label>
+              <label htmlFor="ai-preset-select">{t('settings.ai.form.preset')}</label>
               <CustomSelect
                 id="ai-preset-select"
                 value={selectedPreset}
@@ -385,24 +400,24 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                   value: preset.label,
                   label: preset.label,
                 }))}
-                ariaLabel="Provider Preset Template"
+                ariaLabel={t('settings.ai.form.preset')}
               />
             </div>
 
             <div className="setup-form-group">
-              <label htmlFor="llm-form-name">Profile Display Name</label>
+              <label htmlFor="llm-form-name">{t('settings.ai.form.name')}</label>
               <input
                 id="llm-form-name"
                 type="text"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 className="setup-input"
-                placeholder="e.g. OpenAI GPT-4o, Ollama Local"
+                placeholder={t('settings.ai.form.namePlaceholder')}
               />
             </div>
 
             <div className="setup-form-group">
-              <label htmlFor="llm-form-base">API Base URL</label>
+              <label htmlFor="llm-form-base">{t('settings.ai.form.base')}</label>
               <input
                 id="llm-form-base"
                 type="text"
@@ -415,21 +430,22 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
             </div>
 
             <div className="setup-form-group">
-              <label htmlFor="llm-form-model">Model Name</label>
+              <label htmlFor="llm-form-model">{t('settings.ai.form.model')}</label>
               <input
                 id="llm-form-model"
                 type="text"
                 value={formModel}
                 onChange={(e) => setFormModel(e.target.value)}
                 className="setup-input"
-                placeholder="e.g. gpt-4o or llama-3.3-70b-versatile"
+                placeholder={t('settings.ai.form.modelPlaceholder')}
                 required
               />
             </div>
 
             <div className="setup-form-group">
               <label htmlFor="llm-form-key">
-                API Key {formHasKey ? '(Leave blank to retain active key)' : '(Optional for local endpoints)'}
+                {t('settings.ai.form.apiKey')}{' '}
+                {formHasKey ? t('settings.ai.form.keyRetain') : t('settings.ai.form.keyOptional')}
               </label>
               <div className="setup-input-wrapper">
                 <input
@@ -438,13 +454,15 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                   value={formKey}
                   onChange={(e) => setFormKey(e.target.value)}
                   className="setup-input"
-                  placeholder={formHasKey ? '•••••••••••••••• (Encrypted in SQLite)' : 'sk-...'}
+                  placeholder={formHasKey ? t('settings.ai.form.keyPlaceholderEncrypted') : 'sk-...'}
                 />
                 <button
                   type="button"
                   className="setup-eye-btn"
                   onClick={() => setFormShowKey(!formShowKey)}
-                  aria-label={formShowKey ? 'Hide API key' : 'Show API key'}
+                  aria-label={
+                    formShowKey ? t('common.hideCredential') : t('common.showCredential')
+                  }
                   tabIndex={-1}
                 >
                   {formShowKey ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -459,7 +477,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                 onChange={(e) => setFormIsDefault(e.target.checked)}
                 disabled={editingProfileId ? profiles.find(p => p.id === editingProfileId)?.is_default : false}
               />
-              <span>Make this the active default model</span>
+              <span>{t('settings.ai.form.setDefault')}</span>
             </label>
 
             <div className="llm-form-actions">
@@ -473,7 +491,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                 }}
                 disabled={savingForm}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -482,7 +500,13 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                 disabled={savingForm}
               >
                 <Save size={14} />
-                <span>{savingForm ? 'Saving...' : editingProfileId ? 'Update Model' : 'Save Model'}</span>
+                <span>
+                  {savingForm
+                    ? t('common.saving')
+                    : editingProfileId
+                    ? t('settings.ai.form.update')
+                    : t('settings.ai.form.save')}
+                </span>
               </button>
             </div>
           </div>
@@ -492,7 +516,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
         <div className="llm-profiles-list">
           {profiles.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)', border: '1px dashed var(--border-subtle)', borderRadius: '10px' }}>
-              No LLM profiles configured yet. Click "Add Model" above to get started.
+              {t('settings.ai.empty')}
             </div>
           ) : (
             profiles.map((profile) => (
@@ -505,11 +529,12 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                     <span className="llm-profile-name">{profile.name || profile.model}</span>
                     {profile.is_default && (
                       <span className="llm-badge-default">
-                        <Sparkles size={11} /> DEFAULT
+                        <Sparkles size={11} /> {t('settings.ai.status.defaultBadge')}
                       </span>
                     )}
                     <span className={`llm-badge-key ${profile.has_key ? 'has-key' : ''}`}>
-                      <Lock size={10} /> {profile.has_key ? 'Key Configured' : 'No Key / Local'}
+                      <Lock size={10} />{' '}
+                      {profile.has_key ? t('settings.ai.status.keyConfigured') : t('settings.ai.status.noKey')}
                     </span>
                   </div>
                   <div className="llm-profile-meta">
@@ -527,10 +552,10 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                       className="btn-set-default"
                       onClick={() => handleSetDefault(profile)}
                       disabled={actionLoading !== null}
-                      title="Set as active default model"
+                      title={t('settings.ai.actions.setDefaultTitle')}
                     >
                       <Star size={13} />
-                      <span>Set as Default</span>
+                      <span>{t('settings.ai.actions.setDefault')}</span>
                     </button>
                   )}
 
@@ -538,9 +563,9 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                     type="button"
                     className="btn-icon-action"
                     onClick={() => handleEditProfile(profile)}
-                    title="Edit profile"
+                    title={t('settings.ai.actions.edit')}
                     disabled={actionLoading !== null}
-                    aria-label={`Edit ${profile.name}`}
+                    aria-label={t('settings.ai.actions.editAria', { name: profile.name })}
                   >
                     <Pencil size={14} />
                   </button>
@@ -550,9 +575,9 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                       type="button"
                       className="btn-icon-action delete"
                       onClick={() => handleDeleteProfile(profile)}
-                      title="Delete profile"
+                      title={t('settings.ai.actions.delete')}
                       disabled={actionLoading !== null}
-                      aria-label={`Delete ${profile.name}`}
+                      aria-label={t('settings.ai.actions.deleteAria', { name: profile.name })}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -561,8 +586,8 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                       type="button"
                       className="btn-icon-action"
                       disabled
-                      title="Active default model cannot be deleted"
-                      aria-label="Active default model cannot be deleted"
+                      title={t('settings.ai.actions.cannotDelete')}
+                      aria-label={t('settings.ai.actions.cannotDelete')}
                     >
                       <Trash2 size={14} style={{ opacity: 0.3 }} />
                     </button>
@@ -578,11 +603,11 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
           <div className="llm-header-row" style={{ marginBottom: '8px' }}>
             <div className="llm-header-title">
               <Network size={16} />
-              <span>Use for (Role Routing)</span>
+              <span>{t('settings.ai.roles.title')}</span>
             </div>
           </div>
           <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '0 0 12px 0', lineHeight: 1.5 }}>
-            Assign different LLM models to each pipeline role. Unassigned roles fall back to the default model.
+            {t('settings.ai.roles.desc')}
           </p>
 
           <div className="llm-roles-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -592,29 +617,29 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                 <div key={role.key} className="pref-item-card">
                   <div className="pref-item-text" style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span className="pref-item-title">{role.label}</span>
+                      <span className="pref-item-title">{t(role.labelKey)}</span>
                       <span
                         style={{
                           fontSize: '11px',
                           fontWeight: 600,
                           padding: '1px 6px',
                           borderRadius: '4px',
-                          backgroundColor: role.hint.includes('strongest')
+                          backgroundColor: role.isStrong
                             ? 'rgba(234, 179, 8, 0.15)'
                             : 'rgba(16, 185, 129, 0.15)',
-                          color: role.hint.includes('strongest')
+                          color: role.isStrong
                             ? 'var(--accent-amber, #eab308)'
                             : 'var(--accent-emerald, #10b981)',
-                          border: role.hint.includes('strongest')
+                          border: role.isStrong
                             ? '1px solid rgba(234, 179, 8, 0.3)'
                             : '1px solid rgba(16, 185, 129, 0.3)',
                         }}
                       >
-                        {role.hint}
+                        {t(role.hintKey)}
                       </span>
                     </div>
                     <span className="pref-item-desc" style={{ marginTop: '3px' }}>
-                      {role.description}
+                      {t(role.descriptionKey)}
                     </span>
                   </div>
 
@@ -625,15 +650,20 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                       options={[
                         {
                           value: '',
-                          label: `Default (${defaultProfile?.name || defaultProfile?.model || 'Active Default'})`,
+                          label: t('settings.ai.roles.defaultOption', {
+                            name:
+                              defaultProfile?.name ||
+                              defaultProfile?.model ||
+                              t('settings.ai.roles.defaultActive'),
+                          }),
                         },
                         ...profiles.map((p) => ({
                           value: p.id,
-                          label: `${p.name || p.model}${p.is_default ? ' (Default)' : ''}`,
+                          label: `${p.name || p.model}${p.is_default ? ` ${t('settings.ai.roles.modelDefaultSuffix')}` : ''}`,
                         })),
                       ]}
                       disabled={actionLoading !== null}
-                      ariaLabel={`Select model for ${role.label}`}
+                      ariaLabel={t('settings.ai.roles.selectAria', { role: t(role.labelKey) })}
                       size="sm"
                     />
                   </div>
@@ -648,11 +678,11 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
           <div className="llm-header-row" style={{ marginBottom: '8px' }}>
             <div className="llm-header-title">
               <Sliders size={16} />
-              <span>Token Caps (Max Output Tokens)</span>
+              <span>{t('settings.ai.tokenCaps.title')}</span>
             </div>
           </div>
           <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '0 0 12px 0', lineHeight: 1.5 }}>
-            Limit maximum generated tokens per inference call for each role to prevent runaway cost and ensure reasoning models have adequate headroom.
+            {t('settings.ai.tokenCaps.desc')}
           </p>
 
           <div className="llm-roles-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -663,13 +693,13 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                 <div key={`cap-${role.key}`} className="pref-item-card">
                   <div className="pref-item-text" style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className="pref-item-title">{role.label}</span>
+                      <span className="pref-item-title">{t(role.labelKey)}</span>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Default: {defaultCap.toLocaleString()} tokens
+                        {t('settings.ai.tokenCaps.default', { count: formatNumber(defaultCap) })}
                       </span>
                     </div>
                     <span className="pref-item-desc" style={{ marginTop: '2px' }}>
-                      Max tokens allowed for {role.label.toLowerCase()} requests
+                      {t('settings.ai.tokenCaps.perRole', { role: t(role.labelKey) })}
                     </span>
                   </div>
 
@@ -688,9 +718,9 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
                       }}
                       className="setup-input"
                       style={{ width: '110px', textAlign: 'right', padding: '6px 10px', fontSize: '13px' }}
-                      aria-label={`Token cap for ${role.label}`}
+                      aria-label={t('settings.ai.tokenCaps.aria', { role: t(role.labelKey) })}
                     />
-                    <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>tokens</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{t('settings.ai.tokenCaps.unit')}</span>
                   </div>
                 </div>
               );
@@ -701,7 +731,7 @@ export const AIProfileTab: React.FC<AIProfileTabProps> = ({
         <div className="setup-info-box" style={{ marginTop: '20px' }}>
           <Cpu size={16} />
           <span>
-            Keys, endpoints, and models are securely stored in your local SQLite database. Default model switches and token cap adjustments apply immediately to background triage and research.
+            {t('settings.ai.info')}
           </span>
         </div>
       </div>

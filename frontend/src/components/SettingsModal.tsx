@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import * as api from '../api';
 import { LLMProfile, Playbook } from '../types';
+import { useLocale } from '../i18n';
 import { ThemeSelector } from './ThemeSelector';
 import { ResearchScheduler } from './ResearchScheduler';
 import {
@@ -60,6 +61,7 @@ interface SettingsBaseline {
 }
 
 export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalProps) {
+  const { t } = useLocale();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'appearance');
   const bodyRef = React.useRef<HTMLDivElement>(null);
 
@@ -302,7 +304,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
 
     // Validation for user profile length
     if (profileCharCount > 1500) {
-      setError('User profile exceeds 1,500 characters limit. Please shorten some fields.');
+      setError(t('settings.validation.profileTooLong'));
       setActiveTab('profile');
       return;
     }
@@ -310,12 +312,12 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
     // Validation for auth token update
     if (authToken.trim()) {
       if (authToken.trim().length < 6) {
-        setError('Master access token must be at least 6 characters long.');
+        setError(t('settings.validation.tokenTooShort'));
         setActiveTab('security');
         return;
       }
       if (authToken !== confirmAuthToken) {
-        setError('Master passphrases do not match.');
+        setError(t('settings.validation.tokenMismatch'));
         setActiveTab('security');
         return;
       }
@@ -376,7 +378,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
         discordChannelId,
       });
 
-      showToast('Platform preferences saved successfully.');
+      showToast(t('settings.modal.toast.saved'));
       onClose();
     } catch (err: unknown) {
       setError(api.getErrorMessage(err));
@@ -388,15 +390,15 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
     const trimmed = newCardTypeInput.trim().toLowerCase();
     if (!trimmed) return;
     if (trimmed === 'other') {
-      setError('"other" is already an immutable fallback card type.');
+      setError(t('settings.modal.taxonomy.otherExists'));
       return;
     }
     if (cardTypes.includes(trimmed)) {
-      setError(`Card type "${trimmed}" already exists.`);
+      setError(t('settings.modal.taxonomy.exists', { type: trimmed }));
       return;
     }
     if (cardTypes.length >= 20) {
-      setError('Maximum of 20 active card types reached.');
+      setError(t('settings.modal.taxonomy.max'));
       return;
     }
     setError(null);
@@ -466,28 +468,26 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h2 id="settings-modal-title" className="settings-title">
-                  Platform Preferences
+                  {t('settings.modal.title')}
                 </h2>
                 {isDirty && (
                   <span
                     className="settings-dirty-badge"
-                    title="You have unsaved platform preferences"
+                    title={t('settings.modal.unsavedTitle')}
                   >
                     <span className="settings-dirty-dot" />
-                    Unsaved
+                    {t('settings.modal.unsaved')}
                   </span>
                 )}
               </div>
-              <span className="settings-subtitle">
-                Customize workspace appearance, AI models, channels, and access security
-              </span>
+              <span className="settings-subtitle">{t('settings.modal.subtitle')}</span>
             </div>
           </div>
           <button
             type="button"
             className="modal-close-btn"
             onClick={onClose}
-            aria-label="Close settings"
+            aria-label={t('settings.modal.close')}
           >
             <X size={18} />
           </button>
@@ -496,7 +496,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
         {/* Modal Layout Wrapper */}
         <div className="settings-modal-layout">
           {/* Sidebar Navigation Rail */}
-          <div className="settings-sidebar" role="tablist" aria-label="Settings categories">
+          <div className="settings-sidebar" role="tablist" aria-label={t('settings.modal.categoriesAria')}>
             <button
               id="settings-tab-appearance"
               type="button"
@@ -507,7 +507,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
               onClick={() => setActiveTab('appearance')}
             >
               <Palette size={15} />
-              <span>Appearance & Preferences</span>
+              <span>{t('settings.modal.tabs.appearance')}</span>
             </button>
             <button
               id="settings-tab-profile"
@@ -519,7 +519,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
               onClick={() => setActiveTab('profile')}
             >
               <User size={15} />
-              <span>About me</span>
+              <span>{t('settings.modal.tabs.profile')}</span>
             </button>
             <button
               id="settings-tab-integrations"
@@ -531,7 +531,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
               onClick={() => setActiveTab('integrations')}
             >
               <Plug size={15} />
-              <span>Integrations</span>
+              <span>{t('settings.modal.tabs.integrations')}</span>
             </button>
             <button
               id="settings-tab-ai"
@@ -543,7 +543,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
               onClick={() => setActiveTab('ai')}
             >
               <Cpu size={15} />
-              <span>AI Engine</span>
+              <span>{t('settings.modal.tabs.ai')}</span>
             </button>
             <button
               id="settings-tab-schedule"
@@ -555,7 +555,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
               onClick={() => setActiveTab('schedule')}
             >
               <Clock size={15} />
-              <span>Scheduled Research</span>
+              <span>{t('settings.modal.tabs.schedule')}</span>
             </button>
             <button
               id="settings-tab-channels"
@@ -567,7 +567,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
               onClick={() => setActiveTab('channels')}
             >
               <MessageSquare size={15} />
-              <span>Channels & Alerts</span>
+              <span>{t('settings.modal.tabs.channels')}</span>
             </button>
             <button
               id="settings-tab-security"
@@ -579,32 +579,32 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
               onClick={() => setActiveTab('security')}
             >
               <Shield size={15} />
-              <span>Security & Access</span>
+              <span>{t('settings.modal.tabs.security')}</span>
             </button>
 
             {/* Support Sparkkeep */}
             <div className="settings-sidebar-footer">
-              <span className="settings-sidebar-footer-title">Support Project</span>
+              <span className="settings-sidebar-footer-title">{t('settings.modal.support.title')}</span>
               <div className="settings-sidebar-support-links">
                 <a
                   href="https://ko-fi.com/andreiburlacu"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="settings-support-link"
-                  title="Buy me a coffee on Ko-fi"
+                  title={t('settings.modal.support.coffeeTitle')}
                 >
                   <Coffee size={13} color="#ff5e5b" />
-                  <span>Buy me a coffee</span>
+                  <span>{t('settings.modal.support.coffee')}</span>
                 </a>
                 <a
                   href="https://github.com/sponsors/BurlacuAndrei"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="settings-support-link"
-                  title="Sponsor on GitHub"
+                  title={t('settings.modal.support.githubTitle')}
                 >
                   <Heart size={13} color="#ea4aaa" />
-                  <span>GitHub Sponsor</span>
+                  <span>{t('settings.modal.support.github')}</span>
                 </a>
               </div>
             </div>
@@ -623,7 +623,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
             {/* Modal Body */}
             {loading ? (
               <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                Loading platform configuration...
+                {t('settings.modal.loading')}
               </div>
             ) : (
               <div className="settings-modal-body" ref={bodyRef}>
@@ -637,9 +637,9 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                   >
                     <div className="settings-section">
                       <div className="settings-section-header">
-                        <span className="settings-section-title">Color Palette & Contrast</span>
+                        <span className="settings-section-title">{t('settings.appearance.palette.title')}</span>
                         <span className="settings-section-desc">
-                          Select an accent palette and dark/light mode for your workspace
+                          {t('settings.appearance.palette.desc')}
                         </span>
                       </div>
                       <ThemeSelector />
@@ -647,45 +647,45 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
 
                     <div className="settings-section">
                       <div className="settings-section-header">
-                        <span className="settings-section-title">Layout & Usability</span>
+                        <span className="settings-section-title">{t('settings.appearance.layout.title')}</span>
                         <span className="settings-section-desc">
-                          Configure workspace spacing and interface motion
+                          {t('settings.appearance.layout.desc')}
                         </span>
                       </div>
 
                       <div className="pref-item-card" style={{ marginBottom: '10px' }}>
                         <div className="pref-item-text">
-                          <span className="pref-item-title">Card Density</span>
+                          <span className="pref-item-title">{t('settings.appearance.density.title')}</span>
                           <span className="pref-item-desc">
-                            Comfortable spacing vs compact overview
+                            {t('settings.appearance.density.desc')}
                           </span>
                         </div>
                         <select
                           value={cardDensity}
                           onChange={(e) => setCardDensity(e.target.value as 'comfortable' | 'compact')}
                           className="pref-select"
-                          aria-label="Card density"
+                          aria-label={t('settings.appearance.density.label')}
                         >
-                          <option value="comfortable">Comfortable</option>
-                          <option value="compact">Compact</option>
+                          <option value="comfortable">{t('settings.appearance.density.comfortable')}</option>
+                          <option value="compact">{t('settings.appearance.density.compact')}</option>
                         </select>
                       </div>
 
                       <div className="pref-item-card">
                         <div className="pref-item-text">
-                          <span className="pref-item-title">Visual Effects</span>
+                          <span className="pref-item-title">{t('settings.appearance.effects.title')}</span>
                           <span className="pref-item-desc">
-                            Glassmorphism blurs and transitions
+                            {t('settings.appearance.effects.desc')}
                           </span>
                         </div>
                         <select
                           value={reduceMotion}
                           onChange={(e) => setReduceMotion(e.target.value as 'default' | 'reduced')}
                           className="pref-select"
-                          aria-label="Visual effects"
+                          aria-label={t('settings.appearance.effects.label')}
                         >
-                          <option value="default">Full Glassmorphism</option>
-                          <option value="reduced">Reduced Blur & Motion</option>
+                          <option value="default">{t('settings.appearance.effects.full')}</option>
+                          <option value="reduced">{t('settings.appearance.effects.reduced')}</option>
                         </select>
                       </div>
                     </div>
@@ -698,9 +698,9 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                       <div className="settings-section-header">
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
                           <div>
-                            <span className="settings-section-title">Card Taxonomy</span>
+                            <span className="settings-section-title">{t('settings.modal.taxonomy.title')}</span>
                             <span className="settings-section-desc">
-                              Configure up to 20 macro Card Types for triage ingestion and category routing. "other" is an immutable fallback.
+                              {t('settings.modal.taxonomy.desc')}
                             </span>
                           </div>
                           <span
@@ -715,7 +715,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                               border: '1px solid var(--border-subtle)',
                             }}
                           >
-                            {cardTypes.length} / 20 active types
+                            {t('settings.modal.taxonomy.count', { count: cardTypes.length })}
                           </span>
                         </div>
                       </div>
@@ -754,8 +754,8 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                                 borderRadius: '4px',
                                 marginLeft: '2px',
                               }}
-                              aria-label={`Remove ${type}`}
-                              title={`Remove ${type}`}
+                              aria-label={t('settings.modal.taxonomy.remove', { type })}
+                              title={t('settings.modal.taxonomy.remove', { type })}
                             >
                               <X size={13} />
                             </button>
@@ -774,10 +774,10 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                             fontSize: '12px',
                             color: 'var(--text-dim)',
                           }}
-                          title="Immutable fallback"
+                          title={t('settings.modal.taxonomy.immutable')}
                         >
                           <span>other</span>
-                          <span style={{ fontSize: '10px', opacity: 0.6 }}>(fallback)</span>
+                          <span style={{ fontSize: '10px', opacity: 0.6 }}>{t('settings.modal.taxonomy.fallback')}</span>
                         </div>
                       </div>
 
@@ -787,7 +787,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                           type="text"
                           className="setup-input"
                           style={{ maxWidth: '260px' }}
-                          placeholder="Add card type..."
+                          placeholder={t('settings.modal.taxonomy.placeholder')}
                           value={newCardTypeInput}
                           onChange={(e) => setNewCardTypeInput(e.target.value)}
                           onKeyDown={(e) => {
@@ -797,7 +797,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                             }
                           }}
                           disabled={cardTypes.length >= 20}
-                          aria-label="New card type"
+                          aria-label={t('settings.modal.taxonomy.newLabel')}
                         />
                         <button
                           type="button"
@@ -811,7 +811,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                             newCardTypeInput.trim().toLowerCase() === 'other'
                           }
                         >
-                          Add Type
+                          {t('settings.modal.taxonomy.add')}
                         </button>
                       </div>
                     </div>
@@ -965,21 +965,23 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                         display: 'inline-block',
                       }}
                     />
-                    Unsaved changes
+                    {t('settings.modal.footer.unsaved')}
                   </span>
                 )}
                 <button type="button" className="setup-btn-secondary" onClick={onClose}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="button"
                   className="setup-btn-primary"
                   onClick={handleSave}
                   disabled={submitting || loading || !isDirty}
-                  title={!isDirty ? 'No changes to save' : 'Save platform preferences'}
+                  title={!isDirty ? t('settings.modal.footer.noChanges') : t('settings.modal.footer.saveTitle')}
                 >
                   <Save size={16} />
-                  <span>{submitting ? 'Saving Changes...' : 'Save Changes'}</span>
+                  <span>
+                    {submitting ? t('settings.modal.footer.saving') : t('settings.modal.footer.save')}
+                  </span>
                 </button>
               </div>
             )}
@@ -1020,14 +1022,19 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                 id="taxonomy-impact-modal-title"
                 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--text-main)' }}
               >
-                Detach "{pendingDeleteCardType.type}" from Playbooks?
+                {t('settings.modal.taxonomy.confirmTitle', { type: pendingDeleteCardType.type })}
               </h3>
             </div>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              The card type <strong>{pendingDeleteCardType.type}</strong> is currently referenced by{' '}
-              {pendingDeleteCardType.affectedPlaybooks.length}{' '}
-              {pendingDeleteCardType.affectedPlaybooks.length === 1 ? 'playbook' : 'playbooks'}.
-              Detaching will safely remove this card type tag while keeping your playbooks intact.
+              {t(
+                pendingDeleteCardType.affectedPlaybooks.length === 1
+                  ? 'settings.modal.taxonomy.confirmBodySingular'
+                  : 'settings.modal.taxonomy.confirmBodyPlural',
+                {
+                  type: pendingDeleteCardType.type,
+                  count: pendingDeleteCardType.affectedPlaybooks.length,
+                }
+              )}
             </p>
             <div
               style={{
@@ -1069,14 +1076,14 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                 className="setup-btn-secondary"
                 onClick={() => setPendingDeleteCardType(null)}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
                 className="setup-btn-primary"
                 onClick={handleConfirmDetachCardType}
               >
-                Detach from Playbooks (Default)
+                {t('settings.modal.taxonomy.detach')}
               </button>
             </div>
           </div>

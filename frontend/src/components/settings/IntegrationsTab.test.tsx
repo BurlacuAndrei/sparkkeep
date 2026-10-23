@@ -1,7 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+import {
+  render as rtlRender,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  act,
+} from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { IntegrationsTab } from './IntegrationsTab';
 import * as api from '../../api';
+import { LocaleProvider } from '../../i18n';
+
+const render = (ui: ReactElement) => rtlRender(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 vi.mock('../../api', async () => {
   const actual = await vi.importActual<typeof import('../../api')>('../../api');

@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { AIProfileTab } from './AIProfileTab';
 import { LLMProfile } from '../../types';
+import { LocaleProvider } from '../../i18n';
+
+const render = (ui: ReactElement) => rtlRender(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 describe('AIProfileTab Component', () => {
   const mockProfiles: LLMProfile[] = [

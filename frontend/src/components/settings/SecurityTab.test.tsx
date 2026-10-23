@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { SecurityTab } from './SecurityTab';
+import { LocaleProvider } from '../../i18n';
+
+const render = (ui: ReactElement) => rtlRender(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 describe('SecurityTab Component', () => {
   it('renders open access state when hasAuthToken is false', () => {
@@ -20,7 +24,7 @@ describe('SecurityTab Component', () => {
     );
 
     expect(screen.getByText('Open Access')).toBeDefined();
-    expect(screen.getByPlaceholderText('Create master passphrase...')).toBeDefined();
+    expect(screen.getByPlaceholderText(/Create master passphrase/)).toBeDefined();
   });
 
   it('renders protected state and displays confirmation input when passphrase typed', () => {
@@ -43,14 +47,16 @@ describe('SecurityTab Component', () => {
 
     // Type a passphrase
     rerender(
-      <SecurityTab
-        authToken="secret123"
-        setAuthToken={setAuthToken}
-        confirmAuthToken=""
-        setConfirmAuthToken={setConfirmAuthToken}
-        hasAuthToken={true}
-        showToast={showToast}
-      />
+      <LocaleProvider locale="en">
+        <SecurityTab
+          authToken="secret123"
+          setAuthToken={setAuthToken}
+          confirmAuthToken=""
+          setConfirmAuthToken={setConfirmAuthToken}
+          hasAuthToken={true}
+          showToast={showToast}
+        />
+      </LocaleProvider>
     );
 
     expect(screen.getByLabelText(/Confirm New Passphrase/i)).toBeDefined();

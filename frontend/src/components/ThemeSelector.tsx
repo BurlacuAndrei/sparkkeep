@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sun, Moon, Monitor, Check } from 'lucide-react';
 import { useTheme, Theme } from '../context/ThemeContext';
+import { useLocale } from '../i18n';
 
 export interface ThemeSelectorProps {
   className?: string;
@@ -8,15 +9,31 @@ export interface ThemeSelectorProps {
 
 export function ThemeSelector({ className = '' }: ThemeSelectorProps) {
   const { theme, setTheme } = useTheme();
+  const { t } = useLocale();
 
   const options: { id: Theme; label: string; sub: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
-    { id: 'dark', label: 'Dark Mode', sub: 'Deep obsidian slate', icon: Moon },
-    { id: 'light', label: 'Light Mode', sub: 'Crisp high-contrast', icon: Sun },
-    { id: 'system', label: 'System Default', sub: 'Auto-sync with OS', icon: Monitor },
+    {
+      id: 'dark',
+      label: t('settings.appearance.theme.dark.label'),
+      sub: t('settings.appearance.theme.dark.sub'),
+      icon: Moon,
+    },
+    {
+      id: 'light',
+      label: t('settings.appearance.theme.light.label'),
+      sub: t('settings.appearance.theme.light.sub'),
+      icon: Sun,
+    },
+    {
+      id: 'system',
+      label: t('settings.appearance.theme.system.label'),
+      sub: t('settings.appearance.theme.system.sub'),
+      icon: Monitor,
+    },
   ];
 
   return (
-    <div className={`theme-options-grid ${className}`} role="radiogroup" aria-label="Interface theme selector">
+    <div className={`theme-options-grid ${className}`} role="radiogroup" aria-label={t('settings.appearance.theme.aria')}>
       {options.map((opt) => {
         const Icon = opt.icon;
         const isSelected = theme === opt.id;

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import * as api from '../api';
 import { ResearchRule, QuietWindowConfig, Playbook } from '../types';
+import { useLocale } from '../i18n';
 import { CustomSelect } from './CustomSelect';
 
 interface ResearchSchedulerProps {
@@ -19,6 +20,7 @@ interface ResearchSchedulerProps {
 export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
   showToast,
 }) => {
+  const { t } = useLocale();
   const [loading, setLoading] = useState(true);
   const [quietWindow, setQuietWindow] = useState<QuietWindowConfig>({
     enabled: false,
@@ -63,7 +65,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
     setSavingQuietWindow(true);
     try {
       await api.updateQuietWindow(quietWindow);
-      showToast('Quiet window settings saved');
+      showToast(t('settings.schedule.quiet.saved'));
     } catch (err) {
       showToast(api.getErrorMessage(err));
     } finally {
@@ -76,18 +78,22 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
       const updated = { ...rule, enabled: !rule.enabled };
       await api.updateResearchRule(rule.id, updated);
       setRules((prev) => prev.map((r) => (r.id === rule.id ? updated : r)));
-      showToast(`Rule ${updated.enabled ? 'enabled' : 'disabled'}`);
+      showToast(
+        updated.enabled
+          ? t('settings.schedule.toast.ruleEnabled')
+          : t('settings.schedule.toast.ruleDisabled')
+      );
     } catch (err) {
       showToast(api.getErrorMessage(err));
     }
   };
 
   const handleDeleteRule = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this rule?')) return;
+    if (!window.confirm(t('settings.schedule.deleteConfirm'))) return;
     try {
       await api.deleteResearchRule(id);
       setRules((prev) => prev.filter((r) => r.id !== id));
-      showToast('Rule deleted');
+      showToast(t('settings.schedule.toast.deleted'));
     } catch (err) {
       showToast(api.getErrorMessage(err));
     }
@@ -97,7 +103,14 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
     setRunningRuleId(id);
     try {
       const queued = await api.runResearchRule(id);
-      showToast(`Rule executed: queued ${queued.length} card(s)`);
+      showToast(
+        t(
+          queued.length === 1
+            ? 'settings.schedule.toast.executedSingular'
+            : 'settings.schedule.toast.executedPlural',
+          { count: queued.length }
+        )
+      );
     } catch (err) {
       showToast(api.getErrorMessage(err));
     } finally {
@@ -111,17 +124,17 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
 
     try {
       if (!editingRule.name.trim()) {
-        showToast('Rule name is required');
+        showToast(t('settings.schedule.toast.nameRequired'));
         return;
       }
       if (editingRule.id && rules.some((r) => r.id === editingRule.id)) {
         await api.updateResearchRule(editingRule.id, editingRule);
         setRules((prev) => prev.map((r) => (r.id === editingRule.id ? editingRule : r)));
-        showToast('Rule updated successfully');
+        showToast(t('settings.schedule.toast.updated'));
       } else {
         const created = await api.createResearchRule(editingRule);
         setRules((prev) => [...prev, created]);
-        showToast('Rule created successfully');
+        showToast(t('settings.schedule.toast.created'));
       }
       setEditingRule(null);
     } catch (err) {
@@ -132,7 +145,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
   if (loading) {
     return (
       <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8' }}>
-        Loading scheduled research settings...
+        {t('settings.schedule.loading')}
       </div>
     );
   }
@@ -144,10 +157,10 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
         <div className="settings-section-header">
           <div className="settings-section-title">
             <Moon size={16} color="#818cf8" />
-            <span>Quiet Window (Overnight Execution)</span>
+            <span>{t('settings.schedule.quiet.title')}</span>
           </div>
           <p className="settings-section-desc">
-            When enabled, queued research runs are held and only processed during the specified time window.
+            {t('settings.schedule.quiet.desc')}
           </p>
         </div>
 
@@ -170,7 +183,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
               style={{ width: 16, height: 16, accentColor: 'var(--accent-indigo)' }}
             />
             <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-main)' }}>
-              Enable Quiet Window (only run research within window)
+              {t('settings.schedule.quiet.enable')}
             </span>
           </label>
 
@@ -185,7 +198,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
           >
             <div>
               <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4, display: 'block' }}>
-                START TIME (HH:MM)
+                {t('settings.schedule.quiet.start')}
               </label>
               <input
                 type="time"
@@ -197,7 +210,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
             </div>
             <div>
               <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4, display: 'block' }}>
-                END TIME (HH:MM)
+                {t('settings.schedule.quiet.end')}
               </label>
               <input
                 type="time"
@@ -218,7 +231,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
               onClick={handleSaveQuietWindow}
             >
               <Save size={13} style={{ marginRight: 6 }} />
-              {savingQuietWindow ? 'Saving...' : 'Save Window Settings'}
+              {savingQuietWindow ? t('common.saving') : t('settings.schedule.quiet.save')}
             </button>
           </div>
         </div>
@@ -230,10 +243,10 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
           <div className="settings-section-header">
             <div className="settings-section-title">
               <Calendar size={16} color="#818cf8" />
-              <span>Scheduled Automation Rules</span>
+              <span>{t('settings.schedule.rules.title')}</span>
             </div>
             <p className="settings-section-desc">
-              Automatically queue research for matching cards on a recurring daily schedule.
+              {t('settings.schedule.rules.desc')}
             </p>
           </div>
           <button
@@ -243,7 +256,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
             onClick={() =>
               setEditingRule({
                 id: `rule_${Date.now()}`,
-                name: 'Nightly High Priority Inbox',
+                name: t('settings.schedule.defaultRuleName'),
                 enabled: true,
                 time: '02:00',
                 filters: {
@@ -256,7 +269,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
             }
           >
             <Plus size={14} style={{ marginRight: 4 }} />
-            New Rule
+            {t('settings.schedule.rules.new')}
           </button>
         </div>
 
@@ -272,14 +285,15 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
               fontSize: 13,
             }}
           >
-            No scheduled research rules configured yet. Click "New Rule" to create one.
+            {t('settings.schedule.rules.empty')}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {rules.map((rule) => {
               const pbName = rule.playbook_id
-                ? playbooks.find((p) => p.id === rule.playbook_id)?.name || `Playbook #${rule.playbook_id}`
-                : 'Auto (Card Match)';
+                ? playbooks.find((p) => p.id === rule.playbook_id)?.name ||
+                  t('settings.schedule.rules.playbookFallback', { id: rule.playbook_id })
+                : t('settings.schedule.rules.autoPlaybook');
 
               return (
                 <div
@@ -311,17 +325,17 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                           border: `1px solid ${rule.enabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(148, 163, 184, 0.3)'}`,
                         }}
                       >
-                        {rule.enabled ? 'Active' : 'Disabled'}
+                        {rule.enabled ? t('settings.schedule.rules.active') : t('common.disabled')}
                       </span>
                     </div>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11.5, color: '#94a3b8' }}>
                       <span>⏰ <strong>{rule.time}</strong></span>
-                      <span>· Status: <strong>{rule.filters.status || 'all'}</strong></span>
-                      {rule.filters.worthiness && <span>· Worthiness: <strong>{rule.filters.worthiness}</strong></span>}
-                      {rule.filters.type && <span>· Type: <strong>{rule.filters.type}</strong></span>}
-                      <span>· Max: <strong>{rule.max_cards} cards</strong></span>
-                      <span>· Playbook: <strong>{pbName}</strong></span>
+                      <span>· {t('settings.schedule.rules.status')} <strong>{rule.filters.status || t('settings.schedule.rules.all')}</strong></span>
+                      {rule.filters.worthiness && <span>· {t('settings.schedule.rules.worthiness')} <strong>{rule.filters.worthiness}</strong></span>}
+                      {rule.filters.type && <span>· {t('settings.schedule.rules.type')} <strong>{rule.filters.type}</strong></span>}
+                      <span>· {t('settings.schedule.rules.max')} <strong>{t('settings.schedule.rules.maxCards', { count: rule.max_cards })}</strong></span>
+                      <span>· {t('settings.schedule.rules.playbook')} <strong>{pbName}</strong></span>
                     </div>
                   </div>
 
@@ -329,13 +343,13 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                     <button
                       type="button"
                       className="btn-secondary"
-                      title="Run now immediately"
+                      title={t('settings.schedule.rules.runTitle')}
                       style={{ padding: '6px 10px', fontSize: 11.5 }}
                       disabled={runningRuleId === rule.id}
                       onClick={() => handleRunRule(rule.id)}
                     >
                       <Play size={12} style={{ marginRight: 4 }} />
-                      {runningRuleId === rule.id ? 'Running...' : 'Run Now'}
+                      {runningRuleId === rule.id ? t('settings.schedule.rules.running') : t('settings.schedule.rules.run')}
                     </button>
                     <button
                       type="button"
@@ -343,21 +357,21 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                       style={{ padding: '6px 10px', fontSize: 11.5 }}
                       onClick={() => setEditingRule(rule)}
                     >
-                      Edit
+                      {t('common.edit')}
                     </button>
                     <button
                       type="button"
                       className="btn-secondary"
-                      title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+                      title={rule.enabled ? t('settings.schedule.rules.disableTitle') : t('settings.schedule.rules.enableTitle')}
                       style={{ padding: '6px 10px', fontSize: 11.5 }}
                       onClick={() => handleToggleRule(rule)}
                     >
-                      {rule.enabled ? 'Disable' : 'Enable'}
+                      {rule.enabled ? t('settings.schedule.rules.disable') : t('settings.schedule.rules.enable')}
                     </button>
                     <button
                       type="button"
                       className="icon-btn"
-                      title="Delete rule"
+                      title={t('settings.schedule.rules.deleteTitle')}
                       style={{ color: '#f87171' }}
                       onClick={() => handleDeleteRule(rule.id)}
                     >
@@ -377,7 +391,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
           <div className="modal-content" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">
-                {rules.some((r) => r.id === editingRule.id) ? 'Edit Rule' : 'New Research Rule'}
+                {rules.some((r) => r.id === editingRule.id) ? t('settings.schedule.modal.editTitle') : t('settings.schedule.modal.newTitle')}
               </h3>
               <button type="button" className="close-btn" onClick={() => setEditingRule(null)}>
                 <X size={18} />
@@ -386,20 +400,20 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
 
             <form onSubmit={handleSaveRule} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="form-group">
-                <label>RULE NAME</label>
+                <label>{t('settings.schedule.modal.nameLabel')}</label>
                 <input
                   type="text"
                   className="form-input"
                   required
                   value={editingRule.name}
                   onChange={(e) => setEditingRule({ ...editingRule, name: e.target.value })}
-                  placeholder="e.g. Nightly High Priority Inbox"
+                  placeholder={t('settings.schedule.modal.namePlaceholder')}
                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-group">
-                  <label>SCHEDULE TIME (HH:MM)</label>
+                  <label>{t('settings.schedule.modal.timeLabel')}</label>
                   <input
                     type="time"
                     className="form-input"
@@ -409,7 +423,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                   />
                 </div>
                 <div className="form-group">
-                  <label>MAX CARDS PER RUN</label>
+                  <label>{t('settings.schedule.modal.maxCardsLabel')}</label>
                   <input
                     type="number"
                     className="form-input"
@@ -423,7 +437,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-group">
-                  <label>CARD STATUS</label>
+                  <label>{t('settings.schedule.modal.statusLabel')}</label>
                   <CustomSelect
                     value={editingRule.filters.status || ''}
                     onChange={(val) =>
@@ -433,16 +447,16 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                       })
                     }
                     options={[
-                      { value: '', label: 'Any Status' },
-                      { value: 'inbox', label: '📥 Inbox' },
-                      { value: 'doing', label: '⚡ Doing' },
+                      { value: '', label: t('settings.schedule.modal.anyStatus') },
+                      { value: 'inbox', label: t('settings.schedule.modal.inbox') },
+                      { value: 'doing', label: t('settings.schedule.modal.doing') },
                     ]}
-                    ariaLabel="Filter by Card Status"
+                    ariaLabel={t('settings.schedule.modal.statusAria')}
                     size="sm"
                   />
                 </div>
                 <div className="form-group">
-                  <label>WORTHINESS</label>
+                  <label>{t('settings.schedule.modal.worthinessLabel')}</label>
                   <CustomSelect
                     value={editingRule.filters.worthiness || ''}
                     onChange={(val) =>
@@ -452,12 +466,12 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                       })
                     }
                     options={[
-                      { value: '', label: 'Any Worthiness' },
-                      { value: 'high', label: '🟢 High only' },
-                      { value: 'medium', label: '🟡 Medium' },
-                      { value: 'low', label: '⚪ Low' },
+                      { value: '', label: t('settings.schedule.modal.anyWorthiness') },
+                      { value: 'high', label: t('settings.schedule.modal.high') },
+                      { value: 'medium', label: t('settings.schedule.modal.medium') },
+                      { value: 'low', label: t('settings.schedule.modal.low') },
                     ]}
-                    ariaLabel="Filter by Worthiness"
+                    ariaLabel={t('settings.schedule.modal.worthinessAria')}
                     size="sm"
                   />
                 </div>
@@ -465,7 +479,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-group">
-                  <label>CARD TYPE</label>
+                  <label>{t('settings.schedule.modal.typeLabel')}</label>
                   <CustomSelect
                     value={editingRule.filters.type || ''}
                     onChange={(val) =>
@@ -475,23 +489,23 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                       })
                     }
                     options={[
-                      { value: '', label: 'Any Type' },
-                      { value: 'article', label: '📄 Article' },
-                      { value: 'repo', label: '💻 Repo / Code' },
-                      { value: 'paper', label: '🔬 Paper' },
-                      { value: 'tool', label: '🛠️ Tool' },
-                      { value: 'video', label: '🎬 Video' },
+                      { value: '', label: t('settings.schedule.modal.anyType') },
+                      { value: 'article', label: t('settings.schedule.modal.article') },
+                      { value: 'repo', label: t('settings.schedule.modal.repo') },
+                      { value: 'paper', label: t('settings.schedule.modal.paper') },
+                      { value: 'tool', label: t('settings.schedule.modal.tool') },
+                      { value: 'video', label: t('settings.schedule.modal.video') },
                     ]}
-                    ariaLabel="Filter by Card Type"
+                    ariaLabel={t('settings.schedule.modal.typeAria')}
                     size="sm"
                   />
                 </div>
                 <div className="form-group">
-                  <label>MAX AGE (HOURS)</label>
+                  <label>{t('settings.schedule.modal.maxAgeLabel')}</label>
                   <input
                     type="number"
                     className="form-input"
-                    placeholder="0 = no limit"
+                    placeholder={t('settings.schedule.modal.maxAgePlaceholder')}
                     value={editingRule.filters.max_age_hours || ''}
                     onChange={(e) =>
                       setEditingRule({
@@ -504,7 +518,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
               </div>
 
               <div className="form-group">
-                <label>PLAYBOOK OVERRIDE</label>
+                <label>{t('settings.schedule.modal.playbookLabel')}</label>
                 <CustomSelect
                   value={editingRule.playbook_id ? String(editingRule.playbook_id) : ''}
                   onChange={(val) =>
@@ -514,24 +528,24 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                     })
                   }
                   options={[
-                    { value: '', label: 'Auto (Default per Card Type)' },
+                    { value: '', label: t('settings.schedule.modal.playbookAuto') },
                     ...playbooks.map((pb) => ({
                       value: String(pb.id),
-                      label: `${pb.name} ${pb.is_builtin ? '(Built-in)' : ''}`,
+                      label: `${pb.name} ${pb.is_builtin ? t('settings.schedule.modal.builtIn') : ''}`,
                     })),
                   ]}
-                  ariaLabel="Playbook Override"
+                  ariaLabel={t('settings.schedule.modal.playbookAria')}
                   size="sm"
                 />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
                 <button type="button" className="btn-secondary" onClick={() => setEditingRule(null)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="btn-primary">
                   <Save size={14} style={{ marginRight: 6 }} />
-                  Save Rule
+                  {t('settings.schedule.modal.save')}
                 </button>
               </div>
             </form>

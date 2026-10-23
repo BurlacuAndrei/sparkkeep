@@ -1,8 +1,23 @@
 import React, { useState } from 'react';
 import { Shield, Sparkles, Save, User, Globe } from 'lucide-react';
 import * as api from '../../api';
+import { useLocale } from '../../i18n';
+import type { TranslationKey } from '../../i18n';
 import { LANGUAGE_OPTIONS, PROFILE_ARCHETYPES, ProfileArchetype } from './constants';
 import { CustomSelect } from '../CustomSelect';
+
+const LANGUAGE_LABEL_KEYS: Record<string, TranslationKey> = {
+  'Same as source / English': 'settings.profile.languages.sameAsSource',
+  English: 'settings.profile.languages.english',
+  Spanish: 'settings.profile.languages.spanish',
+  German: 'settings.profile.languages.german',
+  French: 'settings.profile.languages.french',
+  Italian: 'settings.profile.languages.italian',
+  Portuguese: 'settings.profile.languages.portuguese',
+  Japanese: 'settings.profile.languages.japanese',
+  Chinese: 'settings.profile.languages.chinese',
+  Romanian: 'settings.profile.languages.romanian',
+};
 
 export interface UserProfileTabProps {
   goals: string;
@@ -39,6 +54,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
   onError,
   onDirtyChange,
 }) => {
+  const { t } = useLocale();
   const [savingProfile, setSavingProfile] = useState(false);
 
   const parseTags = (str: string) =>
@@ -62,13 +78,13 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
     setInterests(archetype.interests);
     setConstraints(archetype.constraints);
     onDirtyChange?.();
-    showToast(`Loaded ${archetype.label} starter profile.`);
+    showToast(t('settings.profile.toast.archetypeLoaded', { name: t(archetype.labelKey) }));
   };
 
   const handleSaveProfile = async () => {
     if (profileCharCount > 1500) {
       if (onError) {
-        onError('User profile exceeds 1,500 characters limit. Please shorten some fields.');
+        onError(t('settings.validation.profileTooLong'));
       }
       return;
     }
@@ -89,7 +105,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
           language: finalLang,
         },
       });
-      showToast('About me profile saved successfully.');
+      showToast(t('settings.profile.toast.saved'));
       onDirtyChange?.();
     } catch (err: unknown) {
       if (onError) onError(api.getErrorMessage(err));
@@ -104,10 +120,10 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <User size={18} style={{ color: 'var(--accent)' }} />
-            <span className="settings-section-title">Personal Fit & About Me</span>
+            <span className="settings-section-title">{t('settings.profile.title')}</span>
           </div>
           <span className="settings-section-desc">
-            Tailor Triage's value proposition and Research's personal-fit verdict specifically to your domain, professional background, tools, and objectives.
+            {t('settings.profile.desc')}
           </span>
         </div>
 
@@ -115,7 +131,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
         <div className="setup-info-box" style={{ marginBottom: '16px' }}>
           <Shield size={16} />
           <span>
-            <strong>Privacy note:</strong> Your profile is stored locally in your database and sent only to your configured LLM providers during triage and research.
+            <strong>{t('settings.profile.privacyTitle')}</strong> {t('settings.profile.privacyNote')}
           </span>
         </div>
 
@@ -123,10 +139,10 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
         <div style={{ marginBottom: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Starter Archetypes / Domain Presets
+              {t('settings.profile.archetypes.title')}
             </span>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Click to prefill and tailor to your domain
+              {t('settings.profile.archetypes.hint')}
             </span>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -136,7 +152,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
                 type="button"
                 className="archetype-preset-chip"
                 onClick={() => handleApplyArchetype(arch)}
-                title={arch.description}
+                title={t(arch.descriptionKey)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -152,7 +168,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
                   transition: 'all 0.15s ease',
                 }}
               >
-                <span>{arch.badge}</span>
+                <span>{t(arch.badgeKey)}</span>
               </button>
             ))}
           </div>
@@ -174,7 +190,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Sparkles size={15} style={{ color: 'var(--accent, #6366f1)' }} />
-            <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>Profile Character Budget</span>
+            <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>{t('settings.profile.budget.title')}</span>
           </div>
           <span
             style={{
@@ -187,13 +203,14 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
                   : 'var(--text-muted, #64748b)',
             }}
           >
-            {profileCharCount} / 1,500 chars {profileCharCount > 1500 ? '(Exceeds 1,500 max limit)' : ''}
+            {t('settings.profile.budget.counter', { count: profileCharCount })}{' '}
+            {profileCharCount > 1500 ? t('settings.profile.budget.exceeds') : ''}
           </span>
         </div>
 
         {/* Goals */}
         <div className="setup-form-group">
-          <label htmlFor="profile-goals">Tell me about yourself / Primary Goals</label>
+          <label htmlFor="profile-goals">{t('settings.profile.goals.label')}</label>
           <textarea
             id="profile-goals"
             className="setup-textarea"
@@ -203,16 +220,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setGoals(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. Founder scaling a B2B business, investor analyzing macro trends, agronomist researching sustainable farming, or engineer building AI systems..."
+            placeholder={t('settings.profile.goals.placeholder')}
           />
           <span className="setup-hint">
-            Free text: Give the AI context on who you are, what your core objectives are, and what makes an insight or project relevant to you.
+            {t('settings.profile.goals.hint')}
           </span>
         </div>
 
         {/* Skills */}
         <div className="setup-form-group">
-          <label htmlFor="profile-skills">Core Skills & Proficiencies</label>
+          <label htmlFor="profile-skills">{t('settings.profile.skills.label')}</label>
           <input
             id="profile-skills"
             type="text"
@@ -222,16 +239,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setSkills(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. B2B Sales, Financial Modeling, Agronomy, Systems Engineering, Data Analysis, GTM Strategy"
+            placeholder={t('settings.profile.skills.placeholder')}
           />
           <span className="setup-hint">
-            Comma-separated competencies you already possess or are actively developing.
+            {t('settings.profile.skills.hint')}
           </span>
         </div>
 
         {/* Stack & Tools */}
         <div className="setup-form-group">
-          <label htmlFor="profile-stack">Tools, Platforms & Systems</label>
+          <label htmlFor="profile-stack">{t('settings.profile.stack.label')}</label>
           <input
             id="profile-stack"
             type="text"
@@ -241,16 +258,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setStack(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. Notion, Bloomberg Terminal, FarmOS, Docker, Linear, QuickBooks, PostgreSQL, GIS"
+            placeholder={t('settings.profile.stack.placeholder')}
           />
           <span className="setup-hint">
-            Comma-separated software, equipment, or daily operational platforms you utilize.
+            {t('settings.profile.stack.hint')}
           </span>
         </div>
 
         {/* Interests */}
         <div className="setup-form-group">
-          <label htmlFor="profile-interests">Domains & Focus Interests</label>
+          <label htmlFor="profile-interests">{t('settings.profile.interests.label')}</label>
           <input
             id="profile-interests"
             type="text"
@@ -260,16 +277,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setInterests(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. Regenerative agriculture, local LLMs, seed fundraising, commodity markets, robotics, macro liquidity"
+            placeholder={t('settings.profile.interests.placeholder')}
           />
           <span className="setup-hint">
-            Comma-separated subjects and trends that should receive priority attention during triage and briefings.
+            {t('settings.profile.interests.hint')}
           </span>
         </div>
 
         {/* Constraints */}
         <div className="setup-form-group">
-          <label htmlFor="profile-constraints">Constraints & Operating Guidelines</label>
+          <label htmlFor="profile-constraints">{t('settings.profile.constraints.label')}</label>
           <textarea
             id="profile-constraints"
             className="setup-textarea"
@@ -279,16 +296,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
               setConstraints(e.target.value);
               onDirtyChange?.();
             }}
-            placeholder="e.g. Self-hosted only; budget <$500/mo; field-ready / offline capability; prioritize primary sources and audited metrics."
+            placeholder={t('settings.profile.constraints.placeholder')}
           />
           <span className="setup-hint">
-            Hardware limits, budget restrictions, or preferences that influence feasibility ratings.
+            {t('settings.profile.constraints.hint')}
           </span>
         </div>
 
         {/* Output Language */}
         <div className="setup-form-group">
-          <label htmlFor="profile-language-select">Output Language for Triage & Research</label>
+          <label htmlFor="profile-language-select">{t('settings.profile.language.label')}</label>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ minWidth: '240px', flex: '0 0 auto' }}>
               <CustomSelect
@@ -306,16 +323,16 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
                 options={[
                   ...LANGUAGE_OPTIONS.map((lang) => ({
                     value: lang,
-                    label: lang,
+                    label: LANGUAGE_LABEL_KEYS[lang] ? t(LANGUAGE_LABEL_KEYS[lang]) : lang,
                     icon: <Globe size={13} style={{ color: 'var(--accent-indigo)' }} />,
                   })),
                   {
                     value: 'Custom',
-                    label: 'Custom Language...',
+                    label: t('settings.profile.language.custom'),
                     icon: <Globe size={13} style={{ color: 'var(--accent-purple)' }} />,
                   },
                 ]}
-                ariaLabel="Output Language for Triage & Research"
+                ariaLabel={t('settings.profile.language.label')}
               />
             </div>
             {(!LANGUAGE_OPTIONS.includes(language) || language === 'Custom') && (
@@ -328,13 +345,13 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
                   setLanguage(e.target.value);
                   onDirtyChange?.();
                 }}
-                placeholder="Enter language (e.g. Spanish, German, Japanese)..."
+                placeholder={t('settings.profile.language.placeholder')}
                 style={{ flex: 1, minWidth: '180px' }}
               />
             )}
           </div>
           <span className="setup-hint">
-            Default: "Same as source / English". When set, briefings and research reports will be instructed to write in this language.
+            {t('settings.profile.language.hint')}
           </span>
         </div>
 
@@ -346,7 +363,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
             disabled={savingProfile || profileCharCount > 1500}
           >
             <Save size={15} />
-            <span>{savingProfile ? 'Saving Profile...' : 'Save Profile'}</span>
+            <span>{savingProfile ? t('settings.profile.saving') : t('settings.profile.save')}</span>
           </button>
         </div>
       </div>

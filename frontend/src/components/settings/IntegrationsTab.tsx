@@ -38,6 +38,8 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import * as api from '../../api';
+import { useLocale } from '../../i18n';
+import type { TranslationKey } from '../../i18n';
 
 export interface IntegrationsTabProps {
   showToast: (msg: string) => void;
@@ -48,20 +50,20 @@ export interface IntegrationsTabProps {
 
 // Ordered by adoption: most popular integrations first.
 const INTEGRATION_SECTIONS = [
-  { slug: 'obsidian', title: 'Obsidian Vault Export' },
-  { slug: 'notion', title: 'Notion Knowledge Sink' },
-  { slug: 'joplin', title: 'Joplin Knowledge Sink' },
-  { slug: 'browser-extension', title: 'Official Browser Extension (Chrome & Firefox)' },
-  { slug: 'bookmarklet', title: 'Browser Bookmarklet' },
-  { slug: 'ios-shortcut', title: 'Apple iOS Shortcut & Share Sheet' },
-  { slug: 'raycast', title: 'Raycast Extension / Script Command' },
-  { slug: 'mcp', title: 'Model Context Protocol (MCP)' },
-  { slug: 'capture-api', title: 'Universal Inbound Capture API' },
-  { slug: 'webhook', title: 'Webhook Test Triggers' },
-  { slug: 'client-apps', title: 'Client App Shortcuts' },
-  { slug: 'library-export', title: 'Data Sovereignty & Full Library Export' },
-  { slug: 'outbox-feed', title: 'Outbox RSS Feed' },
-] as const;
+  { slug: 'obsidian', titleKey: 'settings.integrations.sections.obsidian' },
+  { slug: 'notion', titleKey: 'settings.integrations.sections.notion' },
+  { slug: 'joplin', titleKey: 'settings.integrations.sections.joplin' },
+  { slug: 'browser-extension', titleKey: 'settings.integrations.sections.browserExtension' },
+  { slug: 'bookmarklet', titleKey: 'settings.integrations.sections.bookmarklet' },
+  { slug: 'ios-shortcut', titleKey: 'settings.integrations.sections.iosShortcut' },
+  { slug: 'raycast', titleKey: 'settings.integrations.sections.raycast' },
+  { slug: 'mcp', titleKey: 'settings.integrations.sections.mcp' },
+  { slug: 'capture-api', titleKey: 'settings.integrations.sections.captureApi' },
+  { slug: 'webhook', titleKey: 'settings.integrations.sections.webhook' },
+  { slug: 'client-apps', titleKey: 'settings.integrations.sections.clientApps' },
+  { slug: 'library-export', titleKey: 'settings.integrations.sections.libraryExport' },
+  { slug: 'outbox-feed', titleKey: 'settings.integrations.sections.outboxFeed' },
+] as const satisfies ReadonlyArray<{ slug: string; titleKey: TranslationKey }>;
 
 type SectionSlug = (typeof INTEGRATION_SECTIONS)[number]['slug'];
 
@@ -72,8 +74,8 @@ const SECTION_HASH_PREFIX = `#${SECTION_ID_PREFIX}`;
 const isSectionSlug = (value: string): value is SectionSlug =>
   INTEGRATION_SECTIONS.some((section) => section.slug === value);
 
-const sectionTitle = (slug: SectionSlug): string =>
-  INTEGRATION_SECTIONS.find((section) => section.slug === slug)?.title ?? slug;
+const sectionDefinition = (slug: SectionSlug) =>
+  INTEGRATION_SECTIONS.find((section) => section.slug === slug);
 
 const readCollapsedSections = (): Set<SectionSlug> => {
   try {
@@ -114,7 +116,10 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   header,
   children,
 }) => {
+  const { t } = useLocale();
   const bodyId = `integration-body-${slug}`;
+  const definition = sectionDefinition(slug);
+  const title = definition ? t(definition.titleKey) : slug;
   return (
     <div
       className={`settings-section${expanded ? '' : ' is-collapsed'}`}
@@ -128,7 +133,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           className="settings-section-toggle"
           aria-expanded={expanded}
           aria-controls={bodyId}
-          aria-label={`Toggle ${sectionTitle(slug)} section`}
+          aria-label={t('settings.integrations.toggle', { section: title })}
           onClick={() => onToggle(slug)}
         >
           <ChevronDown size={18} className="settings-section-chevron" aria-hidden="true" />
@@ -147,6 +152,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
   initialVaultPath,
   onVaultPathChange,
 }) => {
+  const { t } = useLocale();
   // Extension State & Pairing
   const [extensionInstalled, setExtensionInstalled] = useState(false);
   const [showExtensionGuide, setShowExtensionGuide] = useState(false);
@@ -157,14 +163,14 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
   const [obsidianAutoExport, setObsidianAutoExport] = useState(false);
   const [syncingObsidian, setSyncingObsidian] = useState(false);
   const [testingObsidian, setTestingObsidian] = useState(false);
-  const [lastSyncResult, setLastSyncResult] = useState<string | null>(null);
+  const [lastSyncResult, setLastSyncResult] = useState<{ success: boolean; message: string } | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Webhook Test Trigger state
   const [webhookUrl, setWebhookUrl] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [testingWebhook, setTestingWebhook] = useState(false);
-  const [webhookResult, setWebhookResult] = useState<string | null>(null);
+  const [webhookResult, setWebhookResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Copy feedback state
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -192,7 +198,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
   const [testingJoplin, setTestingJoplin] = useState(false);
   const [syncingJoplin, setSyncingJoplin] = useState(false);
   const [joplinTestResult, setJoplinTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [joplinSyncResult, setJoplinSyncResult] = useState<string | null>(null);
+  const [joplinSyncResult, setJoplinSyncResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Notion Knowledge Sink state
   const [notionToken, setNotionToken] = useState<string>('');
@@ -201,7 +207,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
   const [testingNotion, setTestingNotion] = useState(false);
   const [syncingNotion, setSyncingNotion] = useState(false);
   const [notionTestResult, setNotionTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [notionSyncResult, setNotionSyncResult] = useState<string | null>(null);
+  const [notionSyncResult, setNotionSyncResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Collapsible sections: collapsed slugs persist for the browser session.
   const [collapsedSections, setCollapsedSections] = useState<Set<SectionSlug>>(readCollapsedSections);
@@ -314,7 +320,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text);
       setCopiedId(id);
-      showToast(`${label} copied to clipboard!`);
+      showToast(t('settings.integrations.copyToast', { label }));
       setTimeout(() => setCopiedId(null), 2000);
     }
   };
@@ -328,17 +334,21 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
       if (e.data.type === 'SPARKKEEP_PAIR_ACK') {
         if (e.data.ok) {
           setPairSuccess(true);
-          showToast('⚡ Extension paired to this instance successfully!');
+          showToast(t('settings.integrations.browser.pairedToast'));
           setTimeout(() => setPairSuccess(false), 4000);
         } else {
-          showToast(`Pairing failed: ${e.data.error || 'Unknown error'}`);
+          showToast(
+            t('settings.integrations.browser.pairFailed', {
+              error: e.data.error || t('settings.integrations.browser.unknownError'),
+            })
+          );
         }
       }
     };
     window.addEventListener('message', handleMessage);
     window.postMessage({ type: 'SPARKKEEP_EXTENSION_PING' }, '*');
     return () => window.removeEventListener('message', handleMessage);
-  }, [showToast]);
+  }, [showToast, t]);
 
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
 
@@ -350,7 +360,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
     }, '*');
     setTimeout(() => {
       if (!extensionInstalled) {
-        showToast('Pairing handshake sent! If extension is loaded, it is now paired.');
+        showToast(t('settings.integrations.browser.handshake'));
       }
     }, 500);
   };
@@ -424,18 +434,21 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
         vault_path: vaultPath.trim() || undefined,
       });
       if (res.ok && res.success) {
-        const msg = res.message || 'Obsidian vault directory is accessible and writable!';
+        const msg = res.message || t('settings.integrations.obsidian.testSuccessFallback');
         setTestResult({ success: true, message: `✅ ${msg}` });
         showToast(msg);
       } else {
-        const msg = res.message || 'Obsidian vault connection test failed.';
+        const msg = res.message || t('settings.integrations.obsidian.testFailedFallback');
         setTestResult({ success: false, message: `❌ ${msg}` });
-        showToast(`Test failed: ${msg}`);
+        showToast(t('settings.integrations.testFailed', { message: msg }));
       }
     } catch (err: unknown) {
       const errMsg = api.getErrorMessage(err);
-      setTestResult({ success: false, message: `❌ Error testing vault: ${errMsg}` });
-      showToast(`Error testing vault: ${errMsg}`);
+      setTestResult({
+        success: false,
+        message: `❌ ${t('settings.integrations.obsidian.testError', { message: errMsg })}`,
+      });
+      showToast(t('settings.integrations.obsidian.testError', { message: errMsg }));
     } finally {
       setTestingObsidian(false);
     }
@@ -449,13 +462,21 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
         await api.patchSettings({ obsidian_vault_path: vaultPath.trim() }).catch(() => {});
       }
       const res = await api.syncObsidian(vaultPath.trim() || undefined);
-      const msg = `Synced ${res.written} notes to ${res.vault_path}`;
-      setLastSyncResult(`✅ ${msg}`);
+      const msg = t(
+        res.written === 1
+          ? 'settings.integrations.obsidian.syncSuccessSingular'
+          : 'settings.integrations.obsidian.syncSuccessPlural',
+        { count: res.written, path: res.vault_path }
+      );
+      setLastSyncResult({ success: true, message: msg });
       showToast(`📁 ${msg}`);
     } catch (err: unknown) {
       const errMsg = api.getErrorMessage(err);
-      setLastSyncResult(`❌ Error syncing to vault: ${errMsg}`);
-      showToast(`Error syncing to vault: ${errMsg}`);
+      setLastSyncResult({
+        success: false,
+        message: t('settings.integrations.obsidian.syncError', { message: errMsg }),
+      });
+      showToast(t('settings.integrations.obsidian.syncError', { message: errMsg }));
     } finally {
       setSyncingObsidian(false);
     }
@@ -464,7 +485,11 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
   const handleSaveObsidianAutoExport = async () => {
     try {
       await api.patchSettings({ obsidian_auto_export: obsidianAutoExport });
-      showToast(`Obsidian auto-export ${obsidianAutoExport ? 'enabled' : 'disabled'}`);
+      showToast(
+        obsidianAutoExport
+          ? t('settings.integrations.obsidian.autoExportEnabled')
+          : t('settings.integrations.obsidian.autoExportDisabled')
+      );
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
       // Revert on error
@@ -474,7 +499,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
 
   const handleTestWebhook = async () => {
     if (!webhookUrl.trim()) {
-      setWebhookResult('❌ Please enter a webhook target URL.');
+      setWebhookResult({ success: false, message: t('settings.integrations.webhook.needUrl') });
       return;
     }
     setTestingWebhook(true);
@@ -485,17 +510,29 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
         webhookSecret.trim() ? webhookSecret.trim() : undefined
       );
       if (res.ok) {
-        setWebhookResult(`✅ Success (HTTP ${res.status_code}) - Endpoint responded cleanly!`);
-        showToast(`Webhook test succeeded with HTTP ${res.status_code}!`);
+        setWebhookResult({
+          success: true,
+          message: t('settings.integrations.webhook.success', { status: res.status_code }),
+        });
+        showToast(t('settings.integrations.webhook.successToast', { status: res.status_code }));
       } else {
         const errDetail = res.error ? `: ${res.error}` : '';
-        setWebhookResult(`❌ Error (HTTP ${res.status_code})${errDetail}`);
-        showToast(`Webhook test failed: HTTP ${res.status_code}`);
+        setWebhookResult({
+          success: false,
+          message: t('settings.integrations.webhook.error', {
+            status: res.status_code,
+            detail: errDetail,
+          }),
+        });
+        showToast(t('settings.integrations.webhook.failedToast', { status: res.status_code }));
       }
     } catch (err: unknown) {
       const errMsg = api.getErrorMessage(err);
-      setWebhookResult(`❌ Request failed: ${errMsg}`);
-      showToast(`Webhook request failed: ${errMsg}`);
+      setWebhookResult({
+        success: false,
+        message: t('settings.integrations.webhook.requestFailed', { message: errMsg }),
+      });
+      showToast(t('settings.integrations.webhook.requestFailedToast', { message: errMsg }));
     } finally {
       setTestingWebhook(false);
     }
@@ -514,7 +551,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
           setShowFullToken(true);
         }
       } else {
-        setTokenError('Failed to load token');
+        setTokenError(t('settings.integrations.outbox.loadFailed'));
       }
     } catch (err: unknown) {
       setTokenError(api.getErrorMessage(err));
@@ -533,9 +570,9 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
         const feedUrl = res.feed_url || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080') + `/api/v1/feed.xml?token=${res.token}`;
         setFeedUrl(feedUrl);
         setShowFullToken(true);
-        showToast('✅ New feed token generated!');
+        showToast(t('settings.integrations.outbox.newToken'));
       } else {
-        setTokenError('Failed to regenerate token');
+        setTokenError(t('settings.integrations.outbox.regenFailed'));
       }
     } catch (err: unknown) {
       setTokenError(api.getErrorMessage(err));
@@ -551,18 +588,21 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
       await handleSaveJoplinSettings();
       const res = await api.testJoplinConnection();
       if (res.ok && res.success) {
-        const msg = res.message || 'Joplin connection successful!';
+        const msg = res.message || t('settings.integrations.joplin.successFallback');
         setJoplinTestResult({ success: true, message: `✅ ${msg}` });
         showToast(msg);
       } else {
-        const msg = res.message || 'Joplin connection test failed.';
+        const msg = res.message || t('settings.integrations.joplin.testFailedFallback');
         setJoplinTestResult({ success: false, message: `❌ ${msg}` });
-        showToast(`Test failed: ${msg}`);
+        showToast(t('settings.integrations.testFailed', { message: msg }));
       }
     } catch (err: unknown) {
       const errMsg = api.getErrorMessage(err);
-      setJoplinTestResult({ success: false, message: `❌ Error testing Joplin: ${errMsg}` });
-      showToast(`Error testing Joplin: ${errMsg}`);
+      setJoplinTestResult({
+        success: false,
+        message: `❌ ${t('settings.integrations.joplin.testError', { message: errMsg })}`,
+      });
+      showToast(t('settings.integrations.joplin.testError', { message: errMsg }));
     } finally {
       setTestingJoplin(false);
     }
@@ -575,17 +615,28 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
       await handleSaveJoplinSettings();
       const res = await api.syncJoplin();
       if (res.ok) {
-        const msg = `Synced ${res.written} notes to Joplin`;
-        setJoplinSyncResult(`✅ ${msg}`);
+        const msg = t(
+          res.written === 1
+            ? 'settings.integrations.joplin.syncSuccessSingular'
+            : 'settings.integrations.joplin.syncSuccessPlural',
+          { count: res.written }
+        );
+        setJoplinSyncResult({ success: true, message: msg });
         showToast(`📓 ${msg}`);
       } else {
-        setJoplinSyncResult(`❌ Sync failed`);
-        showToast('Sync failed');
+        setJoplinSyncResult({
+          success: false,
+          message: t('settings.integrations.joplin.syncFailed'),
+        });
+        showToast(t('settings.integrations.joplin.syncFailed'));
       }
     } catch (err: unknown) {
       const errMsg = api.getErrorMessage(err);
-      setJoplinSyncResult(`❌ Error syncing to Joplin: ${errMsg}`);
-      showToast(`Error syncing to Joplin: ${errMsg}`);
+      setJoplinSyncResult({
+        success: false,
+        message: t('settings.integrations.joplin.syncError', { message: errMsg }),
+      });
+      showToast(t('settings.integrations.joplin.syncError', { message: errMsg }));
     } finally {
       setSyncingJoplin(false);
     }
@@ -601,7 +652,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
         joplin_password: joplinPassword.trim() || undefined,
         joplin_auto_export: joplinAutoExport,
       });
-      showToast('Joplin settings saved');
+      showToast(t('settings.integrations.joplin.saved'));
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
       throw err;
@@ -615,18 +666,21 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
       await handleSaveNotionSettings();
       const res = await api.testNotionConnection();
       if (res.ok && res.success) {
-        const msg = res.message || 'Notion connection successful!';
+        const msg = res.message || t('settings.integrations.notion.successFallback');
         setNotionTestResult({ success: true, message: `✅ ${msg}` });
         showToast(msg);
       } else {
-        const msg = res.message || 'Notion connection test failed.';
+        const msg = res.message || t('settings.integrations.notion.testFailedFallback');
         setNotionTestResult({ success: false, message: `❌ ${msg}` });
-        showToast(`Test failed: ${msg}`);
+        showToast(t('settings.integrations.testFailed', { message: msg }));
       }
     } catch (err: unknown) {
       const errMsg = api.getErrorMessage(err);
-      setNotionTestResult({ success: false, message: `❌ Error testing Notion: ${errMsg}` });
-      showToast(`Error testing Notion: ${errMsg}`);
+      setNotionTestResult({
+        success: false,
+        message: `❌ ${t('settings.integrations.notion.testError', { message: errMsg })}`,
+      });
+      showToast(t('settings.integrations.notion.testError', { message: errMsg }));
     } finally {
       setTestingNotion(false);
     }
@@ -639,17 +693,28 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
       await handleSaveNotionSettings();
       const res = await api.syncNotion();
       if (res.ok) {
-        const msg = `Synced ${res.written} notes to Notion`;
-        setNotionSyncResult(`✅ ${msg}`);
+        const msg = t(
+          res.written === 1
+            ? 'settings.integrations.notion.syncSuccessSingular'
+            : 'settings.integrations.notion.syncSuccessPlural',
+          { count: res.written }
+        );
+        setNotionSyncResult({ success: true, message: msg });
         showToast(`📓 ${msg}`);
       } else {
-        setNotionSyncResult(`❌ Sync failed`);
-        showToast('Sync failed');
+        setNotionSyncResult({
+          success: false,
+          message: t('settings.integrations.notion.syncFailed'),
+        });
+        showToast(t('settings.integrations.notion.syncFailed'));
       }
     } catch (err: unknown) {
       const errMsg = api.getErrorMessage(err);
-      setNotionSyncResult(`❌ Error syncing to Notion: ${errMsg}`);
-      showToast(`Error syncing to Notion: ${errMsg}`);
+      setNotionSyncResult({
+        success: false,
+        message: t('settings.integrations.notion.syncError', { message: errMsg }),
+      });
+      showToast(t('settings.integrations.notion.syncError', { message: errMsg }));
     } finally {
       setSyncingNotion(false);
     }
@@ -662,7 +727,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
         notion_database_id: notionDatabaseId.trim() || undefined,
         notion_auto_export: notionAutoExport,
       });
-      showToast('Notion settings saved');
+      showToast(t('settings.integrations.notion.saved'));
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
       throw err;
@@ -680,7 +745,11 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
     setClientIntentsEnabled(newValue);
     try {
       await api.patchSettings({ client_intents_enabled: newValue });
-      showToast(`${intentId} ${isEnabled ? 'disabled' : 'enabled'}`);
+      showToast(
+        isEnabled
+          ? t('settings.integrations.clientApps.toggleDisabled', { intent: intentId })
+          : t('settings.integrations.clientApps.toggleEnabled', { intent: intentId })
+      );
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
       // Revert on error
@@ -694,7 +763,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
     if (!githubRepo.trim()) return;
     try {
       await api.patchSettings({ github_repo: githubRepo.trim() });
-      showToast('GitHub repository saved');
+      showToast(t('settings.integrations.clientApps.saved'));
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
@@ -738,8 +807,8 @@ echo "Saved to Sparkkeep"`;
 
   return (
     <div className="settings-panel" role="tabpanel">
-      <nav className="settings-section-index" aria-label="Integration sections" ref={indexNavRef}>
-        {INTEGRATION_SECTIONS.map(({ slug, title }) => (
+      <nav className="settings-section-index" aria-label={t('settings.integrations.navAria')} ref={indexNavRef}>
+        {INTEGRATION_SECTIONS.map(({ slug, titleKey }) => (
           <button
             key={slug}
             type="button"
@@ -747,7 +816,7 @@ echo "Saved to Sparkkeep"`;
             aria-current={activeSection === slug ? 'true' : undefined}
             onClick={() => activateSection(slug)}
           >
-            {title}
+            {t(titleKey)}
           </button>
         ))}
       </nav>
@@ -756,9 +825,9 @@ echo "Saved to Sparkkeep"`;
         <div className="settings-group-header">
           <div className="settings-group-heading">
             <Library size={20} className="settings-group-icon" aria-hidden="true" />
-            <h2 className="settings-group-title" id="settings-group-knowledge-sinks">Knowledge Sinks</h2>
+            <h2 className="settings-group-title" id="settings-group-knowledge-sinks">{t('settings.integrations.groups.knowledge.title')}</h2>
           </div>
-          <p className="settings-group-desc">Outbound: Sparkkeep writes your library into your notes app.</p>
+          <p className="settings-group-desc">{t('settings.integrations.groups.knowledge.desc')}</p>
         </div>
 
         <CollapsibleSection
@@ -769,17 +838,17 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Brain size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('notion')}>Notion Knowledge Sink</h3>
+                <h3 {...headingProps('notion')}>{t('settings.integrations.sections.notion')}</h3>
               </div>
               <span className="settings-section-desc">
-                Sync your Sparkkeep library to a Notion database with rich block rendering, auto-provisioned schema, and idempotent upserts via Sparkkeep ID.
+                {t('settings.integrations.notion.desc')}
               </span>
             </div>
           }
         >
 
           <div className="setup-form-group">
-            <label htmlFor="notion-token">Integration Token</label>
+            <label htmlFor="notion-token">{t('settings.integrations.notion.tokenLabel')}</label>
             <input
               id="notion-token"
               type="password"
@@ -790,29 +859,29 @@ echo "Saved to Sparkkeep"`;
               style={{ fontFamily: 'var(--font-mono)' }}
             />
             <span className="setup-hint">
-              Create an Internal Integration at{' '}
+              {t('settings.integrations.notion.tokenHintBefore')}{' '}
               <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener noreferrer">
                 notion.so/my-integrations
-              </a>{' '}
-              , then share your target database with the integration.
+              </a>
+              {t('settings.integrations.notion.tokenHintAfter')}
             </span>
           </div>
 
           <div className="setup-form-group">
-            <label htmlFor="notion-database-id">Database ID</label>
+            <label htmlFor="notion-database-id">{t('settings.integrations.notion.databaseLabel')}</label>
             <input
               id="notion-database-id"
               type="text"
               value={notionDatabaseId}
               onChange={(e) => setNotionDatabaseId(e.target.value)}
               className="setup-input"
-              placeholder="32-char database ID from Notion URL"
+              placeholder={t('settings.integrations.notion.databasePlaceholder')}
               style={{ fontFamily: 'var(--font-mono)' }}
             />
             <span className="setup-hint">
-              Found in the database URL:{' '}
-              <code>{`https://notion.so/workspace/<DATABASE_ID>?v=...`}</code> {' '}
-              — the 32-char segment before <code>?v=</code>.
+              {t('settings.integrations.notion.databaseHint')}{' '}
+              <code>{`https://notion.so/workspace/<DATABASE_ID>?v=...`}</code>{' '}
+              {t('settings.integrations.notion.databaseHintAfter')} <code>?v=</code>.
             </span>
           </div>
 
@@ -824,11 +893,11 @@ echo "Saved to Sparkkeep"`;
                 onChange={(e) => setNotionAutoExport(e.target.checked)}
               />
               <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                Auto-export on card changes (requires Ticket 06 background sync)
+                {t('settings.integrations.notion.autoExport')}
               </span>
             </label>
             <span className="setup-hint" style={{ marginLeft: 'auto', fontSize: '11px' }}>
-              When enabled, new/updated cards are automatically synced to Notion.
+              {t('settings.integrations.notion.autoExportHint')}
             </span>
           </div>
 
@@ -840,7 +909,7 @@ echo "Saved to Sparkkeep"`;
               onClick={handleTestNotion}
               style={{ whiteSpace: 'nowrap' }}
             >
-              {testingNotion ? 'Testing...' : 'Test Connection'}
+              {testingNotion ? t('common.testing') : t('settings.integrations.actions.testConnection')}
             </button>
             <button
               type="button"
@@ -850,7 +919,7 @@ echo "Saved to Sparkkeep"`;
               style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               <HardDrive size={14} />
-              <span>{syncingNotion ? 'Syncing...' : 'Sync Library Now'}</span>
+              <span>{syncingNotion ? t('common.syncing') : t('settings.integrations.actions.syncNow')}</span>
             </button>
             <button
               type="button"
@@ -859,7 +928,7 @@ echo "Saved to Sparkkeep"`;
               style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               <Save size={14} />
-              <span>Save Settings</span>
+              <span>{t('settings.integrations.actions.saveSettings')}</span>
             </button>
           </div>
 
@@ -890,31 +959,31 @@ echo "Saved to Sparkkeep"`;
               className={`setup-info-box`}
               style={{
                 marginTop: '12px',
-                background: notionSyncResult.startsWith('✅')
+                background: notionSyncResult.success
                   ? 'rgba(16, 185, 129, 0.1)'
                   : 'rgba(239, 68, 68, 0.1)',
-                borderColor: notionSyncResult.startsWith('✅')
+                borderColor: notionSyncResult.success
                   ? 'rgba(16, 185, 129, 0.3)'
                   : 'rgba(239, 68, 68, 0.3)',
               }}
             >
-              {notionSyncResult.startsWith('✅') ? (
+              {notionSyncResult.success ? (
                 <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
               ) : (
                 <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
               )}
-              <span style={{ fontSize: '13px' }}>{notionSyncResult}</span>
+              <span style={{ fontSize: '13px' }}>{notionSyncResult.message}</span>
             </div>
           )}
 
           <div className="setup-info-box" style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
-            <strong>How it works:</strong>
+            <strong>{t('settings.integrations.notion.howTitle')}</strong>
             <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', lineHeight: 1.7 }}>
-              <li>Database properties are auto-provisioned: Sparkkeep ID (number), Card Type, Horizon, Status, Tags, Source URL, Created At, Updated At, Researched.</li>
-              <li>Upsert is idempotent via <strong>Sparkkeep ID</strong> property — re-syncing updates the same page.</li>
-              <li>Content rendered as Notion blocks: headings, paragraphs, lists, checkboxes, code blocks, callouts for Research Dossier.</li>
-              <li>Long text auto-chunked at 2,000 chars; blocks batched at 100 per API call.</li>
-              <li>Rate limits handled with exponential backoff.</li>
+              <li>{t('settings.integrations.notion.howProperties')}</li>
+              <li>{t('settings.integrations.notion.howIdempotent')}</li>
+              <li>{t('settings.integrations.notion.howBlocks')}</li>
+              <li>{t('settings.integrations.notion.howChunking')}</li>
+              <li>{t('settings.integrations.notion.howRate')}</li>
             </ul>
           </div>
         </CollapsibleSection>
@@ -929,17 +998,17 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FolderSync size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('obsidian')}>Obsidian Vault Export</h3>
+                <h3 {...headingProps('obsidian')}>{t('settings.integrations.sections.obsidian')}</h3>
               </div>
               <span className="settings-section-desc">
-                Mirror and export your Sparkkeep library into your local or networked Obsidian knowledge base with full Markdown and YAML frontmatter.
+                {t('settings.integrations.obsidian.desc')}
               </span>
             </div>
           }
         >
 
           <div className="setup-form-group">
-            <label htmlFor="obsidian-vault-path">Obsidian Vault Directory Path</label>
+            <label htmlFor="obsidian-vault-path">{t('settings.integrations.obsidian.pathLabel')}</label>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <input
                 id="obsidian-vault-path"
@@ -960,7 +1029,7 @@ echo "Saved to Sparkkeep"`;
                 onClick={handleTestObsidian}
                 style={{ whiteSpace: 'nowrap' }}
               >
-                <span>{testingObsidian ? 'Testing...' : 'Test Connection'}</span>
+                <span>{testingObsidian ? t('common.testing') : t('settings.integrations.actions.testConnection')}</span>
               </button>
               <button
                 type="button"
@@ -970,11 +1039,11 @@ echo "Saved to Sparkkeep"`;
                 style={{ whiteSpace: 'nowrap' }}
               >
                 <FolderSync size={14} />
-                <span>{syncingObsidian ? 'Syncing...' : 'Sync Vault Now'}</span>
+                <span>{syncingObsidian ? t('common.syncing') : t('settings.integrations.obsidian.syncNow')}</span>
               </button>
             </div>
             <span className="setup-hint">
-              Leave blank to use the default configured system vault path. Creates folder structures with tags, executive summaries, and research reports.
+              {t('settings.integrations.obsidian.pathHint')}
             </span>
           </div>
 
@@ -990,11 +1059,11 @@ echo "Saved to Sparkkeep"`;
                 style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
               />
               <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                Auto-export on status change & research completion
+                {t('settings.integrations.obsidian.autoExport')}
               </span>
             </label>
             <span className="setup-hint" style={{ marginTop: '6px', display: 'block' }}>
-              When enabled, cards transitioning to To-Do, In Progress, or Done — and cards with completed research — are automatically exported to your Obsidian vault.
+              {t('settings.integrations.obsidian.autoExportHint')}
             </span>
           </div>
 
@@ -1025,20 +1094,20 @@ echo "Saved to Sparkkeep"`;
               className={`setup-info-box`}
               style={{
                 marginTop: '12px',
-                background: lastSyncResult.startsWith('✅')
+                background: lastSyncResult.success
                   ? 'rgba(16, 185, 129, 0.1)'
                   : 'rgba(239, 68, 68, 0.1)',
-                borderColor: lastSyncResult.startsWith('✅')
+                borderColor: lastSyncResult.success
                   ? 'rgba(16, 185, 129, 0.3)'
                   : 'rgba(239, 68, 68, 0.3)',
               }}
             >
-              {lastSyncResult.startsWith('✅') ? (
+              {lastSyncResult.success ? (
                 <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
               ) : (
                 <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
               )}
-              <span style={{ fontSize: '13px' }}>{lastSyncResult}</span>
+              <span style={{ fontSize: '13px' }}>{lastSyncResult.message}</span>
             </div>
           )}
         </CollapsibleSection>
@@ -1053,17 +1122,17 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Database size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('joplin')}>Joplin Knowledge Sink</h3>
+                <h3 {...headingProps('joplin')}>{t('settings.integrations.sections.joplin')}</h3>
               </div>
               <span className="settings-section-desc">
-                Sync your Sparkkeep library to Joplin via Self-Hosted Server or Desktop Clipper API. Notes use deterministic IDs for idempotent upserts.
+                {t('settings.integrations.joplin.desc')}
               </span>
             </div>
           }
         >
 
           <div className="setup-form-group">
-            <label>Mode</label>
+            <label>{t('settings.integrations.joplin.mode')}</label>
             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                 <input
@@ -1080,7 +1149,7 @@ echo "Saved to Sparkkeep"`;
                 />
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Database size={14} style={{ color: '#e85d04' }} />
-                  Self-Hosted Server
+                  {t('settings.integrations.joplin.modeServer')}
                 </span>
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
@@ -1096,17 +1165,17 @@ echo "Saved to Sparkkeep"`;
                 />
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Monitor size={14} style={{ color: '#4a90d9' }} />
-                  Desktop Clipper API
+                  {t('settings.integrations.joplin.modeClipper')}
                 </span>
               </label>
             </div>
             <span className="setup-hint">
-              Server mode requires email/password for authentication. Clipper mode requires only the clipper token (Joplin Desktop must be running with Clipper plugin enabled).
+              {t('settings.integrations.joplin.modeHint')}
             </span>
           </div>
 
           <div className="setup-form-group">
-            <label htmlFor="joplin-base-url">Base URL</label>
+            <label htmlFor="joplin-base-url">{t('settings.integrations.joplin.baseUrl')}</label>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <input
                 id="joplin-base-url"
@@ -1119,16 +1188,16 @@ echo "Saved to Sparkkeep"`;
               />
             </div>
             <span className="setup-hint">
-              {joplinMode === "server"
-                ? "Your self-hosted Joplin Server URL (e.g., https://joplin.yourdomain.com)"
-                : "Joplin Desktop Clipper API endpoint (default: http://127.0.0.1:41184)"}
+              {joplinMode === 'server'
+                ? t('settings.integrations.joplin.baseUrlHintServer')
+                : t('settings.integrations.joplin.baseUrlHintClipper')}
             </span>
           </div>
 
           {joplinMode === "server" && (
             <div>
               <div className="setup-form-group">
-                <label htmlFor="joplin-email">Email (Server Mode)</label>
+                <label htmlFor="joplin-email">{t('settings.integrations.joplin.emailLabel')}</label>
                 <input
                   id="joplin-email"
                   type="email"
@@ -1138,11 +1207,11 @@ echo "Saved to Sparkkeep"`;
                   placeholder="admin@joplin.example.com"
                   style={{ fontFamily: 'var(--font-mono)' }}
                 />
-                <span className="setup-hint">Email used to authenticate with Joplin Server.</span>
+                <span className="setup-hint">{t('settings.integrations.joplin.emailHint')}</span>
               </div>
 
               <div className="setup-form-group">
-                <label htmlFor="joplin-password">Password (Server Mode)</label>
+                <label htmlFor="joplin-password">{t('settings.integrations.joplin.passwordLabel')}</label>
                 <input
                   id="joplin-password"
                   type="password"
@@ -1152,14 +1221,14 @@ echo "Saved to Sparkkeep"`;
                   placeholder="••••••••"
                   style={{ fontFamily: 'var(--font-mono)' }}
                 />
-                <span className="setup-hint">Password for Joplin Server authentication. Used only to obtain a session token.</span>
+                <span className="setup-hint">{t('settings.integrations.joplin.passwordHint')}</span>
               </div>
             </div>
           )}
 
           {joplinMode === "clipper" && (
             <div className="setup-form-group">
-              <label htmlFor="joplin-token">Clipper Token (Desktop Mode)</label>
+              <label htmlFor="joplin-token">{t('settings.integrations.joplin.tokenLabel')}</label>
               <input
                 id="joplin-token"
                 type="password"
@@ -1170,7 +1239,7 @@ echo "Saved to Sparkkeep"`;
                 style={{ fontFamily: 'var(--font-mono)' }}
               />
               <span className="setup-hint">
-                Token from Joplin Desktop → Options → Web Clipper → "Authorization token". Joplin must be running with the Web Clipper service enabled.
+                {t('settings.integrations.joplin.tokenHint')}
               </span>
             </div>
           )}
@@ -1183,11 +1252,11 @@ echo "Saved to Sparkkeep"`;
                 onChange={(e) => setJoplinAutoExport(e.target.checked)}
               />
               <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                Auto-export on card changes (requires Ticket 06 background sync)
+                {t('settings.integrations.joplin.autoExport')}
               </span>
             </label>
             <span className="setup-hint" style={{ marginLeft: 'auto', fontSize: '11px' }}>
-              When enabled, new/updated cards are automatically synced to Joplin.
+              {t('settings.integrations.joplin.autoExportHint')}
             </span>
           </div>
 
@@ -1199,7 +1268,7 @@ echo "Saved to Sparkkeep"`;
               onClick={handleTestJoplin}
               style={{ whiteSpace: 'nowrap' }}
             >
-              {testingJoplin ? 'Testing...' : 'Test Connection'}
+              {testingJoplin ? t('common.testing') : t('settings.integrations.actions.testConnection')}
             </button>
             <button
               type="button"
@@ -1209,7 +1278,7 @@ echo "Saved to Sparkkeep"`;
               style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               <HardDrive size={14} />
-              <span>{syncingJoplin ? 'Syncing...' : 'Sync Library Now'}</span>
+              <span>{syncingJoplin ? t('common.syncing') : t('settings.integrations.actions.syncNow')}</span>
             </button>
             <button
               type="button"
@@ -1218,7 +1287,7 @@ echo "Saved to Sparkkeep"`;
               style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               <Save size={14} />
-              <span>Save Settings</span>
+              <span>{t('settings.integrations.actions.saveSettings')}</span>
             </button>
           </div>
 
@@ -1249,31 +1318,35 @@ echo "Saved to Sparkkeep"`;
               className={`setup-info-box`}
               style={{
                 marginTop: '12px',
-                background: joplinSyncResult.startsWith('✅')
+                background: joplinSyncResult.success
                   ? 'rgba(16, 185, 129, 0.1)'
                   : 'rgba(239, 68, 68, 0.1)',
-                borderColor: joplinSyncResult.startsWith('✅')
+                borderColor: joplinSyncResult.success
                   ? 'rgba(16, 185, 129, 0.3)'
                   : 'rgba(239, 68, 68, 0.3)',
               }}
             >
-              {joplinSyncResult.startsWith('✅') ? (
+              {joplinSyncResult.success ? (
                 <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
               ) : (
                 <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
               )}
-              <span style={{ fontSize: '13px' }}>{joplinSyncResult}</span>
+              <span style={{ fontSize: '13px' }}>{joplinSyncResult.message}</span>
             </div>
           )}
 
           <div className="setup-info-box" style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
-            <strong>How it works:</strong>
+            <strong>{t('settings.integrations.joplin.howTitle')}</strong>
             <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', lineHeight: 1.7 }}>
-              <li>Notes are created in a <strong>Sparkkeep</strong> notebook (auto-created).</li>
-              <li>Each card gets a deterministic 32-char hex ID: <code>{`sha256("sparkkeep:card:{id}")[:32]`}</code> — re-syncing updates the same note.</li>
-              <li>Tags are synced as Joplin tags with deterministic IDs.</li>
-              <li>Markdown includes: Title, Executive Summary, Value Proposition, Proposed Actions (as checkboxes), References, Research Dossier.</li>
-              <li><strong>E2EE note:</strong> Target notebook must have End-to-End Encryption disabled in Joplin (Settings → Encryption).</li>
+              <li>{t('settings.integrations.joplin.howNotebook')}</li>
+              <li>
+                {t('settings.integrations.joplin.howIdBefore')}{' '}
+                <code>{'sha256("sparkkeep:card:{id}")[:32]'}</code>{' '}
+                {t('settings.integrations.joplin.howIdAfter')}
+              </li>
+              <li>{t('settings.integrations.joplin.howTags')}</li>
+              <li>{t('settings.integrations.joplin.howContent')}</li>
+              <li>{t('settings.integrations.joplin.howE2ee')}</li>
             </ul>
           </div>
         </CollapsibleSection>
@@ -1286,9 +1359,9 @@ echo "Saved to Sparkkeep"`;
         <div className="settings-group-header">
           <div className="settings-group-heading">
             <Inbox size={20} className="settings-group-icon" aria-hidden="true" />
-            <h2 className="settings-group-title" id="settings-group-inbound-capture-tools">Inbound Capture Tools</h2>
+            <h2 className="settings-group-title" id="settings-group-inbound-capture-tools">{t('settings.integrations.groups.inbound.title')}</h2>
           </div>
-          <p className="settings-group-desc">Inbound: tools capture into Sparkkeep; MCP clients read the library.</p>
+          <p className="settings-group-desc">{t('settings.integrations.groups.inbound.desc')}</p>
         </div>
 
         <CollapsibleSection
@@ -1300,17 +1373,19 @@ echo "Saved to Sparkkeep"`;
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Globe size={18} style={{ color: 'var(--accent)' }} />
-                  <h3 {...headingProps('browser-extension')}>Official Browser Extension (Chrome &amp; Firefox)</h3>
+                  <h3 {...headingProps('browser-extension')}>{t('settings.integrations.sections.browserExtension')}</h3>
                 </div>
                 <span
                   className={`settings-badge ${extensionInstalled ? 'success' : 'neutral'}`}
                   style={{ fontSize: '10.5px' }}
                 >
-                  {extensionInstalled ? 'Extension Detected (Active)' : 'Available for Chrome & Firefox'}
+                  {extensionInstalled
+                    ? t('settings.integrations.browser.detected')
+                    : t('settings.integrations.browser.available')}
                 </span>
               </div>
               <span className="settings-section-desc">
-                1-Click web clipping, highlighted quote extraction, and automatic triage directly into your private Sparkkeep instance.
+                {t('settings.integrations.browser.desc')}
               </span>
             </div>
           }
@@ -1329,10 +1404,12 @@ echo "Saved to Sparkkeep"`;
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
               <div>
                 <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                  {pairSuccess ? '✓ Paired with Instance!' : 'Magic Instance Pairing'}
+                  {pairSuccess ? t('settings.integrations.browser.pairedTitle') : t('settings.integrations.browser.pairTitle')}
                 </strong>
                 <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                  Preconfigures the extension with this server address (<code style={{ color: 'var(--accent)' }}>{currentOrigin}</code>) and your authentication credentials.
+                  {t('settings.integrations.browser.pairDescBefore')}
+                  <code style={{ color: 'var(--accent)' }}>{currentOrigin}</code>
+                  {t('settings.integrations.browser.pairDescAfter')}
                 </div>
               </div>
 
@@ -1344,7 +1421,7 @@ echo "Saved to Sparkkeep"`;
                   style={{ fontSize: '12px', padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
                   <Sparkles size={14} />
-                  <span>1-Click Pair Extension</span>
+                  <span>{t('settings.integrations.browser.pairAction')}</span>
                 </button>
                 <button
                   type="button"
@@ -1352,7 +1429,9 @@ echo "Saved to Sparkkeep"`;
                   onClick={() => setShowExtensionGuide(!showExtensionGuide)}
                   style={{ fontSize: '12px', padding: '6px 12px' }}
                 >
-                  {showExtensionGuide ? 'Hide Guide' : 'Setup Guide'}
+                  {showExtensionGuide
+                    ? t('settings.integrations.browser.hideGuide')
+                    : t('settings.integrations.browser.showGuide')}
                 </button>
               </div>
             </div>
@@ -1368,20 +1447,26 @@ echo "Saved to Sparkkeep"`;
                 }}
               >
                 <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
-                  How to load the extension in your browser:
+                  {t('settings.integrations.browser.guideTitle')}
                 </div>
                 <ol style={{ paddingLeft: '18px', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <li>
-                    Open <code>chrome://extensions</code> (Chrome/Brave/Edge) or <code>about:debugging</code> (Firefox).
+                    {t('settings.integrations.browser.step1Before')}{' '}
+                    <code>chrome://extensions</code>
+                    {t('settings.integrations.browser.step1Mid')}
+                    <code>about:debugging</code>
+                    {t('settings.integrations.browser.step1After')}
                   </li>
                   <li>
-                    Enable <strong>Developer Mode</strong>, click <strong>Load unpacked</strong>, and select the <code>extension/</code> directory inside this repo.
+                    {t('settings.integrations.browser.step2Before')}{' '}
+                    <code>extension/</code>{' '}
+                    {t('settings.integrations.browser.step2After')}
                   </li>
+                  <li>{t('settings.integrations.browser.step3')}</li>
                   <li>
-                    Return to this page and click <strong>1-Click Pair Extension</strong> above to automatically connect!
-                  </li>
-                  <li>
-                    Use shortcut <code>Alt+Shift+S</code> on any page or right-click any highlighted text to clip.
+                    {t('settings.integrations.browser.step4Before')}{' '}
+                    <code>Alt+Shift+S</code>{' '}
+                    {t('settings.integrations.browser.step4After')}
                   </li>
                 </ol>
               </div>
@@ -1399,10 +1484,10 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Bookmark size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('bookmarklet')}>Browser Bookmarklet</h3>
+                <h3 {...headingProps('bookmarklet')}>{t('settings.integrations.sections.bookmarklet')}</h3>
               </div>
               <span className="settings-section-desc">
-                Instantly capture any webpage or article directly into Sparkkeep from Chrome, Safari, Firefox, or Edge.
+                {t('settings.integrations.bookmarklet.desc')}
               </span>
             </div>
           }
@@ -1410,7 +1495,7 @@ echo "Saved to Sparkkeep"`;
 
           <div className="setup-info-box" style={{ marginBottom: '14px' }}>
             <span>
-              Drag the button below directly to your browser's bookmarks bar, or copy the code snippet into a manual bookmark URL.
+              {t('settings.integrations.bookmarklet.info')}
             </span>
           </div>
 
@@ -1419,7 +1504,7 @@ echo "Saved to Sparkkeep"`;
               href={bookmarkletCode}
               onClick={(e) => {
                 e.preventDefault();
-                showToast('Drag this button directly to your browser Bookmarks Bar!');
+                showToast(t('settings.integrations.bookmarklet.dragToast'));
               }}
               className="setup-btn-primary"
               style={{
@@ -1429,20 +1514,26 @@ echo "Saved to Sparkkeep"`;
                 alignItems: 'center',
                 gap: '8px',
               }}
-              title="Drag to your Bookmarks Toolbar"
+              title={t('settings.integrations.bookmarklet.dragTitle')}
             >
               <Bookmark size={15} />
-              <span>⚡ Save to Sparkkeep</span>
+              <span>{t('settings.integrations.bookmarklet.saveButton')}</span>
             </a>
 
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => copyToClipboard(bookmarkletCode, 'bookmarklet', 'Bookmarklet code')}
+              onClick={() =>
+                copyToClipboard(
+                  bookmarkletCode,
+                  'bookmarklet',
+                  t('settings.integrations.copyLabels.bookmarklet')
+                )
+              }
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               {copiedId === 'bookmarklet' ? <Check size={14} /> : <Copy size={14} />}
-              <span>{copiedId === 'bookmarklet' ? 'Copied' : 'Copy Bookmarklet Code'}</span>
+              <span>{copiedId === 'bookmarklet' ? t('common.copied') : t('settings.integrations.bookmarklet.copy')}</span>
             </button>
           </div>
         </CollapsibleSection>
@@ -1457,10 +1548,10 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Smartphone size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('ios-shortcut')}>Apple iOS Shortcut &amp; Share Sheet</h3>
+                <h3 {...headingProps('ios-shortcut')}>{t('settings.integrations.sections.iosShortcut')}</h3>
               </div>
               <span className="settings-section-desc">
-                Share articles, tweets, and links from Safari or any iOS app directly into Sparkkeep using Apple Shortcuts.
+                {t('settings.integrations.ios.desc')}
               </span>
             </div>
           }
@@ -1478,18 +1569,29 @@ echo "Saved to Sparkkeep"`;
             }}
           >
             <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>
-              Shortcut Steps in Apple Shortcuts app:
+              {t('settings.integrations.ios.stepsTitle')}
             </div>
             <ol style={{ paddingLeft: '18px', margin: 0 }}>
-              <li>Create a new shortcut named <strong>"Send to Sparkkeep"</strong> and enable <em>Show in Share Sheet</em>.</li>
-              <li>Add action: <strong>Get Contents of URL</strong> with address: <code style={{ color: 'var(--accent)' }}>{currentOrigin}/api/v1/capture</code></li>
-              <li>Set Method to <strong>POST</strong> and Headers:
-                <br />
-                • <code style={{ color: 'var(--accent)' }}>Authorization</code>: <code style={{ color: 'var(--accent)' }}>Bearer YOUR_MASTER_PASSPHRASE</code>
-                <br />
-                • <code style={{ color: 'var(--accent)' }}>Content-Type</code>: <code style={{ color: 'var(--accent)' }}>application/json</code>
+              <li>{t('settings.integrations.ios.step1')}</li>
+              <li>
+                {t('settings.integrations.ios.step2Before')}{' '}
+                <code style={{ color: 'var(--accent)' }}>{`${currentOrigin}/api/v1/capture`}</code>
               </li>
-              <li>Set Request Body (JSON): <code style={{ color: 'var(--accent)' }}>{`{"url": Shortcut Input, "text": "Captured via iOS"}`}</code></li>
+              <li>
+                {t('settings.integrations.ios.step3Before')}
+                <br />
+                • <code style={{ color: 'var(--accent)' }}>Authorization</code>:{' '}
+                <code style={{ color: 'var(--accent)' }}>Bearer YOUR_MASTER_PASSPHRASE</code>
+                <br />
+                • <code style={{ color: 'var(--accent)' }}>Content-Type</code>:{' '}
+                <code style={{ color: 'var(--accent)' }}>application/json</code>
+              </li>
+              <li>
+                {t('settings.integrations.ios.step4Before')}{' '}
+                <code style={{ color: 'var(--accent)' }}>
+                  {'{"url": Shortcut Input, "text": "Captured via iOS"}'}
+                </code>
+              </li>
             </ol>
           </div>
         </CollapsibleSection>
@@ -1508,20 +1610,22 @@ echo "Saved to Sparkkeep"`;
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Command size={18} style={{ color: 'var(--accent)' }} />
-                  <h3 {...headingProps('raycast')}>Raycast Extension / Script Command</h3>
+                  <h3 {...headingProps('raycast')}>{t('settings.integrations.sections.raycast')}</h3>
                 </div>
                 <span className="settings-section-desc">
-                  Trigger instant captures straight from your Mac keystrokes using a Raycast Script Command.
+                  {t('settings.integrations.raycast.desc')}
                 </span>
               </div>
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => copyToClipboard(raycastScript, 'raycast', 'Raycast script')}
+                onClick={() =>
+                  copyToClipboard(raycastScript, 'raycast', t('settings.integrations.copyLabels.raycast'))
+                }
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 10px' }}
               >
                 {copiedId === 'raycast' ? <Check size={13} /> : <Copy size={13} />}
-                <span>{copiedId === 'raycast' ? 'Copied' : 'Copy Script'}</span>
+                <span>{copiedId === 'raycast' ? t('common.copied') : t('settings.integrations.raycast.copyScript')}</span>
               </button>
             </div>
           }
@@ -1558,20 +1662,22 @@ echo "Saved to Sparkkeep"`;
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Cpu size={18} style={{ color: 'var(--accent)' }} />
-                  <h3 {...headingProps('mcp')}>Model Context Protocol (MCP)</h3>
+                  <h3 {...headingProps('mcp')}>{t('settings.integrations.sections.mcp')}</h3>
                 </div>
                 <span className="settings-section-desc">
-                  Empower Claude Desktop, Cursor, and Zed AI agents to query your Sparkkeep library as an active knowledge context.
+                  {t('settings.integrations.mcp.desc')}
                 </span>
               </div>
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => copyToClipboard(mcpConfig, 'mcp', 'MCP server config')}
+                onClick={() =>
+                  copyToClipboard(mcpConfig, 'mcp', t('settings.integrations.copyLabels.mcp'))
+                }
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 10px' }}
               >
                 {copiedId === 'mcp' ? <Check size={13} /> : <Copy size={13} />}
-                <span>{copiedId === 'mcp' ? 'Copied' : 'Copy MCP Config'}</span>
+                <span>{copiedId === 'mcp' ? t('common.copied') : t('settings.integrations.mcp.copyConfig')}</span>
               </button>
             </div>
           }
@@ -1592,7 +1698,10 @@ echo "Saved to Sparkkeep"`;
             {mcpConfig}
           </pre>
           <span className="setup-hint">
-            Paste into your <code>claude_desktop_config.json</code> under <code>mcpServers</code> to expose Sparkkeep search directly to your AI conversations.
+            {t('settings.integrations.mcp.hintBefore')}{' '}
+            <code>claude_desktop_config.json</code>{' '}
+            {t('settings.integrations.mcp.hintMid')} <code>mcpServers</code>{' '}
+            {t('settings.integrations.mcp.hintAfter')}
           </span>
         </CollapsibleSection>
 
@@ -1606,10 +1715,10 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Terminal size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('capture-api')}>Universal Inbound Capture API</h3>
+                <h3 {...headingProps('capture-api')}>{t('settings.integrations.sections.captureApi')}</h3>
               </div>
               <span className="settings-section-desc">
-                Send raw URLs and ideas into Sparkkeep from custom scripts, cron jobs, or command lines.
+                {t('settings.integrations.captureApi.desc')}
               </span>
             </div>
           }
@@ -1618,12 +1727,12 @@ echo "Saved to Sparkkeep"`;
           <div className="setup-info-box">
             <Terminal size={16} />
             <span>
-              Use your master passphrase as the Bearer token to authorize capture requests.
+              {t('settings.integrations.captureApi.info')}
             </span>
           </div>
 
           <div className="setup-form-group">
-            <label>Example cURL Request</label>
+            <label>{t('settings.integrations.captureApi.example')}</label>
             <pre
               style={{
                 background: 'var(--surface-sunken, #090a0f)',
@@ -1655,9 +1764,9 @@ echo "Saved to Sparkkeep"`;
         <div className="settings-group-header">
           <div className="settings-group-heading">
             <FlaskConical size={20} className="settings-group-icon" aria-hidden="true" />
-            <h2 className="settings-group-title" id="settings-group-automation-testing">Automation & Testing</h2>
+            <h2 className="settings-group-title" id="settings-group-automation-testing">{t('settings.integrations.groups.automation.title')}</h2>
           </div>
-          <p className="settings-group-desc">Bidirectional: other apps trigger and verify Sparkkeep flows.</p>
+          <p className="settings-group-desc">{t('settings.integrations.groups.automation.desc')}</p>
         </div>
 
         <CollapsibleSection
@@ -1668,10 +1777,10 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Send size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('webhook')}>Webhook Test Triggers</h3>
+                <h3 {...headingProps('webhook')}>{t('settings.integrations.sections.webhook')}</h3>
               </div>
               <span className="settings-section-desc">
-                Test outbound webhook payloads and dispatch triggers to external automation platforms like Zapier, n8n, Make, or custom API endpoints.
+                {t('settings.integrations.webhook.desc')}
               </span>
             </div>
           }
@@ -1679,7 +1788,7 @@ echo "Saved to Sparkkeep"`;
 
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px' }}>
             <div className="setup-form-group">
-              <label htmlFor="test-webhook-url">Destination Webhook URL</label>
+              <label htmlFor="test-webhook-url">{t('settings.integrations.webhook.urlLabel')}</label>
               <input
                 id="test-webhook-url"
                 type="url"
@@ -1691,14 +1800,14 @@ echo "Saved to Sparkkeep"`;
             </div>
 
             <div className="setup-form-group">
-              <label htmlFor="test-webhook-secret">Webhook Secret / Bearer (Optional)</label>
+              <label htmlFor="test-webhook-secret">{t('settings.integrations.webhook.secretLabel')}</label>
               <input
                 id="test-webhook-secret"
                 type="password"
                 value={webhookSecret}
                 onChange={(e) => setWebhookSecret(e.target.value)}
                 className="setup-input"
-                placeholder="Secret token"
+                placeholder={t('settings.integrations.webhook.secretPlaceholder')}
               />
             </div>
           </div>
@@ -1710,20 +1819,20 @@ echo "Saved to Sparkkeep"`;
               disabled={testingWebhook || !webhookUrl.trim()}
               onClick={handleTestWebhook}
             >
-              {testingWebhook ? 'Triggering...' : 'Dispatch Test Payload'}
+              {testingWebhook ? t('settings.integrations.webhook.triggering') : t('settings.integrations.webhook.dispatch')}
             </button>
 
             {webhookResult && (
               <span
                 style={{
                   fontSize: '13px',
-                  color: webhookResult.startsWith('✅')
+                  color: webhookResult.success
                     ? 'var(--accent-emerald, #10b981)'
                     : 'var(--color-error, #ef4444)',
                   fontWeight: 500,
                 }}
               >
-                {webhookResult}
+                {webhookResult.message}
               </span>
             )}
           </div>
@@ -1739,10 +1848,10 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Smartphone size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('client-apps')}>Client App Shortcuts</h3>
+                <h3 {...headingProps('client-apps')}>{t('settings.integrations.sections.clientApps')}</h3>
               </div>
               <span className="settings-section-desc">
-                Open cards directly in your favorite note-taking and task apps via URI schemes. Enable the apps you use.
+                {t('settings.integrations.clientApps.desc')}
               </span>
             </div>
           }
@@ -1798,16 +1907,16 @@ echo "Saved to Sparkkeep"`;
                     {savingIntents === app.id ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                         <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
-                        Saving...
+                        {t('common.saving')}
                       </span>
                     ) : enabled ? (
                       <>
                         <Check size={12} />
-                        <span>Enabled</span>
+                        <span>{t('common.enabled')}</span>
                       </>
                     ) : (
                       <>
-                        <span>Enable</span>
+                        <span>{t('common.enable')}</span>
                       </>
                     )}
                   </button>
@@ -1829,7 +1938,7 @@ echo "Saved to Sparkkeep"`;
                   type="text"
                   value={githubRepo}
                   onChange={(e) => setGithubRepo(e.target.value)}
-                  placeholder="owner/repo (e.g., facebook/react)"
+                  placeholder={t('settings.integrations.clientApps.repoPlaceholder')}
                   className="setup-input"
                   style={{ flex: 1, minWidth: '200px', maxWidth: '300px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
                 />
@@ -1840,11 +1949,12 @@ echo "Saved to Sparkkeep"`;
                   disabled={!githubRepo.trim()}
                   style={{ whiteSpace: 'nowrap', fontSize: '12px', padding: '6px 14px' }}
                 >
-                  Save Repository
+                  {t('settings.integrations.clientApps.saveRepo')}
                 </button>
               </div>
               <span className="setup-hint">
-                Required for GitHub Issues intent. Format: <code style={{ color: 'var(--accent)' }}>owner/repo</code>.
+                {t('settings.integrations.clientApps.repoHintBefore')}{' '}
+                <code style={{ color: 'var(--accent)' }}>owner/repo</code>.
               </span>
             </div>
           </div>
@@ -1857,9 +1967,9 @@ echo "Saved to Sparkkeep"`;
         <div className="settings-group-header">
           <div className="settings-group-heading">
             <Share2 size={20} className="settings-group-icon" aria-hidden="true" />
-            <h2 className="settings-group-title" id="settings-group-export-syndication">Export & Syndication</h2>
+            <h2 className="settings-group-title" id="settings-group-export-syndication">{t('settings.integrations.groups.export.title')}</h2>
           </div>
-          <p className="settings-group-desc">Outbound: Sparkkeep publishes your library to readers and feeds.</p>
+          <p className="settings-group-desc">{t('settings.integrations.groups.export.desc')}</p>
         </div>
 
         <CollapsibleSection
@@ -1870,10 +1980,10 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Download size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('library-export')}>Data Sovereignty & Full Library Export</h3>
+                <h3 {...headingProps('library-export')}>{t('settings.integrations.sections.libraryExport')}</h3>
               </div>
               <span className="settings-section-desc">
-                Download your entire library directly in your browser. Zero vendor lock-in guaranteed.
+                {t('settings.integrations.library.desc')}
               </span>
             </div>
           }
@@ -1887,7 +1997,7 @@ echo "Saved to Sparkkeep"`;
               style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 14px', borderRadius: '10px', cursor: 'pointer' }}
             >
               <FileCode size={15} />
-              <span>Download Full Library (.JSON)</span>
+              <span>{t('settings.integrations.library.json')}</span>
             </button>
             <button
               type="button"
@@ -1896,7 +2006,7 @@ echo "Saved to Sparkkeep"`;
               style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 14px', borderRadius: '10px', cursor: 'pointer' }}
             >
               <FileArchive size={15} />
-              <span>Download Markdown Archive (.ZIP)</span>
+              <span>{t('settings.integrations.library.zip')}</span>
             </button>
           </div>
         </CollapsibleSection>
@@ -1911,10 +2021,10 @@ echo "Saved to Sparkkeep"`;
             <div className="settings-section-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Rss size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('outbox-feed')}>Outbox RSS Feed</h3>
+                <h3 {...headingProps('outbox-feed')}>{t('settings.integrations.sections.outboxFeed')}</h3>
               </div>
               <span className="settings-section-desc">
-                Authenticated, filterable RSS 2.0 feed of your outbox cards with full research dossiers. Use with feed readers, automation tools, or custom dashboards.
+                {t('settings.integrations.outbox.desc')}
               </span>
             </div>
           }
@@ -1925,9 +2035,9 @@ echo "Saved to Sparkkeep"`;
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '240px' }}>
                 <Rss size={20} style={{ color: 'var(--accent)' }} />
                 <div>
-                  <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>Feed Token</strong>
+                  <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>{t('settings.integrations.outbox.tokenTitle')}</strong>
                   <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
-                    {outboxToken || 'Not generated'}
+                    {outboxToken || t('settings.integrations.outbox.notGenerated')}
                   </div>
                 </div>
               </div>
@@ -1939,7 +2049,11 @@ echo "Saved to Sparkkeep"`;
                   disabled={loadingToken}
                   style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
                 >
-                  {loadingToken ? 'Loading...' : outboxToken ? 'Show Token' : 'Generate Token'}
+                  {loadingToken
+                    ? t('common.loading')
+                    : outboxToken
+                    ? t('settings.integrations.outbox.show')
+                    : t('settings.integrations.outbox.generate')}
                 </button>
                 {outboxToken && !showFullToken && (
                   <button
@@ -1948,7 +2062,7 @@ echo "Saved to Sparkkeep"`;
                     onClick={() => setShowFullToken(true)}
                     style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
                   >
-                    <Eye size={14} /> Reveal
+                    <Eye size={14} /> {t('common.reveal')}
                   </button>
                 )}
                 {outboxToken && showFullToken && (
@@ -1958,18 +2072,20 @@ echo "Saved to Sparkkeep"`;
                     onClick={() => setShowFullToken(false)}
                     style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
                   >
-                    <EyeOff size={14} /> Hide
+                    <EyeOff size={14} /> {t('common.hide')}
                   </button>
                 )}
                 {showFullToken && outboxToken && (
                   <button
                     type="button"
                     className="setup-btn-primary"
-                    onClick={() => copyToClipboard(outboxToken, 'outbox-token', 'Feed token')}
+                    onClick={() =>
+                      copyToClipboard(outboxToken, 'outbox-token', t('settings.integrations.copyLabels.token'))
+                    }
                     style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
                     {copiedId === 'outbox-token' ? <Check size={14} /> : <Copy size={14} />}
-                    <span>{copiedId === 'outbox-token' ? 'Copied' : 'Copy Token'}</span>
+                    <span>{copiedId === 'outbox-token' ? t('common.copied') : t('settings.integrations.outbox.copyToken')}</span>
                   </button>
                 )}
                 {outboxToken && (
@@ -1985,7 +2101,7 @@ echo "Saved to Sparkkeep"`;
                     ) : (
                       <>
                         <RotateCcw size={14} />
-                        <span>Regenerate</span>
+                        <span>{t('settings.integrations.outbox.regenerate')}</span>
                       </>
                     )}
                   </button>
@@ -1994,11 +2110,11 @@ echo "Saved to Sparkkeep"`;
                   <button
                     type="button"
                     className="setup-btn-primary"
-                    onClick={() => copyToClipboard(feedUrl, 'feed-url', 'Feed URL')}
+                    onClick={() => copyToClipboard(feedUrl, 'feed-url', t('settings.integrations.copyLabels.feedUrl'))}
                     style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
                     {copiedId === 'feed-url' ? <Check size={14} /> : <Link2 size={14} />}
-                    <span>{copiedId === 'feed-url' ? 'Copied' : 'Copy Feed URL'}</span>
+                    <span>{copiedId === 'feed-url' ? t('common.copied') : t('settings.integrations.outbox.copyFeed')}</span>
                   </button>
                 )}
               </div>
@@ -2007,7 +2123,8 @@ echo "Saved to Sparkkeep"`;
             {showFullToken && outboxToken && feedUrl && (
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginTop: '4px' }}>
                 <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '8px' }}>
-                  <strong>Feed URL:</strong> <code style={{ color: 'var(--accent)' }}>{feedUrl}</code>
+                  <strong>{t('settings.integrations.outbox.feedUrlLabel')}</strong>{' '}
+                  <code style={{ color: 'var(--accent)' }}>{feedUrl}</code>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
                   <a href={`${feedUrl}&status=doing,done`} target="_blank" rel="noopener noreferrer" className="filter-link">status=doing,done</a>
@@ -2016,13 +2133,36 @@ echo "Saved to Sparkkeep"`;
                   <a href={`${feedUrl}&limit=50`} target="_blank" rel="noopener noreferrer" className="filter-link">limit=50</a>
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-                  <strong>Available filters:</strong>
+                  <strong>{t('settings.integrations.outbox.availableFilters')}</strong>
                   <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px' }}>
-                    <li><code>status</code> — comma-separated: <code>inbox</code>, <code>review</code>, <code>to-do</code>, <code>in-progress</code>, <code>done</code>, <code>shelved</code>, <code>dismissed</code></li>
-                    <li><code>type</code> — comma-separated: <code>article</code>, <code>video</code>, <code>tool</code>, <code>repo</code>, <code>book</code>, <code>guide</code>, <code>product</code>, <code>place</code>, <code>idea</code>, <code>claim</code>, <code>tutorial</code>, <code>paper</code>, <code>company</code>, <code>quote</code>, <code>other</code></li>
-                    <li><code>research_only</code> — <code>1</code> or <code>true</code> to include only cards with completed research</li>
-                    <li><code>since</code> — RFC3339 timestamp (e.g., <code>2024-01-15T00:00:00Z</code>)</li>
-                    <li><code>limit</code> — max items (default 100, max 100)</li>
+                    <li>
+                      <code>status</code> — {t('settings.integrations.outbox.filterCommaSeparated')}{' '}
+                      <code>inbox</code>, <code>review</code>, <code>to-do</code>,{' '}
+                      <code>in-progress</code>, <code>done</code>, <code>shelved</code>,{' '}
+                      <code>dismissed</code>
+                    </li>
+                    <li>
+                      <code>type</code> — {t('settings.integrations.outbox.filterCommaSeparated')}{' '}
+                      <code>article</code>, <code>video</code>, <code>tool</code>, <code>repo</code>,{' '}
+                      <code>book</code>, <code>guide</code>, <code>product</code>, <code>place</code>,{' '}
+                      <code>idea</code>, <code>claim</code>, <code>tutorial</code>, <code>paper</code>,{' '}
+                      <code>company</code>, <code>quote</code>, <code>other</code>
+                    </li>
+                    <li>
+                      <code>research_only</code> — <code>1</code>{' '}
+                      {t('settings.integrations.outbox.filterResearchOnlyBefore')}{' '}
+                      <code>true</code>{' '}
+                      {t('settings.integrations.outbox.filterResearchOnlyAfter')}
+                    </li>
+                    <li>
+                      <code>since</code> —{' '}
+                      {t('settings.integrations.outbox.filterSinceBefore')}{' '}
+                      <code>2024-01-15T00:00:00Z</code>
+                      {t('settings.integrations.outbox.filterSinceAfter')}
+                    </li>
+                    <li>
+                      <code>limit</code> — {t('settings.integrations.outbox.filterLimitText')}
+                    </li>
                   </ul>
                 </div>
               </div>

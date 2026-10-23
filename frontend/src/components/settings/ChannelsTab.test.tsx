@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { ChannelsTab } from './ChannelsTab';
 import * as api from '../../api';
+import { LocaleProvider } from '../../i18n';
+
+const render = (ui: ReactElement) => rtlRender(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 vi.mock('../../api', async () => {
   const actual = await vi.importActual<typeof import('../../api')>('../../api');

@@ -22,6 +22,7 @@ import {
   Share2,
 } from 'lucide-react';
 import * as api from '../../api';
+import { useLocale } from '../../i18n';
 
 export type ChannelId = 'telegram' | 'discord' | 'slack' | 'webhook';
 
@@ -70,6 +71,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
   showToast,
   onDirtyChange,
 }) => {
+  const { t } = useLocale();
   const [selectedChannel, setSelectedChannel] = useState<ChannelId>('telegram');
   const [channelTesting, setChannelTesting] = useState<string | null>(null);
   const [digestPushing, setDigestPushing] = useState(false);
@@ -84,6 +86,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
   const [testingInbound, setTestingInbound] = useState(false);
   const [testInboundText, setTestInboundText] = useState('Sparkkeep Inbound Webhook Test Spark #capture');
   const [inboundTestResult, setInboundTestResult] = useState<string | null>(null);
+  const [inboundTestFailed, setInboundTestFailed] = useState(false);
   const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false);
   const [activeSnippetTab, setActiveSnippetTab] = useState<'curl' | 'js' | 'python' | 'schema'>('curl');
   const [copiedSnippet, setCopiedSnippet] = useState(false);
@@ -94,6 +97,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
   const handleTestInboundCapture = async () => {
     setTestingInbound(true);
     setInboundTestResult(null);
+    setInboundTestFailed(false);
     try {
       const payloadText = testInboundText.trim() || 'Sparkkeep Inbound Webhook Test Spark #capture';
       const res = await api.captureSpark({
@@ -101,11 +105,12 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
         text: payloadText,
       });
       const cardId = res.card_ids?.[0] || res.cards?.[0] || 'created';
-      setInboundTestResult(`HTTP 200 OK — Ingested spark (Card ID: ${cardId})`);
-      showToast('Test spark captured successfully! Check your inbox.');
+      setInboundTestResult(t('settings.channels.webhook.testResult', { id: cardId }));
+      showToast(t('settings.channels.webhook.testCaptured'));
     } catch (err: unknown) {
       const errMsg = api.getErrorMessage(err);
-      setInboundTestResult(`Error: ${errMsg}`);
+      setInboundTestFailed(true);
+      setInboundTestResult(t('settings.channels.webhook.errorResult', { message: errMsg }));
       showToast(errMsg);
     } finally {
       setTestingInbound(false);
@@ -116,7 +121,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
     if (navigator.clipboard) {
       navigator.clipboard.writeText(inboundWebhookUrl);
       setCopiedWebhookUrl(true);
-      showToast('Inbound Webhook URL copied to clipboard.');
+      showToast(t('settings.channels.webhook.urlCopied'));
       setTimeout(() => setCopiedWebhookUrl(false), 2000);
     }
   };
@@ -125,7 +130,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
     setChannelTesting(channelId);
     try {
       const res = await api.testChannel(channelId);
-      showToast(res.message || `Test notification sent to ${channelId}!`);
+      showToast(res.message || t('settings.channels.digest.testSent', { channel: channelId }));
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     } finally {
@@ -137,7 +142,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
     setDigestPushing(true);
     try {
       const res = await api.pushDigestToChannel(selectedDigestChannel);
-      showToast(res.message || 'Digest pushed successfully!');
+      showToast(res.message || t('settings.channels.digest.pushed'));
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     } finally {
@@ -149,7 +154,7 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({
     if (navigator.clipboard) {
       navigator.clipboard.writeText(command);
       setCopiedPassphrase(true);
-      showToast('Pairing command copied to clipboard.');
+      showToast(t('settings.channels.webhook.commandCopied'));
       setTimeout(() => setCopiedPassphrase(false), 2000);
     }
   };
@@ -226,7 +231,7 @@ print(response.json())`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(currentSnippetCode);
       setCopiedSnippet(true);
-      showToast('Code snippet copied to clipboard.');
+      showToast(t('settings.channels.webhook.snippetCopied'));
       setTimeout(() => setCopiedSnippet(false), 2000);
     }
   };
@@ -234,51 +239,57 @@ print(response.json())`;
   const channelCards = [
     {
       id: 'telegram' as ChannelId,
-      title: 'Telegram Bot',
-      subtitle: 'Two-way capture, inline triage buttons & bot alerts',
-      typeTag: 'Two-Way Bot',
+      title: t('settings.channels.cards.telegram.title'),
+      subtitle: t('settings.channels.cards.telegram.subtitle'),
+      typeTag: t('settings.channels.cards.telegram.typeTag'),
       icon: Send,
       color: '#38bdf8',
       bgTint: 'rgba(56, 189, 248, 0.08)',
       iconBg: 'rgba(56, 189, 248, 0.15)',
       isConfigured: hasTgToken,
-      statusLabel: hasTgToken ? 'Connected' : 'Not Configured',
+      statusLabel: hasTgToken
+        ? t('settings.channels.status.connected')
+        : t('settings.channels.status.notConfigured'),
     },
     {
       id: 'discord' as ChannelId,
-      title: 'Discord Bot',
-      subtitle: 'Rich embeds, server text channels & triage links',
-      typeTag: 'Server Embeds',
+      title: t('settings.channels.cards.discord.title'),
+      subtitle: t('settings.channels.cards.discord.subtitle'),
+      typeTag: t('settings.channels.cards.discord.typeTag'),
       icon: MessageCircle,
       color: '#818cf8',
       bgTint: 'rgba(129, 140, 248, 0.08)',
       iconBg: 'rgba(129, 140, 248, 0.15)',
       isConfigured: hasDiscordToken,
-      statusLabel: hasDiscordToken ? 'Connected' : 'Not Configured',
+      statusLabel: hasDiscordToken
+        ? t('settings.channels.status.connected')
+        : t('settings.channels.status.notConfigured'),
     },
     {
       id: 'slack' as ChannelId,
-      title: 'Slack Webhook',
-      subtitle: 'Block Kit team notifications & weekly digest summaries',
-      typeTag: 'Team Webhook',
+      title: t('settings.channels.cards.slack.title'),
+      subtitle: t('settings.channels.cards.slack.subtitle'),
+      typeTag: t('settings.channels.cards.slack.typeTag'),
       icon: MessageSquare,
       color: '#fbbf24',
       bgTint: 'rgba(251, 191, 36, 0.08)',
       iconBg: 'rgba(251, 191, 36, 0.15)',
       isConfigured: hasSlackWebhook,
-      statusLabel: hasSlackWebhook ? 'Connected' : 'Not Configured',
+      statusLabel: hasSlackWebhook
+        ? t('settings.channels.status.connected')
+        : t('settings.channels.status.notConfigured'),
     },
     {
       id: 'webhook' as ChannelId,
-      title: 'Inbound Webhook',
-      subtitle: 'Universal HTTP POST API, cURL, Mobile & Custom Tools',
-      typeTag: 'Generic Endpoint',
+      title: t('settings.channels.cards.webhook.title'),
+      subtitle: t('settings.channels.cards.webhook.subtitle'),
+      typeTag: t('settings.channels.cards.webhook.typeTag'),
       icon: Terminal,
       color: '#a855f7',
       bgTint: 'rgba(168, 85, 247, 0.08)',
       iconBg: 'rgba(168, 85, 247, 0.15)',
       isConfigured: true,
-      statusLabel: 'Active & Ready',
+      statusLabel: t('settings.channels.status.activeReady'),
     },
   ];
 
@@ -289,15 +300,15 @@ print(response.json())`;
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Radio size={18} style={{ color: 'var(--accent)' }} />
-            <span className="settings-section-title">Omnichannel Messenger Hub</span>
+            <span className="settings-section-title">{t('settings.channels.hub.title')}</span>
           </div>
           <span className="settings-section-desc">
-            Select a channel below to configure credentials, test live connectivity, and access integration guides.
+            {t('settings.channels.hub.desc')}
           </span>
         </div>
 
         {/* Balanced 2x2 Channel Cards Deck */}
-        <div className="channels-deck" role="tablist" aria-label="Messenger channels">
+        <div className="channels-deck" role="tablist" aria-label={t('settings.channels.hub.deckAria')}>
           {channelCards.map((card) => {
             const Icon = card.icon;
             const isSelected = selectedChannel === card.id;
@@ -341,11 +352,11 @@ print(response.json())`;
                 <div className="channel-card-footer">
                   {isSelected ? (
                     <span className="channel-card-active-label">
-                      <span>Configuring</span>
+                      <span>{t('settings.channels.configuring')}</span>
                       <ChevronRight size={13} />
                     </span>
                   ) : (
-                    <span className="channel-card-inactive-label">Click to configure</span>
+                    <span className="channel-card-inactive-label">{t('settings.channels.clickToConfigure')}</span>
                   )}
                   <span className="channel-card-tag">{card.typeTag}</span>
                 </div>
@@ -375,13 +386,13 @@ print(response.json())`;
                 </div>
                 <div className="channel-workspace-meta">
                   <div className="channel-workspace-title-row">
-                    <span className="channel-workspace-title">Telegram Bot</span>
+                    <span className="channel-workspace-title">{t('settings.channels.telegram.title')}</span>
                     <span className={`settings-badge ${hasTgToken ? 'success' : 'neutral'}`}>
-                      {hasTgToken ? 'Active' : 'Optional'}
+                      {hasTgToken ? t('common.active') : t('common.optional')}
                     </span>
                   </div>
                   <span className="channel-workspace-desc">
-                    Forward messages, links, and audio notes directly into Sparkkeep with interactive inline triage buttons.
+                    {t('settings.channels.telegram.desc')}
                   </span>
                 </div>
               </div>
@@ -394,7 +405,7 @@ print(response.json())`;
                   disabled={channelTesting === 'telegram'}
                   onClick={() => handleTestChannel('telegram')}
                 >
-                  {channelTesting === 'telegram' ? 'Testing...' : 'Send Test Notification'}
+                  {channelTesting === 'telegram' ? t('common.testing') : t('settings.channels.telegram.test')}
                 </button>
               )}
             </div>
@@ -402,7 +413,8 @@ print(response.json())`;
             {/* Telegram Form Credentials */}
             <div className="setup-form-group">
               <label htmlFor="settings-tg-token">
-                Telegram Bot Token {hasTgToken ? '(Configured)' : ''}
+                {t('settings.channels.telegram.tokenLabel')}{' '}
+                {hasTgToken ? t('settings.channels.telegram.configured') : ''}
               </label>
               <div className="channel-input-wrapper">
                 <input
@@ -417,21 +429,21 @@ print(response.json())`;
                   placeholder={
                     hasTgToken
                       ? '••••••••••••••••'
-                      : 'Enter BotFather Token (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)'
+                      : t('settings.channels.telegram.tokenPlaceholder')
                   }
                 />
                 <button
                   type="button"
                   className="channel-eye-btn"
                   onClick={() => setShowTgToken(!showTgToken)}
-                  title={showTgToken ? 'Hide token' : 'Show token'}
-                  aria-label={showTgToken ? 'Hide token' : 'Show token'}
+                  title={showTgToken ? t('common.hideCredential') : t('common.showCredential')}
+                  aria-label={showTgToken ? t('common.hideCredential') : t('common.showCredential')}
                 >
                   {showTgToken ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
               <span className="setup-hint">
-                Created via @BotFather on Telegram. Controls message delivery and two-way inline triage buttons.
+                {t('settings.channels.telegram.hint')}
               </span>
             </div>
 
@@ -447,10 +459,10 @@ print(response.json())`;
                 <CheckCircle2 size={18} style={{ color: 'var(--accent-emerald)', marginTop: '2px', flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
                   <strong style={{ color: 'var(--accent-emerald)', fontSize: '13px' }}>
-                    Bot is Active! Link your private chat:
+                    {t('settings.channels.telegram.activeTitle')}
                   </strong>
                   <div style={{ marginTop: '4px', fontSize: '12.5px', color: 'var(--text-dim)' }}>
-                    Send this command to your Telegram bot to pair your personal account:
+                    {t('settings.channels.telegram.activeDesc')}
                   </div>
                   <div
                     style={{
@@ -482,12 +494,12 @@ print(response.json())`;
                       style={{ fontSize: '11px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
                       {copiedPassphrase ? <Check size={12} /> : <Copy size={12} />}
-                      <span>{copiedPassphrase ? 'Copied' : 'Copy Command'}</span>
+                      <span>{copiedPassphrase ? t('common.copied') : t('settings.channels.telegram.copyCommand')}</span>
                     </button>
                   </div>
                   {tgChatId && (
                     <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                      ✓ Currently paired to chat ID: <strong>{tgChatId}</strong>
+                      {t('settings.channels.telegram.paired')} <strong>{tgChatId}</strong>
                     </div>
                   )}
                 </div>
@@ -498,13 +510,13 @@ print(response.json())`;
             <div className="channel-guide-box">
               <span className="channel-guide-title">
                 <Sparkles size={15} style={{ color: '#38bdf8' }} />
-                <span>How to set up Telegram Bot in 4 easy steps</span>
+                <span>{t('settings.channels.telegram.guideTitle')}</span>
               </span>
               <div className="channel-step-list">
                 <div className="channel-step-item">
                   <span className="channel-step-num">1</span>
                   <span>
-                    Open{' '}
+                    {t('settings.channels.telegram.step1Before')}{' '}
                     <a
                       href="https://t.me/BotFather"
                       target="_blank"
@@ -513,20 +525,31 @@ print(response.json())`;
                     >
                       @BotFather <ExternalLink size={11} />
                     </a>{' '}
-                    in your Telegram application.
+                    {t('settings.channels.telegram.step1After')}
                   </span>
                 </div>
                 <div className="channel-step-item">
                   <span className="channel-step-num">2</span>
-                  <span>Send <code>/newbot</code> and follow the prompts to choose a friendly name and username.</span>
+                  <span>
+                    {t('settings.channels.telegram.step2Before')} <code>/newbot</code>{' '}
+                    {t('settings.channels.telegram.step2After')}
+                  </span>
                 </div>
                 <div className="channel-step-item">
                   <span className="channel-step-num">3</span>
-                  <span>Copy the <strong>HTTP API Token</strong> provided by BotFather and paste it into the field above.</span>
+                  <span>
+                    {t('settings.channels.telegram.step3Before')}{' '}
+                    <strong>HTTP API Token</strong>{' '}
+                    {t('settings.channels.telegram.step3After')}
+                  </span>
                 </div>
                 <div className="channel-step-item">
                   <span className="channel-step-num">4</span>
-                  <span>Save platform preferences, open your new bot on Telegram, and send <code>/start YOUR_MASTER_PASSPHRASE</code>.</span>
+                  <span>
+                    {t('settings.channels.telegram.step4Before')}{' '}
+                    <code>/start YOUR_MASTER_PASSPHRASE</code>
+                    {t('settings.channels.telegram.step4After')}
+                  </span>
                 </div>
               </div>
             </div>
@@ -546,13 +569,13 @@ print(response.json())`;
                 </div>
                 <div className="channel-workspace-meta">
                   <div className="channel-workspace-title-row">
-                    <span className="channel-workspace-title">Discord Bot</span>
+                    <span className="channel-workspace-title">{t('settings.channels.discord.title')}</span>
                     <span className={`settings-badge ${hasDiscordToken ? 'success' : 'neutral'}`}>
-                      {hasDiscordToken ? 'Active' : 'Optional'}
+                      {hasDiscordToken ? t('common.active') : t('common.optional')}
                     </span>
                   </div>
                   <span className="channel-workspace-desc">
-                    Deliver Rich Embeds with action buttons into your private Discord server and triage incoming links.
+                    {t('settings.channels.discord.desc')}
                   </span>
                 </div>
               </div>
@@ -565,7 +588,7 @@ print(response.json())`;
                   disabled={channelTesting === 'discord'}
                   onClick={() => handleTestChannel('discord')}
                 >
-                  {channelTesting === 'discord' ? 'Testing...' : 'Send Test Embed'}
+                  {channelTesting === 'discord' ? t('common.testing') : t('settings.channels.discord.test')}
                 </button>
               )}
             </div>
@@ -574,7 +597,8 @@ print(response.json())`;
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
               <div className="setup-form-group">
                 <label htmlFor="settings-discord-token">
-                  Discord Bot Token {hasDiscordToken ? '(Configured)' : ''}
+                  {t('settings.channels.discord.tokenLabel')}{' '}
+                  {hasDiscordToken ? t('settings.channels.discord.configured') : ''}
                 </label>
                 <div className="channel-input-wrapper">
                   <input
@@ -586,23 +610,23 @@ print(response.json())`;
                       onDirtyChange?.();
                     }}
                     className="setup-input"
-                    placeholder={hasDiscordToken ? '••••••••••••••••' : 'Discord Bot Token'}
+                    placeholder={hasDiscordToken ? '••••••••••••••••' : t('settings.channels.discord.tokenPlaceholder')}
                   />
                   <button
                     type="button"
                     className="channel-eye-btn"
                     onClick={() => setShowDiscordToken(!showDiscordToken)}
-                    title={showDiscordToken ? 'Hide token' : 'Show token'}
-                    aria-label={showDiscordToken ? 'Hide token' : 'Show token'}
+                    title={showDiscordToken ? t('common.hideCredential') : t('common.showCredential')}
+                    aria-label={showDiscordToken ? t('common.hideCredential') : t('common.showCredential')}
                   >
                     {showDiscordToken ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-                <span className="setup-hint">Found under Bot &rarr; Token in the Discord Developer Portal.</span>
+                <span className="setup-hint">{t('settings.channels.discord.hint')}</span>
               </div>
 
               <div className="setup-form-group">
-                <label htmlFor="settings-discord-channel">Discord Target Channel ID</label>
+                <label htmlFor="settings-discord-channel">{t('settings.channels.discord.channelLabel')}</label>
                 <input
                   id="settings-discord-channel"
                   type="text"
@@ -612,9 +636,9 @@ print(response.json())`;
                     onDirtyChange?.();
                   }}
                   className="setup-input"
-                  placeholder="e.g. 112233445566778899"
+                  placeholder={t('settings.channels.discord.channelPlaceholder')}
                 />
-                <span className="setup-hint">Right-click the channel in Discord with Developer Mode on &rarr; Copy Channel ID.</span>
+                <span className="setup-hint">{t('settings.channels.discord.channelHint')}</span>
               </div>
             </div>
 
@@ -622,13 +646,13 @@ print(response.json())`;
             <div className="channel-guide-box">
               <span className="channel-guide-title">
                 <Sparkles size={15} style={{ color: '#818cf8' }} />
-                <span>How to set up Discord Bot in 4 easy steps</span>
+                <span>{t('settings.channels.discord.guideTitle')}</span>
               </span>
               <div className="channel-step-list">
                 <div className="channel-step-item">
                   <span className="channel-step-num">1</span>
                   <span>
-                    Visit the{' '}
+                    {t('settings.channels.discord.step1Before')}{' '}
                     <a
                       href="https://discord.com/developers/applications"
                       target="_blank"
@@ -637,25 +661,37 @@ print(response.json())`;
                     >
                       Discord Developer Portal <ExternalLink size={11} />
                     </a>{' '}
-                    and click <strong>New Application</strong>.
+                    {t('settings.channels.discord.step1After')}
                   </span>
                 </div>
                 <div className="channel-step-item">
                   <span className="channel-step-num">2</span>
                   <span>
-                    Navigate to <strong>Bot</strong>, click <strong>Reset Token</strong>, copy it, and paste it above. Under <em>Privileged Gateway Intents</em>, enable <strong>Message Content Intent</strong>.
+                    {t('settings.channels.discord.step2Before')} <strong>Bot</strong>
+                    {t('settings.channels.discord.step2AfterBot')} <strong>Reset Token</strong>
+                    {t('settings.channels.discord.step2AfterReset')}{' '}
+                    <strong>Message Content Intent</strong>
+                    {t('settings.channels.discord.step2End')}
                   </span>
                 </div>
                 <div className="channel-step-item">
                   <span className="channel-step-num">3</span>
                   <span>
-                    Under <strong>OAuth2 &rarr; URL Generator</strong>, select the <code>bot</code> scope and check permissions <code>Send Messages</code> and <code>Embed Links</code>. Invite the bot to your server.
+                    {t('settings.channels.discord.step3Before')}{' '}
+                    <strong>OAuth2 → URL Generator</strong>
+                    {t('settings.channels.discord.step3AfterScope')} <code>bot</code>{' '}
+                    {t('settings.channels.discord.step3AfterBot')}{' '}
+                    <code>Send Messages</code> {t('settings.channels.discord.step3AfterSend')}{' '}
+                    <code>Embed Links</code>
+                    {t('settings.channels.discord.step3End')}
                   </span>
                 </div>
                 <div className="channel-step-item">
                   <span className="channel-step-num">4</span>
                   <span>
-                    In Discord settings &rarr; Advanced, enable <strong>Developer Mode</strong>. Right-click your desired text channel, select <strong>Copy Channel ID</strong>, and paste it above.
+                    {t('settings.channels.discord.step4Before')} <strong>Developer Mode</strong>
+                    {t('settings.channels.discord.step4Mid')} <strong>Copy Channel ID</strong>
+                    {t('settings.channels.discord.step4End')}
                   </span>
                 </div>
               </div>
@@ -676,13 +712,13 @@ print(response.json())`;
                 </div>
                 <div className="channel-workspace-meta">
                   <div className="channel-workspace-title-row">
-                    <span className="channel-workspace-title">Slack Webhook</span>
+                    <span className="channel-workspace-title">{t('settings.channels.slack.title')}</span>
                     <span className={`settings-badge ${hasSlackWebhook ? 'success' : 'neutral'}`}>
-                      {hasSlackWebhook ? 'Active' : 'Optional'}
+                      {hasSlackWebhook ? t('common.active') : t('common.optional')}
                     </span>
                   </div>
                   <span className="channel-workspace-desc">
-                    Post Block Kit interactive cards and daily triage digests into your Slack workspace.
+                    {t('settings.channels.slack.desc')}
                   </span>
                 </div>
               </div>
@@ -695,7 +731,7 @@ print(response.json())`;
                   disabled={channelTesting === 'slack'}
                   onClick={() => handleTestChannel('slack')}
                 >
-                  {channelTesting === 'slack' ? 'Testing...' : 'Send Test Message'}
+                  {channelTesting === 'slack' ? t('common.testing') : t('settings.channels.slack.test')}
                 </button>
               )}
             </div>
@@ -703,7 +739,8 @@ print(response.json())`;
             {/* Slack Form Credentials */}
             <div className="setup-form-group">
               <label htmlFor="settings-slack-webhook">
-                Slack Incoming Webhook URL {hasSlackWebhook ? '(Configured)' : ''}
+                {t('settings.channels.slack.webhookLabel')}{' '}
+                {hasSlackWebhook ? t('settings.channels.slack.configured') : ''}
               </label>
               <div className="channel-input-wrapper">
                 <input
@@ -715,20 +752,20 @@ print(response.json())`;
                     onDirtyChange?.();
                   }}
                   className="setup-input"
-                  placeholder={hasSlackWebhook ? '••••••••••••••••' : 'https://hooks.slack.com/services/T00/B00/XXXX'}
+                  placeholder={hasSlackWebhook ? '••••••••••••••••' : t('settings.channels.slack.webhookPlaceholder')}
                 />
                 <button
                   type="button"
                   className="channel-eye-btn"
                   onClick={() => setShowSlackWebhook(!showSlackWebhook)}
-                  title={showSlackWebhook ? 'Hide webhook' : 'Show webhook'}
-                  aria-label={showSlackWebhook ? 'Hide webhook' : 'Show webhook'}
+                  title={showSlackWebhook ? t('common.hideCredential') : t('common.showCredential')}
+                  aria-label={showSlackWebhook ? t('common.hideCredential') : t('common.showCredential')}
                 >
                   {showSlackWebhook ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
               <span className="setup-hint">
-                Incoming webhook generated by your custom Slack App or workflow integration.
+                {t('settings.channels.slack.hint')}
               </span>
             </div>
 
@@ -736,13 +773,13 @@ print(response.json())`;
             <div className="channel-guide-box">
               <span className="channel-guide-title">
                 <Sparkles size={15} style={{ color: '#fbbf24' }} />
-                <span>How to set up Slack Webhook in 3 easy steps</span>
+                <span>{t('settings.channels.slack.guideTitle')}</span>
               </span>
               <div className="channel-step-list">
                 <div className="channel-step-item">
                   <span className="channel-step-num">1</span>
                   <span>
-                    Visit{' '}
+                    {t('settings.channels.slack.step1Before')}{' '}
                     <a
                       href="https://api.slack.com/apps"
                       target="_blank"
@@ -751,19 +788,25 @@ print(response.json())`;
                     >
                       Slack API Apps <ExternalLink size={11} />
                     </a>{' '}
-                    and click <strong>Create New App</strong> &rarr; <em>From scratch</em>.
+                    {t('settings.channels.slack.step1After')}
                   </span>
                 </div>
                 <div className="channel-step-item">
                   <span className="channel-step-num">2</span>
                   <span>
-                    Under Features, click <strong>Incoming Webhooks</strong> and toggle <em>Activate Incoming Webhooks</em> to <strong>On</strong>.
+                    {t('settings.channels.slack.step2Before')} <strong>Incoming Webhooks</strong>{' '}
+                    {t('settings.channels.slack.step2Mid')}{' '}
+                    <strong>Activate Incoming Webhooks</strong>{' '}
+                    {t('settings.channels.slack.step2To')} <strong>On</strong>
+                    {t('settings.channels.slack.step2End')}
                   </span>
                 </div>
                 <div className="channel-step-item">
                   <span className="channel-step-num">3</span>
                   <span>
-                    Click <strong>Add New Webhook to Workspace</strong>, choose the channel you want alerts delivered to, and copy the Webhook URL above.
+                    {t('settings.channels.slack.step3Before')}{' '}
+                    <strong>Add New Webhook to Workspace</strong>
+                    {t('settings.channels.slack.step3End')}
                   </span>
                 </div>
               </div>
@@ -784,11 +827,11 @@ print(response.json())`;
                 </div>
                 <div className="channel-workspace-meta">
                   <div className="channel-workspace-title-row">
-                    <span className="channel-workspace-title">Inbound Webhook &amp; Mobile Capture</span>
-                    <span className="settings-badge success">Active</span>
+                    <span className="channel-workspace-title">{t('settings.channels.webhook.title')}</span>
+                    <span className="settings-badge success">{t('common.active')}</span>
                   </div>
                   <span className="channel-workspace-desc">
-                    Universal HTTP REST endpoint. Ingest links, markdown notes, quotes, or media from generic webhooks, cURL, automation platforms (n8n, Make, Zapier), iOS Shortcuts, or WhatsApp share sheets.
+                    {t('settings.channels.webhook.desc')}
                   </span>
                 </div>
               </div>
@@ -800,13 +843,13 @@ print(response.json())`;
                 disabled={testingInbound}
                 onClick={handleTestInboundCapture}
               >
-                {testingInbound ? 'Capturing...' : 'Send Test Inbound Spark'}
+                {testingInbound ? t('settings.channels.webhook.capturing') : t('settings.channels.webhook.test')}
               </button>
             </div>
 
             {/* Inbound Endpoint URL Box */}
             <div className="setup-form-group">
-              <label htmlFor="settings-inbound-webhook-url">Inbound Capture Webhook Endpoint (Universal)</label>
+              <label htmlFor="settings-inbound-webhook-url">{t('settings.channels.webhook.endpointLabel')}</label>
               <div className="channel-input-wrapper">
                 <input
                   id="settings-inbound-webhook-url"
@@ -820,14 +863,19 @@ print(response.json())`;
                   type="button"
                   className="channel-eye-btn"
                   onClick={handleCopyWebhookUrl}
-                  title="Copy Inbound URL"
-                  aria-label="Copy Inbound URL"
+                  title={t('settings.channels.webhook.copyUrl')}
+                  aria-label={t('settings.channels.webhook.copyUrl')}
                 >
                   {copiedWebhookUrl ? <Check size={15} style={{ color: 'var(--accent-emerald)' }} /> : <Copy size={15} />}
                 </button>
               </div>
               <span className="setup-hint">
-                Accepts HTTP <code>POST</code> with <code>Content-Type: application/json</code> and optional <code>Authorization: Bearer YOUR_MASTER_PASSPHRASE</code>.
+                {t('settings.channels.webhook.endpointHintBefore')} <code>POST</code>{' '}
+                {t('settings.channels.webhook.endpointHintMid')}{' '}
+                <code>Content-Type: application/json</code>{' '}
+                {t('settings.channels.webhook.endpointHintMid2')}{' '}
+                <code>Authorization: Bearer YOUR_MASTER_PASSPHRASE</code>
+                {t('settings.channels.webhook.endpointHintEnd')}
               </span>
             </div>
 
@@ -836,10 +884,10 @@ print(response.json())`;
               <div className="channel-tester-header">
                 <div className="channel-tester-title">
                   <Zap size={14} style={{ color: 'var(--accent)' }} />
-                  <span>Interactive Inbound Webhook Simulator</span>
+                  <span>{t('settings.channels.webhook.simulatorTitle')}</span>
                 </div>
                 {inboundTestResult && (
-                  <span className={`channel-tester-result ${inboundTestResult.startsWith('Error') ? 'error' : ''}`}>
+                  <span className={`channel-tester-result ${inboundTestFailed ? 'error' : ''}`}>
                     {inboundTestResult}
                   </span>
                 )}
@@ -849,10 +897,10 @@ print(response.json())`;
                   type="text"
                   value={testInboundText}
                   onChange={(e) => setTestInboundText(e.target.value)}
-                  placeholder="Enter a test URL (https://...) or personal note..."
+                  placeholder={t('settings.channels.webhook.simulatorPlaceholder')}
                   className="setup-input channel-tester-input"
                   style={{ fontSize: '12px' }}
-                  aria-label="Test inbound spark text"
+                  aria-label={t('settings.channels.webhook.simulatorAria')}
                 />
                 <button
                   type="button"
@@ -861,7 +909,7 @@ print(response.json())`;
                   onClick={handleTestInboundCapture}
                   style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
                 >
-                  {testingInbound ? 'Ingesting...' : 'Simulate Inbound Capture'}
+                  {testingInbound ? t('settings.channels.webhook.ingesting') : t('settings.channels.webhook.simulate')}
                 </button>
               </div>
             </div>
@@ -871,7 +919,7 @@ print(response.json())`;
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                 <span className="channel-guide-title">
                   <Code2 size={15} style={{ color: '#a855f7' }} />
-                  <span>Payload Specification &amp; Custom Automation</span>
+                  <span>{t('settings.channels.webhook.specTitle')}</span>
                 </span>
                 <div className="channel-code-tabs">
                   <button
@@ -913,10 +961,10 @@ print(response.json())`;
                   type="button"
                   className="channel-code-copy-btn"
                   onClick={handleCopySnippet}
-                  title="Copy snippet"
+                  title={t('settings.channels.webhook.copySnippet')}
                 >
                   {copiedSnippet ? <Check size={12} /> : <Copy size={12} />}
-                  <span>{copiedSnippet ? 'Copied' : 'Copy'}</span>
+                  <span>{copiedSnippet ? t('common.copied') : t('common.copy')}</span>
                 </button>
               </div>
             </div>
@@ -926,11 +974,11 @@ print(response.json())`;
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <Globe size={16} style={{ color: 'var(--accent)' }} />
                 <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                  Generic Webhook Versatility &amp; Mobile Recipes
+                  {t('settings.channels.webhook.recipesTitle')}
                 </strong>
               </div>
               <span style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.45 }}>
-                Because this endpoint adheres to standard REST specifications, you can connect it to any custom tool, messaging client, or automated pipeline:
+                {t('settings.channels.webhook.recipesDesc')}
               </span>
 
               <div className="channel-recipes-grid">
@@ -938,10 +986,12 @@ print(response.json())`;
                 <div className="channel-recipe-card">
                   <div className="channel-recipe-title">
                     <Zap size={14} style={{ color: '#f59e0b' }} />
-                    <span>n8n, Zapier &amp; Make</span>
+                    <span>{t('settings.channels.webhook.recipe1Title')}</span>
                   </div>
                   <span className="channel-recipe-desc">
-                    Point any generic HTTP Webhook action to this URL. Pass <code>url</code> or <code>text</code> in the JSON body to capture articles from RSS feeds or bookmarks automatically.
+                    {t('settings.channels.webhook.recipe1DescBefore')} <code>url</code>{' '}
+                    {t('settings.channels.webhook.recipe1DescMid')} <code>text</code>{' '}
+                    {t('settings.channels.webhook.recipe1DescEnd')}
                   </span>
                 </div>
 
@@ -949,10 +999,12 @@ print(response.json())`;
                 <div className="channel-recipe-card">
                   <div className="channel-recipe-title">
                     <Smartphone size={14} style={{ color: '#38bdf8' }} />
-                    <span>iOS &amp; Android Share Sheet</span>
+                    <span>{t('settings.channels.webhook.recipe2Title')}</span>
                   </div>
                   <span className="channel-recipe-desc">
-                    Create a 1-action Shortcut on iPhone or Android that accepts input from the system Share Sheet and makes an HTTP POST with <code>url: ShortcutInput</code>.
+                    {t('settings.channels.webhook.recipe2DescBefore')}{' '}
+                    <code>url: ShortcutInput</code>
+                    {t('settings.channels.webhook.recipe2DescEnd')}
                   </span>
                 </div>
 
@@ -960,10 +1012,11 @@ print(response.json())`;
                 <div className="channel-recipe-card" style={{ borderColor: 'rgba(37, 211, 102, 0.3)' }}>
                   <div className="channel-recipe-title">
                     <Share2 size={14} style={{ color: '#25d366' }} />
-                    <span>WhatsApp Integration (Phase 1: Zero-Maintenance Share Sheet)</span>
+                    <span>{t('settings.channels.webhook.recipe3Title')}</span>
                   </div>
                   <span className="channel-recipe-desc">
-                    In WhatsApp (iOS/Android), tap and hold any message, voice memo, or link &rarr; tap <strong>Share</strong> &rarr; choose your Sparkkeep shortcut to ingest content without fragile browser bridges.
+                    {t('settings.channels.webhook.recipe3DescBefore')} <strong>Share</strong>{' '}
+                    {t('settings.channels.webhook.recipe3DescEnd')}
                   </span>
                 </div>
               </div>
@@ -977,10 +1030,10 @@ print(response.json())`;
         <div className="settings-section-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Bell size={18} style={{ color: 'var(--accent)' }} />
-            <span className="settings-section-title">Digest &amp; Alert Notifications</span>
+            <span className="settings-section-title">{t('settings.channels.digest.title')}</span>
           </div>
           <span className="settings-section-desc">
-            Push intelligence summaries on-demand or configure event-driven notifications across your active channels.
+            {t('settings.channels.digest.desc')}
           </span>
         </div>
 
@@ -988,7 +1041,7 @@ print(response.json())`;
         <div className="digest-controls-row">
           <div className="setup-form-group" style={{ flex: '1 1 200px', marginBottom: 0 }}>
             <label htmlFor="settings-digest-channel" style={{ fontSize: '11.5px', marginBottom: '4px' }}>
-              Target Channel
+              {t('settings.channels.digest.channel')}
             </label>
             <select
               id="settings-digest-channel"
@@ -996,18 +1049,18 @@ print(response.json())`;
               onChange={(e) => setSelectedDigestChannel(e.target.value)}
               className="setup-input"
               style={{ background: 'var(--bg-input)', color: 'var(--text-main)', height: '36px', fontSize: '12.5px' }}
-              aria-label="Select digest channel"
+              aria-label={t('settings.channels.digest.channelAria')}
             >
-              <option value="all">All Configured Channels</option>
-              <option value="telegram">Telegram Bot</option>
-              <option value="discord">Discord Bot</option>
-              <option value="slack">Slack Webhook</option>
+              <option value="all">{t('settings.channels.digest.allChannels')}</option>
+              <option value="telegram">{t('settings.channels.cards.telegram.title')}</option>
+              <option value="discord">{t('settings.channels.cards.discord.title')}</option>
+              <option value="slack">{t('settings.channels.cards.slack.title')}</option>
             </select>
           </div>
 
           <div className="setup-form-group" style={{ flex: '1 1 160px', marginBottom: 0 }}>
             <label htmlFor="settings-digest-days" style={{ fontSize: '11.5px', marginBottom: '4px' }}>
-              Summary Window
+              {t('settings.channels.digest.window')}
             </label>
             <select
               id="settings-digest-days"
@@ -1015,11 +1068,11 @@ print(response.json())`;
               onChange={(e) => setSelectedDigestDays(Number(e.target.value))}
               className="setup-input"
               style={{ background: 'var(--bg-input)', color: 'var(--text-main)', height: '36px', fontSize: '12.5px' }}
-              aria-label="Select digest window"
+              aria-label={t('settings.channels.digest.windowAria')}
             >
-              <option value={7}>Last 7 Days (Weekly)</option>
-              <option value={14}>Last 14 Days (Bi-weekly)</option>
-              <option value={30}>Last 30 Days (Monthly)</option>
+              <option value={7}>{t('settings.channels.digest.days7')}</option>
+              <option value={14}>{t('settings.channels.digest.days14')}</option>
+              <option value={30}>{t('settings.channels.digest.days30')}</option>
             </select>
           </div>
 
@@ -1032,7 +1085,7 @@ print(response.json())`;
               style={{ height: '36px', padding: '0 16px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12.5px' }}
             >
               <Zap size={14} />
-              <span>{digestPushing ? 'Pushing Digest...' : 'Push Digest Now'}</span>
+              <span>{digestPushing ? t('settings.channels.digest.pushing') : t('settings.channels.digest.push')}</span>
             </button>
           </div>
         </div>
@@ -1042,22 +1095,22 @@ print(response.json())`;
           <div className="alerts-trigger-pill">
             <Zap size={13} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '2px' }} />
             <div>
-              <strong>Instant Ingest Alerts</strong>
-              <span>Immediate delivery confirmation with inline triage buttons sent to connected bots</span>
+              <strong>{t('settings.channels.triggers.instantTitle')}</strong>
+              <span>{t('settings.channels.triggers.instantDesc')}</span>
             </div>
           </div>
           <div className="alerts-trigger-pill">
             <Sparkles size={13} style={{ color: '#38bdf8', flexShrink: 0, marginTop: '2px' }} />
             <div>
-              <strong>AI Synthesis Briefs</strong>
-              <span>Key findings, executive summaries, and action steps dispatched upon completion</span>
+              <strong>{t('settings.channels.triggers.aiTitle')}</strong>
+              <span>{t('settings.channels.triggers.aiDesc')}</span>
             </div>
           </div>
           <div className="alerts-trigger-pill">
             <Clock size={13} style={{ color: '#a855f7', flexShrink: 0, marginTop: '2px' }} />
             <div>
-              <strong>Automated Digest Schedule</strong>
-              <span>Scheduled summaries delivered according to your weekly active hours settings</span>
+              <strong>{t('settings.channels.triggers.scheduleTitle')}</strong>
+              <span>{t('settings.channels.triggers.scheduleDesc')}</span>
             </div>
           </div>
         </div>

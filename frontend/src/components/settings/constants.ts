@@ -1,34 +1,39 @@
+import type { TranslationKey } from '../../i18n';
+
 export interface RoleDefinition {
   key: string;
-  label: string;
-  description: string;
-  hint: string;
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
+  hintKey: TranslationKey;
+  /** Marks roles that benefit from the strongest available model. */
+  isStrong?: boolean;
 }
 
 export const ROLE_DEFINITIONS: RoleDefinition[] = [
   {
     key: 'triage',
-    label: 'Triage & Extraction',
-    description: 'Processes incoming links and notes into structured idea cards.',
-    hint: 'fast & cheap recommended',
+    labelKey: 'settings.ai.roles.triage.label',
+    descriptionKey: 'settings.ai.roles.triage.description',
+    hintKey: 'settings.ai.roles.triage.hint',
   },
   {
     key: 'vision',
-    label: 'Vision & Image Analysis',
-    description: 'Transcribes text and digests screenshot / photo uploads.',
-    hint: 'fast & cheap recommended',
+    labelKey: 'settings.ai.roles.vision.label',
+    descriptionKey: 'settings.ai.roles.vision.description',
+    hintKey: 'settings.ai.roles.vision.hint',
   },
   {
     key: 'research_plan',
-    label: 'Research Planning',
-    description: 'Generates targeted web search queries and reading plans.',
-    hint: 'fast & cheap recommended',
+    labelKey: 'settings.ai.roles.researchPlan.label',
+    descriptionKey: 'settings.ai.roles.researchPlan.description',
+    hintKey: 'settings.ai.roles.researchPlan.hint',
   },
   {
     key: 'research_synthesis',
-    label: 'Research Synthesis',
-    description: 'Synthesizes deep-dive findings into a comprehensive markdown report.',
-    hint: 'strongest model recommended',
+    labelKey: 'settings.ai.roles.researchSynthesis.label',
+    descriptionKey: 'settings.ai.roles.researchSynthesis.description',
+    hintKey: 'settings.ai.roles.researchSynthesis.hint',
+    isStrong: true,
   },
 ];
 
@@ -130,9 +135,9 @@ export const LANGUAGE_OPTIONS: string[] = [
 
 export interface ProfileArchetype {
   id: string;
-  label: string;
-  badge: string;
-  description: string;
+  labelKey: TranslationKey;
+  badgeKey: TranslationKey;
+  descriptionKey: TranslationKey;
   goals: string;
   skills: string;
   stack: string;
@@ -141,11 +146,13 @@ export interface ProfileArchetype {
 }
 
 export const PROFILE_ARCHETYPES: ProfileArchetype[] = [
+  // shortcut: preset profile bodies below are English-only AI seed content;
+  // translate them once AI responses themselves are localized.
   {
     id: 'founder',
-    label: 'Founder & Operator',
-    badge: '🚀 Founder / Operator',
-    description: 'Scaling products, go-to-market traction, hiring, and capital allocation',
+    labelKey: 'settings.profile.archetypes.founder.label',
+    badgeKey: 'settings.profile.archetypes.founder.badge',
+    descriptionKey: 'settings.profile.archetypes.founder.description',
     goals: 'Early-stage founder scaling a high-growth company. Focused on product-market fit, enterprise go-to-market, customer acquisition, hiring leaders, and seed/Series A fundraising.',
     skills: 'B2B Sales, Product Strategy, Financial Modeling, Executive Hiring, Unit Economics, GTM',
     stack: 'HubSpot, Stripe, Notion, Linear, QuickBooks, Carta, Google Workspace',
@@ -154,9 +161,9 @@ export const PROFILE_ARCHETYPES: ProfileArchetype[] = [
   },
   {
     id: 'finance',
-    label: 'Finance & Investing',
-    badge: '📈 Finance & Markets',
-    description: 'Macro analysis, valuation, risk hedging, fintech, and asset allocation',
+    labelKey: 'settings.profile.archetypes.finance.label',
+    badgeKey: 'settings.profile.archetypes.finance.badge',
+    descriptionKey: 'settings.profile.archetypes.finance.description',
     goals: 'Independent investor and financial analyst tracking global macroeconomic shifts, market liquidity, fintech disruptors, and asymmetrical investment opportunities.',
     skills: 'Fundamental Analysis, DCF Valuation, Macroeconomics, Portfolio Risk Management, Financial Statement Auditing',
     stack: 'Bloomberg Terminal, Koyfin, TradingView, SEC EDGAR, Excel / Google Sheets, Substack',
@@ -165,9 +172,9 @@ export const PROFILE_ARCHETYPES: ProfileArchetype[] = [
   },
   {
     id: 'agriculture',
-    label: 'Agriculture & AgTech',
-    badge: '🌾 AgTech & Bioeconomy',
-    description: 'Precision agriculture, soil microbiome, sustainable yields, and commodity logistics',
+    labelKey: 'settings.profile.archetypes.agriculture.label',
+    badgeKey: 'settings.profile.archetypes.agriculture.badge',
+    descriptionKey: 'settings.profile.archetypes.agriculture.description',
     goals: 'AgTech innovator and agribusiness operator focused on sustainable food systems, farm robotics, soil regeneration, and resilient supply chains.',
     skills: 'Agronomy, Precision Agriculture, Soil Science, Supply Chain Logistics, Farm Management, GIS Analysis',
     stack: 'John Deere Operations Center, Climate FieldView, DroneDeploy, FarmOS, QGIS, Weather APIs',
@@ -176,9 +183,9 @@ export const PROFILE_ARCHETYPES: ProfileArchetype[] = [
   },
   {
     id: 'systems',
-    label: 'Systems & AI Engineer',
-    badge: '⚡ Systems & AI',
-    description: 'Local AI pipelines, distributed backend services, homelabs, and privacy-first tooling',
+    labelKey: 'settings.profile.archetypes.systems.label',
+    badgeKey: 'settings.profile.archetypes.systems.badge',
+    descriptionKey: 'settings.profile.archetypes.systems.description',
     goals: 'Software engineer and homelab enthusiast architecting local AI agent workflows, resilient microservices, and self-hosted privacy infrastructure.',
     skills: 'TypeScript, Python, Go, Distributed Systems, Containerization, Local LLM Inference, Security Hardening',
     stack: 'Linux, Docker, Kubernetes, PostgreSQL, Ollama, Obsidian, Neovim, WireGuard',

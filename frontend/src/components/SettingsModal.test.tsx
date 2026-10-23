@@ -207,6 +207,55 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
   });
 });
 
+describe('SettingsModal Romanian locale', () => {
+  const mockOnClose = vi.fn();
+  const mockShowToast = vi.fn();
+
+  const renderRo = () =>
+    render(
+      <ThemeProvider defaultTheme="dark">
+        <LocaleProvider locale="ro">
+          <SettingsModal onClose={mockOnClose} showToast={mockShowToast} />
+        </LocaleProvider>
+      </ThemeProvider>
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('renders translated modal chrome and appearance tab in Romanian', async () => {
+    renderRo();
+
+    await waitFor(() => {
+      expect(screen.getByText('Paletă de culori și contrast')).toBeDefined();
+    });
+
+    expect(screen.getByText('Preferințele platformei')).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Aspect și preferințe' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Despre mine' })).toBeDefined();
+    expect(screen.getByLabelText('Limba interfeței')).toBeDefined();
+    expect(screen.getByText('Susține proiectul')).toBeDefined();
+  });
+
+  it('renders translated profile tab labels in Romanian', async () => {
+    renderRo();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Despre mine' })).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Despre mine' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Potrivire personală și despre mine')).toBeDefined();
+    });
+    expect(screen.getByText('Bugetul de caractere al profilului')).toBeDefined();
+    expect(screen.getByLabelText(/Instrumente, platforme și sisteme/i)).toBeDefined();
+  });
+});
+
 describe('Card Taxonomy Management in Platform Preferences', () => {
   const mockOnClose = vi.fn();
   const mockShowToast = vi.fn();
