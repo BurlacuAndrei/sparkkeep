@@ -50,6 +50,9 @@ export function translate(
  * digits are 1..19 in the "few" form ("0 carduri", "101 carduri"), everything
  * else uses "other" ("120 de carduri"); 1 keeps its own form. English only
  * splits 1.
+ *
+ * shortcut: non-en/ro locales fall back to English plural categories; add
+ * rules here when a third locale lands.
  */
 export function pluralCategory(locale: Locale, count: number): PluralCategory {
   const n = Math.abs(count);

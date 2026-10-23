@@ -724,6 +724,7 @@ export function parseImportedPlaybook(
 }
 
 export function buildUserStepTemplate(step: PlaybookStep): UserSavedStepTemplate {
+  // shortcut: saved-step library templates persist in English (DB/export/LLM prompts).
   return {
     id: generateStepTemplateId(),
     name: step.name || 'Custom Step',

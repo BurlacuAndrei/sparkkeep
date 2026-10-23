@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"sparkkeep"
 	"sparkkeep/internal/obsidian"
 	"sparkkeep/internal/port"
 )
@@ -33,7 +34,7 @@ func (a *api) exportLibraryJSON(w http.ResponseWriter, r *http.Request) {
 
 	payload := LibraryExportPayload{
 		Version:    "1.0",
-		Generator:  "Sparkkeep 0.9.0",
+		Generator:  "Sparkkeep " + sparkkeep.Version,
 		ExportedAt: time.Now().UTC().Format(time.RFC3339),
 		Metrics: map[string]int{
 			"card_count":     len(cards),

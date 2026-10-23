@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session cookies now expire after 30 days instead of 365 (user-visible: you
   will need to sign in again sooner).
 
+## [0.9.1] - 2026-10-23
+
+### Added
+- Multilanguage UI: English and Romanian, with a language switcher in
+  Settings → Appearance and browser-language detection on first run.
+- Localized app shell, cards, research, digest, playbooks, and settings
+  surfaces, with plural-aware counts and `Intl` date/number formatting.
+
 ## [0.9.0] - 2026-10-14
 
 First release: self-hosted capture and action engine with multi-channel

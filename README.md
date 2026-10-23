@@ -139,7 +139,7 @@ docker compose up -d
 Download the latest lightweight (~24MB) binary for Linux, macOS, or Windows from [Releases](https://github.com/BurlacuAndrei/sparkkeep/releases):
 
 ```bash
-# Example for Linux AMD64 (replace VERSION with the latest release, e.g. v0.9.0)
+# Example for Linux AMD64 (replace VERSION with the latest release, e.g. v0.9.1)
 tar -xzf sparkkeep-<VERSION>-linux-amd64.tar.gz
 ./sparkkeep-linux-amd64
 ```
@@ -417,6 +417,25 @@ Sparkkeep uses forward-only SQLite migrations. When upgrading your instance:
 - **Frontend:** React 19 + TypeScript + Vite. Assets are embedded directly into the Go executable via `//go:embed`.
 - **Search:** Embedded SQLite FTS5 with database triggers for zero-lag full-text indexing.
 - **Portability:** Builds into a single lightweight binary (<25MB) across Linux, macOS, and Windows.
+
+---
+
+## 🌐 Localization
+
+The UI ships in **English** (default) and **Romanian**. Users switch language in **Settings → Appearance**; the choice persists in `localStorage` under `sparkkeep_locale`, and the browser language is used as the first-run fallback. `<html lang>` follows the active locale.
+
+The frontend uses a small typed catalog module in [`frontend/src/i18n/`](frontend/src/i18n/): `en.ts` is the source of truth and `ro.ts` is the Romanian catalog. `index.tsx` exposes `LocaleProvider`, `useLocale()` (`t`, `tp`, `formatNumber`, `formatDate`), and the formatting helpers.
+
+To add a locale:
+
+1. Create `frontend/src/i18n/<code>.ts` exporting a `satisfies Catalog` object with the same shape as `en.ts`. TypeScript rejects missing or extra keys at compile time.
+2. Add the code to the `Locale` union in `frontend/src/i18n/types.ts`.
+3. Register the catalog in the `catalogs` map in `frontend/src/i18n/index.tsx`, and add a `locales` option (code plus native-language label).
+4. Extend `frontend/src/i18n/__tests__/catalogParity.test.ts` and `localeCoverage.test.tsx` so key parity and full coverage cover the new catalog.
+5. Extend `pluralCategory` in `frontend/src/i18n/translate.ts` and `plural.test.ts` when the new locale needs different plural categories.
+6. Run `cd frontend && npm test` and `npm run build`; commit the rebuilt `internal/web/dist`.
+
+Persisted playbook seed data and third-party UI labels stay in English by design (see the `shortcut:` comments where relevant). Card copy is persisted in the locale that was active when it was written.
 
 ---
 

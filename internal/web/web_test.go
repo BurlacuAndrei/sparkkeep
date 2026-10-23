@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"sparkkeep"
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/channel"
 	"sparkkeep/internal/config"
@@ -3995,6 +3996,16 @@ func TestSetupDemoAndLibraryExport(t *testing.T) {
 	}
 	if !strings.Contains(rrLib.Body.String(), "Vector Embeddings vs SQLite FTS5") {
 		t.Fatalf("export/library: expected demo cards in payload: %s", rrLib.Body.String())
+	}
+	var libPayload struct {
+		Generator string `json:"generator"`
+	}
+	if err := json.Unmarshal(rrLib.Body.Bytes(), &libPayload); err != nil {
+		t.Fatalf("export/library: unmarshal payload: %v", err)
+	}
+	wantGenerator := "Sparkkeep " + sparkkeep.Version
+	if !strings.HasPrefix(libPayload.Generator, "Sparkkeep ") || libPayload.Generator != wantGenerator {
+		t.Fatalf("export/library: generator = %q, want %q", libPayload.Generator, wantGenerator)
 	}
 
 	// 3. GET /api/v1/export/archive.zip (with auth)

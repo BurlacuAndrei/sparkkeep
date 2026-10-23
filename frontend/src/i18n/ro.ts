@@ -851,8 +851,8 @@ export const ro = {
   },
   cards: {
     empty: 'Încă nicio scânteie',
-    // shortcut: one plural form for all counts; swap for a plural helper when a
-    // locale with richer plural rules than Romanian/English is added.
+    // Romanian plural categories: one (1), few (0 and 1..19 mod 100), other.
+    // A new locale must provide the categories its plural rules select.
     count_one: '{{count}} card',
     count_few: '{{count}} carduri',
     count_other: '{{count}} de carduri',

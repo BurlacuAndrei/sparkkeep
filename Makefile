@@ -25,7 +25,7 @@ check: fmt vet
 		echo "❌ Version drift: version.go ($$GO_VER) != frontend/package.json ($$PKG_VER)"; exit 1; \
 	fi
 	cd frontend && npm install && npm run lint && npm test && npm run build
-	@git diff --quiet -- internal/web/dist || (echo "❌ internal/web/dist is out of sync with frontend. Run 'npm run build' and commit the distribution bundle." && exit 1)
+	@test -z "$$(git status --porcelain -- internal/web/dist)" || (echo "❌ internal/web/dist is out of sync with frontend. Run 'npm run build' and commit the distribution bundle." && exit 1)
 	go test -race ./...
 
 docker:
