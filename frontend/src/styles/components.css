@@ -2945,11 +2945,12 @@
 
 .settings-section-index {
   position: sticky;
-  top: 0;
+  top: -24px;
   z-index: 5;
   display: flex;
   gap: 8px;
-  padding: 8px 0;
+  padding: 8px 24px;
+  margin: 0 -24px;
   overflow-x: auto;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);

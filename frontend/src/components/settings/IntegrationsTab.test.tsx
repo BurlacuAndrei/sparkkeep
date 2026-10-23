@@ -348,7 +348,7 @@ describe('IntegrationsTab section index', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(document.getElementById(toggle.getAttribute('aria-controls') ?? '')?.hidden).toBe(false);
     expect(indexEntry('Joplin Knowledge Sink').getAttribute('aria-current')).toBe('true');
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
     expect(JSON.parse(window.sessionStorage.getItem(COLLAPSED_KEY) ?? '[]')).not.toContain('joplin');
 
     const heading = screen.getByRole('heading', { name: 'Joplin Knowledge Sink' });
@@ -364,7 +364,7 @@ describe('IntegrationsTab section index', () => {
     fireEvent.click(indexEntry('Browser Bookmarklet'));
 
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
     expect(indexEntry('Browser Bookmarklet').getAttribute('aria-current')).toBe('true');
   });
 

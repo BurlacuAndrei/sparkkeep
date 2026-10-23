@@ -205,6 +205,7 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
   // Collapsible sections: collapsed slugs persist for the browser session.
   const [collapsedSections, setCollapsedSections] = useState<Set<SectionSlug>>(readCollapsedSections);
   const [activeSection, setActiveSection] = useState<SectionSlug | null>(null);
+  const indexNavRef = useRef<HTMLElement | null>(null);
 
   const setSectionExpanded = (slug: SectionSlug, expanded: boolean) => {
     const next = new Set(collapsedSections);
@@ -296,6 +297,17 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
     });
     return () => observer.disconnect();
   }, []);
+
+  // Scroll the active chip horizontally into view so it's always visible.
+  useEffect(() => {
+    if (!activeSection || !indexNavRef.current) return;
+    const chip = indexNavRef.current.querySelector<HTMLButtonElement>(
+      `button[aria-current="true"]`
+    );
+    if (chip && typeof chip.scrollIntoView === 'function') {
+      chip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [activeSection]);
 
   const copyToClipboard = (text: string, id: string, label: string) => {
     if (navigator.clipboard) {
@@ -725,7 +737,7 @@ echo "Saved to Sparkkeep"`;
 
   return (
     <div className="settings-panel" role="tabpanel">
-      <nav className="settings-section-index" aria-label="Integration sections">
+      <nav className="settings-section-index" aria-label="Integration sections" ref={indexNavRef}>
         {INTEGRATION_SECTIONS.map(({ slug, title }) => (
           <button
             key={slug}
