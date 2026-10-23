@@ -931,11 +931,11 @@ export const CardModal: React.FC<CardModalProps> = ({
             }}
           >
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Sparkles size={14} color="#c084fc" />
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Sparkles size={14} color="var(--accent-purple)" />
                 <span>Ready to dig deeper?</span>
               </div>
-              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
                 Trigger autonomous multi-step research to verify claims against live web sources, survey alternatives, and formulate next actions.
               </div>
             </div>

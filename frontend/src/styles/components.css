@@ -1079,7 +1079,7 @@
 .heading-summary { color: var(--accent-cyan); }
 .heading-value { color: var(--accent-amber); }
 .heading-actions { color: var(--accent-emerald); }
-.heading-research { color: #c084fc; }
+.heading-research { color: var(--accent-purple); }
 
 .briefing-text {
   font-size: 13.5px;
