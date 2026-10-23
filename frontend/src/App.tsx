@@ -13,6 +13,7 @@ import { LockScreen } from './components/LockScreen';
 import { Bell } from 'lucide-react';
 import { CardActionsProvider } from './context/CardActionsContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { LocaleProvider } from './i18n';
 
 const SettingsModal = React.lazy(() => import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal })));
 const CardModal = React.lazy(() => import('./components/CardModal').then((m) => ({ default: m.CardModal })));
@@ -518,7 +519,9 @@ function AppContent() {
 export function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <LocaleProvider>
+        <AppContent />
+      </LocaleProvider>
     </ThemeProvider>
   );
 }
