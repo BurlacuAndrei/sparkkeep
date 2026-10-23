@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PlaybookManager, PLAYBOOK_TEMPLATES } from './PlaybookManager';
+import { LocaleProvider } from '../i18n';
 import * as api from '../api';
+
+const renderLocalized = (ui: React.ReactElement) =>
+  render(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 vi.mock('../api', async () => {
   const actual = await vi.importActual<typeof import('../api')>('../api');
@@ -41,7 +45,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   });
 
   it('opens builder canvas directly with default lean starter when clicking New Playbook', async () => {
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -72,7 +76,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   });
 
   it('selects a playbook template archetype and loads its steps into the editor via Load Template', async () => {
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -98,7 +102,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   });
 
   it('inserts quick prompt starter into custom step prompt instruction', async () => {
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -119,7 +123,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   });
 
   it('allows standard steps (Planning, Landscape, Verdict) to be expanded and edited with all transparent step primitives', async () => {
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -189,7 +193,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   });
 
   it('updates prompt instruction when quick prompt starter button is clicked on standard and custom steps', async () => {
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -246,7 +250,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   });
 
   it('allows custom steps to be placed after verdict without validation errors', async () => {
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -276,7 +280,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
 
   it('saves step to library in localStorage and allows 1-click addition from Add Step modal', async () => {
     const mockToast = vi.fn();
-    render(<PlaybookManager showToast={mockToast} />);
+    renderLocalized(<PlaybookManager showToast={mockToast} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -325,7 +329,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   });
 
   it('enforces 8,000 characters limit on step instruction in validation', async () => {
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -359,7 +363,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
       },
     });
 
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -403,7 +407,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
       },
     });
 
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -423,7 +427,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
   });
 
   it('handles Set as Platform Default toggle when saving playbook', async () => {
-    render(<PlaybookManager showToast={vi.fn()} />);
+    renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -451,7 +455,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
 
   it('supports Export JSON and Import JSON workflow with validation', async () => {
     const mockToast = vi.fn();
-    render(<PlaybookManager showToast={mockToast} />);
+    renderLocalized(<PlaybookManager showToast={mockToast} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -536,7 +540,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
 
   it('browses visual Template Gallery by research domains, displaying 5-pillar badges and budget estimates', async () => {
     const mockToast = vi.fn();
-    render(<PlaybookManager showToast={mockToast} />);
+    renderLocalized(<PlaybookManager showToast={mockToast} />);
 
     await waitFor(() => {
       expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -595,7 +599,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
 
   describe('Client-Side Dry-Run Inspector & Real-Time Prompt Preview', () => {
     it('toggles Dry-Run Inspector, displays compiled prompts and planned queries for fallback card with zero cost', async () => {
-      render(<PlaybookManager showToast={vi.fn()} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -636,7 +640,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
     });
 
     it('switches test cards and re-compiles prompt variables and search query plans dynamically in real time', async () => {
-      render(<PlaybookManager showToast={vi.fn()} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -675,7 +679,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
         },
       ];
 
-      render(<PlaybookManager showToast={vi.fn()} cards={customCards} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} cards={customCards} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -700,7 +704,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
 
   describe('Research Health Inspector & Soft Linter', () => {
     it('calculates 5-Pillar readiness score and updates dynamically when steps are toggled', async () => {
-      render(<PlaybookManager showToast={vi.fn()} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -731,7 +735,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
     });
 
     it('displays non-blocking advisory warnings for missing pillars and keeps save enabled', async () => {
-      render(<PlaybookManager showToast={vi.fn()} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -766,7 +770,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
 
     it('inserts recommended steps at optimal positions using 1-click auto-fix buttons', async () => {
       const mockToast = vi.fn();
-      render(<PlaybookManager showToast={mockToast} />);
+      renderLocalized(<PlaybookManager showToast={mockToast} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -831,7 +835,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
     });
 
     it('calculates dynamic token usage, web fetches, and latency estimates in real time', async () => {
-      render(<PlaybookManager showToast={vi.fn()} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -865,7 +869,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
 
   describe('Visual Pipeline Timeline & In-Place Focused Step Editor', () => {
     it('renders pipeline steps as connected timeline nodes with connector rails, stage badges, and tool policy chips', async () => {
-      render(<PlaybookManager showToast={vi.fn()} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -893,7 +897,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
     });
 
     it('expands in-place focused card editor when clicking a step card while preserving surrounding pipeline context and updates live indicators', async () => {
-      render(<PlaybookManager showToast={vi.fn()} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -936,7 +940,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
     });
 
     it('renders contextual in-line step inserters and opens quick-add palette to insert custom steps at exact indices', async () => {
-      render(<PlaybookManager showToast={vi.fn()} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();
@@ -978,7 +982,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
     });
 
     it('renders rich workflow cards with flow strips, default badges, and card-type chips', async () => {
-      render(<PlaybookManager showToast={vi.fn()} />);
+      renderLocalized(<PlaybookManager showToast={vi.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Default Research Pipeline')).toBeDefined();

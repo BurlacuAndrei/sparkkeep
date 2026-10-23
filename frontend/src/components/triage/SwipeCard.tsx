@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Card } from '../../types';
 import { getPlatformInfo, formatRelativeAge } from '../../utils/cardUtils';
+import { enumLabel } from '../../utils/cardEnumLabels';
 import {
   Horizon,
   horizonLabel,
@@ -19,6 +20,7 @@ import {
   isResearchReady,
   suggestedHorizonOf,
 } from '../../utils/triage';
+import { useLocale } from '../../i18n';
 
 export type DeckIntent = 'dismiss' | 'keep' | 'research' | 'skip';
 
@@ -76,6 +78,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
   onCommit,
 }) => {
   const ref = useRef<HTMLElement>(null);
+  const { t } = useLocale();
   const drag = useRef<{
     id: number;
     x0: number;
@@ -93,7 +96,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
   const analysisFailed = isAnalysisFailed(card);
   const verdict = (card.research_verdict || '').toLowerCase();
   const platform = getPlatformInfo(card.source_url);
-  const age = formatRelativeAge(card.created_at);
+  const age = formatRelativeAge(card.created_at, t);
   const worthLevel = (card.worthiness?.level || '').toLowerCase();
   const researchActions =
     ready && card.actions_source === 'research' ? (card.proposed_actions || []).slice(0, 3) : [];
@@ -252,7 +255,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       ref={ref}
       className={`deck-card ${ready ? 'is-ready' : ''} ${researchFailed ? 'is-research-failed' : ''} ${expanded ? 'is-expanded' : ''}`}
       data-id={card.id}
-      aria-label={`Idea: ${card.title}`}
+      aria-label={t('cards.swipe.aria', { title: card.title })}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => endDrag(e)}
@@ -262,11 +265,18 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       {ready && (
         <div className="deck-ribbon ready">
           <Sparkles size={13} />
-          <span>Research report ready</span>
+          <span>{t('cards.swipe.ready')}</span>
           {verdict && (
             <span className={`deck-verdict ${verdict}`}>
-              {verdict}
-              {card.research_confidence && <em> · {card.research_confidence} confidence</em>}
+              {enumLabel(t, 'verdict', verdict)}
+              {card.research_confidence && (
+                <em>
+                  {' '}
+                  · {t('cards.swipe.confidence', {
+                    value: enumLabel(t, 'confidence', card.research_confidence),
+                  })}
+                </em>
+              )}
             </span>
           )}
         </div>
@@ -274,9 +284,9 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       {researchFailed && (
         <div className="deck-ribbon failed">
           <AlertTriangle size={13} />
-          <span>Research failed</span>
+          <span>{t('cards.swipe.failed')}</span>
           <button type="button" className="deck-ribbon-btn" onClick={onRetryResearch}>
-            <RefreshCw size={11} /> Retry
+            <RefreshCw size={11} /> {t('cards.swipe.retry')}
           </button>
         </div>
       )}
@@ -288,11 +298,11 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
         </span>
         {card.type && <span className="deck-chip type">{card.type}</span>}
         {card.signals?.extraction && card.signals.extraction !== 'full' && (
-          <span className="deck-chip warn" title="The source could only be partially read">
-            <AlertTriangle size={10} /> {card.signals.extraction}
+          <span className="deck-chip warn" title={t('cards.swipe.partialRead')}>
+            <AlertTriangle size={10} /> {enumLabel(t, 'extraction', card.signals.extraction)}
           </span>
         )}
-        {card.signals?.promo && <span className="deck-chip warn">promo</span>}
+        {card.signals?.promo && <span className="deck-chip warn">{t('cards.item.promo')}</span>}
         <span className="deck-card-age">{age}</span>
       </div>
 
@@ -300,11 +310,11 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
         <div className="deck-sibling-row">
           <span className="deck-sibling-pill">
             <Layers size={11} />
-            Idea {siblingIndex} of {siblingTotal} from this capture
+            {t('cards.swipe.ideaOf', { index: siblingIndex ?? 1, total: siblingTotal })}
           </span>
           {remainingSiblings > 1 && (
             <button type="button" className="deck-link-btn" onClick={onDismissSiblings}>
-              <X size={11} /> Dismiss remaining {remainingSiblings}
+              <X size={11} /> {t('cards.swipe.dismissRemaining', { count: remainingSiblings })}
             </button>
           )}
         </div>
@@ -315,9 +325,9 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       {analysisFailed ? (
         <div className="deck-failed-box">
           <AlertTriangle size={14} />
-          <span>Couldn't read this source.</span>
+          <span>{t('cards.swipe.failedRead')}</span>
           <button type="button" className="deck-ribbon-btn" onClick={onRetryAnalysis}>
-            <RefreshCw size={11} /> Retry extraction
+            <RefreshCw size={11} /> {t('cards.swipe.retryExtraction')}
           </button>
         </div>
       ) : (
@@ -325,7 +335,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           <p className="deck-card-tldr">{card.tldr || card.summary}</p>
           {card.why_care && (
             <p className="deck-card-why">
-              <strong>Why you'd care</strong>
+              <strong>{t('cards.swipe.whyCare')}</strong>
               {card.why_care}
             </p>
           )}
@@ -350,7 +360,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           {card.summary && card.tldr && card.summary !== card.tldr && <p className="deck-detail-summary">{card.summary}</p>}
           {card.claims && card.claims.length > 0 && (
             <div className="deck-detail-block">
-              <h4>Claims</h4>
+              <h4>{t('cards.swipe.claims')}</h4>
               <ul>
                 {card.claims.slice(0, 5).map((c, i) => (
                   <li key={i}>{c}</li>
@@ -360,7 +370,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           )}
           {card.open_questions && card.open_questions.length > 0 && (
             <div className="deck-detail-block">
-              <h4>Open questions</h4>
+              <h4>{t('cards.swipe.openQuestions')}</h4>
               <ul>
                 {card.open_questions.slice(0, 4).map((q, i) => (
                   <li key={i}>{q}</li>
@@ -370,7 +380,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           )}
           {card.worthiness?.reason && (
             <div className="deck-detail-block">
-              <h4>Why this worthiness</h4>
+              <h4>{t('cards.swipe.whyWorthiness')}</h4>
               <p>{card.worthiness.reason}</p>
             </div>
           )}
@@ -386,11 +396,14 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
         <div className="deck-ai-row">
           {worthLevel && (
             <span className={`deck-worth ${worthLevel}`} title={card.worthiness?.reason || ''}>
-              <Target size={11} /> {worthLevel} worthiness
+              <Target size={11} /> {t('cards.swipe.worthiness', {
+                level: enumLabel(t, 'worthiness', worthLevel),
+              })}
             </span>
           )}
           <span className="deck-suggest">
-            <Sparkles size={11} /> Suggested: <strong>{horizonLabel(suggested)}</strong>
+            <Sparkles size={11} /> {t('cards.swipe.suggested')}{' '}
+            <strong>{horizonLabel(suggested, t)}</strong>
           </span>
         </div>
         <div className="deck-card-footer-actions">
@@ -398,10 +411,10 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
             <span key={t} className="deck-tag">#{t}</span>
           ))}
           <button type="button" className="deck-link-btn" onClick={onToggleExpand} aria-expanded={expanded}>
-            <ChevronDown size={12} className={expanded ? 'flip' : ''} /> {expanded ? 'Less' : 'More'}
+            <ChevronDown size={12} className={expanded ? 'flip' : ''} /> {expanded ? t('cards.swipe.less') : t('cards.swipe.more')}
           </button>
           <button type="button" className="deck-link-btn" onClick={onOpenDetail}>
-            <ExternalLink size={12} /> {ready ? 'Full report' : 'Details'}
+            <ExternalLink size={12} /> {ready ? t('cards.swipe.fullReport') : t('cards.swipe.details')}
           </button>
         </div>
       </div>

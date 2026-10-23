@@ -3,6 +3,7 @@ import { Card } from '../types';
 import { CardItem } from './CardItem';
 import { Zap, CheckCircle2, ListTodo, Archive, XCircle, LayoutGrid, Rows3 } from 'lucide-react';
 import * as api from '../api';
+import { useLocale } from '../i18n';
 
 interface KanbanBoardProps {
   cards: Card[];
@@ -32,6 +33,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 }) => {
   const [boardMode, setBoardMode] = useState<'active' | 'shelved' | 'dismissed'>('active');
   const [showArchivedDone, setShowArchivedDone] = useState(false);
+  const { t, tp } = useLocale();
 
   const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
     if (typeof window !== 'undefined') {
@@ -66,11 +68,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const allCount = boardCards.length;
 
   const horizonTabs = [
-    { id: 'short-term', label: 'Short-Term', count: shortCount, colorClass: 'short-term' },
-    { id: 'medium-term', label: 'Medium-Term', count: mediumCount, colorClass: 'medium-term' },
-    { id: 'long-term', label: 'Long-Term', count: longCount, colorClass: 'long-term' },
-    { id: 'all', label: 'All Horizons', count: allCount, colorClass: 'all' },
+    { id: 'short-term', label: t('cards.horizon.short'), count: shortCount, colorClass: 'short-term' },
+    { id: 'medium-term', label: t('cards.horizon.medium'), count: mediumCount, colorClass: 'medium-term' },
+    { id: 'long-term', label: t('cards.horizon.long'), count: longCount, colorClass: 'long-term' },
+    { id: 'all', label: t('cards.select.allHorizons'), count: allCount, colorClass: 'all' },
   ];
+
+  const countLabel = (count: number) => tp('cards.count', count);
 
   const activeHorizon = horizon || 'all';
 
@@ -126,8 +130,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       const targetCard = cards.find((c) => c.id === cardId);
       if (targetCard && targetCard.status !== colStatus) {
         onUpdateCard(cardId, { status: colStatus as any });
-        const label = colStatus === 'to-do' ? 'To Do' : colStatus === 'in-progress' ? 'In Progress' : 'Completed';
-        showToast?.(`Moved card #${cardId} → ${label}`);
+        const label =
+          colStatus === 'to-do'
+            ? t('cards.status.toDo')
+            : colStatus === 'in-progress'
+            ? t('cards.status.inProgress')
+            : t('cards.status.done');
+        showToast?.(t('cards.board.moved', { id: cardId, label }));
       }
     }
   };
@@ -152,13 +161,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <div className="board-header-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 38 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <h2 id="main-heading" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>{boardMode === 'active' ? 'Execution Boards' : boardMode === 'shelved' ? 'Shelf (Later)' : 'Dismissed Cards'}</span>
+              <span>{boardMode === 'active' ? t('cards.board.titleActive') : boardMode === 'shelved' ? t('cards.board.titleShelved') : t('cards.board.titleDismissed')}</span>
               <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-dim)' }}>
                 ({boardMode === 'active'
-                  ? `${displayedCards.length}${activeHorizon !== 'all' && displayedCards.length !== boardCards.length ? ` of ${boardCards.length}` : ''} ${displayedCards.length === 1 ? 'card' : 'cards'}`
+                  ? activeHorizon !== 'all' && displayedCards.length !== boardCards.length
+                    ? t('cards.board.countFiltered', {
+                        shown: displayedCards.length,
+                        total: boardCards.length,
+                      })
+                    : countLabel(displayedCards.length)
                   : boardMode === 'shelved'
-                  ? `${shelvedCards.length} cards`
-                  : `${dismissedCards.length} cards`})
+                  ? countLabel(shelvedCards.length)
+                  : countLabel(dismissedCards.length)})
               </span>
             </h2>
 
@@ -184,7 +198,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 }}
               >
                 <LayoutGrid size={13} />
-                <span>Active</span>
+                <span>{t('cards.board.modeActive')}</span>
               </button>
               <button
                 type="button"
@@ -206,7 +220,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 }}
               >
                 <Archive size={13} />
-                <span>Shelved ({shelvedCards.length})</span>
+                <span>{t('cards.board.modeShelved', { count: shelvedCards.length })}</span>
               </button>
               <button
                 type="button"
@@ -228,7 +242,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 }}
               >
                 <XCircle size={13} />
-                <span>Dismissed ({dismissedCards.length})</span>
+                <span>{t('cards.board.modeDismissed', { count: dismissedCards.length })}</span>
               </button>
             </div>
           </div>
@@ -238,8 +252,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             type="button"
             className="board-density-toggle-btn"
             onClick={toggleDensity}
-            title={`Card Spacing: currently ${density}. Click to switch.`}
-            aria-label={`Switch card density, currently ${density}`}
+            title={t('cards.board.densityTitle', {
+              density: density === 'compact' ? t('cards.density.compact') : t('cards.density.comfortable'),
+            })}
+            aria-label={t('cards.board.densityAria', {
+              density: density === 'compact' ? t('cards.density.compact') : t('cards.density.comfortable'),
+            })}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -256,14 +274,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             }}
           >
             <Rows3 size={13} />
-            <span>{density === 'compact' ? 'Compact' : 'Comfortable'}</span>
+            <span>{density === 'compact' ? t('cards.density.compact') : t('cards.density.comfortable')}</span>
           </button>
         </div>
 
         {/* Tier 2: Dedicated Contextual Sub-row */}
         <div className="board-header-context-row" style={{ minHeight: 36, display: 'flex', alignItems: 'center' }}>
           {boardMode === 'active' && (
-            <div className="horizon-segmented-control" role="tablist" aria-label="Filter execution board by horizon">
+            <div className="horizon-segmented-control" role="tablist" aria-label={t('cards.board.filterAria')}>
               {horizonTabs.map((tab) => {
                 const isActive = activeHorizon === tab.id;
                 return (
@@ -297,7 +315,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               gap: 12,
             }}>
               <span style={{ fontSize: 13, color: 'var(--color-warning-text)' }}>
-                <strong>Shelved Cards:</strong> Ideas or projects set aside for future revisit. Click <strong>Restore</strong> on any card to move it back to your active Inbox.
+                <strong>{t('cards.board.shelvedTitle')}</strong> {t('cards.board.shelvedBefore')}{' '}
+                <strong>{t('cards.item.restore')}</strong> {t('cards.board.shelvedAfter')}
               </span>
             </div>
           )}
@@ -315,7 +334,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               gap: 12,
             }}>
               <span style={{ fontSize: 13, color: 'var(--color-error-text)' }}>
-                <strong>Dismissed Cards:</strong> Items decided as not relevant. You can review them anytime or click <strong>Restore</strong> to bring them back.
+                <strong>{t('cards.board.dismissedTitle')}</strong> {t('cards.board.dismissedBefore')}{' '}
+                <strong>{t('cards.item.restore')}</strong> {t('cards.board.dismissedAfter')}
               </span>
             </div>
           )}
@@ -336,7 +356,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           gap: 12,
         }}>
           <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-            {triageMatchingCards.length} {triageMatchingCards.length === 1 ? 'card' : 'cards'} matching this view {triageMatchingCards.length === 1 ? 'is' : 'are'} currently in <strong>Triage</strong> (not yet committed to the Execution Board).
+            {triageMatchingCards.length === 1
+              ? t('cards.board.triageSingular', { count: triageMatchingCards.length })
+              : t('cards.board.triagePlural', { count: triageMatchingCards.length })}{' '}
+            <strong>{t('triage.title')}</strong> {t('cards.board.triageAfter')}
           </span>
           {onSwitchToTriage && (
             <button
@@ -345,7 +368,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               style={{ fontSize: 12, padding: '4px 12px', height: 'auto', whiteSpace: 'nowrap' }}
               onClick={onSwitchToTriage}
             >
-              View in Triage
+              {t('cards.board.viewInTriage')}
             </button>
           )}
         </div>
@@ -364,14 +387,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <div className="column-header">
               <div className="column-title">
                 <ListTodo size={15} strokeWidth={1.5} color="var(--accent-indigo)" />
-                <span>To Do</span>
+                <span>{t('cards.status.toDo')}</span>
               </div>
               <span className="column-count">{todoCards.length}</span>
             </div>
             <div className="cards-container">
               {todoCards.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-                  Ready for work. (Drop cards here)
+                  {t('cards.board.emptyTodo')}
                 </div>
               ) : (
                 todoCards.map(renderCardItem)
@@ -389,14 +412,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <div className="column-header">
               <div className="column-title">
                 <Zap size={15} strokeWidth={1.5} color="var(--accent-emerald)" />
-                <span>In Progress</span>
+                <span>{t('cards.status.inProgress')}</span>
               </div>
               <span className="column-count">{inProgressCards.length}</span>
             </div>
             <div className="cards-container">
               {inProgressCards.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-                  No active actions. (Drop cards here)
+                  {t('cards.board.emptyInProgress')}
                 </div>
               ) : (
                 inProgressCards.map(renderCardItem)
@@ -414,7 +437,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <div className="column-header">
               <div className="column-title">
                 <CheckCircle2 size={15} strokeWidth={1.5} color="var(--accent-blue)" />
-                <span>Completed</span>
+                <span>{t('cards.item.completed')}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <button
@@ -424,13 +447,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   onClick={async () => {
                     try {
                       const res = await api.syncObsidian();
-                      showToast?.(`Synced ${res.written} cards to Obsidian vault`);
+                      showToast?.(tp('cards.board.syncedObsidian', res.written));
                     } catch (err: unknown) {
                       showToast?.(api.getErrorMessage(err));
                     }
                   }}
                 >
-                  Sync Obsidian
+                  {t('cards.board.syncObsidian')}
                 </button>
                 <span className="column-count">{displayedDoneCards.length}</span>
               </div>
@@ -438,7 +461,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <div className="cards-container">
               {displayedDoneCards.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-                  Nothing completed yet.
+                  {t('cards.board.emptyDone')}
                 </div>
               ) : (
                 displayedDoneCards.map(renderCardItem)
@@ -460,10 +483,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   }}
                 >
                   {showArchivedDone
-                    ? 'Hide archived'
-                    : (archivedDoneCards.length > 0
-                        ? `View archived (${archivedDoneCards.length})...`
-                        : 'View archived...')}
+                    ? t('cards.board.hideArchived')
+                    : archivedDoneCards.length > 0
+                    ? t('cards.board.viewArchivedCount', { count: archivedDoneCards.length })
+                    : t('cards.board.viewArchived')}
                 </button>
               </div>
             </div>
@@ -476,7 +499,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <div>
           {shelvedCards.length === 0 ? (
             <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-faint)', fontSize: 14 }}>
-              No cards are currently shelved.
+              {t('cards.board.noneShelved')}
             </div>
           ) : (
             <div style={{
@@ -495,7 +518,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <div>
           {dismissedCards.length === 0 ? (
             <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-faint)', fontSize: 14 }}>
-              No dismissed cards.
+              {t('cards.board.noneDismissed')}
             </div>
           ) : (
             <div style={{

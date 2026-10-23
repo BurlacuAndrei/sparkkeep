@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { KanbanBoard } from './KanbanBoard';
 import { CardActionsProvider, CardActions } from '../context/CardActionsContext';
 import { Card } from '../types';
+import { LocaleProvider } from '../i18n';
 
 describe('KanbanBoard Density & Usability', () => {
   beforeEach(() => {
@@ -34,11 +35,48 @@ describe('KanbanBoard Density & Usability', () => {
 
   const renderWithProvider = (ui: React.ReactElement) => {
     return render(
-      <CardActionsProvider value={mockActions}>
-        {ui}
-      </CardActionsProvider>
+      <LocaleProvider locale="en">
+        <CardActionsProvider value={mockActions}>{ui}</CardActionsProvider>
+      </LocaleProvider>
     );
   };
+
+  it('renders Romanian plural counts under the ro locale', () => {
+    const { unmount } = render(
+      <LocaleProvider locale="ro">
+        <CardActionsProvider value={mockActions}>
+          <KanbanBoard
+            cards={[mockCards[0]]}
+            horizon="all"
+            onHorizonChange={vi.fn()}
+            onSelectCard={vi.fn()}
+            onUpdateCard={vi.fn()}
+            onResearch={vi.fn()}
+            onRetry={vi.fn()}
+          />
+        </CardActionsProvider>
+      </LocaleProvider>
+    );
+    expect(screen.getByText('(1 card)')).toBeDefined();
+    unmount();
+
+    render(
+      <LocaleProvider locale="ro">
+        <CardActionsProvider value={mockActions}>
+          <KanbanBoard
+            cards={[mockCards[0], { ...mockCards[0], id: 2, title: 'Second card' }]}
+            horizon="all"
+            onHorizonChange={vi.fn()}
+            onSelectCard={vi.fn()}
+            onUpdateCard={vi.fn()}
+            onResearch={vi.fn()}
+            onRetry={vi.fn()}
+          />
+        </CardActionsProvider>
+      </LocaleProvider>
+    );
+    expect(screen.getByText('(2 carduri)')).toBeDefined();
+  });
 
   it('renders comfortable density by default and toggles to compact', () => {
     renderWithProvider(

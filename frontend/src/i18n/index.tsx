@@ -5,21 +5,30 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import { en } from './en';
 import { ro } from './ro';
-import { translate } from './translate';
+import { translate, translatePlural } from './translate';
 import type {
   Catalog,
   Locale,
   LocaleContextValue,
   LocaleOption,
+  PluralBaseKey,
   TranslateFn,
+  TranslatePluralFn,
+  TranslationVars,
 } from './types';
+
+export { translate } from './translate';
+export { pluralCategory } from './translate';
 
 export type {
   Catalog,
   Locale,
   LocaleContextValue,
   LocaleOption,
+  PluralBaseKey,
+  PluralCategory,
   TranslateFn,
+  TranslatePluralFn,
   TranslationKey,
   TranslationVars,
 } from './types';
@@ -109,6 +118,12 @@ export function LocaleProvider({ children, locale: initialLocale }: LocaleProvid
     [locale]
   );
 
+  const tp = useCallback<TranslatePluralFn>(
+    (key: PluralBaseKey, count: number, vars?: TranslationVars) =>
+      translatePlural(catalogs[locale], locale, key, count, vars),
+    [locale]
+  );
+
   const formatNumberForLocale = useCallback((value: number) => formatNumber(value, locale), [locale]);
   const formatDateForLocale = useCallback(
     (value: Date | string | number) => formatDate(value, locale),
@@ -118,13 +133,14 @@ export function LocaleProvider({ children, locale: initialLocale }: LocaleProvid
   const contextValue = useMemo<LocaleContextValue>(
     () => ({
       t,
+      tp,
       locale,
       setLocale,
       locales,
       formatNumber: formatNumberForLocale,
       formatDate: formatDateForLocale,
     }),
-    [t, locale, setLocale, formatNumberForLocale, formatDateForLocale]
+    [t, tp, locale, setLocale, formatNumberForLocale, formatDateForLocale]
   );
 
   return <LocaleContext.Provider value={contextValue}>{children}</LocaleContext.Provider>;

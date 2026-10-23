@@ -1,11 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { NewCardModal } from './NewCardModal';
+import { LocaleProvider } from '../i18n';
+
+const renderModal = (ui: React.ReactElement) =>
+  render(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 describe('NewCardModal Smart Capture and Manual Fallback', () => {
   it('renders modal with initial focus and placeholder', () => {
     const handleClose = vi.fn();
-    render(<NewCardModal onClose={handleClose} />);
+    renderModal(<NewCardModal onClose={handleClose} />);
 
     expect(screen.getByText('Capture Spark')).toBeDefined();
     expect(screen.getByPlaceholderText(/Paste URL \(article, GitHub repo/i)).toBeDefined();
@@ -15,7 +19,7 @@ describe('NewCardModal Smart Capture and Manual Fallback', () => {
     const handleClose = vi.fn();
     const handleCapture = vi.fn().mockResolvedValue([1]);
 
-    render(<NewCardModal onClose={handleClose} onCapture={handleCapture} />);
+    renderModal(<NewCardModal onClose={handleClose} onCapture={handleCapture} />);
 
     const sourceInput = screen.getByPlaceholderText(/Paste URL \(article, GitHub repo/i);
     fireEvent.change(sourceInput, { target: { value: 'https://example.com/article' } });
@@ -37,7 +41,7 @@ describe('NewCardModal Smart Capture and Manual Fallback', () => {
     const handleClose = vi.fn();
     const handleCapture = vi.fn().mockResolvedValue([2]);
 
-    render(<NewCardModal onClose={handleClose} onCapture={handleCapture} />);
+    renderModal(<NewCardModal onClose={handleClose} onCapture={handleCapture} />);
 
     const sourceInput = screen.getByPlaceholderText(/Paste URL \(article, GitHub repo/i);
     fireEvent.change(sourceInput, { target: { value: 'Refactor database indexing layer' } });
@@ -59,7 +63,7 @@ describe('NewCardModal Smart Capture and Manual Fallback', () => {
     const handleClose = vi.fn();
     const handleCapture = vi.fn().mockRejectedValue(new Error('Discarded by Noise Gate: engagement bait detected'));
 
-    render(<NewCardModal onClose={handleClose} onCapture={handleCapture} />);
+    renderModal(<NewCardModal onClose={handleClose} onCapture={handleCapture} />);
 
     const sourceInput = screen.getByPlaceholderText(/Paste URL \(article, GitHub repo/i);
     fireEvent.change(sourceInput, { target: { value: 'https://clickbait.example.com' } });
@@ -77,7 +81,7 @@ describe('NewCardModal Smart Capture and Manual Fallback', () => {
     const handleClose = vi.fn();
     const handleCreate = vi.fn().mockResolvedValue(undefined);
 
-    render(<NewCardModal onClose={handleClose} onCreate={handleCreate} />);
+    renderModal(<NewCardModal onClose={handleClose} onCreate={handleCreate} />);
 
     const manualToggle = screen.getByRole('button', { name: /Need a blank card without AI/i });
     fireEvent.click(manualToggle);
@@ -106,7 +110,7 @@ describe('NewCardModal Smart Capture and Manual Fallback', () => {
 
   it('closes on Escape key press', () => {
     const handleClose = vi.fn();
-    render(<NewCardModal onClose={handleClose} />);
+    renderModal(<NewCardModal onClose={handleClose} />);
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(handleClose).toHaveBeenCalled();

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CardComment } from '../../types';
 import { MessageSquare, User, Send } from 'lucide-react';
+import { useLocale } from '../../i18n';
 
 export interface CardCommentsSectionProps {
   cardId: number;
@@ -14,6 +15,7 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
 }) => {
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { t } = useLocale();
 
   const handleSubmit = async () => {
     const trimmed = newComment.trim();
@@ -31,7 +33,7 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
     <div className="rail-section">
       <div className="rail-section-title">
         <MessageSquare size={13} color="var(--accent-amber)" />
-        <span>Comments & History ({comments.length})</span>
+        <span>{t('cards.comments.title', { count: comments.length })}</span>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
@@ -63,7 +65,7 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
                 }}
               >
                 <User size={9} />
-                <span>User</span>
+                <span>{t('cards.comments.user')}</span>
               </span>
 
               {/* Timestamp */}
@@ -80,7 +82,7 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
 
         {comments.length === 0 && (
           <div style={{ fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>
-            No comments yet. Add a note or observation below.
+            {t('cards.comments.empty')}
           </div>
         )}
       </div>
@@ -91,7 +93,7 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
           rows={2}
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
-          placeholder="Add note or comment... (Cmd+Enter to submit)"
+          placeholder={t('cards.comments.placeholder')}
           style={{ flex: 1, fontSize: 11.5 }}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -108,7 +110,7 @@ export const CardCommentsSection: React.FC<CardCommentsSectionProps> = ({
           style={{ padding: '4px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
         >
           <Send size={11} />
-          <span>{isSubmitting ? 'Posting...' : 'Post'}</span>
+          <span>{isSubmitting ? t('cards.comments.posting') : t('cards.comments.post')}</span>
         </button>
       </div>
     </div>

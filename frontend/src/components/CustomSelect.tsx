@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { SelectOption } from './selectOptions';
+import { useLocale } from '../i18n';
 
 export interface CustomSelectProps<T extends string = string> {
   id?: string;
@@ -22,7 +23,7 @@ export function CustomSelect<T extends string = string>({
   value,
   onChange,
   options,
-  placeholder = 'Select...',
+  placeholder,
   disabled = false,
   className = '',
   triggerClassName = '',
@@ -31,6 +32,8 @@ export function CustomSelect<T extends string = string>({
 }: CustomSelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const { t } = useLocale();
+  const placeholderText = placeholder ?? t('cards.select.placeholder');
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -186,7 +189,7 @@ export function CustomSelect<T extends string = string>({
               {selectedOption.badge && <span className="custom-select-badge">{selectedOption.badge}</span>}
             </>
           ) : (
-            <span className="custom-select-placeholder">{placeholder}</span>
+            <span className="custom-select-placeholder">{placeholderText}</span>
           )}
         </span>
         <ChevronDown
@@ -201,7 +204,7 @@ export function CustomSelect<T extends string = string>({
           ref={menuRef}
           id={listboxId}
           role="listbox"
-          aria-label={ariaLabel || 'Options'}
+          aria-label={ariaLabel || t('cards.select.optionsAria')}
           className={`custom-select-menu size-${size}`}
         >
           {options.map((opt, idx) => {

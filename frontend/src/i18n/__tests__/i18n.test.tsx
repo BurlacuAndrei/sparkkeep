@@ -35,12 +35,13 @@ describe('t()', () => {
   it('interpolates {{var}} placeholders', () => {
     const { result } = renderHook(() => useLocale(), { wrapper });
     expect(result.current.t('research.queued', { id: 42 })).toBe('Research queued for card #42');
-    expect(result.current.t('cards.count', { count: 3 })).toBe('3 cards');
+    expect(result.current.tp('cards.count', 3)).toBe('3 cards');
   });
 
   it('leaves placeholders without a supplied value untouched', () => {
     const { result } = renderHook(() => useLocale(), { wrapper });
-    expect(result.current.t('cards.count', {})).toBe('{{count}} cards');
+    expect(result.current.t('common.appName', {})).toBe('Sparkkeep');
+    expect(result.current.t('research.queued', {})).toBe('Research queued for card #{{id}}');
   });
 
   it('inserts values literally, without replacement-pattern expansion', () => {

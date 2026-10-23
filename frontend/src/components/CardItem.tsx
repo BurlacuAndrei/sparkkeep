@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 import { getPlatformInfo, formatRelativeAge } from '../utils/cardUtils';
+import { enumLabel, statusLabel } from '../utils/cardEnumLabels';
+import { useLocale } from '../i18n';
 
 export interface CardItemProps {
   card: Card;
@@ -48,6 +50,7 @@ export const CardItem: React.FC<CardItemProps> = ({
   onToggleSelect,
 }) => {
   const actions = useCardActions();
+  const { t, tp } = useLocale();
   const onSelect = propOnSelect || actions.onSelectCard;
   const onStatusChange = propOnStatusChange || actions.onStatusChange;
   const onResearch = propOnResearch || actions.onResearch;
@@ -95,7 +98,7 @@ export const CardItem: React.FC<CardItemProps> = ({
 
   const isFailed = Boolean(card.analysis_failed || card.title === 'Analysis failed');
   const platform = getPlatformInfo(card.source_url);
-  const relativeAge = formatRelativeAge(card.created_at);
+  const relativeAge = formatRelativeAge(card.created_at, t);
 
   const completedCount = card.completed_actions?.length || 0;
   const totalActions = card.proposed_actions?.length || 0;
@@ -105,7 +108,12 @@ export const CardItem: React.FC<CardItemProps> = ({
   const confidence = card.research_confidence || '';
 
   const suggestedHorizon = card.suggested_horizon || card.horizon || 'short-term';
-  const horizonLabel = suggestedHorizon === 'short-term' ? 'Short' : suggestedHorizon === 'medium-term' ? 'Medium' : 'Long';
+  const horizonLabel =
+    suggestedHorizon === 'short-term'
+      ? t('cards.horizonShort')
+      : suggestedHorizon === 'medium-term'
+      ? t('cards.horizonMedium')
+      : t('cards.horizonLong');
 
   const handleClick = (e: React.MouseEvent) => {
     if (selectable && onToggleSelect) {
@@ -198,7 +206,7 @@ export const CardItem: React.FC<CardItemProps> = ({
           {/* Platform glyph */}
           <span
             className="card-platform-glyph"
-            title={`Source: ${platform.name}`}
+            title={t('cards.item.sourceTitle', { name: platform.name })}
             style={{ color: platform.color, display: 'inline-flex', alignItems: 'center', gap: 3 }}
           >
             {platform.icon}
@@ -214,42 +222,53 @@ export const CardItem: React.FC<CardItemProps> = ({
 
           {/* Sibling count */}
           {siblingCount && siblingCount > 1 && (
-            <span className="card-sibling-badge" title={`Card ${siblingIndex || 1} of ${siblingCount} from this capture`}>
+            <span
+              className="card-sibling-badge"
+              title={t('cards.item.siblingTitle', {
+                index: siblingIndex || 1,
+                total: siblingCount,
+              })}
+            >
               <Layers size={9.5} style={{ marginRight: 2 }} />
-              {siblingIndex ? `${siblingIndex}/${siblingCount}` : `${siblingCount} ideas`}
+              {siblingIndex
+                ? `${siblingIndex}/${siblingCount}`
+                : tp('cards.item.siblingIdeas', siblingCount)}
             </span>
           )}
 
           {/* Signal warnings */}
           {card.signals?.extraction && card.signals.extraction !== 'full' && (
-            <span className="card-signal-badge warning" title={`Extraction signal: ${card.signals.extraction}`}>
+            <span
+              className="card-signal-badge warning"
+              title={t('cards.item.extractionTitle', { signal: card.signals.extraction })}
+            >
               <AlertTriangle size={10} strokeWidth={2} />
-              <span>{card.signals.extraction}</span>
+              <span>{enumLabel(t, 'extraction', card.signals.extraction)}</span>
             </span>
           )}
           {card.signals?.promo && (
-            <span className="card-signal-badge promo" title="Promotional or sponsored content detected">
-              promo
+            <span className="card-signal-badge promo" title={t('cards.item.promoTitle')}>
+              {t('cards.item.promo')}
             </span>
           )}
           {card.research_state === 'failed' && (
             <span
               className="card-signal-badge warning"
               style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }}
-              title="Research failed — click Retry"
+              title={t('cards.item.researchFailedTitle')}
             >
               <AlertTriangle size={10} strokeWidth={2} />
-              <span>research failed</span>
+              <span>{t('cards.item.researchFailed')}</span>
             </span>
           )}
           {card.research_state === 'running' && card.status !== 'inbox' && (
             <span
               className="card-signal-badge"
               style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}
-              title="Research running in background"
+              title={t('cards.item.researchRunningTitle')}
             >
               <Loader2 size={10} className="spin" />
-              <span>researching</span>
+              <span>{t('cards.item.researching')}</span>
             </span>
           )}
         </div>
@@ -273,7 +292,7 @@ export const CardItem: React.FC<CardItemProps> = ({
         {isFailed ? (
           <div className="card-stage-failed">
             <AlertTriangle size={12} color="#fb7185" />
-            <span>Couldn't read source</span>
+            <span>{t('cards.item.failedRead')}</span>
           </div>
         ) : card.status === 'researching' || card.research_state === 'queued' || card.research_state === 'running' ? (
           <div style={{ width: '100%' }}>
@@ -284,13 +303,18 @@ export const CardItem: React.FC<CardItemProps> = ({
             {card.worthiness?.level && (
               <span
                 className={`card-worthiness-chip ${card.worthiness.level.toLowerCase()}`}
-                title={card.worthiness.reason || `Worthiness: ${card.worthiness.level}`}
+                title={
+                  card.worthiness.reason ||
+                  t('cards.item.worthinessTitle', {
+                    level: enumLabel(t, 'worthiness', card.worthiness.level),
+                  })
+                }
               >
-                {card.worthiness.level.toUpperCase()}
+                {enumLabel(t, 'worthiness', card.worthiness.level).toUpperCase()}
               </span>
             )}
-            <span className="card-horizon-hint" title="AI suggested horizon">
-              Suggest: <strong style={{ textTransform: 'capitalize' }}>{horizonLabel}</strong>
+            <span className="card-horizon-hint" title={t('cards.item.suggestedTitle')}>
+              {t('cards.item.suggest')} <strong style={{ textTransform: 'capitalize' }}>{horizonLabel}</strong>
             </span>
           </div>
         ) : card.status === 'review' ? (
@@ -298,28 +322,40 @@ export const CardItem: React.FC<CardItemProps> = ({
             {verdict ? (
               <span className={`card-verdict-pill ${verdict}`}>
                 <span className="verdict-dot" />
-                <strong>{verdict.toUpperCase()}</strong>
-                {confidence && <span style={{ opacity: 0.8, fontSize: 9.5 }}>· {confidence}</span>}
+                <strong>{enumLabel(t, 'verdict', verdict).toUpperCase()}</strong>
+                {confidence && (
+                  <span style={{ opacity: 0.8, fontSize: 9.5 }}>
+                    · {enumLabel(t, 'confidence', confidence)}
+                  </span>
+                )}
               </span>
             ) : (
               <span className="card-verdict-pill awaiting">
-                Review Ready
+                {t('cards.item.reviewReady')}
               </span>
             )}
           </div>
         ) : card.status === 'to-do' ? (
           <div className="card-stage-todo">
             <span className={`horizon-pill ${card.horizon || 'short-term'}`}>
-              {(card.horizon || 'short-term').replace('-term', '')}
+              {card.horizon === 'medium-term'
+                ? t('cards.horizonMedium')
+                : card.horizon === 'long-term'
+                ? t('cards.horizonLong')
+                : t('cards.horizonShort')}
             </span>
             <span className="card-todo-actions-count">
               <CheckCircle2 size={11.5} color={completedCount > 0 ? '#34d399' : '#94a3b8'} />
-              <span>{totalActions > 0 ? `${completedCount}/${totalActions} actions` : 'Ready to plan'}</span>
+              <span>
+                {totalActions > 0
+                  ? t('cards.item.actionsCount', { completed: completedCount, total: totalActions })
+                  : t('cards.item.readyToPlan')}
+              </span>
             </span>
             {card.research_state === 'done' && (
-              <span className="card-research-ready-badge" title="Deep Research complete — click card to view findings">
+              <span className="card-research-ready-badge" title={t('cards.item.researchReadyTitle')}>
                 <Sparkles size={10} color="#c084fc" />
-                <span>Research Ready</span>
+                <span>{t('cards.item.researchReady')}</span>
               </span>
             )}
           </div>
@@ -328,13 +364,17 @@ export const CardItem: React.FC<CardItemProps> = ({
             <div className="card-progress-meta">
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <Clock size={11} color="#34d399" />
-                <span>In Progress</span>
+                <span>{t('cards.status.inProgress')}</span>
               </span>
-              <span>{totalActions > 0 ? `${completedCount}/${totalActions} done` : ''}</span>
+              <span>
+                {totalActions > 0
+                  ? t('cards.item.doneCount', { completed: completedCount, total: totalActions })
+                  : ''}
+              </span>
               {card.research_state === 'done' && (
-                <span className="card-research-ready-badge" title="Deep Research complete — click card to view findings">
+                <span className="card-research-ready-badge" title={t('cards.item.researchReadyTitle')}>
                   <Sparkles size={10} color="#c084fc" />
-                  <span>Research Ready</span>
+                  <span>{t('cards.item.researchReady')}</span>
                 </span>
               )}
             </div>
@@ -350,12 +390,12 @@ export const CardItem: React.FC<CardItemProps> = ({
         ) : card.status === 'done' ? (
           <div className="card-stage-done">
             <CheckCircle2 size={12} color="#34d399" />
-            <span>Completed</span>
+            <span>{t('cards.item.completed')}</span>
           </div>
         ) : (
           <div className="card-stage-archived">
             <Archive size={11.5} color="#94a3b8" />
-            <span style={{ textTransform: 'capitalize' }}>{card.status}</span>
+            <span style={{ textTransform: 'capitalize' }}>{statusLabel(t, card.status)}</span>
           </div>
         )}
       </div>
@@ -384,20 +424,20 @@ export const CardItem: React.FC<CardItemProps> = ({
               type="button"
               className="card-primary-action-btn retry"
               onClick={handlePrimaryAction}
-              title="Retry Extraction"
+              title={t('cards.header.retryExtraction')}
             >
               <RefreshCw size={11.5} />
-              <span>Retry</span>
+              <span>{t('cards.item.retry')}</span>
             </button>
           ) : card.status === 'inbox' ? (
             <button
               type="button"
               className="card-primary-action-btn commit"
               onClick={handlePrimaryAction}
-              title={`Commit with ${horizonLabel} horizon`}
+              title={t('cards.item.commitTitle', { horizon: horizonLabel })}
             >
               <ArrowRight size={11.5} />
-              <span>Commit</span>
+              <span>{t('cards.item.commit')}</span>
             </button>
           ) : card.status === 'review' ? (
             verdict === 'watch' ? (
@@ -405,30 +445,30 @@ export const CardItem: React.FC<CardItemProps> = ({
                 type="button"
                 className="card-primary-action-btn watch"
                 onClick={handlePrimaryAction}
-                title="Shelve for later inspection"
+                title={t('cards.item.watchTitle')}
               >
                 <Clock size={11.5} />
-                <span>Watch</span>
+                <span>{t('cards.item.watch')}</span>
               </button>
             ) : verdict === 'skip' ? (
               <button
                 type="button"
                 className="card-primary-action-btn skip"
                 onClick={handlePrimaryAction}
-                title="Dismiss as not recommended"
+                title={t('cards.item.skipTitle')}
               >
                 <X size={11.5} />
-                <span>Skip</span>
+                <span>{t('cards.item.skip')}</span>
               </button>
             ) : (
               <button
                 type="button"
                 className="card-primary-action-btn accept"
                 onClick={handlePrimaryAction}
-                title="Accept verdict and move to To Do"
+                title={t('cards.item.acceptTitle')}
               >
                 <Check size={11.5} />
-                <span>Accept → To Do</span>
+                <span>{t('cards.item.accept')}</span>
               </button>
             )
           ) : card.status === 'to-do' ? (
@@ -436,40 +476,40 @@ export const CardItem: React.FC<CardItemProps> = ({
               type="button"
               className="card-primary-action-btn start"
               onClick={handlePrimaryAction}
-              title="Start Working"
+              title={t('cards.item.startTitle')}
             >
               <ArrowRight size={11.5} />
-              <span>Start</span>
+              <span>{t('cards.item.start')}</span>
             </button>
           ) : card.status === 'in-progress' ? (
             <button
               type="button"
               className="card-primary-action-btn done"
               onClick={handlePrimaryAction}
-              title="Mark Completed"
+              title={t('cards.item.doneTitle')}
             >
               <Check size={11.5} />
-              <span>Done</span>
+              <span>{t('cards.item.done')}</span>
             </button>
           ) : card.status === 'shelved' || card.status === 'dismissed' ? (
             <button
               type="button"
               className="card-primary-action-btn restore"
               onClick={handlePrimaryAction}
-              title="Restore to Inbox"
+              title={t('cards.item.restoreTitle')}
             >
               <RotateCcw size={11.5} />
-              <span>Restore</span>
+              <span>{t('cards.item.restore')}</span>
             </button>
           ) : card.status === 'done' ? (
             <button
               type="button"
               className="card-primary-action-btn reopen"
               onClick={handlePrimaryAction}
-              title="Reopen to To Do"
+              title={t('cards.item.reopenTitle')}
             >
               <RotateCcw size={11.5} />
-              <span>Reopen</span>
+              <span>{t('cards.item.reopen')}</span>
             </button>
           ) : null}
 
@@ -478,7 +518,7 @@ export const CardItem: React.FC<CardItemProps> = ({
             <button
               type="button"
               className={`icon-btn card-more-btn ${menuOpen ? 'active' : ''}`}
-              title="More actions"
+              title={t('cards.item.moreActions')}
               onClick={handleMenuToggle}
             >
               <MoreHorizontal size={13} strokeWidth={2} />
@@ -499,7 +539,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                   }}
                 >
                   <Sparkles size={13} color="#c084fc" />
-                  <span>Deep Research</span>
+                  <span>{t('cards.item.deepResearch')}</span>
                 </button>
 
                 {card.research_state === 'failed' && (
@@ -512,7 +552,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                     }}
                   >
                     <RotateCcw size={13} color="#f87171" />
-                    <span style={{ color: '#f87171' }}>Retry Research</span>
+                    <span style={{ color: '#f87171' }}>{t('cards.item.retryResearch')}</span>
                   </button>
                 )}
 
@@ -527,7 +567,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                     }}
                   >
                     <ArrowRight size={13} color="#cbd5e1" />
-                    <span>Move to To Do</span>
+                    <span>{t('cards.item.moveToTodo')}</span>
                   </button>
                 )}
 
@@ -541,7 +581,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                     }}
                   >
                     <ArrowRight size={13} color="#34d399" />
-                    <span>Move to In Progress</span>
+                    <span>{t('cards.item.moveToInProgress')}</span>
                   </button>
                 )}
 
@@ -555,13 +595,13 @@ export const CardItem: React.FC<CardItemProps> = ({
                     }}
                   >
                     <Check size={13} color="#a5b4fc" />
-                    <span>Mark as Done</span>
+                    <span>{t('cards.item.markDone')}</span>
                   </button>
                 )}
 
                 {/* Horizon Switcher */}
                 <div className="card-context-divider" />
-                <div className="card-context-submenu-label">Set Horizon</div>
+                <div className="card-context-submenu-label">{t('cards.item.setHorizon')}</div>
                 <div style={{ display: 'flex', gap: 4, padding: '2px 8px 6px' }}>
                   {(['short-term', 'medium-term', 'long-term'] as const).map((h) => (
                     <button
@@ -573,7 +613,11 @@ export const CardItem: React.FC<CardItemProps> = ({
                         actions.onUpdateCard?.(card.id, { horizon: h });
                       }}
                     >
-                      {h === 'short-term' ? 'Short' : h === 'medium-term' ? 'Med' : 'Long'}
+                      {h === 'short-term'
+                        ? t('cards.horizonShort')
+                        : h === 'medium-term'
+                        ? t('cards.horizonMed')
+                        : t('cards.horizonLong')}
                     </button>
                   ))}
                 </div>
@@ -591,7 +635,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                     }}
                   >
                     <Clock size={13} color="#fbbf24" />
-                    <span>Shelve for Later</span>
+                    <span>{t('cards.item.shelve')}</span>
                   </button>
                 )}
 
@@ -605,7 +649,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                     }}
                   >
                     <X size={13} color="#fb7185" />
-                    <span>Dismiss (Not for me)</span>
+                    <span>{t('cards.item.dismiss')}</span>
                   </button>
                 )}
 
@@ -619,7 +663,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                     }}
                   >
                     <Trash2 size={13} color="#fb7185" />
-                    <span>Delete Permanently</span>
+                    <span>{t('cards.item.deletePermanently')}</span>
                   </button>
                 )}
               </div>

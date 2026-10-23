@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, ChevronDown, Clock, Sparkles, Undo2 } from 'lucide-react';
 import { Card } from '../../types';
 import { fetchCardResearchRuns } from '../../api';
+import { useLocale } from '../../i18n';
 
 const STEP_IDS = ['planning', 'search', 'reading', 'claims', 'landscape', 'synthesis'];
 
@@ -57,13 +58,18 @@ const Ring: React.FC<{ pct: number; tone: 'violet' | 'green' | 'amber'; spin?: b
 
 const InFlightItem: React.FC<{ card: Card; onOpen: () => void }> = ({ card, onOpen }) => {
   const p = useResearchProgress(card.id);
+  const { t } = useLocale();
   return (
-    <button type="button" className="tray-item" onClick={onOpen} title="Open card">
+    <button type="button" className="tray-item" onClick={onOpen} title={t('cards.tray.openCard')}>
       <Ring pct={p.queued ? 0.08 : Math.max(0.08, p.pct)} tone="violet" spin={p.queued} />
       <span className="tray-item-text">
         <span className="tray-item-title">{card.title}</span>
         <span className="tray-item-sub">
-          {p.queued ? `Queued${p.position ? ` · #${p.position}` : ''}` : `Researching · ${Math.round(p.pct * 100)}%`}
+          {p.queued
+            ? p.position
+              ? t('cards.tray.queuedAt', { position: p.position })
+              : t('cards.tray.queued')
+            : t('cards.tray.researching', { percent: Math.round(p.pct * 100) })}
         </span>
       </span>
     </button>
@@ -88,26 +94,27 @@ export const ResearchTray: React.FC<ResearchTrayProps> = ({
   onPullForward,
 }) => {
   const [collapsed, setCollapsed] = useState(false);
+  const { t } = useLocale();
   const total = inFlight.length + pending.length + returned.length;
   if (total === 0) return null;
 
   return (
-    <aside id="research-tray" className={`research-tray ${collapsed ? 'is-collapsed' : ''}`} aria-label="Research tray">
+    <aside id="research-tray" className={`research-tray ${collapsed ? 'is-collapsed' : ''}`} aria-label={t('cards.tray.aria')}>
       <button type="button" className="tray-header" onClick={() => setCollapsed((v) => !v)} aria-expanded={!collapsed}>
         <Sparkles size={13} />
-        <span>Research tray</span>
+        <span>{t('cards.tray.title')}</span>
         <span className="tray-count">{total}</span>
         <ChevronDown size={14} className={`tray-chevron ${collapsed ? 'flip' : ''}`} />
       </button>
       {!collapsed && (
         <div className="tray-items">
           {returned.map((c) => (
-            <button key={`r-${c.id}`} type="button" className="tray-item ready" onClick={() => onPullForward(c.id)} title="Bring to the front now">
+            <button key={`r-${c.id}`} type="button" className="tray-item ready" onClick={() => onPullForward(c.id)} title={t('cards.tray.bringFront')}>
               <CheckCircle2 size={20} className="tray-ready-icon" />
               <span className="tray-item-text">
                 <span className="tray-item-title">{c.title}</span>
                 <span className="tray-item-sub">
-                  {c.research_state === 'failed' ? 'Research failed · up next' : 'Report ready · up next'}
+                  {c.research_state === 'failed' ? t('cards.tray.failed') : t('cards.tray.ready')}
                 </span>
               </span>
             </button>
@@ -117,17 +124,17 @@ export const ResearchTray: React.FC<ResearchTrayProps> = ({
               <Clock size={18} className="tray-pending-icon" />
               <span className="tray-item-text">
                 <span className="tray-item-title">{c.title}</span>
-                <span className="tray-item-sub">Starting research…</span>
+                <span className="tray-item-sub">{t('cards.tray.starting')}</span>
               </span>
               <button type="button" className="tray-undo" onClick={() => onCancelPending(c.id)}>
-                <Undo2 size={12} /> Undo
+                <Undo2 size={12} /> {t('cards.tray.undo')}
               </button>
             </div>
           ))}
           {inFlight.map((c) => (
             <InFlightItem key={`f-${c.id}`} card={c} onOpen={() => onOpen(c)} />
           ))}
-          <p className="tray-footnote">Reports return to the deck as your next card.</p>
+          <p className="tray-footnote">{t('cards.tray.footnote')}</p>
         </div>
       )}
     </aside>

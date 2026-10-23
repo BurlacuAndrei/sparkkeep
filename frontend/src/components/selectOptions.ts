@@ -1,4 +1,5 @@
 import React from 'react';
+import type { TranslateFn } from '../i18n';
 
 export interface SelectOption<T extends string = string> {
   value: T;
@@ -9,38 +10,41 @@ export interface SelectOption<T extends string = string> {
   disabled?: boolean;
 }
 
-export const HORIZON_FILTER_OPTIONS: SelectOption<string>[] = [
-  { value: 'all', label: 'All Horizons' },
-  { value: 'short-term', label: '⚡ Short-term (Actionable)' },
-  { value: 'medium-term', label: '📅 Medium-term (Planned)' },
-  { value: 'long-term', label: '🔭 Long-term (Vision)' },
+export const horizonFilterOptions = (t: TranslateFn): SelectOption<string>[] => [
+  { value: 'all', label: t('cards.select.allHorizons') },
+  { value: 'short-term', label: t('cards.select.horizonShort') },
+  { value: 'medium-term', label: t('cards.select.horizonMedium') },
+  { value: 'long-term', label: t('cards.select.horizonLong') },
 ];
 
-
-export const CARD_HORIZON_OPTIONS: SelectOption<'short-term' | 'medium-term' | 'long-term'>[] = [
-  { value: 'short-term', label: '⚡ Short-term (Immediate action)' },
-  { value: 'medium-term', label: '📅 Medium-term (Planned)' },
-  { value: 'long-term', label: '🔭 Long-term (Vision)' },
+export const cardHorizonOptions = (
+  t: TranslateFn
+): SelectOption<'short-term' | 'medium-term' | 'long-term'>[] => [
+  { value: 'short-term', label: t('cards.select.cardHorizonShort') },
+  { value: 'medium-term', label: t('cards.select.cardHorizonMedium') },
+  { value: 'long-term', label: t('cards.select.cardHorizonLong') },
 ];
 
-export const CARD_STATUS_OPTIONS: SelectOption<'inbox' | 'review' | 'to-do' | 'in-progress' | 'done' | 'shelved' | 'dismissed'>[] = [
-  { value: 'inbox', label: '📥 Inbox' },
-  { value: 'review', label: '👀 Review' },
-  { value: 'to-do', label: '📝 To Do' },
-  { value: 'in-progress', label: '⚡ In Progress' },
-  { value: 'done', label: '✅ Done' },
-  { value: 'shelved', label: '📦 Shelved' },
-  { value: 'dismissed', label: '🚫 Dismissed' },
+export const cardStatusOptions = (
+  t: TranslateFn
+): SelectOption<'inbox' | 'review' | 'to-do' | 'in-progress' | 'done' | 'shelved' | 'dismissed'>[] => [
+  { value: 'inbox', label: t('cards.select.statusInbox') },
+  { value: 'review', label: t('cards.select.statusReview') },
+  { value: 'to-do', label: t('cards.select.statusToDo') },
+  { value: 'in-progress', label: t('cards.select.statusInProgress') },
+  { value: 'done', label: t('cards.select.statusDone') },
+  { value: 'shelved', label: t('cards.select.statusShelved') },
+  { value: 'dismissed', label: t('cards.select.statusDismissed') },
 ];
 
-export const CARD_TYPE_OPTIONS: SelectOption<import('../types').CardType>[] = [
-  { value: 'tool', label: '🛠️ Tool' },
-  { value: 'repo', label: '📦 Repository' },
-  { value: 'article', label: '📄 Article' },
-  { value: 'idea', label: '💡 Idea' },
-  { value: 'claim', label: '🎯 Claim' },
-  { value: 'tutorial', label: '📚 Tutorial' },
-  { value: 'product', label: '🚀 Product' },
-  { value: 'collection', label: '📚 Collection' },
-  { value: 'other', label: '📌 Other' },
+export const cardTypeOptions = (t: TranslateFn): SelectOption<import('../types').CardType>[] => [
+  { value: 'tool', label: t('cards.select.typeTool') },
+  { value: 'repo', label: t('cards.select.typeRepo') },
+  { value: 'article', label: t('cards.select.typeArticle') },
+  { value: 'idea', label: t('cards.select.typeIdea') },
+  { value: 'claim', label: t('cards.select.typeClaim') },
+  { value: 'tutorial', label: t('cards.select.typeTutorial') },
+  { value: 'product', label: t('cards.select.typeProduct') },
+  { value: 'collection', label: t('cards.select.typeCollection') },
+  { value: 'other', label: t('cards.select.typeOther') },
 ];

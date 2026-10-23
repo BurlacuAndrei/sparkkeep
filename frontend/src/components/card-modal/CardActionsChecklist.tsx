@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CheckCircle2, Plus, Trash2 } from 'lucide-react';
+import { useLocale } from '../../i18n';
 
 export interface CardActionsChecklistProps {
   title?: string;
@@ -12,7 +13,7 @@ export interface CardActionsChecklistProps {
 }
 
 export const CardActionsChecklist: React.FC<CardActionsChecklistProps> = ({
-  title = 'Next Actions Checklist',
+  title,
   actions,
   completedActions,
   onToggleAction,
@@ -21,6 +22,7 @@ export const CardActionsChecklist: React.FC<CardActionsChecklistProps> = ({
   onAddAction,
 }) => {
   const [newAction, setNewAction] = useState('');
+  const { t } = useLocale();
 
   const completedCount = actions.filter((_, idx) => completedActions[idx]).length;
   const totalActions = actions.length;
@@ -38,10 +40,16 @@ export const CardActionsChecklist: React.FC<CardActionsChecklistProps> = ({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div className="briefing-heading heading-actions" style={{ margin: 0 }}>
           <CheckCircle2 size={13} strokeWidth={1.5} />
-          <span>{title}</span>
+          <span>{title ?? t('cards.checklist.title')}</span>
         </div>
         <span style={{ fontSize: 11.5, color: '#34d399', fontWeight: 600 }}>
-          {totalActions > 0 ? `${completedCount}/${totalActions} completed (${progressPercent}%)` : 'No steps yet'}
+          {totalActions > 0
+            ? t('cards.checklist.progress', {
+                completed: completedCount,
+                total: totalActions,
+                percent: progressPercent,
+              })
+            : t('cards.checklist.noSteps')}
         </span>
       </div>
 
@@ -83,7 +91,7 @@ export const CardActionsChecklist: React.FC<CardActionsChecklistProps> = ({
               type="button"
               className="close-btn"
               onClick={() => onRemoveAction(idx)}
-              title="Remove action"
+              title={t('cards.checklist.remove')}
             >
               <Trash2 size={12} strokeWidth={1.5} />
             </button>
@@ -96,7 +104,7 @@ export const CardActionsChecklist: React.FC<CardActionsChecklistProps> = ({
           type="text"
           className="form-input"
           value={newAction}
-          placeholder="Add an action..."
+          placeholder={t('cards.checklist.placeholder')}
           onChange={(e) => setNewAction(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
@@ -107,7 +115,7 @@ export const CardActionsChecklist: React.FC<CardActionsChecklistProps> = ({
         />
         <button type="button" className="btn-secondary" onClick={handleAdd}>
           <Plus size={13} color="#34d399" />
-          <span>Add</span>
+          <span>{t('cards.checklist.add')}</span>
         </button>
       </div>
     </div>

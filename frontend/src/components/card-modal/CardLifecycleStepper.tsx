@@ -1,17 +1,10 @@
 import React from 'react';
+import { useLocale } from '../../i18n';
 
 export interface LifecycleStep {
   id: string;
   label: string;
 }
-
-const LIFECYCLE_STEPS: LifecycleStep[] = [
-  { id: 'inbox', label: 'Inbox' },
-  { id: 'review', label: 'Review' },
-  { id: 'to-do', label: 'To Do' },
-  { id: 'in-progress', label: 'In Progress' },
-  { id: 'done', label: 'Done' },
-];
 
 export interface CardLifecycleStepperProps {
   status: string;
@@ -22,8 +15,16 @@ export interface CardLifecycleStepperProps {
 export const CardLifecycleStepper: React.FC<CardLifecycleStepperProps> = ({
   status,
   onStatusChange,
-  steps = LIFECYCLE_STEPS,
+  steps: providedSteps,
 }) => {
+  const { t } = useLocale();
+  const steps: LifecycleStep[] = providedSteps ?? [
+    { id: 'inbox', label: t('cards.status.inbox') },
+    { id: 'review', label: t('cards.status.review') },
+    { id: 'to-do', label: t('cards.status.toDo') },
+    { id: 'in-progress', label: t('cards.status.inProgress') },
+    { id: 'done', label: t('cards.status.done') },
+  ];
   return (
     <div className="drawer-stepper">
       {steps.map((step, idx) => {
@@ -34,7 +35,7 @@ export const CardLifecycleStepper: React.FC<CardLifecycleStepperProps> = ({
               type="button"
               className={`drawer-stepper-step ${isActive ? 'active' : ''}`}
               onClick={() => onStatusChange(step.id)}
-              title={`Move card to ${step.label}`}
+              title={t('cards.lifecycle.moveTitle', { step: step.label })}
             >
               <span>{step.label}</span>
             </button>
@@ -66,7 +67,7 @@ export const CardLifecycleStepper: React.FC<CardLifecycleStepperProps> = ({
             marginLeft: 6,
           }}
         >
-          {status}
+          {status === 'shelved' ? t('cards.status.shelved') : t('cards.status.dismissed')}
         </span>
       )}
     </div>

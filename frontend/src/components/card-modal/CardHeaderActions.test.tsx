@@ -3,6 +3,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CardHeaderActions } from './CardHeaderActions';
 import { Card, Settings } from '../../types';
 import * as api from '../../api';
+import { LocaleProvider } from '../../i18n';
+
+const renderHeader = (ui: React.ReactElement) =>
+  render(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 vi.mock('../../api', async () => {
   const actual = await vi.importActual<typeof import('../../api')>('../../api');
@@ -39,7 +43,7 @@ const mockCard: Card = {
 
 describe('CardHeaderActions Obsidian Export', () => {
   it('does not display Send to Obsidian Vault when obsidian_vault_path is absent', () => {
-    render(
+    renderHeader(
       <CardHeaderActions
         card={mockCard}
         status="to-do"
@@ -69,7 +73,7 @@ describe('CardHeaderActions Obsidian Export', () => {
       obsidian_vault_path: '/my/obsidian/vault',
     };
 
-    render(
+    renderHeader(
       <CardHeaderActions
         card={mockCard}
         status="to-do"

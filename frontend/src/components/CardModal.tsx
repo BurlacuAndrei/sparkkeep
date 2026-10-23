@@ -25,10 +25,12 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
-import { CARD_HORIZON_OPTIONS, CARD_TYPE_OPTIONS } from './selectOptions';
+import { cardHorizonOptions, cardTypeOptions } from './selectOptions';
 import { ResearchReportView } from './ResearchReportView';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 import { getPlatformInfo, formatRelativeAge } from '../utils/cardUtils';
+import { enumLabel, statusLabel } from '../utils/cardEnumLabels';
+import { horizonLabel } from '../utils/triage';
 import {
   CardLifecycleStepper,
   CardHeaderActions,
@@ -36,6 +38,7 @@ import {
   CardActionsChecklist,
   CardCommentsSection,
 } from './card-modal';
+import { useLocale } from '../i18n';
 
 export interface CardModalProps {
   card: Card;
@@ -63,6 +66,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   settings,
 }) => {
   const [activeSettings, setActiveSettings] = useState<Settings | null>(settings || null);
+  const { t, tp } = useLocale();
 
   useEffect(() => {
     if (settings !== undefined) {
@@ -288,7 +292,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   const handleHorizonChange = (h: 'short-term' | 'medium-term' | 'long-term') => {
     setHorizon(h);
     onUpdate(card.id, { horizon: h });
-    showToast?.(`Horizon set to ${h}`);
+    showToast?.(t('cards.modal.horizonSet', { horizon: horizonLabel(h, t) }));
   };
 
   const handleStatusTransition = (newStatus: string) => {
@@ -442,7 +446,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   const handleCopyMarkdown = async () => {
     try {
       await navigator.clipboard.writeText(await fetchMarkdown());
-      showToast?.('Markdown copied to clipboard');
+      showToast?.(t('cards.modal.markdownCopied'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -458,7 +462,7 @@ export const CardModal: React.FC<CardModalProps> = ({
       a.download = `spark-${card.id}.md`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast?.('Markdown downloaded');
+      showToast?.(t('cards.modal.markdownDownloaded'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -469,7 +473,7 @@ export const CardModal: React.FC<CardModalProps> = ({
       const md = await fetchMarkdown();
       const q = new URLSearchParams({ text: card.title, description: md });
       window.open(`https://todoist.com/showTask?${q.toString()}`, '_blank', 'noopener');
-      showToast?.('Opening Todoist with this spark...');
+      showToast?.(t('cards.modal.todoistOpening'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -478,17 +482,19 @@ export const CardModal: React.FC<CardModalProps> = ({
   // Spin Off Child Card
   const handleSpinOff = async () => {
     try {
+      // shortcut: card copy is persisted in the active locale (creation-locale policy);
+      // re-translate stored titles/notes if per-view localization is ever required.
       const newCreated = await createCard({
-        title: `Spin-off: ${card.title}`,
-        tldr: `Spun off from card #${card.id}.`,
-        summary: `Spun off from card #${card.id}.`,
+        title: t('cards.modal.spinOffTitle', { title: card.title }),
+        tldr: t('cards.modal.spinOffNote', { id: card.id }),
+        summary: t('cards.modal.spinOffNote', { id: card.id }),
         status: 'inbox',
         horizon: card.horizon || 'short-term',
         source_url: card.source_url,
         capture_id: card.capture_id,
-        references: [{ kind: 'other', label: `Parent Card #${card.id}` }],
+        references: [{ kind: 'other', label: t('cards.modal.parentCard', { id: card.id }) }],
       });
-      showToast?.(`Spun off new card #${newCreated.id}!`);
+      showToast?.(t('cards.modal.spunOff', { id: newCreated.id }));
       if (onSelectCard) onSelectCard(newCreated);
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
@@ -498,7 +504,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   // Split Card Handler
   const handlePerformSplit = useCallback(async () => {
     if (!splitSecondTitle.trim()) {
-      showToast?.('Please give Card B a title');
+      showToast?.(t('cards.modal.splitNeedsTitle'));
       return;
     }
     try {
@@ -509,10 +515,11 @@ export const CardModal: React.FC<CardModalProps> = ({
       onUpdate(card.id, { claims: keptClaims });
 
       // 2. Create Card B with moved items
+      // shortcut: split copy is persisted in the active locale (creation-locale policy).
       await createCard({
         title: splitSecondTitle.trim(),
-        tldr: `Split from card #${card.id}`,
-        summary: `Split from card #${card.id}`,
+        tldr: t('cards.modal.splitFromNote', { id: card.id }),
+        summary: t('cards.modal.splitFromNote', { id: card.id }),
         claims: movedClaims,
         capture_id: card.capture_id,
         source_url: card.source_url,
@@ -521,20 +528,22 @@ export const CardModal: React.FC<CardModalProps> = ({
       });
 
       setIsSplitModalOpen(false);
-      showToast?.(`Split completed: Card #${card.id} and new card created!`);
+      showToast?.(t('cards.modal.splitDone', { id: card.id }));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
-  }, [card.id, card.capture_id, card.horizon, card.source_url, claims, onUpdate, showToast, splitClaimIndices, splitSecondTitle]);
+  }, [card.id, card.capture_id, card.horizon, card.source_url, claims, onUpdate, showToast, splitClaimIndices, splitSecondTitle, t]);
 
   // Merge with Sibling Handler
   const handleMergeWith = async (sibling: Card) => {
-    if (!window.confirm(`Merge sibling card #${sibling.id} ("${sibling.title}") into this card? The sibling will be archived.`)) {
+    if (!window.confirm(t('cards.modal.mergeConfirm', { id: sibling.id, title: sibling.title }))) {
       return;
     }
     try {
       const combinedClaims = Array.from(new Set([...claims, ...(sibling.claims || [])]));
       const combinedActions = Array.from(new Set([...actions, ...(sibling.proposed_actions || [])]));
+      // Content marker stored in the card note; kept in English on purpose so the
+      // note stays searchable regardless of the active UI locale.
       const mergedNote = `${note ? note + '\n\n' : ''}[Merged from #${sibling.id}: "${sibling.title}"]: ${sibling.tldr || sibling.summary || ''}`;
 
       onUpdate(card.id, {
@@ -545,7 +554,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
       // Dismiss the merged sibling
       onUpdate(sibling.id, { status: 'dismissed' as any });
-      showToast?.(`Merged card #${sibling.id} into card #${card.id}`);
+      showToast?.(t('cards.modal.mergedToast', { id: sibling.id, target: card.id }));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -624,21 +633,21 @@ export const CardModal: React.FC<CardModalProps> = ({
   const isFailed = Boolean(card.analysis_failed || card.title === 'Analysis failed');
   const platform = getPlatformInfo(card.source_url);
   const verdict = (card.research_verdict || '').toLowerCase();
-  const confidence = card.research_confidence || '';
+  const confidence = enumLabel(t, 'confidence', card.research_confidence);
 
   // Reusable Left Panel Section Renderers
   const renderTldr = () => (
     <div className="briefing-section">
       <div className="briefing-heading heading-summary">
         <FileText size={13} strokeWidth={1.5} />
-        <span>TL;DR Takeaway</span>
+        <span>{t('cards.modal.tldrTitle')}</span>
       </div>
       <textarea
         className="form-textarea"
         rows={2}
         value={tldr}
         onChange={(e) => handleTldrChange(e.target.value)}
-        placeholder="Core takeaway and summary..."
+        placeholder={t('cards.modal.tldrPlaceholder')}
       />
     </div>
   );
@@ -647,14 +656,14 @@ export const CardModal: React.FC<CardModalProps> = ({
     <div className="briefing-section">
       <div className="briefing-heading heading-value">
         <Lightbulb size={13} strokeWidth={1.5} />
-        <span>Why You Might Care</span>
+        <span>{t('cards.modal.whyTitle')}</span>
       </div>
       <textarea
         className="form-textarea"
         rows={2}
         value={whyCare}
         onChange={(e) => handleWhyCareChange(e.target.value)}
-        placeholder="Why this matters, practical implications..."
+        placeholder={t('cards.modal.whyPlaceholder')}
       />
     </div>
   );
@@ -671,7 +680,7 @@ export const CardModal: React.FC<CardModalProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Sparkles size={13} strokeWidth={1.8} color="#c084fc" />
-            <span>Deep Research</span>
+            <span>{t('cards.modal.researchTitle')}</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -690,7 +699,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 }}
               >
                 <RefreshCw size={11} className="spin" />
-                <span>In Progress</span>
+                <span>{t('cards.status.inProgress')}</span>
               </span>
             ) : isDone && research ? (
               <span
@@ -707,7 +716,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 }}
               >
                 <CheckCircle2 size={11} />
-                <span>Findings Ready</span>
+                <span>{t('cards.modal.findingsReady')}</span>
               </span>
             ) : (
               <span
@@ -723,7 +732,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   border: '1px solid rgba(148, 163, 184, 0.2)',
                 }}
               >
-                <span>Not Run</span>
+                <span>{t('cards.modal.notRun')}</span>
               </span>
             )}
           </div>
@@ -736,12 +745,12 @@ export const CardModal: React.FC<CardModalProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className={`card-verdict-pill ${verdict || 'pursue'}`}>
                   <span className="verdict-dot" />
-                  <strong>{(verdict || 'PURSUE').toUpperCase()}</strong>
-                  {confidence && <span>· Confidence: {confidence}</span>}
+                  <strong>{enumLabel(t, 'verdict', verdict || 'pursue').toUpperCase()}</strong>
+                  {confidence && <span>{t('cards.modal.confidence', { value: confidence })}</span>}
                 </span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-                Research Synthesis
+                {t('cards.modal.synthesis')}
               </div>
             </div>
 
@@ -749,13 +758,13 @@ export const CardModal: React.FC<CardModalProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-main)' }}>
                 {research.result.verdict.for_whom && (
                   <div>
-                    <strong style={{ color: 'var(--text-main)' }}>For Whom: </strong>
+                    <strong style={{ color: 'var(--text-main)' }}>{t('cards.modal.forWhom')}</strong>
                     <span>{research.result.verdict.for_whom}</span>
                   </div>
                 )}
                 {research.result.verdict.risks && research.result.verdict.risks.length > 0 && (
                   <div>
-                    <strong style={{ color: '#fb7185' }}>Risks & Watch-outs: </strong>
+                    <strong style={{ color: '#fb7185' }}>{t('cards.modal.risks')}</strong>
                     <span>{research.result.verdict.risks.join(' · ')}</span>
                   </div>
                 )}
@@ -771,7 +780,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 style={{ fontSize: 12, padding: '5px 12px' }}
               >
                 <Check size={13} />
-                <span>Accept Verdict → To Do</span>
+                <span>{t('cards.modal.acceptVerdict')}</span>
               </button>
               <button
                 type="button"
@@ -780,7 +789,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 style={{ fontSize: 12, padding: '5px 12px' }}
               >
                 <Clock size={13} />
-                <span>Watch (Shelve)</span>
+                <span>{t('cards.modal.watch')}</span>
               </button>
               <button
                 type="button"
@@ -789,7 +798,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 style={{ fontSize: 12, padding: '5px 12px', color: '#fb7185' }}
               >
                 <X size={13} />
-                <span>Skip (Dismiss)</span>
+                <span>{t('cards.modal.skip')}</span>
               </button>
             </div>
           </div>
@@ -809,10 +818,10 @@ export const CardModal: React.FC<CardModalProps> = ({
               <RefreshCw size={16} className="spin" color="var(--accent-indigo, #818cf8)" />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
-                  Autonomous Deep Research in Progress...
+                  {t('cards.modal.researchRunning')}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
-                  Verifying claims, exploring live web sources, and synthesizing takeaways. This section updates automatically upon completion.
+                  {t('cards.modal.researchRunningBody')}
                 </div>
               </div>
             </div>
@@ -849,18 +858,18 @@ export const CardModal: React.FC<CardModalProps> = ({
                 </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span>Deep Research Report</span>
+                    <span>{t('cards.modal.reportTitle')}</span>
                     {research.result?.verdict?.recommendation && (
                       <span className={`card-verdict-pill ${research.result.verdict.recommendation}`} style={{ fontSize: 10, padding: '1px 6px' }}>
-                        {research.result.verdict.recommendation.toUpperCase()}
+                        {enumLabel(t, 'verdict', research.result.verdict.recommendation).toUpperCase()}
                       </span>
                     )}
                   </div>
                   <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 2 }}>
                     {research.result?.claims?.length
-                      ? `${research.result.claims.length} claims verified & synthesized`
-                      : 'Autonomous multi-step analysis completed'}
-                    {research.tokens ? ` · ${research.tokens.toLocaleString()} tokens` : ''}
+                      ? tp('cards.modal.claimsVerified', research.result.claims.length)
+                      : t('cards.modal.analysisDone')}
+                    {research.tokens ? t('cards.modal.tokens', { count: research.tokens.toLocaleString() }) : ''}
                   </div>
                 </div>
               </div>
@@ -874,11 +883,11 @@ export const CardModal: React.FC<CardModalProps> = ({
                       e.stopPropagation();
                       setIsReportExpanded((v) => !v);
                     }}
-                    title={isReportExpanded ? 'Collapse to contained scroll' : 'Expand full height'}
+                    title={isReportExpanded ? t('cards.modal.collapseScroll') : t('cards.modal.expandHeight')}
                     style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
                   >
                     {isReportExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                    <span>{isReportExpanded ? 'Fit Height' : 'Full Height'}</span>
+                    <span>{isReportExpanded ? t('cards.modal.fitHeight') : t('cards.modal.fullHeight')}</span>
                   </button>
                 )}
                 <button
@@ -888,7 +897,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   style={{ fontSize: 12, padding: '5px 12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}
                 >
                   <FileSearch size={13} color="#38bdf8" />
-                  <span>{isReportOpen ? 'Hide Report' : 'View Report'}</span>
+                  <span>{isReportOpen ? t('cards.modal.hideReport') : t('cards.modal.viewReport')}</span>
                   {isReportOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                 </button>
               </div>
@@ -906,7 +915,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       const updated = [...actions, ...fresh];
                       setActions(updated);
                       onUpdate(card.id, { proposed_actions: updated });
-                      if (showToast) showToast(`Added ${fresh.length} action(s) to checklist`);
+                      if (showToast) showToast(tp('cards.modal.addedActions', fresh.length));
                     }
                   }}
                   showToast={showToast}
@@ -933,10 +942,10 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Sparkles size={14} color="var(--accent-purple)" />
-                <span>Ready to dig deeper?</span>
+                <span>{t('cards.modal.readyDeeper')}</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
-                Trigger autonomous multi-step research to verify claims against live web sources, survey alternatives, and formulate next actions.
+                {t('cards.modal.readyDeeperBody')}
               </div>
             </div>
             <button
@@ -946,7 +955,7 @@ export const CardModal: React.FC<CardModalProps> = ({
               style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <Sparkles size={13} />
-              <span>Run Deep Research</span>
+              <span>{t('cards.modal.runResearch')}</span>
             </button>
           </div>
         )}
@@ -971,13 +980,13 @@ export const CardModal: React.FC<CardModalProps> = ({
               {saveStatus === 'saving' && (
                 <span className="autosave-indicator saving">
                   <RefreshCw size={11} className="spin" />
-                  <span>Saving...</span>
+                  <span>{t('cards.modal.saving')}</span>
                 </span>
               )}
               {saveStatus === 'saved' && (
                 <span className="autosave-indicator saved">
                   <Check size={11} strokeWidth={2.5} />
-                  <span>Saved</span>
+                  <span>{t('cards.modal.saved')}</span>
                 </span>
               )}
 
@@ -985,7 +994,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 type="button"
                 className="close-btn"
                 onClick={onClose}
-                title="Close drawer (Esc)"
+                title={t('cards.modal.closeTitle')}
               >
                 <X size={18} strokeWidth={1.5} />
               </button>
@@ -999,7 +1008,7 @@ export const CardModal: React.FC<CardModalProps> = ({
               className="drawer-title-input"
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
-              placeholder="Card headline..."
+              placeholder={t('cards.modal.titlePlaceholder')}
               style={{
                 fontSize: 18,
                 fontWeight: 700,
@@ -1030,8 +1039,8 @@ export const CardModal: React.FC<CardModalProps> = ({
                 id="drawer-type-select"
                 value={cardType}
                 onChange={handleTypeChange}
-                options={CARD_TYPE_OPTIONS}
-                ariaLabel="Card Type"
+                options={cardTypeOptions(t)}
+                ariaLabel={t('cards.modal.typeAria')}
               />
             </div>
 
@@ -1041,8 +1050,8 @@ export const CardModal: React.FC<CardModalProps> = ({
                 id="drawer-horizon-select"
                 value={horizon}
                 onChange={(val) => handleHorizonChange(val as any)}
-                options={CARD_HORIZON_OPTIONS}
-                ariaLabel="Card Horizon"
+                options={cardHorizonOptions(t)}
+                ariaLabel={t('cards.modal.horizonAria')}
               />
             </div>
 
@@ -1050,22 +1059,33 @@ export const CardModal: React.FC<CardModalProps> = ({
             {card.worthiness?.level && (
               <span
                 className={`card-worthiness-chip ${card.worthiness.level.toLowerCase()}`}
-                title={card.worthiness.reason || `Worthiness: ${card.worthiness.level}`}
+                title={
+                  card.worthiness.reason ||
+                  t('cards.item.worthinessTitle', {
+                    level: enumLabel(t, 'worthiness', card.worthiness.level),
+                  })
+                }
               >
-                WORTH: {card.worthiness.level.toUpperCase()}
+                {t('cards.modal.worth', {
+                  level: enumLabel(t, 'worthiness', card.worthiness.level).toUpperCase(),
+                })}
               </span>
             )}
 
             {/* Signal warnings */}
             {card.signals?.extraction && card.signals.extraction !== 'full' && (
-              <span className="card-signal-badge warning" title="Extraction signal warning">
+              <span className="card-signal-badge warning" title={t('cards.modal.extractionTitle')}>
                 <AlertTriangle size={10} strokeWidth={2} />
-                <span>Extraction: {card.signals.extraction}</span>
+                <span>
+                  {t('cards.modal.extractionValue', {
+                    value: enumLabel(t, 'extraction', card.signals.extraction),
+                  })}
+                </span>
               </span>
             )}
             {card.signals?.promo && (
               <span className="card-signal-badge promo">
-                Promo Content
+                {t('cards.modal.promoContent')}
               </span>
             )}
 
@@ -1120,10 +1140,10 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Layers size={14} color="#818cf8" />
-                    <span>Collection Card</span>
+                    <span>{t('cards.modal.collectionTitle')}</span>
                   </div>
                   <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                    This card represents a roundup of multiple items. You can promote individual items or split them into independent cards.
+                    {t('cards.modal.collectionBody')}
                   </div>
                 </div>
                 <button
@@ -1133,7 +1153,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }}
                 >
                   <Split size={12} />
-                  <span>Split Items</span>
+                  <span>{t('cards.modal.splitItems')}</span>
                 </button>
               </div>
             )}
@@ -1156,10 +1176,10 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#f3e8ff', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Sparkles size={14} color="#c084fc" />
-                    <span>Subject Card</span>
+                    <span>{t('cards.modal.subjectTitle')}</span>
                   </div>
                   <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                    This card does not have an AI triage briefing yet. Synthesize a full brief from your title and notes.
+                    {t('cards.modal.subjectBody')}
                   </div>
                 </div>
                 <button
@@ -1169,7 +1189,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}
                 >
                   <Sparkles size={12} />
-                  <span>Synthesize Brief</span>
+                  <span>{t('cards.modal.synthesize')}</span>
                 </button>
               </div>
             )}
@@ -1200,7 +1220,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <div className="briefing-section">
                   <div className="briefing-heading heading-claims">
                     <CheckCircle2 size={13} strokeWidth={1.5} />
-                    <span>Key Claims</span>
+                    <span>{t('cards.modal.keyClaims')}</span>
                   </div>
                   <div className="actions-list">
                     {claims.map((claim, idx) => (
@@ -1213,7 +1233,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                           onChange={(e) => editClaim(idx, e.target.value)}
                           style={{ flex: 1, padding: '4px 8px', background: 'transparent', border: '1px solid transparent' }}
                         />
-                        <button type="button" className="close-btn" onClick={() => removeClaim(idx)} title="Remove claim">
+                        <button type="button" className="close-btn" onClick={() => removeClaim(idx)} title={t('cards.modal.removeClaim')}>
                           <Trash2 size={13} strokeWidth={1.5} />
                         </button>
                       </div>
@@ -1224,7 +1244,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       type="text"
                       className="form-input"
                       value={newClaim}
-                      placeholder="Add a claim..."
+                      placeholder={t('cards.modal.addClaimPlaceholder')}
                       onChange={(e) => setNewClaim(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -1235,7 +1255,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                     />
                     <button type="button" className="btn-secondary" onClick={addClaim}>
                       <Plus size={13} color="#34d399" />
-                      <span>Add</span>
+                      <span>{t('cards.modal.add')}</span>
                     </button>
                   </div>
                 </div>
@@ -1244,7 +1264,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <div className="briefing-section">
                   <div className="briefing-heading heading-questions">
                     <Lightbulb size={13} strokeWidth={1.5} />
-                    <span>Open Questions (Research will address)</span>
+                    <span>{t('cards.modal.openQuestions')}</span>
                   </div>
                   <div className="actions-list">
                     {openQuestions.map((q, idx) => (
@@ -1257,7 +1277,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                           onChange={(e) => editQuestion(idx, e.target.value)}
                           style={{ flex: 1, padding: '4px 8px', background: 'transparent', border: '1px solid transparent' }}
                         />
-                        <button type="button" className="close-btn" onClick={() => removeQuestion(idx)} title="Remove question">
+                        <button type="button" className="close-btn" onClick={() => removeQuestion(idx)} title={t('cards.modal.removeQuestion')}>
                           <Trash2 size={13} strokeWidth={1.5} />
                         </button>
                       </div>
@@ -1268,7 +1288,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       type="text"
                       className="form-input"
                       value={newQuestion}
-                      placeholder="Add an open question..."
+                      placeholder={t('cards.modal.addQuestionPlaceholder')}
                       onChange={(e) => setNewQuestion(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -1279,7 +1299,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                     />
                     <button type="button" className="btn-secondary" onClick={addQuestion}>
                       <Plus size={13} color="#fbbf24" />
-                      <span>Add</span>
+                      <span>{t('cards.modal.add')}</span>
                     </button>
                   </div>
                 </div>
@@ -1312,7 +1332,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <div className="briefing-section">
                   <div className="briefing-heading heading-claims">
                     <CheckCircle2 size={13} strokeWidth={1.5} />
-                    <span>Claims & Verification</span>
+                    <span>{t('cards.modal.claimsVerification')}</span>
                   </div>
                   <div className="actions-list">
                     {claims.map((claim, idx) => {
@@ -1339,7 +1359,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                                 st === 'supported' ? '#34d399' : st === 'disputed' ? '#fb7185' : '#94a3b8',
                             }}
                           >
-                            {st}
+                            {enumLabel(t, 'claimStatus', st)}
                           </span>
                           <span style={{ flex: 1, fontSize: 13, color: 'var(--text-main)' }}>{claim}</span>
                         </div>
@@ -1376,14 +1396,14 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <div className="briefing-section">
                   <div className="briefing-heading heading-value">
                     <FileText size={13} strokeWidth={1.5} />
-                    <span>Working Notes / Scratchpad</span>
+                    <span>{t('cards.modal.scratchpad')}</span>
                   </div>
                   <textarea
                     className="form-textarea"
                     rows={2}
                     value={note}
                     onChange={(e) => handleNoteChange(e.target.value)}
-                    placeholder="Capture scratchpad thoughts, in-progress findings, blockers..."
+                    placeholder={t('cards.modal.scratchpadPlaceholder')}
                   />
                 </div>
 
@@ -1392,7 +1412,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   <div className="briefing-section">
                     <div className="briefing-heading heading-claims">
                       <CheckCircle2 size={13} strokeWidth={1.5} />
-                      <span>Key Claims</span>
+                      <span>{t('cards.modal.keyClaims')}</span>
                     </div>
                     <div className="actions-list">
                       {claims.map((claim, idx) => (
@@ -1426,12 +1446,12 @@ export const CardModal: React.FC<CardModalProps> = ({
                     {status === 'shelved' ? <Clock size={20} color="#fbbf24" /> : <X size={20} color="#fb7185" />}
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#e0e7ff', textTransform: 'capitalize' }}>
-                        Card is {status}
+                        {status === 'shelved' ? t('cards.modal.shelvedTitle') : t('cards.modal.dismissedTitle')}
                       </div>
                       <div style={{ fontSize: 12, color: '#94a3b8' }}>
                         {status === 'shelved'
-                          ? 'This card is currently on hold or in watch status.'
-                          : 'This card was dismissed from the active flow.'}
+                          ? t('cards.modal.shelvedBody')
+                          : t('cards.modal.dismissedBody')}
                       </div>
                     </div>
                   </div>
@@ -1442,7 +1462,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                     style={{ whiteSpace: 'nowrap' }}
                   >
                     <RotateCcw size={12} />
-                    <span>Restore to To Do</span>
+                    <span>{t('cards.modal.restoreToTodo')}</span>
                   </button>
                 </div>
 
@@ -1484,10 +1504,10 @@ export const CardModal: React.FC<CardModalProps> = ({
                   <CheckCircle2 size={24} color="#34d399" />
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#e0e7ff' }}>
-                      Card Completed!
+                      {t('cards.modal.doneTitle')}
                     </div>
                     <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                      All actions completed. You can log an outcome note below or export to Obsidian / Markdown.
+                      {t('cards.modal.doneBody')}
                     </div>
                   </div>
                   <button
@@ -1497,7 +1517,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                     onClick={() => handleStatusTransition('to-do')}
                   >
                     <RotateCcw size={12} />
-                    <span>Reopen</span>
+                    <span>{t('cards.modal.reopen')}</span>
                   </button>
                 </div>
 
@@ -1509,7 +1529,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
                 {/* 3. Completed Actions Checklist */}
                 <CardActionsChecklist
-                  title="Completed Actions"
+                  title={t('cards.modal.completedActions')}
                   actions={actions}
                   completedActions={completedActions}
                   onToggleAction={handleToggleAction}
@@ -1525,14 +1545,14 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <div className="briefing-section">
                   <div className="briefing-heading heading-value">
                     <FileText size={13} strokeWidth={1.5} />
-                    <span>Outcome Note / Key Learnings</span>
+                    <span>{t('cards.modal.outcome')}</span>
                   </div>
                   <textarea
                     className="form-textarea"
                     rows={3}
                     value={note}
                     onChange={(e) => handleNoteChange(e.target.value)}
-                    placeholder="What happened? What were the key outcomes or learnings?"
+                    placeholder={t('cards.modal.outcomePlaceholder')}
                   />
                 </div>
               </>
@@ -1545,7 +1565,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div className="rail-section">
               <div className="rail-section-title">
                 <FileCode size={13} color="var(--accent-blue)" />
-                <span>Source Provenance</span>
+                <span>{t('cards.modal.provenance')}</span>
               </div>
               <div
                 style={{
@@ -1562,7 +1582,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   <span style={{ color: platform.color }}>{platform.icon}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{platform.name}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-faint)', marginLeft: 'auto' }}>
-                    {formatRelativeAge(card.created_at)}
+                    {formatRelativeAge(card.created_at, t)}
                   </span>
                 </div>
 
@@ -1581,7 +1601,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                       wordBreak: 'break-all',
                     }}
                   >
-                    <span>Open Original Source</span>
+                    <span>{t('cards.modal.openSource')}</span>
                     <ExternalLink size={11} />
                   </a>
                 )}
@@ -1594,7 +1614,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   style={{ width: '100%', fontSize: 11.5, padding: '4px 8px', justifyContent: 'center' }}
                 >
                   <FileText size={12} />
-                  <span>View Captured Content</span>
+                  <span>{t('cards.modal.viewCaptured')}</span>
                 </button>
               </div>
             </div>
@@ -1603,12 +1623,12 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div className="rail-section">
               <div className="rail-section-title">
                 <Layers size={13} color="var(--accent-purple)" />
-                <span>From Same Source ({siblings.length})</span>
+                <span>{t('cards.modal.fromSameSource', { count: siblings.length })}</span>
               </div>
 
               {siblings.length === 0 ? (
                 <div style={{ fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>
-                  Single idea from this source.
+                  {t('cards.modal.singleIdea')}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1640,7 +1660,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                             color: sib.status === 'done' ? 'var(--accent-emerald)' : 'var(--accent-blue)',
                           }}
                         >
-                          {sib.status}
+                          {statusLabel(t, sib.status)}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1653,9 +1673,9 @@ export const CardModal: React.FC<CardModalProps> = ({
                             handleMergeWith(sib);
                           }}
                           style={{ fontSize: 9.5, padding: '1px 5px', height: 18 }}
-                          title="Merge into current card"
+                          title={t('cards.modal.mergeTitle')}
                         >
-                          Merge
+                          {t('cards.modal.merge')}
                         </button>
                       </div>
                     </div>
@@ -1699,7 +1719,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <FileText size={16} color="#38bdf8" />
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Captured Content #{capture?.id || card.capture_id || 'Raw'}</h3>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{t('cards.modal.captureTitle', { id: capture?.id || card.capture_id || t('cards.modal.captureRaw') })}</h3>
               </div>
               <button type="button" className="close-btn" onClick={() => setIsCaptureModalOpen(false)}>
                 <X size={16} />
@@ -1709,7 +1729,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {capture?.source_url && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>SOURCE URL</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>{t('cards.modal.sourceUrl')}</div>
                   <a href={capture.source_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', fontSize: 12.5 }}>
                     {capture.source_url}
                   </a>
@@ -1718,7 +1738,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               {capture?.caption && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>CAPTION / SUMMARY</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>{t('cards.modal.caption')}</div>
                   <div style={{ fontSize: 13, color: 'var(--text-main)', background: 'var(--surface-sunken)', padding: 10, borderRadius: 6 }}>
                     {capture.caption}
                   </div>
@@ -1727,7 +1747,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               {capture?.transcript && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>TRANSCRIPT EXCERPT</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>{t('cards.modal.transcript')}</div>
                   <div style={{ fontSize: 12.5, color: 'var(--text-main)', maxHeight: 200, overflowY: 'auto', background: 'var(--surface-sunken)', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap' }}>
                     {capture.transcript}
                   </div>
@@ -1736,7 +1756,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               {capture?.text && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>RAW EXTRACTED TEXT</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>{t('cards.modal.rawText')}</div>
                   <div style={{ fontSize: 12.5, color: 'var(--text-main)', maxHeight: 200, overflowY: 'auto', background: 'var(--surface-sunken)', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap' }}>
                     {capture.text}
                   </div>
@@ -1745,7 +1765,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               {note && !capture && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>SOURCE NOTE</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>{t('cards.modal.sourceNote')}</div>
                   <div style={{ fontSize: 13, color: 'var(--text-main)', background: 'var(--surface-sunken)', padding: 10, borderRadius: 6 }}>
                     {note}
                   </div>
@@ -1763,7 +1783,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Split size={16} color="var(--accent-blue)" />
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-main)' }}>Split Card #{card.id} into Two</h3>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-main)' }}>{t('cards.modal.splitTitle', { id: card.id })}</h3>
               </div>
               <button type="button" className="close-btn" onClick={() => setIsSplitModalOpen(false)}>
                 <X size={16} />
@@ -1771,18 +1791,18 @@ export const CardModal: React.FC<CardModalProps> = ({
             </div>
 
             <p style={{ fontSize: 12.5, color: 'var(--text-dim)', margin: '0 0 12px 0' }}>
-              Select which claims or topics should move to the second card. Both cards will share the same source capture.
+              {t('cards.modal.splitBody')}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)', display: 'block', marginBottom: 4 }}>
-                  Card B Title
+                  {t('cards.modal.cardBTitle')}
                 </label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Title for the new split card..."
+                  placeholder={t('cards.modal.cardBPlaceholder')}
                   value={splitSecondTitle}
                   onChange={(e) => setSplitSecondTitle(e.target.value)}
                 />
@@ -1790,7 +1810,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)', display: 'block', marginBottom: 4 }}>
-                  Select Claims to Move to Card B
+                  {t('cards.modal.selectClaims')}
                 </label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
                   {claims.map((claim, idx) => {
@@ -1829,7 +1849,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
                 <button type="button" className="btn-secondary" onClick={() => setIsSplitModalOpen(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="button"
@@ -1838,7 +1858,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   disabled={!splitSecondTitle.trim()}
                 >
                   <Split size={13} />
-                  <span>Execute Split</span>
+                  <span>{t('cards.modal.executeSplit')}</span>
                 </button>
               </div>
             </div>

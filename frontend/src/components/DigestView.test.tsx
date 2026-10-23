@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DigestView } from './DigestView';
+import { LocaleProvider } from '../i18n';
 import { ThemeProvider } from '../context/ThemeContext';
 import { CardActionsProvider } from '../context/CardActionsContext';
 import { Card, DigestData } from '../types';
 import * as api from '../api';
+
+const renderLocalized = (ui: React.ReactElement) =>
+  render(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 const originalIsSecureContext = window.isSecureContext;
 
@@ -145,7 +149,7 @@ describe('DigestView', () => {
   };
 
   it('renders empty state cleanly in Light mode', () => {
-    render(
+    renderLocalized(
       <ThemeProvider defaultTheme="light">
         <DigestView digest={null} {...dummyProps} />
       </ThemeProvider>
@@ -156,7 +160,7 @@ describe('DigestView', () => {
   });
 
   it('renders populated digest with title, KPI metrics, and themes in Light mode', () => {
-    render(
+    renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
           <DigestView digest={mockPopulatedDigest} {...dummyProps} />
@@ -177,7 +181,7 @@ describe('DigestView', () => {
   });
 
   it('renders "Send to Integrations" button instead of hardcoded Telegram button', () => {
-    render(
+    renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
           <DigestView digest={mockPopulatedDigest} {...dummyProps} />
@@ -191,7 +195,7 @@ describe('DigestView', () => {
 
   it('dispatches digest to all integrations when main button is clicked', async () => {
     const showToast = vi.fn();
-    render(
+    renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
           <DigestView digest={mockPopulatedDigest} {...dummyProps} showToast={showToast} />
@@ -209,7 +213,7 @@ describe('DigestView', () => {
   });
 
   it('opens integration selection dropdown when chevron is clicked, displaying channels', async () => {
-    render(
+    renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
           <DigestView digest={mockPopulatedDigest} {...dummyProps} />
@@ -234,7 +238,7 @@ describe('DigestView', () => {
     });
 
     const showToast = vi.fn();
-    render(
+    renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
           <DigestView digest={mockPopulatedDigest} {...dummyProps} showToast={showToast} />
@@ -259,7 +263,7 @@ describe('DigestView', () => {
   });
 
   it('closes channel menu on Escape key', () => {
-    render(
+    renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
           <DigestView digest={mockPopulatedDigest} {...dummyProps} />
@@ -278,7 +282,7 @@ describe('DigestView', () => {
   it('respects selected time window when pushing digest to channel', async () => {
     (api.fetchDigest as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockPopulatedDigest);
 
-    render(
+    renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
           <DigestView digest={mockPopulatedDigest} {...dummyProps} />
@@ -298,7 +302,7 @@ describe('DigestView', () => {
   });
 
   const renderDigestView = (showToast: (msg: string) => void = vi.fn()) =>
-    render(
+    renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
           <DigestView digest={mockPopulatedDigest} {...dummyProps} showToast={showToast} />

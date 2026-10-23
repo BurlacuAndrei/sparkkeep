@@ -4,6 +4,7 @@ import { TriageView } from './TriageView';
 import { CardActionsProvider, CardActions } from '../context/CardActionsContext';
 import { Card } from '../types';
 import * as api from '../api';
+import { LocaleProvider } from '../i18n';
 
 vi.mock('../api', async () => {
   const actual = await vi.importActual<typeof import('../api')>('../api');
@@ -53,7 +54,11 @@ describe('TriageView', () => {
   };
 
   const renderTriage = (ui: React.ReactElement) => {
-    return render(<CardActionsProvider value={mockActions}>{ui}</CardActionsProvider>);
+    return render(
+      <LocaleProvider locale="en">
+        <CardActionsProvider value={mockActions}>{ui}</CardActionsProvider>
+      </LocaleProvider>
+    );
   };
 
   beforeEach(() => {

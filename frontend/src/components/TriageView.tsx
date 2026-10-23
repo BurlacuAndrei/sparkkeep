@@ -9,6 +9,7 @@ import { KeyboardShortcutsModal } from './triage/KeyboardShortcutsModal';
 import {
   HORIZONS,
   Horizon,
+  horizonHint,
   horizonLabel,
   isResearchFailed,
   isResearchInFlight,
@@ -18,6 +19,7 @@ import {
   suggestedHorizonOf,
 } from '../utils/triage';
 import '../styles/triage-deck.css';
+import { useLocale } from '../i18n';
 
 interface TriageViewProps {
   cards: Card[];
@@ -64,6 +66,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
   const [signal, setSignal] = useState<DragSignal>({ direction: null, strength: 0, horizon: null });
   const [stats, setStats] = useState({ kept: 0, dismissed: 0, researched: 0 });
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const { t, tp } = useLocale();
 
   const orderRef = useRef<number[]>([]);
   const cardsRef = useRef<Card[]>(cards);
@@ -244,7 +247,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
         return;
       }
       if (entry.kind === 'research') {
-        if (!cancelPending(entry.id)) showToast?.('Research already started — it will return here when ready');
+        if (!cancelPending(entry.id)) showToast?.(t('cards.triage.researchStarted'));
         return;
       }
       const ids = entry.prev.map((p) => p.id);
@@ -258,14 +261,14 @@ export const TriageView: React.FC<TriageViewProps> = ({
       try {
         await entry.done.catch(() => {});
         await Promise.all(entry.prev.map((p) => api.updateCard(p.id, { status: p.status, horizon: p.horizon })));
-        showToast?.(`Restored ${entry.label}`);
+        showToast?.(t('cards.triage.restored', { label: entry.label }));
       } catch (err: unknown) {
         showToast?.(api.getErrorMessage(err));
       } finally {
         onRefresh?.();
       }
     },
-    [cancelPending, commitOrder, onRefresh, showToast]
+    [cancelPending, commitOrder, onRefresh, showToast, t]
   );
 
   const undoLast = useCallback(() => {
@@ -307,25 +310,37 @@ export const TriageView: React.FC<TriageViewProps> = ({
 
   const apply = useCallback(
     (intent: DeckIntent, card: Card, horizon: Horizon | null) => {
-      const t = `“${shortTitle(card.title)}”`;
+      const title = `“${shortTitle(card.title)}”`;
       if (intent === 'dismiss') {
-        applyStatus([card], () => ({ status: 'dismissed' }), 'dismissed', t, `Dismissed ${t}`);
+        applyStatus(
+          [card],
+          () => ({ status: 'dismissed' }),
+          'dismissed',
+          title,
+          t('cards.triage.dismissed', { title })
+        );
       } else if (intent === 'keep') {
         const h = horizon || suggestedHorizonOf(card);
-        applyStatus([card], () => ({ status: 'to-do', horizon: h }), 'kept', t, `Kept ${t} → ${horizonLabel(h)}`);
+        applyStatus(
+          [card],
+          () => ({ status: 'to-do', horizon: h }),
+          'kept',
+          title,
+          t('cards.triage.kept', { title, horizon: horizonLabel(h, t) })
+        );
       } else if (intent === 'research') {
         setPending((p) => [...p, card.id]);
         setStats((s) => ({ ...s, researched: s.researched + 1 }));
         pendingTimers.current.set(card.id, setTimeout(() => launchResearch(card.id), RESEARCH_UNDO_MS));
         const entry: UndoEntry = { kind: 'research', id: card.id };
         undoStack.current.push(entry);
-        showToast?.(`Researching ${t} — it comes back as your next card when the report is ready`, () => undoEntry(entry));
+        showToast?.(t('cards.triage.researchingToast', { title }), () => undoEntry(entry));
       } else {
         commitOrder([...orderRef.current.filter((x) => x !== card.id), card.id]);
         undoStack.current.push({ kind: 'skip', id: card.id });
       }
     },
-    [applyStatus, commitOrder, launchResearch, showToast, undoEntry]
+    [applyStatus, commitOrder, launchResearch, showToast, undoEntry, t]
   );
 
   const decide = useCallback(
@@ -352,13 +367,13 @@ export const TriageView: React.FC<TriageViewProps> = ({
         siblings,
         () => ({ status: 'dismissed' }),
         'dismissed',
-        `${siblings.length} ideas`,
-        `Dismissed ${siblings.length} ideas from this capture`
+        tp('cards.triage.ideasCount', siblings.length),
+        tp('cards.triage.dismissedSiblings', siblings.length)
       );
       setExit(null);
       setExpanded(false);
     }, DECK_EXIT_MS);
-  }, [applyStatus, current, deck, exit]);
+  }, [applyStatus, current, deck, exit, tp]);
 
   const pullForward = useCallback(
     (id: number) => {
@@ -449,14 +464,16 @@ export const TriageView: React.FC<TriageViewProps> = ({
       targets,
       (c) => (status === 'to-do' ? { status, horizon: suggestedHorizonOf(c) } : { status }),
       status === 'to-do' ? 'kept' : 'dismissed',
-      `${targets.length} ideas`,
-      status === 'to-do' ? `Kept ${targets.length} ideas at their suggested horizon` : `Dismissed ${targets.length} ideas`
+      tp('cards.triage.ideasCount', targets.length),
+      status === 'to-do'
+        ? tp('cards.triage.keptBulk', targets.length)
+        : tp('cards.triage.dismissedBulk', targets.length)
     );
   };
   const bulkResearch = (ids: number[]) => {
     Promise.all(ids.map((id) => api.triggerResearch(id)))
       .then(() => {
-        showToast?.(`Research queued for ${ids.length} ideas`);
+        showToast?.(tp('cards.triage.researchQueued', ids.length));
         onRefresh?.();
       })
       .catch((err: unknown) => showToast?.(api.getErrorMessage(err)));
@@ -496,29 +513,31 @@ export const TriageView: React.FC<TriageViewProps> = ({
     <div className="triage-view">
       <header className="deck-header">
         <div className="deck-header-title">
-          <h2 id="main-heading">Triage</h2>
+          <h2 id="main-heading">{t('triage.title')}</h2>
           <span className="deck-count">
-            {deck.length} to decide
-            {inFlight.length + pending.length > 0 && <> · {inFlight.length + pending.length} researching</>}
+            {t('cards.triage.toDecide', { count: deck.length })}
+            {inFlight.length + pending.length > 0 && (
+              <> · {t('cards.triage.researching', { count: inFlight.length + pending.length })}</>
+            )}
           </span>
         </div>
         <div className="deck-progress" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}>
           <div className="deck-progress-fill" style={{ width: `${progress * 100}%` }} />
         </div>
-        <div className="deck-mode-toggle" role="tablist" aria-label="Triage layout">
+        <div className="deck-mode-toggle" role="tablist" aria-label={t('cards.triage.layoutAria')}>
           <button type="button" id="triage-mode-deck" role="tab" aria-selected={mode === 'deck'} className={mode === 'deck' ? 'active' : ''} onClick={() => switchMode('deck')}>
-            <Layers3 size={13} /> Deck
+            <Layers3 size={13} /> {t('cards.triage.deck')}
           </button>
           <button type="button" id="triage-mode-list" role="tab" aria-selected={mode === 'list'} className={mode === 'list' ? 'active' : ''} onClick={() => switchMode('list')}>
-            <LayoutList size={13} /> List
+            <LayoutList size={13} /> {t('cards.triage.list')}
           </button>
         </div>
         <button
           type="button"
           className="deck-shortcuts-trigger"
           onClick={() => setIsShortcutsOpen(true)}
-          title="Keyboard Shortcuts (?)"
-          aria-label="Keyboard Shortcuts"
+          title={t('cards.triage.shortcutsTitle')}
+          aria-label={t('cards.triage.shortcutsAria')}
         >
           <HelpCircle size={14} />
           <kbd>?</kbd>
@@ -539,18 +558,18 @@ export const TriageView: React.FC<TriageViewProps> = ({
         />
       ) : (
         <>
-          <section className={`deck-stage ${activeDir ? `dir-${activeDir}` : ''}`} aria-label="Triage deck">
+          <section className={`deck-stage ${activeDir ? `dir-${activeDir}` : ''}`} aria-label={t('cards.triage.deckAria')}>
             <div className="deck-zone deck-zone-dismiss" style={zoneStyle('dismiss')} aria-hidden>
               <X size={22} />
-              <span>Dismiss</span>
+              <span>{t('cards.triage.dismiss')}</span>
             </div>
             <div className="deck-zone deck-zone-research" style={zoneStyle('research')} aria-hidden>
               <Sparkles size={16} />
-              <span>Deep research</span>
+              <span>{t('cards.triage.deepResearch')}</span>
             </div>
             <div className="deck-zone deck-zone-skip" style={zoneStyle('skip')} aria-hidden>
               <ArrowDown size={14} />
-              <span>Skip for now</span>
+              <span>{t('cards.triage.skipForNow')}</span>
             </div>
 
             <div className="deck-center">
@@ -591,10 +610,15 @@ export const TriageView: React.FC<TriageViewProps> = ({
                       <div className="deck-empty-icon research">
                         <Sparkles size={26} />
                       </div>
-                      <h3>You're clear for now</h3>
+                      <h3>{t('cards.triage.clearTitle')}</h3>
                       <p>
-                        {inFlight.length + pending.length} {inFlight.length + pending.length === 1 ? 'idea is' : 'ideas are'} being
-                        researched. Each one comes back here as your next card when its report is ready.
+                        {inFlight.length + pending.length === 1
+                          ? t('cards.triage.researchingSingular', {
+                              count: inFlight.length + pending.length,
+                            })
+                          : t('cards.triage.researchingPlural', {
+                              count: inFlight.length + pending.length,
+                            })}
                       </p>
                     </>
                   ) : (
@@ -602,11 +626,11 @@ export const TriageView: React.FC<TriageViewProps> = ({
                       <div className="deck-empty-icon">
                         {decided > 0 ? <PartyPopper size={26} /> : <Inbox size={26} />}
                       </div>
-                      <h3>Triage zero</h3>
+                      <h3>{t('cards.triage.zeroTitle')}</h3>
                       <p>
                         {decided > 0
-                          ? `This session: ${stats.kept} kept · ${stats.dismissed} dismissed · ${stats.researched} researched.`
-                          : 'New captures from Telegram or the web will land here.'}
+                          ? t('cards.triage.session', stats)
+                          : t('cards.triage.zeroBody')}
                       </p>
                     </>
                   )}
@@ -632,41 +656,50 @@ export const TriageView: React.FC<TriageViewProps> = ({
                       decide('keep', h.id);
                     }
                   }}
-                  title={`Keep in ${h.label} (${h.key})`}
+                  title={t('cards.triage.keepInTitle', { horizon: horizonLabel(h.id, t), key: h.key })}
                 >
-                  <span className="deck-horizon-label">{h.label}</span>
-                  <span className="deck-horizon-hint">{h.hint}</span>
-                  {suggested === h.id && <span className="deck-horizon-ai">AI pick</span>}
+                  <span className="deck-horizon-label">{horizonLabel(h.id, t)}</span>
+                  <span className="deck-horizon-hint">{horizonHint(h.id, t)}</span>
+                  {suggested === h.id && <span className="deck-horizon-ai">{t('cards.triage.aiPick')}</span>}
                   <kbd>{h.key}</kbd>
                 </div>
               ))}
             </div>
           </section>
 
-          <div className="deck-controls" aria-label="Triage actions">
+          <div className="deck-controls" aria-label={t('cards.triage.actionsAria')}>
             <button type="button" id="triage-btn-dismiss" className={`deck-btn dismiss ${recommend === 'skip' ? 'is-recommended' : ''}`} disabled={!current} onClick={() => decide('dismiss')}>
               <ArrowLeft size={18} />
-              <span>Dismiss</span>
+              <span>{t('cards.triage.dismiss')}</span>
               <kbd>←</kbd>
             </button>
             <button type="button" id="triage-btn-skip" className="deck-btn skip" disabled={!current || deck.length < 2} onClick={() => decide('skip')}>
               <ArrowDown size={18} />
-              <span>Skip</span>
+              <span>{t('cards.triage.skip')}</span>
               <kbd>↓</kbd>
             </button>
             <button type="button" id="triage-btn-research" className="deck-btn research" disabled={!current} onClick={() => decide('research')}>
               <ArrowUp size={18} />
-              <span>{current && isResearchReady(current) ? 'Re-research' : 'Research'}</span>
+              <span>{current && isResearchReady(current) ? t('cards.triage.reResearch') : t('cards.triage.research')}</span>
               <kbd>↑</kbd>
             </button>
             <button type="button" id="triage-btn-keep" className={`deck-btn keep ${recommend === 'pursue' || recommend === 'watch' ? 'is-recommended' : ''}`} disabled={!current} onClick={() => decide('keep')}>
               <ArrowRight size={18} />
-              <span>Keep{suggested ? ` · ${horizonLabel(suggested)}` : ''}</span>
+              <span>
+                {suggested
+                  ? t('cards.triage.keepWithHorizon', { horizon: horizonLabel(suggested, t) })
+                  : t('cards.triage.keep')}
+              </span>
               <kbd>→</kbd>
             </button>
           </div>
           <p className="deck-hints">
-            Drag the card · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> keep into a horizon · <kbd>Space</kbd> more · <kbd>0</kbd> open details · <button type="button" className="deck-hints-btn" onClick={() => setIsShortcutsOpen(true)}>Press <kbd>?</kbd> for shortcuts</button>
+            {t('cards.triage.hintsDrag')} <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>{' '}
+            {t('cards.triage.hintsKeep')} <kbd>Space</kbd> {t('cards.triage.hintsMore')}{' '}
+            <kbd>0</kbd> {t('cards.triage.hintsOpen')}{' '}
+            <button type="button" className="deck-hints-btn" onClick={() => setIsShortcutsOpen(true)}>
+              {t('cards.triage.hintsPress')} <kbd>?</kbd> {t('cards.triage.hintsForShortcuts')}
+            </button>
           </p>
         </>
       )}
@@ -677,7 +710,7 @@ export const TriageView: React.FC<TriageViewProps> = ({
         returned={returnedCards}
         onOpen={onOpenCardDetail}
         onCancelPending={(id) => {
-          if (cancelPending(id)) showToast?.('Research cancelled — card is back on top');
+          if (cancelPending(id)) showToast?.(t('cards.triage.researchCancelled'));
         }}
         onPullForward={pullForward}
       />

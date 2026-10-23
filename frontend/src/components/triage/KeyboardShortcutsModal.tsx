@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Keyboard, Compass, Sparkles, Navigation } from 'lucide-react';
+import { useLocale } from '../../i18n';
 
 interface KeyboardShortcutsModalProps {
   isOpen: boolean;
@@ -14,6 +15,8 @@ interface ShortcutItem {
 }
 
 export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsModalProps): React.ReactPortal | null {
+  const { t } = useLocale();
+
   useEffect(() => {
     if (!isOpen) return;
     function handleKeyDown(e: KeyboardEvent) {
@@ -29,24 +32,24 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
   if (!isOpen) return null;
 
   const decisionShortcuts: ShortcutItem[] = [
-    { keys: ['1'], label: 'Now', description: 'Route to Short-term horizon' },
-    { keys: ['2'], label: 'Next', description: 'Route to Medium-term horizon' },
-    { keys: ['3'], label: 'Later', description: 'Route to Long-term horizon' },
-    { keys: ['→', 'Enter'], label: 'Accept AI', description: 'Keep suggested horizon & commit' },
-    { keys: ['←', 'Esc', 'x'], label: 'Dismiss', description: 'Engagement bait / not actionable' },
+    { keys: ['1'], label: t('cards.shortcuts.nowLabel'), description: t('cards.shortcuts.nowDesc') },
+    { keys: ['2'], label: t('cards.shortcuts.nextLabel'), description: t('cards.shortcuts.nextDesc') },
+    { keys: ['3'], label: t('cards.shortcuts.laterLabel'), description: t('cards.shortcuts.laterDesc') },
+    { keys: ['→', 'Enter'], label: t('cards.shortcuts.acceptAiLabel'), description: t('cards.shortcuts.acceptAiDesc') },
+    { keys: ['←', 'Esc', 'x'], label: t('cards.shortcuts.dismissLabel'), description: t('cards.shortcuts.dismissDesc') },
   ];
 
   const investigationShortcuts: ShortcutItem[] = [
-    { keys: ['↑', 'r'], label: 'Research', description: 'Run Deep Research playbook' },
-    { keys: ['↓', 's'], label: 'Skip', description: 'Send card to bottom of deck' },
-    { keys: ['Space'], label: 'Toggle Brief', description: 'Expand or collapse AI brief' },
-    { keys: ['0', 'o'], label: 'Open Dossier', description: 'Open full card modal details' },
+    { keys: ['↑', 'r'], label: t('cards.shortcuts.researchLabel'), description: t('cards.shortcuts.researchDesc') },
+    { keys: ['↓', 's'], label: t('cards.shortcuts.skipLabel'), description: t('cards.shortcuts.skipDesc') },
+    { keys: ['Space'], label: t('cards.shortcuts.toggleBriefLabel'), description: t('cards.shortcuts.toggleBriefDesc') },
+    { keys: ['0', 'o'], label: t('cards.shortcuts.openDossierLabel'), description: t('cards.shortcuts.openDossierDesc') },
   ];
 
   const globalShortcuts: ShortcutItem[] = [
-    { keys: ['z'], label: 'Undo', description: '5-second instant undo last action' },
-    { keys: ['?'], label: 'Cheatsheet', description: 'Toggle this shortcuts modal' },
-    { keys: ['⌘', 'K'], label: 'Search', description: 'Open global Omnisearch palette' },
+    { keys: ['z'], label: t('cards.shortcuts.undoLabel'), description: t('cards.shortcuts.undoDesc') },
+    { keys: ['?'], label: t('cards.shortcuts.cheatsheetLabel'), description: t('cards.shortcuts.cheatsheetDesc') },
+    { keys: ['⌘', 'K'], label: t('cards.shortcuts.searchLabel'), description: t('cards.shortcuts.searchDesc') },
   ];
 
   return createPortal(
@@ -55,9 +58,9 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
         <div className="shortcuts-modal-header">
           <div className="shortcuts-header-title">
             <Keyboard size={18} className="shortcuts-header-icon" />
-            <h3 id="shortcuts-title">Triage Deck Keyboard Shortcuts</h3>
+            <h3 id="shortcuts-title">{t('cards.shortcuts.title')}</h3>
           </div>
-          <button type="button" className="shortcuts-close-btn" onClick={onClose} aria-label="Close shortcuts">
+          <button type="button" className="shortcuts-close-btn" onClick={onClose} aria-label={t('cards.shortcuts.closeAria')}>
             <X size={16} />
           </button>
         </div>
@@ -66,7 +69,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           <div className="shortcuts-section">
             <div className="shortcuts-section-title">
               <Compass size={14} />
-              <span>Horizon Decisions</span>
+              <span>{t('cards.shortcuts.horizons')}</span>
             </div>
             <div className="shortcuts-grid">
               {decisionShortcuts.map((s, idx) => (
@@ -88,7 +91,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           <div className="shortcuts-section">
             <div className="shortcuts-section-title">
               <Sparkles size={14} />
-              <span>Inspection & Investigation</span>
+              <span>{t('cards.shortcuts.investigation')}</span>
             </div>
             <div className="shortcuts-grid">
               {investigationShortcuts.map((s, idx) => (
@@ -110,7 +113,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           <div className="shortcuts-section">
             <div className="shortcuts-section-title">
               <Navigation size={14} />
-              <span>Global & Navigation</span>
+              <span>{t('cards.shortcuts.global')}</span>
             </div>
             <div className="shortcuts-grid">
               {globalShortcuts.map((s, idx) => (
@@ -131,7 +134,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
         </div>
 
         <div className="shortcuts-modal-footer">
-          <span>Tip: You can use these shortcuts while navigating the Triage Deck without touching your mouse.</span>
+          <span>{t('cards.shortcuts.tip')}</span>
         </div>
       </div>
     </div>,

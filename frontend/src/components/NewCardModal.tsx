@@ -13,8 +13,9 @@ import {
   CornerDownLeft,
 } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
-import { CARD_HORIZON_OPTIONS, CARD_STATUS_OPTIONS } from './selectOptions';
+import { cardHorizonOptions, cardStatusOptions } from './selectOptions';
 import { CaptureParams } from '../api';
+import { useLocale } from '../i18n';
 
 interface NewCardModalProps {
   onClose: () => void;
@@ -23,6 +24,7 @@ interface NewCardModalProps {
 }
 
 export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, onCreate }) => {
+  const { t } = useLocale();
   // Smart Capture state
   const [sourceInput, setSourceInput] = useState('');
   const [contextInput, setContextInput] = useState('');
@@ -93,7 +95,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
       onClose();
     } catch (err: unknown) {
       setIsSubmitting(false);
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to capture spark. Please check the URL or try again.');
+      setErrorMessage(err instanceof Error ? err.message : t('cards.newCard.captureFailed'));
     }
   };
 
@@ -104,7 +106,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
 
     const titleToUse = manualTitle.trim() || (isUrl ? '' : sourceInput.trim());
     if (!titleToUse) {
-      setErrorMessage('Please provide a title for the card.');
+      setErrorMessage(t('cards.newCard.titleRequired'));
       return;
     }
 
@@ -120,7 +122,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
       });
       onClose();
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to save card.');
+      setErrorMessage(err instanceof Error ? err.message : t('cards.newCard.saveFailed'));
     }
   };
 
@@ -151,10 +153,10 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
           <div className="capture-header-info">
             <div className="capture-title-row">
               <Sparkles size={18} strokeWidth={2} color="#818cf8" />
-              <h2 className="capture-title">Capture Spark</h2>
+              <h2 className="capture-title">{t('cards.newCard.title')}</h2>
             </div>
             <p className="capture-subtitle">
-              Drop a link or quick thought. AI extracts the source and drafts your complete executive brief automatically.
+              {t('cards.newCard.subtitle')}
             </p>
           </div>
           <button
@@ -163,7 +165,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
             onClick={onClose}
             disabled={isSubmitting}
             id="cancel-new"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <X size={17} strokeWidth={1.5} />
           </button>
@@ -208,10 +210,10 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
             </div>
             <div>
               <h4 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-main)' }}>
-                Synthesizing Intelligence Brief...
+                {t('cards.newCard.synthesizing')}
               </h4>
               <p style={{ margin: 0, fontSize: 13, color: 'var(--text-dim)', maxWidth: 380, lineHeight: 1.5 }}>
-                Fetching source content, extracting signal, and drafting your executive summary and next steps.
+                {t('cards.newCard.synthesizingBody')}
               </p>
             </div>
             <button
@@ -220,7 +222,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
               onClick={onClose}
               style={{ fontSize: 12, padding: '5px 12px', marginTop: 4 }}
             >
-              <span>Run in Background</span>
+              <span>{t('cards.newCard.runBackground')}</span>
             </button>
           </div>
         ) : (
@@ -228,11 +230,11 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
           <form id="new-card-form" onSubmit={handleSmartCapture} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="capture-hero-box">
               <div className="capture-input-header">
-                <span className="capture-label">Source Link or Idea</span>
+                <span className="capture-label">{t('cards.newCard.sourceLabel')}</span>
                 {sourceInput.trim() && (
                   <span className="capture-detected-badge">
                     {isUrl ? <Link size={11} /> : <Lightbulb size={11} />}
-                    <span>{isUrl ? 'Web Link' : 'Fleeting Thought'}</span>
+                    <span>{isUrl ? t('cards.newCard.webLink') : t('cards.newCard.fleeting')}</span>
                   </span>
                 )}
               </div>
@@ -241,7 +243,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
                 ref={sourceInputRef}
                 name="source_input"
                 className="capture-textarea"
-                placeholder="Paste URL (article, GitHub repo, YouTube, paper) or type a quick idea..."
+                placeholder={t('cards.newCard.sourcePlaceholder')}
                 value={sourceInput}
                 onChange={(e) => setSourceInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -255,11 +257,11 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
               />
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span className="capture-label" style={{ fontSize: 11 }}>Personal Context / Notes (Optional)</span>
+                <span className="capture-label" style={{ fontSize: 11 }}>{t('cards.newCard.contextLabel')}</span>
                 <input
                   name="context_note"
                   className="capture-context-input"
-                  placeholder="What caught your eye? Any specific focus? (Telegram caption parity)"
+                  placeholder={t('cards.newCard.contextPlaceholder')}
                   value={contextInput}
                   onChange={(e) => setContextInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -289,7 +291,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
                       type="button"
                       onClick={() => setFile(null)}
                       style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 0 }}
-                      aria-label="Remove attachment"
+                      aria-label={t('cards.newCard.removeAttachment')}
                     >
                       <X size={12} />
                     </button>
@@ -301,13 +303,13 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Paperclip size={12} />
-                    <span>Attach file or image</span>
+                    <span>{t('cards.newCard.attach')}</span>
                   </button>
                 )}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 11.5 }}>
                   <CornerDownLeft size={12} strokeWidth={1.5} />
-                  <span>↵ or ⌘↵ to capture</span>
+                  <span>{t('cards.newCard.captureHint')}</span>
                 </div>
               </div>
             </div>
@@ -320,27 +322,27 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
                 onClick={handleToggleManual}
               >
                 {isManualExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                <span>{isManualExpanded ? 'Hide manual entry form' : 'Need a blank card without AI? Switch to manual entry'}</span>
+                <span>{isManualExpanded ? t('cards.newCard.hideManual') : t('cards.newCard.showManual')}</span>
               </button>
 
               {isManualExpanded && (
                 <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12, padding: '14px', background: 'var(--surface-sunken)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
                   <div className="form-group">
-                    <label>Card Title *</label>
+                    <label>{t('cards.newCard.cardTitle')}</label>
                     <input
                       className="form-input"
-                      placeholder="Title of spark"
+                      placeholder={t('cards.newCard.titlePlaceholder')}
                       value={manualTitle}
                       onChange={(e) => setManualTitle(e.target.value)}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label>Summary</label>
+                    <label>{t('cards.newCard.summary')}</label>
                     <textarea
                       className="form-textarea"
                       rows={2}
-                      placeholder="Summary..."
+                      placeholder={t('cards.newCard.summaryPlaceholder')}
                       value={manualSummary}
                       onChange={(e) => setManualSummary(e.target.value)}
                     />
@@ -348,32 +350,32 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
 
                   <div className="form-grid">
                     <div className="form-group">
-                      <label htmlFor="manual-horizon">Horizon</label>
+                      <label htmlFor="manual-horizon">{t('cards.newCard.horizon')}</label>
                       <CustomSelect
                         id="manual-horizon"
                         name="horizon"
                         value={manualHorizon}
                         onChange={(val) => setManualHorizon(val)}
-                        options={CARD_HORIZON_OPTIONS}
-                        ariaLabel="Card horizon"
+                        options={cardHorizonOptions(t)}
+                        ariaLabel={t('cards.newCard.horizonAria')}
                       />
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="manual-status">Status</label>
+                      <label htmlFor="manual-status">{t('cards.newCard.status')}</label>
                       <CustomSelect
                         id="manual-status"
                         name="status"
                         value={manualStatus}
                         onChange={(val) => setManualStatus(val)}
-                        options={CARD_STATUS_OPTIONS}
-                        ariaLabel="Card status"
+                        options={cardStatusOptions(t)}
+                        ariaLabel={t('cards.newCard.statusAria')}
                       />
                     </div>
                   </div>
 
                   <div className="form-group">
-                    <label>Source URL</label>
+                    <label>{t('cards.newCard.sourceUrl')}</label>
                     <input
                       className="form-input"
                       placeholder="https://..."
@@ -383,10 +385,10 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
                   </div>
 
                   <div className="form-group">
-                    <label>Tags</label>
+                    <label>{t('cards.newCard.tags')}</label>
                     <input
                       className="form-input"
-                      placeholder="comma, separated, tags"
+                      placeholder={t('cards.newCard.tagsPlaceholder')}
                       value={manualTags}
                       onChange={(e) => setManualTags(e.target.value)}
                     />
@@ -400,7 +402,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
                       disabled={!manualTitle.trim() && !(sourceInput.trim() && !isUrl)}
                     >
                       <FileText size={13} />
-                      <span>Create Blank Card</span>
+                      <span>{t('cards.newCard.createBlank')}</span>
                     </button>
                   </div>
                 </div>
@@ -410,7 +412,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
             {/* Modal Actions */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 4 }}>
               <button type="button" className="btn-secondary" onClick={onClose}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -419,7 +421,7 @@ export const NewCardModal: React.FC<NewCardModalProps> = ({ onClose, onCapture, 
                 style={{ padding: '7px 16px', background: '#6366f1' }}
               >
                 <Sparkles size={14} />
-                <span>Capture & Synthesize</span>
+                <span>{t('cards.newCard.captureSynthesize')}</span>
               </button>
             </div>
           </form>

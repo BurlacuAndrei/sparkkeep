@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CardModal } from './CardModal';
 import { Card } from '../types';
+import { LocaleProvider } from '../i18n';
+
+const renderCardModal = (ui: React.ReactElement) =>
+  render(<LocaleProvider locale="en">{ui}</LocaleProvider>);
 
 vi.mock('../api', async () => {
   const actual = await vi.importActual<typeof import('../api')>('../api');
@@ -70,7 +74,7 @@ describe('CardModal Subject Card & Synthesize Brief', () => {
 
   it('renders "Synthesize Brief" button for subject cards lacking briefing fields', async () => {
     const onRetry = vi.fn();
-    render(
+    renderCardModal(
       <CardModal
         card={subjectCard}
         onClose={vi.fn()}
@@ -92,7 +96,7 @@ describe('CardModal Subject Card & Synthesize Brief', () => {
 
   it('does NOT render "Synthesize Brief" button when card already has briefing', async () => {
     const onRetry = vi.fn();
-    render(
+    renderCardModal(
       <CardModal
         card={briefedCard}
         onClose={vi.fn()}
@@ -109,7 +113,7 @@ describe('CardModal Subject Card & Synthesize Brief', () => {
 
   it('renders "Retry Extraction" instead of "Synthesize Brief" when card analysis failed', async () => {
     const onRetry = vi.fn();
-    render(
+    renderCardModal(
       <CardModal
         card={failedCard}
         onClose={vi.fn()}

@@ -1,11 +1,12 @@
 import { Card } from '../types';
+import type { TranslateFn } from '../i18n';
 
 export type Horizon = 'short-term' | 'medium-term' | 'long-term';
 
-export const HORIZONS: { id: Horizon; label: string; hint: string; key: string }[] = [
-  { id: 'short-term', label: 'Short-term', hint: 'Act this week', key: '1' },
-  { id: 'medium-term', label: 'Medium-term', hint: 'Next few weeks', key: '2' },
-  { id: 'long-term', label: 'Long-term', hint: 'Someday / explore', key: '3' },
+export const HORIZONS: { id: Horizon; key: string }[] = [
+  { id: 'short-term', key: '1' },
+  { id: 'medium-term', key: '2' },
+  { id: 'long-term', key: '3' },
 ];
 
 /** A card belongs to triage while no keep/dismiss decision has been made. */
@@ -31,8 +32,17 @@ export const suggestedHorizonOf = (c: Card): Horizon => {
   return h === 'medium-term' || h === 'long-term' ? h : 'short-term';
 };
 
-export const horizonLabel = (h: string): string =>
-  HORIZONS.find((x) => x.id === h)?.label ?? 'Short-term';
+export const horizonLabel = (h: string, t: TranslateFn): string => {
+  if (h === 'medium-term') return t('cards.horizon.medium');
+  if (h === 'long-term') return t('cards.horizon.long');
+  return t('cards.horizon.short');
+};
+
+export const horizonHint = (h: Horizon, t: TranslateFn): string => {
+  if (h === 'medium-term') return t('cards.horizon.mediumHint');
+  if (h === 'long-term') return t('cards.horizon.longHint');
+  return t('cards.horizon.shortHint');
+};
 
 const WORTH_SCORE: Record<string, number> = { high: 3, medium: 2, low: 1 };
 const worth = (c: Card) => WORTH_SCORE[(c.worthiness?.level || '').toLowerCase()] ?? 1.5;

@@ -1,13 +1,6 @@
 import React from 'react';
-import {
-  Video,
-  Camera,
-  Share2,
-  Code2,
-  AtSign,
-  Send,
-  Globe,
-} from 'lucide-react';
+import { Video, Camera, Share2, Code2, AtSign, Send, Globe } from 'lucide-react';
+import type { TranslateFn } from '../i18n';
 
 export function getPlatformInfo(url?: string): { name: string; icon: React.ReactNode; color: string } {
   if (!url) return { name: 'Web', icon: <Globe size={11} />, color: 'var(--text-dim, #64748b)' };
@@ -33,20 +26,20 @@ export function getPlatformInfo(url?: string): { name: string; icon: React.React
   return { name: 'Web', icon: <Globe size={11} />, color: 'var(--text-dim, #64748b)' };
 }
 
-export function formatRelativeAge(dateStr?: string): string {
+export function formatRelativeAge(dateStr: string | undefined, t: TranslateFn): string {
   if (!dateStr) return '';
   const time = new Date(dateStr).getTime();
   if (isNaN(time)) return '';
   const diffSec = Math.floor((Date.now() - time) / 1000);
-  if (diffSec < 60) return 'now';
+  if (diffSec < 60) return t('cards.age.now');
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m`;
+  if (diffMin < 60) return t('cards.age.minutes', { count: diffMin });
   const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours}h`;
+  if (diffHours < 24) return t('cards.age.hours', { count: diffHours });
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `${diffDays}d`;
+  if (diffDays < 30) return t('cards.age.days', { count: diffDays });
   const diffMonths = Math.floor(diffDays / 30);
-  return `${diffMonths}mo`;
+  return t('cards.age.months', { count: diffMonths });
 }
 
 export function extractHostname(rawUrl?: string): string {

@@ -21,6 +21,7 @@ import {
   Bookmark,
   Target,
 } from 'lucide-react';
+import { useLocale } from '../../i18n';
 
 export interface CardHeaderActionsProps {
   card: Card;
@@ -67,6 +68,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { t, tp } = useLocale();
 
   // Outside click to close menu
   useEffect(() => {
@@ -94,7 +96,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
     try {
       const md = await fetchMarkdown();
       await navigator.clipboard.writeText(md);
-      showToast?.('Markdown copied to clipboard');
+      showToast?.(t('cards.header.markdownCopied'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -114,7 +116,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
       a.download = `spark-${card.id}.md`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast?.('Markdown downloaded');
+      showToast?.(t('cards.header.markdownDownloaded'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -129,7 +131,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
       const md = await fetchMarkdown();
       const q = new URLSearchParams({ text: card.title, description: md });
       window.open(`https://todoist.com/showTask?${q.toString()}`, '_blank', 'noopener');
-      showToast?.('Opening Todoist with this spark...');
+      showToast?.(t('cards.header.todoistOpening'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -142,7 +144,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
     }
     try {
       await exportCardToSink(card.id, 'obsidian');
-      showToast?.('Sent to Obsidian Vault');
+      showToast?.(t('cards.header.obsidianSent'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -153,7 +155,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
       const md = await fetchMarkdown();
       const q = new URLSearchParams({ name: card.title, content: md });
       window.open(`obsidian://new?${q.toString()}`, '_blank', 'noopener');
-      showToast?.('Opening in Obsidian...');
+      showToast?.(t('cards.header.obsidianOpening'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -164,7 +166,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
       const md = await fetchMarkdown();
       const q = new URLSearchParams({ title: card.title, content: md });
       window.open(`logseq://x-callback-url/quickCapture?${q.toString()}`, '_blank', 'noopener');
-      showToast?.('Opening in Logseq...');
+      showToast?.(t('cards.header.logseqOpening'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -175,7 +177,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
       const md = await fetchMarkdown();
       const q = new URLSearchParams({ title: card.title, notes: md });
       window.open(`things:///add?${q.toString()}`, '_blank', 'noopener');
-      showToast?.('Opening in Things 3...');
+      showToast?.(t('cards.header.thingsOpening'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -186,7 +188,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
       const md = await fetchMarkdown();
       const q = new URLSearchParams({ text: card.title, description: md });
       window.open(`https://todoist.com/showTask?${q.toString()}`, '_blank', 'noopener');
-      showToast?.('Opening in Todoist...');
+      showToast?.(t('cards.header.todoistOpeningIn'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -195,14 +197,14 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
   const handleOpenInGitHub = async () => {
     const repo = settings?.github_repo;
     if (!repo) {
-      showToast?.('GitHub repository not configured in settings');
+      showToast?.(t('cards.header.githubMissing'));
       return;
     }
     try {
       const md = await fetchMarkdown();
       const q = new URLSearchParams({ title: card.title, body: md });
       window.open(`https://github.com/${repo}/issues/new?${q.toString()}`, '_blank', 'noopener');
-      showToast?.('Opening GitHub Issues...');
+      showToast?.(t('cards.header.githubOpening'));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
     }
@@ -210,7 +212,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
 
   const handleDelete = () => {
     if (!onDelete) return;
-    if (window.confirm(`Delete card #${card.id} permanently?`)) {
+    if (window.confirm(t('cards.header.deleteConfirm', { id: card.id }))) {
       onDelete(card.id);
       onClose();
     }
@@ -225,7 +227,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           target="_blank"
           rel="noreferrer"
           className="icon-btn"
-          title="Open original source"
+          title={t('cards.header.openSourceTitle')}
           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <ExternalLink size={13} />
@@ -237,7 +239,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
         type="button"
         className="icon-btn"
         onClick={onOpenCapture}
-        title="View captured content inspector"
+        title={t('cards.header.captureTitle')}
       >
         <FileText size={13} />
       </button>
@@ -247,7 +249,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
         type="button"
         className="icon-btn"
         onClick={onOpenSplit}
-        title="Split card into two"
+        title={t('cards.header.splitTitle')}
       >
         <Split size={13} />
       </button>
@@ -257,7 +259,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
         type="button"
         className="icon-btn"
         onClick={handleDownloadMarkdown}
-        title="Download Markdown (.md)"
+        title={t('cards.header.downloadTitle')}
       >
         <Download size={13} />
       </button>
@@ -268,7 +270,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           type="button"
           className="icon-btn danger"
           onClick={handleDelete}
-          title="Delete card"
+          title={t('cards.header.deleteTitle')}
         >
           <Trash2 size={13} />
         </button>
@@ -280,10 +282,10 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           type="button"
           className="card-primary-action-btn synthesize"
           onClick={() => onRetry(card.id)}
-          title="Synthesize Triage Brief from card title and notes"
+          title={t('cards.header.synthesizeTitle')}
         >
           <Sparkles size={12} />
-          <span>Synthesize Brief</span>
+          <span>{t('cards.header.synthesize')}</span>
         </button>
       )}
 
@@ -295,7 +297,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           onClick={() => onRetry(card.id)}
         >
           <RefreshCw size={12} />
-          <span>Retry Extraction</span>
+          <span>{t('cards.header.retryExtraction')}</span>
         </button>
       ) : status === 'inbox' ? (
         <button
@@ -304,7 +306,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           onClick={() => onStatusTransition('to-do')}
         >
           <ArrowRight size={12} />
-          <span>Commit → To Do</span>
+          <span>{t('cards.header.commitTodo')}</span>
         </button>
       ) : status === 'review' ? (
         <button
@@ -313,7 +315,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           onClick={() => onStatusTransition('to-do')}
         >
           <Check size={12} />
-          <span>Accept → To Do</span>
+          <span>{t('cards.header.acceptTodo')}</span>
         </button>
       ) : status === 'to-do' ? (
         <button
@@ -322,7 +324,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           onClick={() => onStatusTransition('in-progress')}
         >
           <ArrowRight size={12} />
-          <span>Start Working</span>
+          <span>{t('cards.header.startWorking')}</span>
         </button>
       ) : status === 'in-progress' ? (
         <button
@@ -331,7 +333,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           onClick={() => onStatusTransition('done')}
         >
           <Check size={12} />
-          <span>Mark Completed</span>
+          <span>{t('cards.header.markCompleted')}</span>
         </button>
       ) : status === 'shelved' || status === 'dismissed' ? (
         <button
@@ -340,7 +342,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           onClick={() => onStatusTransition('inbox')}
         >
           <RotateCcw size={12} />
-          <span>Restore</span>
+          <span>{t('cards.header.restore')}</span>
         </button>
       ) : null}
 
@@ -355,11 +357,11 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
             onResearch(card.id);
           }
         }}
-        title={research ? 'Jump to Deep Research findings' : 'Run autonomous deep research'}
+        title={research ? t('cards.header.researchJump') : t('cards.header.researchRun')}
         style={{ padding: '4px 10px', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 5 }}
       >
         <Sparkles size={13} color="#c084fc" />
-        <span>{research ? 'Deep Research' : 'Research'}</span>
+        <span>{research ? t('cards.header.deepResearch') : t('cards.header.research')}</span>
       </button>
 
       {/* Overflow Menu ⋯ */}
@@ -368,7 +370,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
           type="button"
           className={`icon-btn ${menuOpen ? 'active' : ''}`}
           onClick={() => setMenuOpen(!menuOpen)}
-          title="More actions"
+          title={t('cards.header.moreActions')}
           style={{ position: 'relative' }}
         >
           <MoreHorizontal size={14} />
@@ -399,7 +401,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                   padding: '0 3px',
                   border: '2px solid var(--bg-primary, #0d0d14)',
                 }}
-                title={`${sinkCount} integration${sinkCount > 1 ? 's' : ''} configured`}
+                title={tp('cards.header.integrations', sinkCount)}
               >
                 {sinkCount}
               </span>
@@ -418,7 +420,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
               }}
             >
               <ClipboardCopy size={13} color="#34d399" />
-              <span>Copy Markdown</span>
+              <span>{t('cards.header.copyMarkdown')}</span>
             </button>
 
             <button
@@ -430,7 +432,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
               }}
             >
               <Download size={13} color="#38bdf8" />
-              <span>Download Markdown</span>
+              <span>{t('cards.header.downloadMarkdown')}</span>
             </button>
 
             <button
@@ -442,7 +444,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
               }}
             >
               <CheckSquare size={13} color="#e879f9" />
-              <span>Add to Todoist</span>
+              <span>{t('cards.header.addTodoist')}</span>
             </button>
 
             {settings?.obsidian_vault_path && (
@@ -455,7 +457,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                 }}
               >
                 <FolderSync size={13} color="#a855f7" />
-                <span>Send to Obsidian Vault</span>
+                <span>{t('cards.header.sendObsidian')}</span>
               </button>
             )}
 
@@ -474,7 +476,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                     }}
                   >
                     <BookOpen size={13} color="#483699" />
-                    <span>Open in Obsidian App</span>
+                    <span>{t('cards.header.openObsidian')}</span>
                   </button>
                 );
               }
@@ -490,7 +492,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                     }}
                   >
                     <Bookmark size={13} color="#1890ff" />
-                    <span>Open in Logseq</span>
+                    <span>{t('cards.header.openLogseq')}</span>
                   </button>
                 );
               }
@@ -506,7 +508,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                     }}
                   >
                     <Target size={13} color="#e67e22" />
-                    <span>Open in Things 3</span>
+                    <span>{t('cards.header.openThings')}</span>
                   </button>
                 );
               }
@@ -522,7 +524,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                     }}
                   >
                     <CheckSquare size={13} color="#e44d2a" />
-                    <span>Open in Todoist</span>
+                    <span>{t('cards.header.openTodoist')}</span>
                   </button>
                 );
               }
@@ -538,7 +540,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                     }}
                   >
                     <GitBranch size={13} color="#24292f" />
-                    <span>Open in GitHub Issues</span>
+                    <span>{t('cards.header.openGithub')}</span>
                   </button>
                 );
               }
@@ -556,7 +558,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
               }}
             >
               <Split size={13} color="#38bdf8" />
-              <span>Split into Two Cards</span>
+              <span>{t('cards.header.splitTwo')}</span>
             </button>
 
             {onSpinOff && (
@@ -569,7 +571,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                 }}
               >
                 <GitBranch size={13} color="#a78bfa" />
-                <span>Spin off Child Card</span>
+                <span>{t('cards.header.spinOff')}</span>
               </button>
             )}
 
@@ -583,7 +585,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                 }}
               >
                 <RefreshCw size={13} color="#fbbf24" />
-                <span>Retry Extraction</span>
+                <span>{t('cards.header.retryExtraction')}</span>
               </button>
             )}
 
@@ -597,7 +599,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                 }}
               >
                 <Sparkles size={13} color="#c084fc" />
-                <span>Synthesize Brief</span>
+                <span>{t('cards.header.synthesize')}</span>
               </button>
             )}
 
@@ -613,7 +615,7 @@ export const CardHeaderActions: React.FC<CardHeaderActionsProps> = ({
                 }}
               >
                 <Trash2 size={13} color="#fb7185" />
-                <span>Delete Card</span>
+                <span>{t('cards.header.deleteCard')}</span>
               </button>
             )}
           </div>

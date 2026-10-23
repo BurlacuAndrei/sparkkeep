@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowRight, CheckSquare, Sparkles, X } from 'lucide-react';
 import { Card } from '../../types';
 import { CardItem } from '../CardItem';
+import { useLocale } from '../../i18n';
 
 interface TriageListProps {
   cards: Card[];
@@ -29,6 +30,7 @@ export const TriageList: React.FC<TriageListProps> = ({
 }) => {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const { t } = useLocale();
 
   const toggle = (id: number) =>
     setSelected((prev) => {
@@ -56,7 +58,7 @@ export const TriageList: React.FC<TriageListProps> = ({
             setSelected(new Set());
           }}
         >
-          <CheckSquare size={13} /> {selecting ? 'Cancel selection' : 'Select'}
+          <CheckSquare size={13} /> {selecting ? t('cards.list.cancelSelection') : t('cards.list.select')}
         </button>
         {selecting && (
           <>
@@ -65,25 +67,25 @@ export const TriageList: React.FC<TriageListProps> = ({
               className="deck-pill-btn"
               onClick={() => setSelected(new Set(cards.map((c) => c.id)))}
             >
-              Select all ({cards.length})
+              {t('cards.list.selectAll', { count: cards.length })}
             </button>
-            <span className="triage-list-sel">{selected.size} selected</span>
+            <span className="triage-list-sel">{t('cards.list.selected', { count: selected.size })}</span>
             <div className="triage-list-bulk">
               <button type="button" className="deck-pill-btn keep" disabled={!selected.size} onClick={() => run(onBulkKeep)}>
-                <ArrowRight size={13} /> Keep (suggested horizon)
+                <ArrowRight size={13} /> {t('cards.list.keep')}
               </button>
               <button type="button" className="deck-pill-btn research" disabled={!selected.size} onClick={() => run(onBulkResearch)}>
-                <Sparkles size={13} /> Research
+                <Sparkles size={13} /> {t('cards.list.research')}
               </button>
               <button type="button" className="deck-pill-btn dismiss" disabled={!selected.size} onClick={() => run(onBulkDismiss)}>
-                <X size={13} /> Dismiss
+                <X size={13} /> {t('cards.list.dismiss')}
               </button>
             </div>
           </>
         )}
       </div>
       {cards.length === 0 ? (
-        <div className="triage-list-empty">Nothing left to triage.</div>
+        <div className="triage-list-empty">{t('cards.list.empty')}</div>
       ) : (
         <div className="triage-list-grid">
           {cards.map((c) => (
