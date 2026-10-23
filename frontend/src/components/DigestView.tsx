@@ -11,6 +11,8 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Download,
   AlertTriangle,
   RotateCw,
   Compass,
@@ -20,6 +22,7 @@ import {
   Radio,
 } from 'lucide-react';
 import * as api from '../api';
+import { isClipboardAvailable, downloadMarkdown } from '../utils/exportUtils';
 import '../styles/digest-brief.css';
 
 interface DigestViewProps {
@@ -40,6 +43,17 @@ function formatDateRange(daysCount: number): string {
 
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
   return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}, ${end.getFullYear()}`;
+}
+
+function toIsoDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function buildDigestFilename(daysCount: number): string {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - daysCount);
+  return `sparkkeep-digest-${toIsoDate(start)}_to_${toIsoDate(end)}.md`;
 }
 
 export const DigestView: React.FC<DigestViewProps> = ({
@@ -354,9 +368,60 @@ export const DigestView: React.FC<DigestViewProps> = ({
 
   const [exportCopied, setExportCopied] = useState(false);
   const [exportCopyFlash, setExportCopyFlash] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const exportArrowRef = useRef<HTMLButtonElement>(null);
+  const exportMenuListRef = useRef<HTMLDivElement>(null);
+  const clipboardAvailable = isClipboardAvailable();
 
-  // Handle Markdown Export
-  const handleExportMarkdown = () => {
+  // Move focus between enabled menuitems, wrapping at both ends
+  const focusExportMenuItem = (direction: 1 | -1) => {
+    const container = exportMenuListRef.current;
+    if (!container) return;
+    const items = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+    );
+    if (items.length === 0) return;
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex =
+      currentIndex === -1
+        ? direction === 1
+          ? 0
+          : items.length - 1
+        : (currentIndex + direction + items.length) % items.length;
+    items[nextIndex].focus();
+  };
+
+  const handleExportMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    focusExportMenuItem(e.key === 'ArrowDown' ? 1 : -1);
+  };
+
+  // Close export menu on outside click or Escape key
+  useEffect(() => {
+    if (!isExportMenuOpen) return;
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsExportMenuOpen(false);
+        exportArrowRef.current?.focus();
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isExportMenuOpen]);
+
+  // Build Markdown digest content
+  const buildDigestMarkdown = (): string => {
     const mdLines: string[] = [];
     mdLines.push(`# 📊 Sparkkeep Intelligence Digest`);
     mdLines.push(`**Period:** ${formatDateRange(windowDays)}`);
@@ -404,19 +469,45 @@ export const DigestView: React.FC<DigestViewProps> = ({
       mdLines.push('');
     }
 
-    const fullMd = mdLines.join('\n');
-    navigator.clipboard
-      .writeText(fullMd)
-      .then(() => {
-        showToast?.('📋 Markdown digest copied to clipboard!');
-        setExportCopied(true);
-        setExportCopyFlash(true);
-        setTimeout(() => setExportCopyFlash(false), 600);
-        setTimeout(() => setExportCopied(false), 2000);
-      })
-      .catch(() => {
-        showToast?.('Could not copy to clipboard');
-      });
+    return mdLines.join('\n');
+  };
+
+  const COPY_FAILED_TOAST = 'Could not copy to clipboard. Use Download .md file instead.';
+
+  const handleCopyMarkdown = () => {
+    try {
+      navigator.clipboard
+        .writeText(buildDigestMarkdown())
+        .then(() => {
+          showToast?.('📋 Markdown digest copied to clipboard!');
+          setExportCopied(true);
+          setExportCopyFlash(true);
+          setTimeout(() => setExportCopyFlash(false), 600);
+          setTimeout(() => setExportCopied(false), 2000);
+        })
+        .catch(() => {
+          showToast?.(COPY_FAILED_TOAST);
+        });
+    } catch {
+      // Clipboard API missing or gone: never fail silently
+      showToast?.(COPY_FAILED_TOAST);
+    }
+  };
+
+  const handleDownloadMarkdown = () => {
+    const filename = buildDigestFilename(windowDays);
+    downloadMarkdown(buildDigestMarkdown(), filename);
+    showToast?.(`📥 Downloaded ${filename}`);
+  };
+
+  // Primary action: copy when the clipboard is usable, otherwise download the file
+  const handlePrimaryExport = () => {
+    setIsExportMenuOpen(false);
+    if (clipboardAvailable) {
+      handleCopyMarkdown();
+    } else {
+      handleDownloadMarkdown();
+    }
   };
 
   const toggleDayExpanded = (date: string, defaultExpanded: boolean) => {
@@ -562,36 +653,115 @@ export const DigestView: React.FC<DigestViewProps> = ({
             )}
           </div>
 
-          <button
-            type="button"
-            className={`digest-btn digest-btn-export ${exportCopied ? 'copied' : ''} ${exportCopyFlash ? 'flash' : ''}`}
-            onClick={handleExportMarkdown}
-            title="Copy Markdown for Obsidian / Notion / Logseq"
-            disabled={exportCopied}
-            style={{ position: 'relative', overflow: 'visible' }}
-          >
-            <FileText size={13} />
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              {exportCopied ? (
-                <>
-                  <CheckCircle2 size={13} color="#34d399" style={{ animation: 'popIn 0.2s ease-out' }} />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                'Export Markdown'
+          <div className="digest-split-btn-group" ref={exportMenuRef}>
+            <button
+              type="button"
+              className={`digest-btn digest-btn-export ${exportCopied ? 'copied' : ''} ${exportCopyFlash ? 'flash' : ''}`}
+              onClick={handlePrimaryExport}
+              title={
+                clipboardAvailable
+                  ? 'Copy Markdown digest to clipboard'
+                  : 'Download Markdown digest as a .md file'
+              }
+              disabled={exportCopied}
+              style={{ position: 'relative', overflow: 'visible' }}
+            >
+              <FileText size={13} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {exportCopied ? (
+                  <>
+                    <CheckCircle2 size={13} color="#34d399" style={{ animation: 'popIn 0.2s ease-out' }} />
+                    <span>Copied!</span>
+                  </>
+                ) : clipboardAvailable ? (
+                  'Export Markdown'
+                ) : (
+                  'Download Markdown'
+                )}
+              </span>
+              {exportCopyFlash && (
+                <div style={{
+                  position: 'absolute',
+                  inset: '-2px',
+                  borderRadius: 'inherit',
+                  border: '2px solid #34d399',
+                  animation: 'copyFlash 0.6s ease-out',
+                  pointerEvents: 'none',
+                }} />
               )}
-            </span>
-            {exportCopyFlash && (
-              <div style={{
-                position: 'absolute',
-                inset: '-2px',
-                borderRadius: 'inherit',
-                border: '2px solid #34d399',
-                animation: 'copyFlash 0.6s ease-out',
-                pointerEvents: 'none',
-              }} />
+            </button>
+
+            <button
+              type="button"
+              ref={exportArrowRef}
+              className={`digest-btn-export-arrow ${isExportMenuOpen ? 'open' : ''}`}
+              onClick={() => setIsExportMenuOpen((prev) => !prev)}
+              aria-label="More export options"
+              aria-haspopup="menu"
+              aria-expanded={isExportMenuOpen}
+              title="More export options"
+            >
+              <ChevronDown size={13} className={isExportMenuOpen ? 'chevron-rotated' : ''} />
+            </button>
+
+            {isExportMenuOpen && (
+              <div
+                className="digest-export-dropdown"
+                role="menu"
+                ref={exportMenuListRef}
+                onKeyDown={handleExportMenuKeyDown}
+              >
+                <div className="digest-dropdown-header" role="presentation">
+                  <span>Export Markdown</span>
+                </div>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="digest-dropdown-item"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    handleCopyMarkdown();
+                  }}
+                  disabled={!clipboardAvailable}
+                  title={
+                    clipboardAvailable
+                      ? 'Copy digest Markdown to clipboard'
+                      : 'Clipboard unavailable: requires a secure (HTTPS) connection'
+                  }
+                >
+                  <div className="digest-dropdown-item-main">
+                    <Copy size={14} style={{ color: '#818cf8', flexShrink: 0 }} />
+                    <div className="digest-dropdown-item-text">
+                      <span className="channel-title">Copy to clipboard</span>
+                      <span className="channel-desc">
+                        {clipboardAvailable ? 'Paste into Obsidian, Notion or Logseq' : 'Requires HTTPS connection'}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="digest-dropdown-item"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    handleDownloadMarkdown();
+                  }}
+                  title="Download digest as a .md file"
+                >
+                  <div className="digest-dropdown-item-main">
+                    <Download size={14} style={{ color: '#38bdf8', flexShrink: 0 }} />
+                    <div className="digest-dropdown-item-text">
+                      <span className="channel-title">Download .md file</span>
+                      <span className="channel-desc">{buildDigestFilename(windowDays)}</span>
+                    </div>
+                  </div>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
         </div>
       </div>
 

@@ -2943,16 +2943,166 @@
   min-height: 0;
 }
 
+.settings-section-index {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  overflow-x: auto;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  scrollbar-width: thin;
+}
+
+.settings-section-index-chip {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface-elevated);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-section-index-chip:hover {
+  border-color: var(--border-hover);
+  color: var(--text-main);
+}
+
+.settings-section-index-chip:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.settings-section-index-chip[aria-current='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.settings-group:first-of-type .settings-group-header {
+  padding-top: 0;
+  border-top: none;
+}
+
+.settings-group-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-group-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.settings-group-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+
+.settings-group-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 .settings-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Keep sticky section index from covering a section scrolled into view. */
+  scroll-margin-top: 56px;
 }
 
 .settings-section-header {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.settings-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-section-head-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-elevated);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-section-toggle:hover {
+  background: var(--border-hover);
+  color: var(--text-main);
+}
+
+.settings-section-toggle:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.settings-section-chevron {
+  transition: transform 0.18s ease;
+}
+
+.settings-section-toggle[aria-expanded='false'] .settings-section-chevron {
+  transform: rotate(-90deg);
+}
+
+.settings-section.is-collapsed {
+  gap: 0;
+}
+
+.settings-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-section-body[hidden] {
+  display: none;
 }
 
 .settings-section-title {
@@ -2962,6 +3112,14 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Only the heading used as the section-index focus target needs box metrics reset. */
+h3.settings-section-title {
+  margin: 0;
+  line-height: 1.5;
+  /* Keep the focused heading clear of the sticky section index. */
+  scroll-margin-top: 56px;
 }
 
 .settings-section-desc {
