@@ -62,6 +62,9 @@ export const Header: React.FC<HeaderProps> = ({
   const [loadingOutboxToken, setLoadingOutboxToken] = useState(false);
   const [regeneratingOutboxToken, setRegeneratingOutboxToken] = useState(false);
   const [syncResults, setSyncResults] = useState<Record<string, { success: boolean; message: string }>>({});
+  const outboxFeedUrl = typeof window === 'undefined' || !outboxToken
+    ? ''
+    : `${window.location.origin}/api/v1/feed.xml?token=${outboxToken}`;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -305,8 +308,11 @@ export const Header: React.FC<HeaderProps> = ({
                 top: '100%',
                 marginTop: '8px',
                 minWidth: '340px',
+                width: '380px',
+                maxWidth: 'calc(100vw - 24px)',
                 maxHeight: '60vh',
                 overflowY: 'auto',
+                overflowX: 'hidden',
                 background: 'var(--bg-surface-elevated, #161822)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 'var(--radius-lg, 12px)',
@@ -429,73 +435,84 @@ export const Header: React.FC<HeaderProps> = ({
                         </button>
                       )}
                       {outboxToken && (
-                        <>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, minWidth: '80px' }}>Feed Token</span>
-                                <div style={{ flex: 1, minWidth: '120px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                                  {showOutboxToken ? outboxToken : '••••••••••••••••'}
-                                </div>
-                              </div>
-                              <div style={{ display: 'flex', gap: '8px', marginLeft: '88px' }}>
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
-                                  onClick={() => setShowOutboxToken(!showOutboxToken)}
-                                  style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap' }}
-                                >
-                                  {showOutboxToken ? <EyeOff size={12} /> : <Eye size={12} />}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
-                                  onClick={() => copyToClipboard(outboxToken)}
-                                  style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                >
-                                  <Copy size={12} /> Copy Token
-                                </button>
-                              </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                            <span style={{ fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+                              Feed Token
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                              <code
+                                style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
+                              >
+                                {showOutboxToken ? outboxToken : '••••••••••••••••'}
+                              </code>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => setShowOutboxToken(!showOutboxToken)}
+                                title={showOutboxToken ? 'Hide token' : 'Show token'}
+                                aria-label={showOutboxToken ? 'Hide feed token' : 'Show feed token'}
+                                style={{ padding: '4px 6px', flexShrink: 0 }}
+                              >
+                                {showOutboxToken ? <EyeOff size={12} /> : <Eye size={12} />}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => copyToClipboard(outboxToken)}
+                                title="Copy token"
+                                aria-label="Copy feed token"
+                                style={{ padding: '4px 6px', flexShrink: 0 }}
+                              >
+                                <Copy size={12} />
+                              </button>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, minWidth: '80px' }}>Feed URL</span>
-                                <div style={{ flex: 1, minWidth: '120px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                                  {typeof window !== 'undefined' ? `${window.location.origin}/api/v1/feed.xml?token=${outboxToken}` : 'feed.xml?token=…'}
-                                </div>
-                              </div>
-                              <div style={{ display: 'flex', gap: '8px', marginLeft: '88px' }}>
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
-                                  onClick={() => copyToClipboard(typeof window !== 'undefined' ? `${window.location.origin}/api/v1/feed.xml?token=${outboxToken}` : '')}
-                                  style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                >
-                                  <Globe size={12} /> Copy URL
-                                </button>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              onClick={handleRegenerateOutboxToken}
-                              disabled={regeneratingOutboxToken}
-                              style={{ fontSize: '11px', padding: '5px 10px', width: '100%', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}
-                            >
-                              {regeneratingOutboxToken ? (
-                                <>
-                                  <RotateCcw size={11} style={{ animation: 'spin 1s linear infinite' }} />
-                                  Regenerating…
-                                </>
-                              ) : (
-                                <>
-                                  <RotateCcw size={11} />
-                                  Regenerate Token
-                                </>
-                              )}
-                            </button>
                           </div>
-                        </>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                            <span style={{ fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+                              Feed URL
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                              <code
+                                title={outboxFeedUrl}
+                                style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
+                              >
+                                {outboxFeedUrl}
+                              </code>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => copyToClipboard(outboxFeedUrl)}
+                                title="Copy URL"
+                                aria-label="Copy feed URL"
+                                style={{ padding: '4px 6px', flexShrink: 0 }}
+                              >
+                                <Globe size={12} />
+                              </button>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={handleRegenerateOutboxToken}
+                            disabled={regeneratingOutboxToken}
+                            style={{ fontSize: '11px', padding: '5px 10px', width: '100%', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            {regeneratingOutboxToken ? (
+                              <>
+                                <RotateCcw size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                                Regenerating…
+                              </>
+                            ) : (
+                              <>
+                                <RotateCcw size={11} />
+                                Regenerate Token
+                              </>
+                            )}
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
