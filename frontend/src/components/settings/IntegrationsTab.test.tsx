@@ -20,13 +20,17 @@ describe('IntegrationsTab Ecosystem Tools', () => {
 
     const groups = screen.getAllByRole('group');
     expect(groups.map((g) => g.getAttribute('aria-labelledby'))).toEqual([
-      'settings-group-inbound-capture-tools',
       'settings-group-knowledge-sinks',
-      'settings-group-export-syndication',
+      'settings-group-inbound-capture-tools',
       'settings-group-automation-testing',
+      'settings-group-export-syndication',
     ]);
 
     const expected: Array<{ heading: string; sections: string[] }> = [
+      {
+        heading: 'Knowledge Sinks',
+        sections: ['Obsidian Vault Export', 'Notion Knowledge Sink', 'Joplin Knowledge Sink'],
+      },
       {
         heading: 'Inbound Capture Tools',
         sections: [
@@ -39,16 +43,12 @@ describe('IntegrationsTab Ecosystem Tools', () => {
         ],
       },
       {
-        heading: 'Knowledge Sinks',
-        sections: ['Obsidian Vault Export', 'Joplin Knowledge Sink', 'Notion Knowledge Sink'],
+        heading: 'Automation & Testing',
+        sections: ['Webhook Test Triggers', 'Client App Shortcuts'],
       },
       {
         heading: 'Export & Syndication',
         sections: ['Data Sovereignty & Full Library Export', 'Outbox RSS Feed'],
-      },
-      {
-        heading: 'Automation & Testing',
-        sections: ['Webhook Test Triggers', 'Client App Shortcuts'],
       },
     ];
 

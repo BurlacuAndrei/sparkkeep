@@ -46,20 +46,21 @@ export interface IntegrationsTabProps {
   onVaultPathChange?: (path: string) => void;
 }
 
+// Ordered by adoption: most popular integrations first.
 const INTEGRATION_SECTIONS = [
+  { slug: 'obsidian', title: 'Obsidian Vault Export' },
+  { slug: 'notion', title: 'Notion Knowledge Sink' },
+  { slug: 'joplin', title: 'Joplin Knowledge Sink' },
   { slug: 'browser-extension', title: 'Official Browser Extension (Chrome & Firefox)' },
   { slug: 'bookmarklet', title: 'Browser Bookmarklet' },
   { slug: 'ios-shortcut', title: 'Apple iOS Shortcut & Share Sheet' },
   { slug: 'raycast', title: 'Raycast Extension / Script Command' },
   { slug: 'mcp', title: 'Model Context Protocol (MCP)' },
   { slug: 'capture-api', title: 'Universal Inbound Capture API' },
-  { slug: 'obsidian', title: 'Obsidian Vault Export' },
-  { slug: 'joplin', title: 'Joplin Knowledge Sink' },
-  { slug: 'notion', title: 'Notion Knowledge Sink' },
-  { slug: 'library-export', title: 'Data Sovereignty & Full Library Export' },
-  { slug: 'outbox-feed', title: 'Outbox RSS Feed' },
   { slug: 'webhook', title: 'Webhook Test Triggers' },
   { slug: 'client-apps', title: 'Client App Shortcuts' },
+  { slug: 'library-export', title: 'Data Sovereignty & Full Library Export' },
+  { slug: 'outbox-feed', title: 'Outbox RSS Feed' },
 ] as const;
 
 type SectionSlug = (typeof INTEGRATION_SECTIONS)[number]['slug'];
@@ -751,6 +752,536 @@ echo "Saved to Sparkkeep"`;
         ))}
       </nav>
 
+      <div className="settings-group" role="group" aria-labelledby="settings-group-knowledge-sinks">
+        <div className="settings-group-header">
+          <div className="settings-group-heading">
+            <Library size={20} className="settings-group-icon" aria-hidden="true" />
+            <h2 className="settings-group-title" id="settings-group-knowledge-sinks">Knowledge Sinks</h2>
+          </div>
+          <p className="settings-group-desc">Outbound: Sparkkeep writes your library into your notes app.</p>
+        </div>
+
+        <CollapsibleSection
+          slug="notion"
+          expanded={!collapsedSections.has('notion')}
+          onToggle={toggleSection}
+          header={
+            <div className="settings-section-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Brain size={18} style={{ color: 'var(--accent)' }} />
+                <h3 {...headingProps('notion')}>Notion Knowledge Sink</h3>
+              </div>
+              <span className="settings-section-desc">
+                Sync your Sparkkeep library to a Notion database with rich block rendering, auto-provisioned schema, and idempotent upserts via Sparkkeep ID.
+              </span>
+            </div>
+          }
+        >
+
+          <div className="setup-form-group">
+            <label htmlFor="notion-token">Integration Token</label>
+            <input
+              id="notion-token"
+              type="password"
+              value={notionToken}
+              onChange={(e) => setNotionToken(e.target.value)}
+              className="setup-input"
+              placeholder="secret_..."
+              style={{ fontFamily: 'var(--font-mono)' }}
+            />
+            <span className="setup-hint">
+              Create an Internal Integration at{' '}
+              <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener noreferrer">
+                notion.so/my-integrations
+              </a>{' '}
+              , then share your target database with the integration.
+            </span>
+          </div>
+
+          <div className="setup-form-group">
+            <label htmlFor="notion-database-id">Database ID</label>
+            <input
+              id="notion-database-id"
+              type="text"
+              value={notionDatabaseId}
+              onChange={(e) => setNotionDatabaseId(e.target.value)}
+              className="setup-input"
+              placeholder="32-char database ID from Notion URL"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            />
+            <span className="setup-hint">
+              Found in the database URL:{' '}
+              <code>{`https://notion.so/workspace/<DATABASE_ID>?v=...`}</code> {' '}
+              — the 32-char segment before <code>?v=</code>.
+            </span>
+          </div>
+
+          <div className="setup-form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={notionAutoExport}
+                onChange={(e) => setNotionAutoExport(e.target.checked)}
+              />
+              <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+                Auto-export on card changes (requires Ticket 06 background sync)
+              </span>
+            </label>
+            <span className="setup-hint" style={{ marginLeft: 'auto', fontSize: '11px' }}>
+              When enabled, new/updated cards are automatically synced to Notion.
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={testingNotion || syncingNotion}
+              onClick={handleTestNotion}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              {testingNotion ? 'Testing...' : 'Test Connection'}
+            </button>
+            <button
+              type="button"
+              className="setup-btn-primary"
+              disabled={syncingNotion || testingNotion}
+              onClick={handleSyncNotion}
+              style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <HardDrive size={14} />
+              <span>{syncingNotion ? 'Syncing...' : 'Sync Library Now'}</span>
+            </button>
+            <button
+              type="button"
+              className="setup-btn-secondary"
+              onClick={handleSaveNotionSettings}
+              style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Save size={14} />
+              <span>Save Settings</span>
+            </button>
+          </div>
+
+          {notionTestResult && (
+            <div
+              className="setup-info-box"
+              style={{
+                marginTop: '12px',
+                background: notionTestResult.success
+                  ? 'rgba(16, 185, 129, 0.1)'
+                  : 'rgba(239, 68, 68, 0.1)',
+                borderColor: notionTestResult.success
+                  ? 'rgba(16, 185, 129, 0.3)'
+                  : 'rgba(239, 68, 68, 0.3)',
+              }}
+            >
+              {notionTestResult.success ? (
+                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+              ) : (
+                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+              )}
+              <span style={{ fontSize: '13px' }}>{notionTestResult.message}</span>
+            </div>
+          )}
+
+          {notionSyncResult && (
+            <div
+              className={`setup-info-box`}
+              style={{
+                marginTop: '12px',
+                background: notionSyncResult.startsWith('✅')
+                  ? 'rgba(16, 185, 129, 0.1)'
+                  : 'rgba(239, 68, 68, 0.1)',
+                borderColor: notionSyncResult.startsWith('✅')
+                  ? 'rgba(16, 185, 129, 0.3)'
+                  : 'rgba(239, 68, 68, 0.3)',
+              }}
+            >
+              {notionSyncResult.startsWith('✅') ? (
+                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+              ) : (
+                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+              )}
+              <span style={{ fontSize: '13px' }}>{notionSyncResult}</span>
+            </div>
+          )}
+
+          <div className="setup-info-box" style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
+            <strong>How it works:</strong>
+            <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', lineHeight: 1.7 }}>
+              <li>Database properties are auto-provisioned: Sparkkeep ID (number), Card Type, Horizon, Status, Tags, Source URL, Created At, Updated At, Researched.</li>
+              <li>Upsert is idempotent via <strong>Sparkkeep ID</strong> property — re-syncing updates the same page.</li>
+              <li>Content rendered as Notion blocks: headings, paragraphs, lists, checkboxes, code blocks, callouts for Research Dossier.</li>
+              <li>Long text auto-chunked at 2,000 chars; blocks batched at 100 per API call.</li>
+              <li>Rate limits handled with exponential backoff.</li>
+            </ul>
+          </div>
+        </CollapsibleSection>
+
+
+        <CollapsibleSection
+          slug="obsidian"
+          style={{ marginTop: '28px' }}
+          expanded={!collapsedSections.has('obsidian')}
+          onToggle={toggleSection}
+          header={
+            <div className="settings-section-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FolderSync size={18} style={{ color: 'var(--accent)' }} />
+                <h3 {...headingProps('obsidian')}>Obsidian Vault Export</h3>
+              </div>
+              <span className="settings-section-desc">
+                Mirror and export your Sparkkeep library into your local or networked Obsidian knowledge base with full Markdown and YAML frontmatter.
+              </span>
+            </div>
+          }
+        >
+
+          <div className="setup-form-group">
+            <label htmlFor="obsidian-vault-path">Obsidian Vault Directory Path</label>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <input
+                id="obsidian-vault-path"
+                type="text"
+                value={vaultPath}
+                onChange={(e) => {
+                  setVaultPath(e.target.value);
+                  onVaultPathChange?.(e.target.value);
+                }}
+                className="setup-input"
+                placeholder="/home/user/Documents/ObsidianVault or C:\Users\User\Documents\Vault"
+                style={{ flex: 1, minWidth: '240px', fontFamily: 'var(--font-mono)' }}
+              />
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={testingObsidian || syncingObsidian}
+                onClick={handleTestObsidian}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                <span>{testingObsidian ? 'Testing...' : 'Test Connection'}</span>
+              </button>
+              <button
+                type="button"
+                className="setup-btn-primary"
+                disabled={syncingObsidian || testingObsidian}
+                onClick={handleSyncObsidian}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                <FolderSync size={14} />
+                <span>{syncingObsidian ? 'Syncing...' : 'Sync Vault Now'}</span>
+              </button>
+            </div>
+            <span className="setup-hint">
+              Leave blank to use the default configured system vault path. Creates folder structures with tags, executive summaries, and research reports.
+            </span>
+          </div>
+
+          <div className="setup-form-group" style={{ marginTop: '16px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 500 }}>
+              <input
+                type="checkbox"
+                checked={obsidianAutoExport}
+                onChange={() => {
+                  setObsidianAutoExport(!obsidianAutoExport);
+                  handleSaveObsidianAutoExport();
+                }}
+                style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
+              />
+              <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+                Auto-export on status change & research completion
+              </span>
+            </label>
+            <span className="setup-hint" style={{ marginTop: '6px', display: 'block' }}>
+              When enabled, cards transitioning to To-Do, In Progress, or Done — and cards with completed research — are automatically exported to your Obsidian vault.
+            </span>
+          </div>
+
+          {testResult && (
+            <div
+              className="setup-info-box"
+              style={{
+                marginTop: '12px',
+                background: testResult.success
+                  ? 'rgba(16, 185, 129, 0.1)'
+                  : 'rgba(239, 68, 68, 0.1)',
+                borderColor: testResult.success
+                  ? 'rgba(16, 185, 129, 0.3)'
+                  : 'rgba(239, 68, 68, 0.3)',
+              }}
+            >
+              {testResult.success ? (
+                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+              ) : (
+                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+              )}
+              <span style={{ fontSize: '13px' }}>{testResult.message}</span>
+            </div>
+          )}
+
+          {lastSyncResult && (
+            <div
+              className={`setup-info-box`}
+              style={{
+                marginTop: '12px',
+                background: lastSyncResult.startsWith('✅')
+                  ? 'rgba(16, 185, 129, 0.1)'
+                  : 'rgba(239, 68, 68, 0.1)',
+                borderColor: lastSyncResult.startsWith('✅')
+                  ? 'rgba(16, 185, 129, 0.3)'
+                  : 'rgba(239, 68, 68, 0.3)',
+              }}
+            >
+              {lastSyncResult.startsWith('✅') ? (
+                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+              ) : (
+                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+              )}
+              <span style={{ fontSize: '13px' }}>{lastSyncResult}</span>
+            </div>
+          )}
+        </CollapsibleSection>
+
+
+        <CollapsibleSection
+          slug="joplin"
+          style={{ marginTop: '28px' }}
+          expanded={!collapsedSections.has('joplin')}
+          onToggle={toggleSection}
+          header={
+            <div className="settings-section-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Database size={18} style={{ color: 'var(--accent)' }} />
+                <h3 {...headingProps('joplin')}>Joplin Knowledge Sink</h3>
+              </div>
+              <span className="settings-section-desc">
+                Sync your Sparkkeep library to Joplin via Self-Hosted Server or Desktop Clipper API. Notes use deterministic IDs for idempotent upserts.
+              </span>
+            </div>
+          }
+        >
+
+          <div className="setup-form-group">
+            <label>Mode</label>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="joplin-mode"
+                  value="server"
+                  checked={joplinMode === "server"}
+                  onChange={() => {
+                    setJoplinMode("server");
+                    if (!joplinBaseUrl || joplinBaseUrl === 'http://127.0.0.1:41184') {
+                      setJoplinBaseUrl('https://joplin.example.com');
+                    }
+                  }}
+                />
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Database size={14} style={{ color: '#e85d04' }} />
+                  Self-Hosted Server
+                </span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="joplin-mode"
+                  value="clipper"
+                  checked={joplinMode === "clipper"}
+                  onChange={() => {
+                    setJoplinMode("clipper");
+                    setJoplinBaseUrl('http://127.0.0.1:41184');
+                  }}
+                />
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Monitor size={14} style={{ color: '#4a90d9' }} />
+                  Desktop Clipper API
+                </span>
+              </label>
+            </div>
+            <span className="setup-hint">
+              Server mode requires email/password for authentication. Clipper mode requires only the clipper token (Joplin Desktop must be running with Clipper plugin enabled).
+            </span>
+          </div>
+
+          <div className="setup-form-group">
+            <label htmlFor="joplin-base-url">Base URL</label>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <input
+                id="joplin-base-url"
+                type="url"
+                value={joplinBaseUrl}
+                onChange={(e) => setJoplinBaseUrl(e.target.value)}
+                className="setup-input"
+                placeholder={joplinMode === "server" ? "https://joplin.example.com" : "http://127.0.0.1:41184"}
+                style={{ flex: 1, minWidth: '240px', fontFamily: 'var(--font-mono)' }}
+              />
+            </div>
+            <span className="setup-hint">
+              {joplinMode === "server"
+                ? "Your self-hosted Joplin Server URL (e.g., https://joplin.yourdomain.com)"
+                : "Joplin Desktop Clipper API endpoint (default: http://127.0.0.1:41184)"}
+            </span>
+          </div>
+
+          {joplinMode === "server" && (
+            <div>
+              <div className="setup-form-group">
+                <label htmlFor="joplin-email">Email (Server Mode)</label>
+                <input
+                  id="joplin-email"
+                  type="email"
+                  value={joplinEmail}
+                  onChange={(e) => setJoplinEmail(e.target.value)}
+                  className="setup-input"
+                  placeholder="admin@joplin.example.com"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                />
+                <span className="setup-hint">Email used to authenticate with Joplin Server.</span>
+              </div>
+
+              <div className="setup-form-group">
+                <label htmlFor="joplin-password">Password (Server Mode)</label>
+                <input
+                  id="joplin-password"
+                  type="password"
+                  value={joplinPassword}
+                  onChange={(e) => setJoplinPassword(e.target.value)}
+                  className="setup-input"
+                  placeholder="••••••••"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                />
+                <span className="setup-hint">Password for Joplin Server authentication. Used only to obtain a session token.</span>
+              </div>
+            </div>
+          )}
+
+          {joplinMode === "clipper" && (
+            <div className="setup-form-group">
+              <label htmlFor="joplin-token">Clipper Token (Desktop Mode)</label>
+              <input
+                id="joplin-token"
+                type="password"
+                value={joplinToken}
+                onChange={(e) => setJoplinToken(e.target.value)}
+                className="setup-input"
+                placeholder="••••••••"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              />
+              <span className="setup-hint">
+                Token from Joplin Desktop → Options → Web Clipper → "Authorization token". Joplin must be running with the Web Clipper service enabled.
+              </span>
+            </div>
+          )}
+
+          <div className="setup-form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={joplinAutoExport}
+                onChange={(e) => setJoplinAutoExport(e.target.checked)}
+              />
+              <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+                Auto-export on card changes (requires Ticket 06 background sync)
+              </span>
+            </label>
+            <span className="setup-hint" style={{ marginLeft: 'auto', fontSize: '11px' }}>
+              When enabled, new/updated cards are automatically synced to Joplin.
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={testingJoplin || syncingJoplin}
+              onClick={handleTestJoplin}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              {testingJoplin ? 'Testing...' : 'Test Connection'}
+            </button>
+            <button
+              type="button"
+              className="setup-btn-primary"
+              disabled={syncingJoplin || testingJoplin}
+              onClick={handleSyncJoplin}
+              style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <HardDrive size={14} />
+              <span>{syncingJoplin ? 'Syncing...' : 'Sync Library Now'}</span>
+            </button>
+            <button
+              type="button"
+              className="setup-btn-secondary"
+              onClick={handleSaveJoplinSettings}
+              style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Save size={14} />
+              <span>Save Settings</span>
+            </button>
+          </div>
+
+          {joplinTestResult && (
+            <div
+              className="setup-info-box"
+              style={{
+                marginTop: '12px',
+                background: joplinTestResult.success
+                  ? 'rgba(16, 185, 129, 0.1)'
+                  : 'rgba(239, 68, 68, 0.1)',
+                borderColor: joplinTestResult.success
+                  ? 'rgba(16, 185, 129, 0.3)'
+                  : 'rgba(239, 68, 68, 0.3)',
+              }}
+            >
+              {joplinTestResult.success ? (
+                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+              ) : (
+                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+              )}
+              <span style={{ fontSize: '13px' }}>{joplinTestResult.message}</span>
+            </div>
+          )}
+
+          {joplinSyncResult && (
+            <div
+              className={`setup-info-box`}
+              style={{
+                marginTop: '12px',
+                background: joplinSyncResult.startsWith('✅')
+                  ? 'rgba(16, 185, 129, 0.1)'
+                  : 'rgba(239, 68, 68, 0.1)',
+                borderColor: joplinSyncResult.startsWith('✅')
+                  ? 'rgba(16, 185, 129, 0.3)'
+                  : 'rgba(239, 68, 68, 0.3)',
+              }}
+            >
+              {joplinSyncResult.startsWith('✅') ? (
+                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
+              ) : (
+                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+              )}
+              <span style={{ fontSize: '13px' }}>{joplinSyncResult}</span>
+            </div>
+          )}
+
+          <div className="setup-info-box" style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
+            <strong>How it works:</strong>
+            <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', lineHeight: 1.7 }}>
+              <li>Notes are created in a <strong>Sparkkeep</strong> notebook (auto-created).</li>
+              <li>Each card gets a deterministic 32-char hex ID: <code>{`sha256("sparkkeep:card:{id}")[:32]`}</code> — re-syncing updates the same note.</li>
+              <li>Tags are synced as Joplin tags with deterministic IDs.</li>
+              <li>Markdown includes: Title, Executive Summary, Value Proposition, Proposed Actions (as checkboxes), References, Research Dossier.</li>
+              <li><strong>E2EE note:</strong> Target notebook must have End-to-End Encryption disabled in Joplin (Settings → Encryption).</li>
+            </ul>
+          </div>
+        </CollapsibleSection>
+
+
+
+      </div>
+
       <div className="settings-group" role="group" aria-labelledby="settings-group-inbound-capture-tools">
         <div className="settings-group-header">
           <div className="settings-group-heading">
@@ -1120,720 +1651,6 @@ echo "Saved to Sparkkeep"`;
 
       </div>
 
-      <div className="settings-group" role="group" aria-labelledby="settings-group-knowledge-sinks">
-        <div className="settings-group-header">
-          <div className="settings-group-heading">
-            <Library size={20} className="settings-group-icon" aria-hidden="true" />
-            <h2 className="settings-group-title" id="settings-group-knowledge-sinks">Knowledge Sinks</h2>
-          </div>
-          <p className="settings-group-desc">Outbound: Sparkkeep writes your library into your notes app.</p>
-        </div>
-
-        <CollapsibleSection
-          slug="obsidian"
-          expanded={!collapsedSections.has('obsidian')}
-          onToggle={toggleSection}
-          header={
-            <div className="settings-section-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FolderSync size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('obsidian')}>Obsidian Vault Export</h3>
-              </div>
-              <span className="settings-section-desc">
-                Mirror and export your Sparkkeep library into your local or networked Obsidian knowledge base with full Markdown and YAML frontmatter.
-              </span>
-            </div>
-          }
-        >
-
-          <div className="setup-form-group">
-            <label htmlFor="obsidian-vault-path">Obsidian Vault Directory Path</label>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <input
-                id="obsidian-vault-path"
-                type="text"
-                value={vaultPath}
-                onChange={(e) => {
-                  setVaultPath(e.target.value);
-                  onVaultPathChange?.(e.target.value);
-                }}
-                className="setup-input"
-                placeholder="/home/user/Documents/ObsidianVault or C:\Users\User\Documents\Vault"
-                style={{ flex: 1, minWidth: '240px', fontFamily: 'var(--font-mono)' }}
-              />
-              <button
-                type="button"
-                className="btn-secondary"
-                disabled={testingObsidian || syncingObsidian}
-                onClick={handleTestObsidian}
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                <span>{testingObsidian ? 'Testing...' : 'Test Connection'}</span>
-              </button>
-              <button
-                type="button"
-                className="setup-btn-primary"
-                disabled={syncingObsidian || testingObsidian}
-                onClick={handleSyncObsidian}
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                <FolderSync size={14} />
-                <span>{syncingObsidian ? 'Syncing...' : 'Sync Vault Now'}</span>
-              </button>
-            </div>
-            <span className="setup-hint">
-              Leave blank to use the default configured system vault path. Creates folder structures with tags, executive summaries, and research reports.
-            </span>
-          </div>
-
-          <div className="setup-form-group" style={{ marginTop: '16px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 500 }}>
-              <input
-                type="checkbox"
-                checked={obsidianAutoExport}
-                onChange={() => {
-                  setObsidianAutoExport(!obsidianAutoExport);
-                  handleSaveObsidianAutoExport();
-                }}
-                style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
-              />
-              <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                Auto-export on status change & research completion
-              </span>
-            </label>
-            <span className="setup-hint" style={{ marginTop: '6px', display: 'block' }}>
-              When enabled, cards transitioning to To-Do, In Progress, or Done — and cards with completed research — are automatically exported to your Obsidian vault.
-            </span>
-          </div>
-
-          {testResult && (
-            <div
-              className="setup-info-box"
-              style={{
-                marginTop: '12px',
-                background: testResult.success
-                  ? 'rgba(16, 185, 129, 0.1)'
-                  : 'rgba(239, 68, 68, 0.1)',
-                borderColor: testResult.success
-                  ? 'rgba(16, 185, 129, 0.3)'
-                  : 'rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {testResult.success ? (
-                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
-              ) : (
-                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
-              )}
-              <span style={{ fontSize: '13px' }}>{testResult.message}</span>
-            </div>
-          )}
-
-          {lastSyncResult && (
-            <div
-              className={`setup-info-box`}
-              style={{
-                marginTop: '12px',
-                background: lastSyncResult.startsWith('✅')
-                  ? 'rgba(16, 185, 129, 0.1)'
-                  : 'rgba(239, 68, 68, 0.1)',
-                borderColor: lastSyncResult.startsWith('✅')
-                  ? 'rgba(16, 185, 129, 0.3)'
-                  : 'rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {lastSyncResult.startsWith('✅') ? (
-                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
-              ) : (
-                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
-              )}
-              <span style={{ fontSize: '13px' }}>{lastSyncResult}</span>
-            </div>
-          )}
-        </CollapsibleSection>
-
-
-        <CollapsibleSection
-          slug="joplin"
-          style={{ marginTop: '28px' }}
-          expanded={!collapsedSections.has('joplin')}
-          onToggle={toggleSection}
-          header={
-            <div className="settings-section-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Database size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('joplin')}>Joplin Knowledge Sink</h3>
-              </div>
-              <span className="settings-section-desc">
-                Sync your Sparkkeep library to Joplin via Self-Hosted Server or Desktop Clipper API. Notes use deterministic IDs for idempotent upserts.
-              </span>
-            </div>
-          }
-        >
-
-          <div className="setup-form-group">
-            <label>Mode</label>
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="joplin-mode"
-                  value="server"
-                  checked={joplinMode === "server"}
-                  onChange={() => {
-                    setJoplinMode("server");
-                    if (!joplinBaseUrl || joplinBaseUrl === 'http://127.0.0.1:41184') {
-                      setJoplinBaseUrl('https://joplin.example.com');
-                    }
-                  }}
-                />
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Database size={14} style={{ color: '#e85d04' }} />
-                  Self-Hosted Server
-                </span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="joplin-mode"
-                  value="clipper"
-                  checked={joplinMode === "clipper"}
-                  onChange={() => {
-                    setJoplinMode("clipper");
-                    setJoplinBaseUrl('http://127.0.0.1:41184');
-                  }}
-                />
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Monitor size={14} style={{ color: '#4a90d9' }} />
-                  Desktop Clipper API
-                </span>
-              </label>
-            </div>
-            <span className="setup-hint">
-              Server mode requires email/password for authentication. Clipper mode requires only the clipper token (Joplin Desktop must be running with Clipper plugin enabled).
-            </span>
-          </div>
-
-          <div className="setup-form-group">
-            <label htmlFor="joplin-base-url">Base URL</label>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <input
-                id="joplin-base-url"
-                type="url"
-                value={joplinBaseUrl}
-                onChange={(e) => setJoplinBaseUrl(e.target.value)}
-                className="setup-input"
-                placeholder={joplinMode === "server" ? "https://joplin.example.com" : "http://127.0.0.1:41184"}
-                style={{ flex: 1, minWidth: '240px', fontFamily: 'var(--font-mono)' }}
-              />
-            </div>
-            <span className="setup-hint">
-              {joplinMode === "server"
-                ? "Your self-hosted Joplin Server URL (e.g., https://joplin.yourdomain.com)"
-                : "Joplin Desktop Clipper API endpoint (default: http://127.0.0.1:41184)"}
-            </span>
-          </div>
-
-          {joplinMode === "server" && (
-            <div>
-              <div className="setup-form-group">
-                <label htmlFor="joplin-email">Email (Server Mode)</label>
-                <input
-                  id="joplin-email"
-                  type="email"
-                  value={joplinEmail}
-                  onChange={(e) => setJoplinEmail(e.target.value)}
-                  className="setup-input"
-                  placeholder="admin@joplin.example.com"
-                  style={{ fontFamily: 'var(--font-mono)' }}
-                />
-                <span className="setup-hint">Email used to authenticate with Joplin Server.</span>
-              </div>
-
-              <div className="setup-form-group">
-                <label htmlFor="joplin-password">Password (Server Mode)</label>
-                <input
-                  id="joplin-password"
-                  type="password"
-                  value={joplinPassword}
-                  onChange={(e) => setJoplinPassword(e.target.value)}
-                  className="setup-input"
-                  placeholder="••••••••"
-                  style={{ fontFamily: 'var(--font-mono)' }}
-                />
-                <span className="setup-hint">Password for Joplin Server authentication. Used only to obtain a session token.</span>
-              </div>
-            </div>
-          )}
-
-          {joplinMode === "clipper" && (
-            <div className="setup-form-group">
-              <label htmlFor="joplin-token">Clipper Token (Desktop Mode)</label>
-              <input
-                id="joplin-token"
-                type="password"
-                value={joplinToken}
-                onChange={(e) => setJoplinToken(e.target.value)}
-                className="setup-input"
-                placeholder="••••••••"
-                style={{ fontFamily: 'var(--font-mono)' }}
-              />
-              <span className="setup-hint">
-                Token from Joplin Desktop → Options → Web Clipper → "Authorization token". Joplin must be running with the Web Clipper service enabled.
-              </span>
-            </div>
-          )}
-
-          <div className="setup-form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={joplinAutoExport}
-                onChange={(e) => setJoplinAutoExport(e.target.checked)}
-              />
-              <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                Auto-export on card changes (requires Ticket 06 background sync)
-              </span>
-            </label>
-            <span className="setup-hint" style={{ marginLeft: 'auto', fontSize: '11px' }}>
-              When enabled, new/updated cards are automatically synced to Joplin.
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={testingJoplin || syncingJoplin}
-              onClick={handleTestJoplin}
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              {testingJoplin ? 'Testing...' : 'Test Connection'}
-            </button>
-            <button
-              type="button"
-              className="setup-btn-primary"
-              disabled={syncingJoplin || testingJoplin}
-              onClick={handleSyncJoplin}
-              style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <HardDrive size={14} />
-              <span>{syncingJoplin ? 'Syncing...' : 'Sync Library Now'}</span>
-            </button>
-            <button
-              type="button"
-              className="setup-btn-secondary"
-              onClick={handleSaveJoplinSettings}
-              style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Save size={14} />
-              <span>Save Settings</span>
-            </button>
-          </div>
-
-          {joplinTestResult && (
-            <div
-              className="setup-info-box"
-              style={{
-                marginTop: '12px',
-                background: joplinTestResult.success
-                  ? 'rgba(16, 185, 129, 0.1)'
-                  : 'rgba(239, 68, 68, 0.1)',
-                borderColor: joplinTestResult.success
-                  ? 'rgba(16, 185, 129, 0.3)'
-                  : 'rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {joplinTestResult.success ? (
-                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
-              ) : (
-                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
-              )}
-              <span style={{ fontSize: '13px' }}>{joplinTestResult.message}</span>
-            </div>
-          )}
-
-          {joplinSyncResult && (
-            <div
-              className={`setup-info-box`}
-              style={{
-                marginTop: '12px',
-                background: joplinSyncResult.startsWith('✅')
-                  ? 'rgba(16, 185, 129, 0.1)'
-                  : 'rgba(239, 68, 68, 0.1)',
-                borderColor: joplinSyncResult.startsWith('✅')
-                  ? 'rgba(16, 185, 129, 0.3)'
-                  : 'rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {joplinSyncResult.startsWith('✅') ? (
-                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
-              ) : (
-                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
-              )}
-              <span style={{ fontSize: '13px' }}>{joplinSyncResult}</span>
-            </div>
-          )}
-
-          <div className="setup-info-box" style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
-            <strong>How it works:</strong>
-            <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', lineHeight: 1.7 }}>
-              <li>Notes are created in a <strong>Sparkkeep</strong> notebook (auto-created).</li>
-              <li>Each card gets a deterministic 32-char hex ID: <code>{`sha256("sparkkeep:card:{id}")[:32]`}</code> — re-syncing updates the same note.</li>
-              <li>Tags are synced as Joplin tags with deterministic IDs.</li>
-              <li>Markdown includes: Title, Executive Summary, Value Proposition, Proposed Actions (as checkboxes), References, Research Dossier.</li>
-              <li><strong>E2EE note:</strong> Target notebook must have End-to-End Encryption disabled in Joplin (Settings → Encryption).</li>
-            </ul>
-          </div>
-        </CollapsibleSection>
-
-
-        <CollapsibleSection
-          slug="notion"
-          style={{ marginTop: '28px' }}
-          expanded={!collapsedSections.has('notion')}
-          onToggle={toggleSection}
-          header={
-            <div className="settings-section-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Brain size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('notion')}>Notion Knowledge Sink</h3>
-              </div>
-              <span className="settings-section-desc">
-                Sync your Sparkkeep library to a Notion database with rich block rendering, auto-provisioned schema, and idempotent upserts via Sparkkeep ID.
-              </span>
-            </div>
-          }
-        >
-
-          <div className="setup-form-group">
-            <label htmlFor="notion-token">Integration Token</label>
-            <input
-              id="notion-token"
-              type="password"
-              value={notionToken}
-              onChange={(e) => setNotionToken(e.target.value)}
-              className="setup-input"
-              placeholder="secret_..."
-              style={{ fontFamily: 'var(--font-mono)' }}
-            />
-            <span className="setup-hint">
-              Create an Internal Integration at{' '}
-              <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener noreferrer">
-                notion.so/my-integrations
-              </a>{' '}
-              , then share your target database with the integration.
-            </span>
-          </div>
-
-          <div className="setup-form-group">
-            <label htmlFor="notion-database-id">Database ID</label>
-            <input
-              id="notion-database-id"
-              type="text"
-              value={notionDatabaseId}
-              onChange={(e) => setNotionDatabaseId(e.target.value)}
-              className="setup-input"
-              placeholder="32-char database ID from Notion URL"
-              style={{ fontFamily: 'var(--font-mono)' }}
-            />
-            <span className="setup-hint">
-              Found in the database URL:{' '}
-              <code>{`https://notion.so/workspace/<DATABASE_ID>?v=...`}</code> {' '}
-              — the 32-char segment before <code>?v=</code>.
-            </span>
-          </div>
-
-          <div className="setup-form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={notionAutoExport}
-                onChange={(e) => setNotionAutoExport(e.target.checked)}
-              />
-              <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                Auto-export on card changes (requires Ticket 06 background sync)
-              </span>
-            </label>
-            <span className="setup-hint" style={{ marginLeft: 'auto', fontSize: '11px' }}>
-              When enabled, new/updated cards are automatically synced to Notion.
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={testingNotion || syncingNotion}
-              onClick={handleTestNotion}
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              {testingNotion ? 'Testing...' : 'Test Connection'}
-            </button>
-            <button
-              type="button"
-              className="setup-btn-primary"
-              disabled={syncingNotion || testingNotion}
-              onClick={handleSyncNotion}
-              style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <HardDrive size={14} />
-              <span>{syncingNotion ? 'Syncing...' : 'Sync Library Now'}</span>
-            </button>
-            <button
-              type="button"
-              className="setup-btn-secondary"
-              onClick={handleSaveNotionSettings}
-              style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Save size={14} />
-              <span>Save Settings</span>
-            </button>
-          </div>
-
-          {notionTestResult && (
-            <div
-              className="setup-info-box"
-              style={{
-                marginTop: '12px',
-                background: notionTestResult.success
-                  ? 'rgba(16, 185, 129, 0.1)'
-                  : 'rgba(239, 68, 68, 0.1)',
-                borderColor: notionTestResult.success
-                  ? 'rgba(16, 185, 129, 0.3)'
-                  : 'rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {notionTestResult.success ? (
-                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
-              ) : (
-                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
-              )}
-              <span style={{ fontSize: '13px' }}>{notionTestResult.message}</span>
-            </div>
-          )}
-
-          {notionSyncResult && (
-            <div
-              className={`setup-info-box`}
-              style={{
-                marginTop: '12px',
-                background: notionSyncResult.startsWith('✅')
-                  ? 'rgba(16, 185, 129, 0.1)'
-                  : 'rgba(239, 68, 68, 0.1)',
-                borderColor: notionSyncResult.startsWith('✅')
-                  ? 'rgba(16, 185, 129, 0.3)'
-                  : 'rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {notionSyncResult.startsWith('✅') ? (
-                <CheckCircle2 size={16} style={{ color: 'var(--accent-emerald)' }} />
-              ) : (
-                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
-              )}
-              <span style={{ fontSize: '13px' }}>{notionSyncResult}</span>
-            </div>
-          )}
-
-          <div className="setup-info-box" style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
-            <strong>How it works:</strong>
-            <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', lineHeight: 1.7 }}>
-              <li>Database properties are auto-provisioned: Sparkkeep ID (number), Card Type, Horizon, Status, Tags, Source URL, Created At, Updated At, Researched.</li>
-              <li>Upsert is idempotent via <strong>Sparkkeep ID</strong> property — re-syncing updates the same page.</li>
-              <li>Content rendered as Notion blocks: headings, paragraphs, lists, checkboxes, code blocks, callouts for Research Dossier.</li>
-              <li>Long text auto-chunked at 2,000 chars; blocks batched at 100 per API call.</li>
-              <li>Rate limits handled with exponential backoff.</li>
-            </ul>
-          </div>
-        </CollapsibleSection>
-
-      </div>
-
-      <div className="settings-group" role="group" aria-labelledby="settings-group-export-syndication">
-        <div className="settings-group-header">
-          <div className="settings-group-heading">
-            <Share2 size={20} className="settings-group-icon" aria-hidden="true" />
-            <h2 className="settings-group-title" id="settings-group-export-syndication">Export & Syndication</h2>
-          </div>
-          <p className="settings-group-desc">Outbound: Sparkkeep publishes your library to readers and feeds.</p>
-        </div>
-
-        <CollapsibleSection
-          slug="library-export"
-          expanded={!collapsedSections.has('library-export')}
-          onToggle={toggleSection}
-          header={
-            <div className="settings-section-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Download size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('library-export')}>Data Sovereignty & Full Library Export</h3>
-              </div>
-              <span className="settings-section-desc">
-                Download your entire library directly in your browser. Zero vendor lock-in guaranteed.
-              </span>
-            </div>
-          }
-        >
-
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
-            <button
-              type="button"
-              className="setup-btn-secondary"
-              onClick={() => api.downloadLibraryExport('json')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 14px', borderRadius: '10px', cursor: 'pointer' }}
-            >
-              <FileCode size={15} />
-              <span>Download Full Library (.JSON)</span>
-            </button>
-            <button
-              type="button"
-              className="setup-btn-secondary"
-              onClick={() => api.downloadLibraryExport('zip')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 14px', borderRadius: '10px', cursor: 'pointer' }}
-            >
-              <FileArchive size={15} />
-              <span>Download Markdown Archive (.ZIP)</span>
-            </button>
-          </div>
-        </CollapsibleSection>
-
-
-        <CollapsibleSection
-          slug="outbox-feed"
-          style={{ marginTop: '28px' }}
-          expanded={!collapsedSections.has('outbox-feed')}
-          onToggle={toggleSection}
-          header={
-            <div className="settings-section-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Rss size={18} style={{ color: 'var(--accent)' }} />
-                <h3 {...headingProps('outbox-feed')}>Outbox RSS Feed</h3>
-              </div>
-              <span className="settings-section-desc">
-                Authenticated, filterable RSS 2.0 feed of your outbox cards with full research dossiers. Use with feed readers, automation tools, or custom dashboards.
-              </span>
-            </div>
-          }
-        >
-
-          <div className="setup-info-box" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '240px' }}>
-                <Rss size={20} style={{ color: 'var(--accent)' }} />
-                <div>
-                  <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>Feed Token</strong>
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
-                    {outboxToken || 'Not generated'}
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={handleLoadOutboxToken}
-                  disabled={loadingToken}
-                  style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
-                >
-                  {loadingToken ? 'Loading...' : outboxToken ? 'Show Token' : 'Generate Token'}
-                </button>
-                {outboxToken && !showFullToken && (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => setShowFullToken(true)}
-                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
-                  >
-                    <Eye size={14} /> Reveal
-                  </button>
-                )}
-                {outboxToken && showFullToken && (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => setShowFullToken(false)}
-                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
-                  >
-                    <EyeOff size={14} /> Hide
-                  </button>
-                )}
-                {showFullToken && outboxToken && (
-                  <button
-                    type="button"
-                    className="setup-btn-primary"
-                    onClick={() => copyToClipboard(outboxToken, 'outbox-token', 'Feed token')}
-                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    {copiedId === 'outbox-token' ? <Check size={14} /> : <Copy size={14} />}
-                    <span>{copiedId === 'outbox-token' ? 'Copied' : 'Copy Token'}</span>
-                  </button>
-                )}
-                {outboxToken && (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={handleRegenerateOutboxToken}
-                    disabled={regeneratingToken}
-                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
-                  >
-                    {regeneratingToken ? (
-                      <RotateCcw size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                    ) : (
-                      <>
-                        <RotateCcw size={14} />
-                        <span>Regenerate</span>
-                      </>
-                    )}
-                  </button>
-                )}
-                {feedUrl && (
-                  <button
-                    type="button"
-                    className="setup-btn-primary"
-                    onClick={() => copyToClipboard(feedUrl, 'feed-url', 'Feed URL')}
-                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    {copiedId === 'feed-url' ? <Check size={14} /> : <Link2 size={14} />}
-                    <span>{copiedId === 'feed-url' ? 'Copied' : 'Copy Feed URL'}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {showFullToken && outboxToken && feedUrl && (
-              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginTop: '4px' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '8px' }}>
-                  <strong>Feed URL:</strong> <code style={{ color: 'var(--accent)' }}>{feedUrl}</code>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-                  <a href={`${feedUrl}&status=doing,done`} target="_blank" rel="noopener noreferrer" className="filter-link">status=doing,done</a>
-                  <a href={`${feedUrl}&type=article`} target="_blank" rel="noopener noreferrer" className="filter-link">type=article</a>
-                  <a href={`${feedUrl}&research_only=1`} target="_blank" rel="noopener noreferrer" className="filter-link">research_only=1</a>
-                  <a href={`${feedUrl}&limit=50`} target="_blank" rel="noopener noreferrer" className="filter-link">limit=50</a>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-                  <strong>Available filters:</strong>
-                  <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px' }}>
-                    <li><code>status</code> — comma-separated: <code>inbox</code>, <code>review</code>, <code>to-do</code>, <code>in-progress</code>, <code>done</code>, <code>shelved</code>, <code>dismissed</code></li>
-                    <li><code>type</code> — comma-separated: <code>article</code>, <code>video</code>, <code>tool</code>, <code>repo</code>, <code>book</code>, <code>guide</code>, <code>product</code>, <code>place</code>, <code>idea</code>, <code>claim</code>, <code>tutorial</code>, <code>paper</code>, <code>company</code>, <code>quote</code>, <code>other</code></li>
-                    <li><code>research_only</code> — <code>1</code> or <code>true</code> to include only cards with completed research</li>
-                    <li><code>since</code> — RFC3339 timestamp (e.g., <code>2024-01-15T00:00:00Z</code>)</li>
-                    <li><code>limit</code> — max items (default 100, max 100)</li>
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            {tokenError && (
-              <div style={{ color: 'var(--color-error, #ef4444)', fontSize: '12px', marginTop: '8px' }}>
-                {tokenError}
-              </div>
-            )}
-          </div>
-        </CollapsibleSection>
-
-
-      </div>
-
       <div className="settings-group" role="group" aria-labelledby="settings-group-automation-testing">
         <div className="settings-group-header">
           <div className="settings-group-heading">
@@ -2035,6 +1852,193 @@ echo "Saved to Sparkkeep"`;
 
 
       </div>
+
+      <div className="settings-group" role="group" aria-labelledby="settings-group-export-syndication">
+        <div className="settings-group-header">
+          <div className="settings-group-heading">
+            <Share2 size={20} className="settings-group-icon" aria-hidden="true" />
+            <h2 className="settings-group-title" id="settings-group-export-syndication">Export & Syndication</h2>
+          </div>
+          <p className="settings-group-desc">Outbound: Sparkkeep publishes your library to readers and feeds.</p>
+        </div>
+
+        <CollapsibleSection
+          slug="library-export"
+          expanded={!collapsedSections.has('library-export')}
+          onToggle={toggleSection}
+          header={
+            <div className="settings-section-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Download size={18} style={{ color: 'var(--accent)' }} />
+                <h3 {...headingProps('library-export')}>Data Sovereignty & Full Library Export</h3>
+              </div>
+              <span className="settings-section-desc">
+                Download your entire library directly in your browser. Zero vendor lock-in guaranteed.
+              </span>
+            </div>
+          }
+        >
+
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+            <button
+              type="button"
+              className="setup-btn-secondary"
+              onClick={() => api.downloadLibraryExport('json')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 14px', borderRadius: '10px', cursor: 'pointer' }}
+            >
+              <FileCode size={15} />
+              <span>Download Full Library (.JSON)</span>
+            </button>
+            <button
+              type="button"
+              className="setup-btn-secondary"
+              onClick={() => api.downloadLibraryExport('zip')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 14px', borderRadius: '10px', cursor: 'pointer' }}
+            >
+              <FileArchive size={15} />
+              <span>Download Markdown Archive (.ZIP)</span>
+            </button>
+          </div>
+        </CollapsibleSection>
+
+
+        <CollapsibleSection
+          slug="outbox-feed"
+          style={{ marginTop: '28px' }}
+          expanded={!collapsedSections.has('outbox-feed')}
+          onToggle={toggleSection}
+          header={
+            <div className="settings-section-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Rss size={18} style={{ color: 'var(--accent)' }} />
+                <h3 {...headingProps('outbox-feed')}>Outbox RSS Feed</h3>
+              </div>
+              <span className="settings-section-desc">
+                Authenticated, filterable RSS 2.0 feed of your outbox cards with full research dossiers. Use with feed readers, automation tools, or custom dashboards.
+              </span>
+            </div>
+          }
+        >
+
+          <div className="setup-info-box" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '240px' }}>
+                <Rss size={20} style={{ color: 'var(--accent)' }} />
+                <div>
+                  <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>Feed Token</strong>
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                    {outboxToken || 'Not generated'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleLoadOutboxToken}
+                  disabled={loadingToken}
+                  style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                >
+                  {loadingToken ? 'Loading...' : outboxToken ? 'Show Token' : 'Generate Token'}
+                </button>
+                {outboxToken && !showFullToken && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setShowFullToken(true)}
+                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                  >
+                    <Eye size={14} /> Reveal
+                  </button>
+                )}
+                {outboxToken && showFullToken && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setShowFullToken(false)}
+                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                  >
+                    <EyeOff size={14} /> Hide
+                  </button>
+                )}
+                {showFullToken && outboxToken && (
+                  <button
+                    type="button"
+                    className="setup-btn-primary"
+                    onClick={() => copyToClipboard(outboxToken, 'outbox-token', 'Feed token')}
+                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    {copiedId === 'outbox-token' ? <Check size={14} /> : <Copy size={14} />}
+                    <span>{copiedId === 'outbox-token' ? 'Copied' : 'Copy Token'}</span>
+                  </button>
+                )}
+                {outboxToken && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleRegenerateOutboxToken}
+                    disabled={regeneratingToken}
+                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                  >
+                    {regeneratingToken ? (
+                      <RotateCcw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      <>
+                        <RotateCcw size={14} />
+                        <span>Regenerate</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                {feedUrl && (
+                  <button
+                    type="button"
+                    className="setup-btn-primary"
+                    onClick={() => copyToClipboard(feedUrl, 'feed-url', 'Feed URL')}
+                    style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    {copiedId === 'feed-url' ? <Check size={14} /> : <Link2 size={14} />}
+                    <span>{copiedId === 'feed-url' ? 'Copied' : 'Copy Feed URL'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {showFullToken && outboxToken && feedUrl && (
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginTop: '4px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '8px' }}>
+                  <strong>Feed URL:</strong> <code style={{ color: 'var(--accent)' }}>{feedUrl}</code>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                  <a href={`${feedUrl}&status=doing,done`} target="_blank" rel="noopener noreferrer" className="filter-link">status=doing,done</a>
+                  <a href={`${feedUrl}&type=article`} target="_blank" rel="noopener noreferrer" className="filter-link">type=article</a>
+                  <a href={`${feedUrl}&research_only=1`} target="_blank" rel="noopener noreferrer" className="filter-link">research_only=1</a>
+                  <a href={`${feedUrl}&limit=50`} target="_blank" rel="noopener noreferrer" className="filter-link">limit=50</a>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: 1.6 }}>
+                  <strong>Available filters:</strong>
+                  <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px' }}>
+                    <li><code>status</code> — comma-separated: <code>inbox</code>, <code>review</code>, <code>to-do</code>, <code>in-progress</code>, <code>done</code>, <code>shelved</code>, <code>dismissed</code></li>
+                    <li><code>type</code> — comma-separated: <code>article</code>, <code>video</code>, <code>tool</code>, <code>repo</code>, <code>book</code>, <code>guide</code>, <code>product</code>, <code>place</code>, <code>idea</code>, <code>claim</code>, <code>tutorial</code>, <code>paper</code>, <code>company</code>, <code>quote</code>, <code>other</code></li>
+                    <li><code>research_only</code> — <code>1</code> or <code>true</code> to include only cards with completed research</li>
+                    <li><code>since</code> — RFC3339 timestamp (e.g., <code>2024-01-15T00:00:00Z</code>)</li>
+                    <li><code>limit</code> — max items (default 100, max 100)</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {tokenError && (
+              <div style={{ color: 'var(--color-error, #ef4444)', fontSize: '12px', marginTop: '8px' }}>
+                {tokenError}
+              </div>
+            )}
+          </div>
+        </CollapsibleSection>
+
+
+      </div>
+
     </div>
   );
 };
