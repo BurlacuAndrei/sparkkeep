@@ -4,6 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { en } from './en';
+import { ro } from './ro';
 import { translate } from './translate';
 import type {
   Catalog,
@@ -34,7 +35,7 @@ export const locales: LocaleOption[] = [
  * Registered catalogs. A missing entry falls back to English, so a locale can
  * be offered before its catalog lands.
  */
-const catalogs: Partial<Record<Locale, Catalog>> = { en };
+const catalogs: Partial<Record<Locale, Catalog>> = { en, ro };
 
 function isLocale(value: string | null): value is Locale {
   return locales.some((option) => option.code === value);
@@ -43,13 +44,13 @@ function isLocale(value: string | null): value is Locale {
 function detectLocale(): Locale {
   if (typeof window === 'undefined') return 'en';
   try {
-    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY)?.toLowerCase() ?? null;
     if (isLocale(stored)) return stored;
   } catch {
     // Fallback if localStorage is inaccessible
   }
   const browser = typeof navigator !== 'undefined' ? navigator.language : '';
-  const prefix = browser.split('-')[0];
+  const prefix = browser.split('-')[0].toLowerCase();
   return isLocale(prefix) ? prefix : 'en';
 }
 

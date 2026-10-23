@@ -25,6 +25,7 @@ import {
   ChannelsTab,
   SecurityTab,
   IntegrationsTab,
+  LanguageSelector,
   DEFAULT_TOKEN_CAPS,
 } from './settings';
 
@@ -687,6 +688,10 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                           <option value="reduced">Reduced Blur & Motion</option>
                         </select>
                       </div>
+                    </div>
+
+                    <div className="settings-section">
+                      <LanguageSelector />
                     </div>
 
                     <div className="settings-section">

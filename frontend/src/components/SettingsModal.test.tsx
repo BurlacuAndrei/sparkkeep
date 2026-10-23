@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { SettingsModal } from './SettingsModal';
 import { ThemeProvider } from '../context/ThemeContext';
+import { LocaleProvider } from '../i18n';
 
 // Mock API endpoints used by SettingsModal
 vi.mock('../api', async () => {
@@ -72,7 +73,11 @@ describe('SettingsModal Unified Layout & Navigation UX', () => {
   const mockShowToast = vi.fn();
 
   const renderWithTheme = (ui: React.ReactElement) => {
-    return render(<ThemeProvider defaultTheme="dark">{ui}</ThemeProvider>);
+    return render(
+      <ThemeProvider defaultTheme="dark">
+        <LocaleProvider locale="en">{ui}</LocaleProvider>
+      </ThemeProvider>
+    );
   };
 
   beforeEach(() => {
@@ -207,7 +212,11 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
   const mockShowToast = vi.fn();
 
   const renderWithTheme = (ui: React.ReactElement) => {
-    return render(<ThemeProvider defaultTheme="dark">{ui}</ThemeProvider>);
+    return render(
+      <ThemeProvider defaultTheme="dark">
+        <LocaleProvider locale="en">{ui}</LocaleProvider>
+      </ThemeProvider>
+    );
   };
 
   beforeEach(() => {

@@ -83,11 +83,43 @@ describe('LocaleProvider', () => {
     expect(result.current.locale).toBe('ro');
   });
 
-  it('falls back to English catalog when the locale catalog is absent', () => {
+  it('normalizes a stored locale to lowercase', () => {
+    localStorage.setItem('sparkkeep_locale', 'RO');
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(result.current.locale).toBe('ro');
+  });
+
+  it('prefers a stored locale over the browser language', () => {
+    localStorage.setItem('sparkkeep_locale', 'en');
+    Object.defineProperty(navigator, 'language', { value: 'ro-RO', configurable: true });
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(result.current.locale).toBe('en');
+  });
+
+  it('ignores an invalid stored locale and falls through to the browser', () => {
+    localStorage.setItem('sparkkeep_locale', 'de');
+    Object.defineProperty(navigator, 'language', { value: 'ro-RO', configurable: true });
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(result.current.locale).toBe('ro');
+  });
+
+  it('applies documentElement.lang on mount', () => {
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(document.documentElement.lang).toBe(result.current.locale);
+  });
+
+  it('detects the browser language prefix case-insensitively', () => {
+    Object.defineProperty(navigator, 'language', { value: 'RO-md', configurable: true });
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(result.current.locale).toBe('ro');
+  });
+
+  it('uses the Romanian catalog when the locale is stored', () => {
     localStorage.setItem('sparkkeep_locale', 'ro');
     const { result } = renderHook(() => useLocale(), { wrapper });
     expect(result.current.locale).toBe('ro');
-    expect(result.current.t('common.appName')).toBe('Sparkkeep');
+    expect(result.current.t('common.language')).toBe('Limbă');
+    expect(result.current.t('settings.appearance.language')).toBe('Limba interfeței');
   });
 
   it('detects the browser language prefix', () => {
