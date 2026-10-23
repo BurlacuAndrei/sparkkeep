@@ -12,7 +12,14 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Card, Playbook, PlaybookStep, CustomStepConfig, StepLibraryTemplate } from '../../types';
-import { CORE_STEP_DESCRIPTIONS, STEP_STAGE_LABELS, UserSavedStepTemplate } from './constants';
+import { useLocale } from '../../i18n';
+import { enumLabel } from '../../utils/cardEnumLabels';
+import {
+  PlaybookValidationError,
+  STEP_DESCRIPTION_KEYS,
+  STEP_STAGE_LABELS,
+  UserSavedStepTemplate,
+} from './constants';
 import { StepEditorModal } from './StepEditorModal';
 import { PlaybookHealthInspector } from './PlaybookHealthInspector';
 import { QuickAddPalette } from './QuickAddPalette';
@@ -39,7 +46,7 @@ export interface StepLibraryControls {
 export interface PlaybookCanvasProps {
   playbook: Playbook;
   onChangePlaybook: (updated: Playbook) => void;
-  validationErrors: string[];
+  validationErrors: PlaybookValidationError[];
   expandedSteps: Record<number, boolean>;
   onToggleExpandStep: (idx: number) => void;
   showToast: (msg: string) => void;
@@ -83,6 +90,8 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
   onSaveStepToLibrary,
   onOpenAddStepModal,
 }) => {
+  const { t, tp } = useLocale();
+
   // Resolve grouped vs flat props
   const resolvedCardTypes = platformSettings?.activeCardTypes ?? activeCardTypes ?? [];
   const resolvedIsDefault = platformSettings?.isPlatformDefault ?? isPlatformDefault ?? false;
@@ -106,7 +115,7 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
 
   const insertStepAtIndex = (insertIdx: number, newStep: PlaybookStep) => {
     if (playbook.steps.length >= 12) {
-      showToast('Maximum 12 steps allowed per playbook');
+      showToast(t('playbooks.canvas.toasts.maxSteps'));
       return;
     }
     const steps = [...playbook.steps];
@@ -115,10 +124,13 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
     onChangePlaybook({ ...playbook, steps });
     setActiveInsertIndex(null);
     onToggleExpandStep(insertIdx);
-    showToast(`Inserted step "${newStep.name}" at position ${insertIdx + 1}`);
+    showToast(
+      t('playbooks.canvas.toasts.inserted', { name: newStep.name, position: insertIdx + 1 })
+    );
   };
 
   const handleAddBlankAt = (insertIdx: number, customName?: string) => {
+    // shortcut: persisted playbook data stays English by design (DB/export/LLM prompts).
     const stepName = customName || 'Custom Analysis';
     insertStepAtIndex(insertIdx, {
       position: insertIdx + 1,
@@ -195,25 +207,25 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
       {/* Top Form Fields */}
       <div className="pb-meta-grid">
         <div className="pb-form-field">
-          <label htmlFor="pb-name-input">Playbook Name</label>
+          <label htmlFor="pb-name-input">{t('playbooks.canvas.name')}</label>
           <input
             id="pb-name-input"
             type="text"
             className="input-text"
-            aria-label="Playbook Name"
-            placeholder="e.g. Monetization & Feasibility Deep Dive"
+            aria-label={t('playbooks.canvas.nameAria')}
+            placeholder={t('playbooks.canvas.namePlaceholder')}
             value={playbook.name}
             onChange={(e) => onChangePlaybook({ ...playbook, name: e.target.value })}
           />
         </div>
         <div className="pb-form-field">
-          <label htmlFor="pb-desc-input">Description</label>
+          <label htmlFor="pb-desc-input">{t('playbooks.canvas.description')}</label>
           <input
             id="pb-desc-input"
             type="text"
             className="input-text"
-            aria-label="Description"
-            placeholder="Brief summary of what this research pipeline focuses on"
+            aria-label={t('playbooks.canvas.descAria')}
+            placeholder={t('playbooks.canvas.descPlaceholder')}
             value={playbook.description}
             onChange={(e) => onChangePlaybook({ ...playbook, description: e.target.value })}
           />
@@ -222,7 +234,7 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
 
       {/* Applicable Card Types */}
       <div className="pb-form-field" style={{ marginTop: 12 }}>
-        <label>Applicable Card Types (Auto-select hints)</label>
+        <label>{t('playbooks.canvas.applicableTypes')}</label>
         <div className="pb-card-types-chips">
           {resolvedCardTypes.map((type) => {
             const active = (playbook.card_types || []).includes(type);
@@ -250,14 +262,16 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
         <label className="pb-platform-default-label">
           <input
             type="checkbox"
-            aria-label="Set as Platform Default"
+            aria-label={t('playbooks.canvas.platformDefaultAria')}
             checked={resolvedIsDefault}
             onChange={(e) => resolvedOnDefaultChange(e.target.checked)}
           />
-          <span>Set as Platform Default</span>
+          <span>{t('playbooks.canvas.platformDefault')}</span>
         </label>
         {resolvedIsDefault && (
-          <span className="pb-platform-default-badge">★ Platform Default</span>
+          <span className="pb-platform-default-badge">
+            {t('playbooks.canvas.platformDefaultBadge')}
+          </span>
         )}
       </div>
 
@@ -270,11 +284,11 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
             <div className="pb-validation-box">
               <div className="pb-validation-title">
                 <AlertCircle size={15} />
-                <span>Validation Checklist ({validationErrors.length})</span>
+                <span>{tp('playbooks.canvas.validationTitle', validationErrors.length)}</span>
               </div>
               <ul className="pb-validation-list">
                 {validationErrors.map((err, i) => (
-                  <li key={i}>{err}</li>
+                  <li key={i}>{t(err.key, err.vars)}</li>
                 ))}
               </ul>
             </div>
@@ -284,7 +298,7 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
           <div className="pb-steps-header">
             <div className="pb-steps-title">
               <Layers size={16} />
-              <span>Pipeline Steps ({playbook.steps.length} / 12)</span>
+              <span>{tp('playbooks.canvas.pipelineTitle', playbook.steps.length, { max: 12 })}</span>
             </div>
             <button
               type="button"
@@ -293,7 +307,7 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
               disabled={playbook.steps.length >= 12}
             >
               <Plus size={13} />
-              <span>Add Step</span>
+              <span>{t('playbooks.canvas.addStep')}</span>
             </button>
           </div>
 
@@ -306,11 +320,11 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                 className="pb-inline-inserter-btn"
                 data-testid="inline-step-inserter-0"
                 onClick={() => setActiveInsertIndex(activeInsertIndex === 0 ? null : 0)}
-                title="Insert step at position 1"
-                aria-label="Insert step at position 1"
+                title={t('playbooks.canvas.insertAt', { position: 1 })}
+                aria-label={t('playbooks.canvas.insertAt', { position: 1 })}
               >
                 <Plus size={11} />
-                <span>Insert Step</span>
+                <span>{t('playbooks.canvas.insert')}</span>
               </button>
               {activeInsertIndex === 0 && (
                 <QuickAddPalette
@@ -327,7 +341,8 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
 
             {playbook.steps.map((step, idx) => {
               const isExpanded = !!expandedSteps[idx];
-              const stageLabel = STEP_STAGE_LABELS[step.kind] || 'Synthesis';
+              const rawStage = STEP_STAGE_LABELS[step.kind] || 'Synthesis';
+              const stageLabel = enumLabel(t, 'stage', rawStage.toLowerCase());
               const effectiveToolPolicy =
                 step.config?.tool_policy || (step.kind === 'search' ? 'search' : 'none');
               const maxQueries = step.config?.max_queries ?? 2;
@@ -370,8 +385,8 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                             className="btn-icon"
                             disabled={idx === 0}
                             onClick={() => moveStep(idx, idx - 1)}
-                            title="Move Up"
-                            aria-label={`Move ${step.name} up`}
+                            title={t('playbooks.canvas.moveUp')}
+                            aria-label={t('playbooks.canvas.moveUpAria', { name: step.name })}
                           >
                             <ArrowUp size={12} />
                           </button>
@@ -380,8 +395,8 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                             className="btn-icon"
                             disabled={idx === playbook.steps.length - 1}
                             onClick={() => moveStep(idx, idx + 1)}
-                            title="Move Down"
-                            aria-label={`Move ${step.name} down`}
+                            title={t('playbooks.canvas.moveDown')}
+                            aria-label={t('playbooks.canvas.moveDownAria', { name: step.name })}
                           >
                             <ArrowDown size={12} />
                           </button>
@@ -390,7 +405,7 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                         {/* Enable toggle */}
                         <label
                           className="pb-toggle"
-                          title="Toggle step enabled"
+                          title={t('playbooks.canvas.toggleStep')}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
@@ -406,28 +421,29 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                           <div className="pb-step-line">
                             <strong className="pb-step-name">{step.name}</strong>
                             <span
-                              className={`pb-stage-badge stage-${stageLabel.toLowerCase()}`}
+                              className={`pb-stage-badge stage-${rawStage.toLowerCase()}`}
                               data-testid={`step-stage-badge-${idx}`}
                             >
                               {stageLabel}
                             </span>
-                            <span className={`pb-kind-badge ${step.kind}`}>{step.kind}</span>
+                            <span className={`pb-kind-badge ${step.kind}`}>
+                              {enumLabel(t, 'stepKind', step.kind)}
+                            </span>
                             {effectiveToolPolicy === 'search' ? (
                               <span
                                 className="pb-tool-badge pb-tool-chip search"
                                 data-testid={`step-tool-chip-${idx}`}
-                                title="Web search enabled"
+                                title={t('playbooks.canvas.webSearchTitle')}
                               >
-                                🔍 Web Search ({maxQueries}{' '}
-                                {maxQueries === 1 ? 'query' : 'queries'})
+                                {tp('playbooks.canvas.webSearch', maxQueries)}
                               </span>
                             ) : (
                               <span
                                 className="pb-tool-badge pb-tool-chip reasoning"
                                 data-testid={`step-tool-chip-${idx}`}
-                                title="Source reasoning over existing context"
+                                title={t('playbooks.canvas.reasoningTitle')}
                               >
-                                🧠 Source Reasoning
+                                {t('playbooks.canvas.reasoning')}
                               </span>
                             )}
                           </div>
@@ -435,7 +451,10 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                             {step.config?.instruction
                               ? step.config.instruction.slice(0, 90) +
                                 (step.config.instruction.length > 90 ? '…' : '')
-                              : CORE_STEP_DESCRIPTIONS[step.kind] || ''}
+                              : t(
+                                  STEP_DESCRIPTION_KEYS[step.kind] ||
+                                    'playbooks.stepDescriptions.custom'
+                                )}
                           </p>
                         </div>
 
@@ -448,11 +467,15 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                             type="button"
                             className="btn-icon"
                             onClick={() => onToggleExpandStep(idx)}
-                            title={isExpanded ? 'Collapse config' : 'Edit config'}
+                            title={
+                              isExpanded
+                                ? t('playbooks.canvas.collapse')
+                                : t('playbooks.canvas.editConfig')
+                            }
                             aria-label={
                               isExpanded
-                                ? `Collapse ${step.name} config`
-                                : `Edit ${step.name} config`
+                                ? t('playbooks.canvas.collapseAria', { name: step.name })
+                                : t('playbooks.canvas.editAria', { name: step.name })
                             }
                           >
                             {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -461,8 +484,8 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                             type="button"
                             className="btn-icon btn-danger"
                             onClick={() => removeStep(idx)}
-                            title="Delete step"
-                            aria-label={`Delete ${step.name}`}
+                            title={t('playbooks.canvas.deleteStep')}
+                            aria-label={t('playbooks.canvas.deleteAria', { name: step.name })}
                           >
                             <Trash2 size={13} />
                           </button>
@@ -494,11 +517,11 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                           activeInsertIndex === idx + 1 ? null : idx + 1
                         )
                       }
-                      title={`Insert step at position ${idx + 2}`}
-                      aria-label={`Insert step at position ${idx + 2}`}
+                      title={t('playbooks.canvas.insertAt', { position: idx + 2 })}
+                      aria-label={t('playbooks.canvas.insertAt', { position: idx + 2 })}
                     >
                       <Plus size={11} />
-                      <span>Insert Step</span>
+                      <span>{t('playbooks.canvas.insert')}</span>
                     </button>
                     {activeInsertIndex === idx + 1 && (
                       <QuickAddPalette
@@ -520,16 +543,17 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
 
         {/* RIGHT PANE: Dual Inspector Dock (Health Inspector & Dry-Run Inspector) */}
         <div className="pb-inspector-dock" data-testid="pb-inspector-dock">
-          <div className="pb-inspector-tabs-header" role="tablist" aria-label="Inspector Tabs">
+          <div className="pb-inspector-tabs-header" role="tablist" aria-label={t('playbooks.canvas.tabsAria')}>
             <button
               type="button"
               role="tab"
               aria-selected={activeTab === 'health'}
               className={`pb-inspector-tab-btn ${activeTab === 'health' ? 'active' : ''}`}
               onClick={() => setTab('health')}
+              aria-label={t('playbooks.canvas.healthAria')}
             >
               <ShieldCheck size={14} />
-              <span>Health Inspector</span>
+              <span>{t('playbooks.canvas.healthTab')}</span>
             </button>
             <button
               type="button"
@@ -537,10 +561,10 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
               aria-selected={activeTab === 'dryrun'}
               className={`pb-inspector-tab-btn ${activeTab === 'dryrun' ? 'active' : ''}`}
               onClick={() => setTab('dryrun')}
-              aria-label="Dry-Run Inspector"
+              aria-label={t('playbooks.canvas.dryRunAria')}
             >
               <Eye size={14} />
-              <span>Dry-Run Inspector</span>
+              <span>{t('playbooks.canvas.dryRunTab')}</span>
             </button>
           </div>
 

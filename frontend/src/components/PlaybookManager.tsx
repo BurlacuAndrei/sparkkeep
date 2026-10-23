@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
 import * as api from '../api';
+import { useLocale } from '../i18n';
 import { Card, Playbook, PlaybookStep, StepLibraryTemplate } from '../types';
 import {
   DEFAULT_CARD_TYPES, DEFAULT_LEAN_STARTER_STEPS, PlaybookTemplate,
@@ -25,6 +26,7 @@ export interface PlaybookManagerProps {
 }
 
 export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, cards = [] }) => {
+  const { t, tp } = useLocale();
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [libraryTemplates, setLibraryTemplates] = useState<StepLibraryTemplate[]>([]);
   const [userStepTemplates, setUserStepTemplates] = useState<UserSavedStepTemplate[]>(() => {
@@ -87,7 +89,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
     try {
       await api.patchSettings({ default_playbook_id: newId });
       setDefaultPlaybookId(newId);
-      showToast('Default research playbook updated');
+      showToast(t('playbooks.manager.toasts.defaultUpdated'));
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
@@ -96,7 +98,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
   const handleDuplicate = async (id: number) => {
     try {
       const dup = await api.duplicatePlaybook(id);
-      showToast(`Duplicated playbook: "${dup.name}"`);
+      showToast(t('playbooks.manager.toasts.duplicated', { name: dup.name }));
       await loadData();
       setEditingPlaybook(dup);
       setIsPlatformDefault(false);
@@ -106,10 +108,10 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
   };
 
   const handleDelete = async (id: number, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete playbook "${name}"?`)) return;
+    if (!window.confirm(t('playbooks.manager.deleteConfirm', { name }))) return;
     try {
       await api.deletePlaybook(id);
-      showToast(`Deleted playbook "${name}"`);
+      showToast(t('playbooks.manager.toasts.deleted', { name }));
       await loadData();
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
@@ -126,6 +128,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
   const startCreateNew = () => {
     setEditingPlaybook({
       id: 0,
+      // shortcut: persisted playbook data stays English by design (DB/export/LLM prompts).
       name: 'New Custom Playbook',
       description: '',
       is_builtin: false,
@@ -140,6 +143,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
 
   const handleSelectTemplate = (template: PlaybookTemplate) => {
     setEditingPlaybook((prev) => ({
+      // shortcut: template step payloads and their names stay English by design (DB/export/LLM prompts).
       id: prev?.id || 0, name: template.name, description: template.description,
       is_builtin: false, card_types: [...template.card_types], version: prev?.version || 1,
       steps: JSON.parse(JSON.stringify(template.steps)),
@@ -147,19 +151,19 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
     setIsTemplateGalleryOpen(false);
     setServerError(null);
     setExpandedSteps({});
-    showToast(`Loaded "${template.name}" template`);
+    showToast(t('playbooks.manager.toasts.templateLoaded', { name: template.name }));
   };
 
   const handleCloneBuiltin = (pb: Playbook) => {
     setEditingPlaybook((prev) => ({
-      id: prev?.id || 0, name: `${pb.name} (Clone)`, description: pb.description,
+      id: prev?.id || 0, name: t('playbooks.manager.cloneName', { name: pb.name }), description: pb.description,
       is_builtin: false, card_types: [...(pb.card_types || [])], version: prev?.version || 1,
       steps: JSON.parse(JSON.stringify(pb.steps || [])),
     }));
     setIsTemplateGalleryOpen(false);
     setServerError(null);
     setExpandedSteps({});
-    showToast(`Loaded "${pb.name}" built-in steps`);
+    showToast(t('playbooks.manager.toasts.cloneLoaded', { name: pb.name }));
   };
 
   const validationErrors = useMemo(() => validatePlaybook(editingPlaybook), [editingPlaybook]);
@@ -184,14 +188,17 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
         max_queries: tpl.max_queries || 2,
       },
     });
-    showToast(`Added step "${tpl.name}" from library`);
+    showToast(t('playbooks.manager.toasts.stepAdded', { name: tpl.name }));
   };
 
   const addBlankCustomStep = () => {
+    // shortcut: persisted playbook data stays English by design (DB/export/LLM prompts).
+    const stepName = 'Custom Analysis';
     insertCustomStep({
-      position: (editingPlaybook?.steps.length || 0) + 1, kind: 'custom', name: 'Custom Analysis', enabled: true,
+      position: (editingPlaybook?.steps.length || 0) + 1, kind: 'custom', name: stepName, enabled: true,
       config: {
-        output_heading: 'Custom Analysis', instruction: 'Analyze the card context and extracted sources.',
+        output_heading: stepName,
+        instruction: 'Analyze the card context and extracted sources.',
         tool_policy: 'none', role: 'research_synthesis', inputs: ['capture', 'sources', 'previous_steps'], max_queries: 2,
       },
     });
@@ -205,7 +212,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
       const updated = [...currentList, newTemplate];
       localStorage.setItem('sparkkeep_user_step_library', JSON.stringify(updated));
       setUserStepTemplates(updated);
-      showToast(`Saved "${newTemplate.name}" to step library`);
+      showToast(t('playbooks.manager.toasts.stepSaved', { name: newTemplate.name }));
     } catch (err: unknown) {
       showToast(api.getErrorMessage(err));
     }
@@ -215,7 +222,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
     const updated = userStepTemplates.filter((t) => t.id !== id);
     localStorage.setItem('sparkkeep_user_step_library', JSON.stringify(updated));
     setUserStepTemplates(updated);
-    showToast(`Removed "${name}" from library`);
+    showToast(t('playbooks.manager.toasts.stepRemoved', { name }));
   };
 
   const handleOpenAddStepModal = () => {
@@ -232,26 +239,32 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
   const handleExportJSON = () => {
     if (!editingPlaybook) return;
     exportPlaybookToFile(editingPlaybook);
-    showToast('Playbook JSON exported');
+    showToast(t('playbooks.manager.toasts.exported'));
   };
 
   const handleApplyImport = () => {
     setImportError(null);
-    const { playbook, error } = parseImportedPlaybook(importJsonText, editingPlaybook);
-    if (error || !playbook) {
-      setImportError(error || 'Invalid JSON.');
+    const { playbook, errorKey, errorVars } = parseImportedPlaybook(
+      importJsonText,
+      editingPlaybook
+    );
+    if (errorKey || !playbook) {
+      setImportError(
+        errorKey ? t(errorKey, errorVars) : t('playbooks.manager.invalidJson')
+      );
       return;
     }
     setEditingPlaybook(playbook);
     setIsImportModalOpen(false);
     setImportJsonText('');
-    showToast(`Successfully imported "${playbook.name}"`);
+    showToast(t('playbooks.manager.toasts.imported', { name: playbook.name }));
   };
 
   const handleSave = async () => {
     if (!editingPlaybook) return;
     if (validationErrors.length > 0) {
-      setServerError(validationErrors[0]);
+      const first = validationErrors[0];
+      setServerError(t(first.key, first.vars));
       return;
     }
     setSaving(true);
@@ -262,7 +275,14 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
           ? await api.updatePlaybook(editingPlaybook.id, editingPlaybook)
           : await api.createPlaybook(editingPlaybook);
 
-      showToast(`${editingPlaybook.id > 0 ? 'Saved' : 'Created'} playbook "${savedPlaybook.name}"`);
+      showToast(
+        t(
+          editingPlaybook.id > 0
+            ? 'playbooks.manager.toasts.saved'
+            : 'playbooks.manager.toasts.created',
+          { name: savedPlaybook.name }
+        )
+      );
       const targetId = editingPlaybook.id > 0 ? editingPlaybook.id : savedPlaybook.id;
       if (isPlatformDefault) {
         await api.patchSettings({ default_playbook_id: targetId });
@@ -287,15 +307,13 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
           <div>
             <h3 className="pb-title">
               <BookOpen size={18} className="pb-title-icon" />
-              Research Playbooks
+              {t('playbooks.manager.title')}
             </h3>
-            <p className="pb-subtitle">
-              Customize step sequences, tune research angles, and plug in curated library analyses.
-            </p>
+            <p className="pb-subtitle">{t('playbooks.manager.subtitle')}</p>
           </div>
           <button type="button" className="btn-primary" onClick={startCreateNew}>
             <Plus size={14} />
-            <span>New Playbook</span>
+            <span>{t('playbooks.manager.new')}</span>
           </button>
         </div>
       ) : (
@@ -303,52 +321,61 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
           <div>
             <h3 className="pb-title">
               <Pencil size={18} className="pb-title-icon" />
-              {editingPlaybook.id > 0 ? `Edit: ${editingPlaybook.name}` : 'New Playbook'}
+              {editingPlaybook.id > 0
+                ? t('playbooks.manager.editTitle', { name: editingPlaybook.name })
+                : t('playbooks.manager.newTitle')}
             </h3>
-            <p className="pb-subtitle">
-              Configure metadata, reorder pipeline steps, or add custom prompt modules.
-            </p>
+            <p className="pb-subtitle">{t('playbooks.manager.editSubtitle')}</p>
           </div>
           <div className="pb-actions-group">
             <button
               type="button"
               className="btn-secondary"
               onClick={() => setIsTemplateGalleryOpen(true)}
-              title="Browse curated starter templates or clone a built-in playbook"
-              aria-label="Load Template"
+              title={t('playbooks.manager.loadTemplateTitle')}
+              aria-label={t('playbooks.manager.loadTemplateAria')}
             >
               <Layers size={14} />
-              <span>Load Template</span>
+              <span>{t('playbooks.manager.loadTemplate')}</span>
             </button>
             <button
               type="button"
               className={`btn-secondary ${inspectorTab === 'dryrun' ? 'active' : ''}`}
               onClick={() => setInspectorTab((prev) => (prev === 'dryrun' ? 'health' : 'dryrun'))}
-              title="Toggle Dry-Run Prompt Inspector"
-              aria-label="Dry-Run Inspector"
+              title={t('playbooks.manager.dryRunTitle')}
+              aria-label={t('playbooks.manager.dryRunAria')}
             >
               <Eye size={14} />
-              <span>{inspectorTab === 'dryrun' ? 'Close Preview' : 'Dry-Run Preview'}</span>
+              <span>
+                {inspectorTab === 'dryrun'
+                  ? t('playbooks.manager.closePreview')
+                  : t('playbooks.manager.dryRunPreview')}
+              </span>
             </button>
-            <button type="button" className="btn-secondary" onClick={handleExportJSON} title="Export playbook as JSON file or copy to clipboard">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleExportJSON}
+              title={t('playbooks.manager.exportTitle')}
+            >
               <Download size={14} />
-              <span>Export JSON</span>
+              <span>{t('playbooks.manager.exportJson')}</span>
             </button>
             <button
               type="button"
               className="btn-secondary"
               onClick={() => { setImportError(null); setImportJsonText(''); setIsImportModalOpen(true); }}
-              title="Import playbook from JSON"
+              title={t('playbooks.manager.importTitle')}
             >
               <Upload size={14} />
-              <span>Import JSON</span>
+              <span>{t('playbooks.manager.importJson')}</span>
             </button>
             <button type="button" className="btn-secondary" onClick={() => { setEditingPlaybook(null); setServerError(null); }} disabled={saving}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="button" className="btn-primary" onClick={handleSave} disabled={saving || validationErrors.length > 0}>
               <CheckCircle2 size={14} />
-              <span>{saving ? 'Saving…' : 'Save Playbook'}</span>
+              <span>{saving ? t('common.saving') : t('playbooks.manager.save')}</span>
             </button>
           </div>
         </div>
@@ -364,17 +391,15 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
       {!editingPlaybook && (
         <div className="pb-list-container">
           {loading ? (
-            <div className="pb-empty-state">Loading playbooks…</div>
+            <div className="pb-empty-state">{t('playbooks.manager.loading')}</div>
           ) : playbooks.length === 0 ? (
-            <div className="pb-empty-state">No playbooks found.</div>
+            <div className="pb-empty-state">{t('playbooks.manager.empty')}</div>
           ) : (
             <>
               <div className="pb-default-selector-card">
                 <div className="pb-default-info">
-                  <span className="pb-default-label">Default Playbook for Untyped Cards</span>
-                  <span className="pb-default-sub">
-                    Runs automatically when researching cards without a type-specific playbook.
-                  </span>
+                  <span className="pb-default-label">{t('playbooks.manager.defaultLabel')}</span>
+                  <span className="pb-default-sub">{t('playbooks.manager.defaultSub')}</span>
                 </div>
                 <div style={{ minWidth: '220px', maxWidth: '300px' }}>
                   <CustomSelect
@@ -383,16 +408,20 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                     onChange={(val) => handleDefaultPlaybookChange(parseInt(val, 10))}
                     options={playbooks.map((p) => ({
                       value: String(p.id),
-                      label: `${p.name} ${p.is_builtin ? '(Built-in)' : '(Custom)'}`,
+                      label: `${p.name} ${
+                        p.is_builtin
+                          ? t('playbooks.manager.builtInSuffix')
+                          : t('playbooks.manager.customSuffix')
+                      }`,
                       icon: p.is_builtin ? <Lock size={12} style={{ color: 'var(--accent-indigo)' }} /> : <Sparkles size={12} style={{ color: 'var(--accent-emerald)' }} />,
                     }))}
-                    ariaLabel="Default Playbook for Untyped Cards"
+                    ariaLabel={t('playbooks.manager.defaultAria')}
                     size="sm"
                   />
                 </div>
               </div>
 
-              <div className="pb-section-header">Built-in Playbooks (Read-Only)</div>
+              <div className="pb-section-header">{t('playbooks.manager.builtInSection')}</div>
               <div className="pb-cards-grid">
                 {builtinPlaybooks.map((p) => {
                   const isDefault = (defaultPlaybookId || 1) === p.id;
@@ -402,33 +431,44 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                         <div className="pb-card-badges-group">
                           <div className="pb-card-badge">
                             <Lock size={12} />
-                            <span>Built-in</span>
+                            <span>{t('playbooks.manager.builtInBadge')}</span>
                           </div>
                           {isDefault && (
-                            <span className="pb-card-default-badge" title="Active default playbook for untyped cards">
+                            <span className="pb-card-default-badge" title={t('playbooks.manager.defaultBadgeTitle')}>
                               <Check size={11} />
-                              <span>Default</span>
+                              <span>{t('playbooks.manager.defaultBadge')}</span>
                             </span>
                           )}
                         </div>
-                        <span className="pb-card-steps">{p.steps?.length || 0} steps</span>
+                        <span className="pb-card-steps">{tp('playbooks.manager.steps', p.steps?.length || 0)}</span>
                       </div>
                       <h4 className="pb-card-name">{p.name}</h4>
-                      <p className="pb-card-desc">{p.description || 'Standard deep research pipeline.'}</p>
+                      <p className="pb-card-desc">{p.description || t('playbooks.manager.builtInDesc')}</p>
 
                       {/* Mini-Pipeline Flow Strip */}
                       {p.steps && p.steps.length > 0 && (
                         <div className="pb-card-flow-strip">
                           {p.steps.slice(0, 4).map((s, idx) => (
                             <React.Fragment key={idx}>
-                              <span className="pb-card-flow-badge" title={s.name || s.config?.output_heading || `Step ${idx + 1}`}>
-                                {s.name || s.config?.output_heading || `Step ${idx + 1}`}
+                              <span
+                                className="pb-card-flow-badge"
+                                title={
+                                  s.name ||
+                                  s.config?.output_heading ||
+                                  t('playbooks.manager.stepFallback', { index: idx + 1 })
+                                }
+                              >
+                                {s.name ||
+                                  s.config?.output_heading ||
+                                  t('playbooks.manager.stepFallback', { index: idx + 1 })}
                               </span>
                               {idx < Math.min(p.steps.length, 4) - 1 && <span className="pb-card-flow-arrow">→</span>}
                             </React.Fragment>
                           ))}
                           {p.steps.length > 4 && (
-                            <span className="pb-card-flow-more">+{p.steps.length - 4} more</span>
+                            <span className="pb-card-flow-more">
+                              {tp('playbooks.manager.more', p.steps.length - 4)}
+                            </span>
                           )}
                         </div>
                       )}
@@ -445,9 +485,14 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                       )}
 
                       <div className="pb-card-footer">
-                        <button type="button" className="btn-secondary btn-sm" onClick={() => handleDuplicate(p.id)} title="Duplicate to edit">
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => handleDuplicate(p.id)}
+                          title={t('playbooks.manager.duplicateTitle')}
+                        >
                           <Copy size={12} />
-                          <span>Duplicate</span>
+                          <span>{t('playbooks.manager.duplicate')}</span>
                         </button>
                       </div>
                     </div>
@@ -455,12 +500,12 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                 })}
               </div>
 
-              <div className="pb-section-header" style={{ marginTop: 24 }}>Custom Playbooks</div>
+              <div className="pb-section-header" style={{ marginTop: 24 }}>
+                {t('playbooks.manager.customSection')}
+              </div>
               <div className="pb-cards-grid">
                 {customPlaybooks.length === 0 ? (
-                  <div className="pb-empty-placeholder">
-                    No custom playbooks yet. Duplicate a built-in or click "New Playbook" to start customizing!
-                  </div>
+                  <div className="pb-empty-placeholder">{t('playbooks.manager.noCustom')}</div>
                 ) : (
                   customPlaybooks.map((p) => {
                     const isDefault = (defaultPlaybookId || 1) === p.id;
@@ -470,33 +515,44 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                           <div className="pb-card-badges-group">
                             <div className="pb-card-badge custom">
                               <Sparkles size={12} />
-                              <span>Custom</span>
+                              <span>{t('playbooks.manager.customBadge')}</span>
                             </div>
                             {isDefault && (
-                              <span className="pb-card-default-badge" title="Active default playbook for untyped cards">
+                              <span className="pb-card-default-badge" title={t('playbooks.manager.defaultBadgeTitle')}>
                                 <Check size={11} />
-                                <span>Default</span>
+                                <span>{t('playbooks.manager.defaultBadge')}</span>
                               </span>
                             )}
                           </div>
-                          <span className="pb-card-steps">{p.steps?.length || 0} steps</span>
+                          <span className="pb-card-steps">{tp('playbooks.manager.steps', p.steps?.length || 0)}</span>
                         </div>
                         <h4 className="pb-card-name">{p.name}</h4>
-                        <p className="pb-card-desc">{p.description || 'Custom research workflow'}</p>
+                        <p className="pb-card-desc">{p.description || t('playbooks.manager.customDesc')}</p>
 
                         {/* Mini-Pipeline Flow Strip */}
                         {p.steps && p.steps.length > 0 && (
                           <div className="pb-card-flow-strip">
                             {p.steps.slice(0, 4).map((s, idx) => (
                               <React.Fragment key={idx}>
-                                <span className="pb-card-flow-badge" title={s.name || s.config?.output_heading || `Step ${idx + 1}`}>
-                                  {s.name || s.config?.output_heading || `Step ${idx + 1}`}
+                                <span
+                                  className="pb-card-flow-badge"
+                                  title={
+                                    s.name ||
+                                    s.config?.output_heading ||
+                                    t('playbooks.manager.stepFallback', { index: idx + 1 })
+                                  }
+                                >
+                                  {s.name ||
+                                    s.config?.output_heading ||
+                                    t('playbooks.manager.stepFallback', { index: idx + 1 })}
                                 </span>
                                 {idx < Math.min(p.steps.length, 4) - 1 && <span className="pb-card-flow-arrow">→</span>}
                               </React.Fragment>
                             ))}
                             {p.steps.length > 4 && (
-                              <span className="pb-card-flow-more">+{p.steps.length - 4} more</span>
+                              <span className="pb-card-flow-more">
+                              {tp('playbooks.manager.more', p.steps.length - 4)}
+                            </span>
                             )}
                           </div>
                         )}
@@ -515,12 +571,12 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                         <div className="pb-card-footer">
                           <button type="button" className="btn-secondary btn-sm" onClick={() => startEdit(p)}>
                             <Pencil size={12} />
-                            <span>Edit</span>
+                            <span>{t('playbooks.manager.edit')}</span>
                           </button>
-                          <button type="button" className="btn-secondary btn-sm" onClick={() => handleDuplicate(p.id)} title="Duplicate">
+                          <button type="button" className="btn-secondary btn-sm" onClick={() => handleDuplicate(p.id)} title={t('playbooks.manager.duplicateTitle')}>
                             <Copy size={12} />
                           </button>
-                          <button type="button" className="btn-secondary btn-sm btn-danger" onClick={() => handleDelete(p.id, p.name)} title="Delete">
+                          <button type="button" className="btn-secondary btn-sm btn-danger" onClick={() => handleDelete(p.id, p.name)} title={t('playbooks.manager.deleteTitle')}>
                             <Trash2 size={12} />
                           </button>
                         </div>

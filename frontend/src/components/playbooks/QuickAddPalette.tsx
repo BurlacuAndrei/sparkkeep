@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Sparkles, X, Globe, Brain } from 'lucide-react';
 import { StepLibraryTemplate } from '../../types';
+import { useLocale } from '../../i18n';
 import { UserSavedStepTemplate } from './constants';
 
 export interface QuickAddPaletteProps {
@@ -22,6 +23,7 @@ export const QuickAddPalette: React.FC<QuickAddPaletteProps> = ({
   libraryTemplates = [],
   userStepTemplates = [],
 }) => {
+  const { t } = useLocale();
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredLibrary = useMemo(() => {
@@ -56,14 +58,17 @@ export const QuickAddPalette: React.FC<QuickAddPaletteProps> = ({
         <div className="pb-palette-title-box">
           <Sparkles size={14} className="pb-palette-icon" />
           <span className="pb-palette-title">
-            Insert Step at Position {insertIndex + 1} of {totalSteps + 1}
+            {t('playbooks.palette.title', {
+              position: insertIndex + 1,
+              total: totalSteps + 1,
+            })}
           </span>
         </div>
         <button
           type="button"
           className="btn-icon"
           onClick={onClose}
-          aria-label="Close step palette"
+          aria-label={t('playbooks.palette.closeAria')}
         >
           <X size={13} />
         </button>
@@ -74,8 +79,8 @@ export const QuickAddPalette: React.FC<QuickAddPaletteProps> = ({
         <input
           type="text"
           className="pb-palette-search-input"
-          placeholder="Filter step primitives or type a custom name…"
-          aria-label="Filter step primitives"
+          placeholder={t('playbooks.palette.filterPlaceholder')}
+          aria-label={t('playbooks.palette.filterAria')}
           autoFocus
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -99,8 +104,8 @@ export const QuickAddPalette: React.FC<QuickAddPaletteProps> = ({
           <Plus size={13} />
           <span>
             {searchQuery.trim()
-              ? `Create Blank Custom Step "${searchQuery.trim()}"`
-              : 'Create Blank Custom Step'}
+              ? t('playbooks.palette.createBlankNamed', { name: searchQuery.trim() })
+              : t('playbooks.palette.createBlank')}
           </span>
         </button>
       </div>
@@ -108,7 +113,7 @@ export const QuickAddPalette: React.FC<QuickAddPaletteProps> = ({
       <div className="pb-palette-list" role="listbox">
         {filteredUserTemplates.length > 0 && (
           <div className="pb-palette-group">
-            <span className="pb-palette-group-label">Saved Custom Steps</span>
+            <span className="pb-palette-group-label">{t('playbooks.palette.savedSteps')}</span>
             {filteredUserTemplates.map((tpl) => (
               <button
                 key={tpl.id}
@@ -126,9 +131,9 @@ export const QuickAddPalette: React.FC<QuickAddPaletteProps> = ({
                 </div>
                 <span className="pb-palette-policy-badge">
                   {tpl.tool_policy === 'search' ? (
-                    <><Globe size={10} /> Search</>
+                    <><Globe size={10} /> {t('playbooks.palette.search')}</>
                   ) : (
-                    <><Brain size={10} /> Reasoning</>
+                    <><Brain size={10} /> {t('playbooks.palette.reasoning')}</>
                   )}
                 </span>
               </button>
@@ -138,7 +143,7 @@ export const QuickAddPalette: React.FC<QuickAddPaletteProps> = ({
 
         {filteredLibrary.length > 0 && (
           <div className="pb-palette-group">
-            <span className="pb-palette-group-label">Standard Step Library</span>
+            <span className="pb-palette-group-label">{t('playbooks.palette.standard')}</span>
             {filteredLibrary.map((tpl) => (
               <button
                 key={tpl.id}
@@ -156,9 +161,9 @@ export const QuickAddPalette: React.FC<QuickAddPaletteProps> = ({
                 </div>
                 <span className="pb-palette-policy-badge">
                   {tpl.tool_policy === 'search' ? (
-                    <><Globe size={10} /> Search</>
+                    <><Globe size={10} /> {t('playbooks.palette.search')}</>
                   ) : (
-                    <><Brain size={10} /> Reasoning</>
+                    <><Brain size={10} /> {t('playbooks.palette.reasoning')}</>
                   )}
                 </span>
               </button>
@@ -168,7 +173,7 @@ export const QuickAddPalette: React.FC<QuickAddPaletteProps> = ({
 
         {filteredLibrary.length === 0 && filteredUserTemplates.length === 0 && (
           <div className="pb-palette-empty">
-            No matching step primitives. Press Enter to create a custom step.
+            {t('playbooks.palette.empty')}
           </div>
         )}
       </div>

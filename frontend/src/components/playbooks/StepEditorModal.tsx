@@ -1,12 +1,15 @@
 import React from 'react';
 import { Sparkles, Plus, Trash2, X, Copy, AlertCircle } from 'lucide-react';
 import { Playbook, PlaybookStep, CustomStepConfig, StepLibraryTemplate } from '../../types';
+import { useLocale } from '../../i18n';
 import {
   INPUT_BINDING_OPTIONS,
   getDefaultInputsForStep,
   STEP_PROMPT_STARTERS,
   DEFAULT_PROMPT_STARTERS,
   PLAYBOOK_TEMPLATES,
+  TEMPLATE_I18N_KEYS,
+  STARTER_LABEL_KEYS,
   PlaybookTemplate,
   PlaybookRecipe,
   TemplateDomain,
@@ -25,29 +28,42 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
   onUpdateConfig,
   onSaveToLibrary,
 }) => {
+  const { t, tp } = useLocale();
   const charCount = (step.config?.instruction || '').length;
+  const starterLabel = (label: string) => {
+    const key = STARTER_LABEL_KEYS[label];
+    return key ? t(key) : label;
+  };
+  const bindingLabel = (key: string) => {
+    if (key === 'capture') return t('playbooks.bindings.capture');
+    if (key === 'references') return t('playbooks.bindings.references');
+    if (key === 'sources') return t('playbooks.bindings.sources');
+    return t('playbooks.bindings.previous_steps');
+  };
 
   return (
     <div className="pb-custom-config-drawer pb-inplace-editor">
       <div className="pb-cfg-row">
         <div className="pb-form-field">
-          <label>Step Display Name</label>
+          <label>{t('playbooks.editor.displayName')}</label>
           <input
             type="text"
             className="input-text"
-            aria-label="Step Display Name"
+            aria-label={t('playbooks.editor.displayName')}
             value={step.name}
             onChange={(e) => onUpdateConfig({}, e.target.value)}
           />
         </div>
         <div className="pb-form-field">
-          <label>Report Section Heading</label>
+          <label>{t('playbooks.editor.heading')}</label>
           <input
             type="text"
             className="input-text"
-            aria-label="Report Section Heading"
+            aria-label={t('playbooks.editor.heading')}
             placeholder={
-              step.kind === 'custom' ? 'e.g. Monetization Angle' : step.name || 'Section Heading'
+              step.kind === 'custom'
+                ? t('playbooks.editor.headingPlaceholderCustom')
+                : step.name || t('playbooks.editor.headingPlaceholder')
             }
             value={step.config?.output_heading || ''}
             onChange={(e) => onUpdateConfig({ output_heading: e.target.value })}
@@ -57,18 +73,18 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
 
       <div className="pb-form-field" style={{ marginTop: 10 }}>
         <div className="pb-label-with-count">
-          <label>Instruction / Prompt</label>
+          <label>{t('playbooks.editor.instruction')}</label>
           <span
             className={`pb-char-counter ${charCount > 8000 ? 'overflow' : ''}`}
             data-testid="step-char-counter"
           >
-            {charCount} / 8,000
+            {tp('playbooks.editor.counter', charCount)}
           </span>
         </div>
 
         {/* Quick Prompt Starters */}
         <div className="pb-prompt-starters-row">
-          <span className="pb-prompt-starters-label">Prompt Starters:</span>
+          <span className="pb-prompt-starters-label">{t('playbooks.editor.starters')}</span>
           {(STEP_PROMPT_STARTERS[step.kind] || DEFAULT_PROMPT_STARTERS).map((snip) => (
             <button
               key={snip.label}
@@ -80,7 +96,7 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
                 onUpdateConfig({ instruction: next.slice(0, 8000) });
               }}
             >
-              + {snip.label}
+              + {starterLabel(snip.label)}
             </button>
           ))}
         </div>
@@ -88,8 +104,8 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
         <textarea
           className="input-textarea"
           rows={3}
-          aria-label="Instruction / Prompt"
-          placeholder="Prompt instructions for this step…"
+          aria-label={t('playbooks.editor.instruction')}
+          placeholder={t('playbooks.editor.instructionPlaceholder')}
           value={step.config?.instruction || ''}
           onChange={(e) => onUpdateConfig({ instruction: e.target.value })}
         />
@@ -98,11 +114,11 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
       {/* Tool Policy, Max Queries, LLM Role */}
       <div className="pb-cfg-row" style={{ marginTop: 10 }}>
         <div className="pb-form-field">
-          <label htmlFor="step-tool-policy-select">Tool Policy</label>
+          <label htmlFor="step-tool-policy-select">{t('playbooks.editor.toolPolicy')}</label>
           <select
             id="step-tool-policy-select"
             className="input-select"
-            aria-label="Tool Policy"
+            aria-label={t('playbooks.editor.toolPolicy')}
             value={step.config?.tool_policy || (step.kind === 'search' ? 'search' : 'none')}
             onChange={(e) =>
               onUpdateConfig({
@@ -110,20 +126,20 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
               })
             }
           >
-            <option value="none">None (Reason over existing sources only)</option>
-            <option value="search">Search (Execute live web queries)</option>
+            <option value="none">{t('playbooks.editor.policyNone')}</option>
+            <option value="search">{t('playbooks.editor.policySearch')}</option>
           </select>
         </div>
 
         {(step.config?.tool_policy === 'search' ||
           (!step.config?.tool_policy && step.kind === 'search')) && (
           <div className="pb-form-field">
-            <label htmlFor="step-max-queries-input">Max Search Queries (1–5)</label>
+            <label htmlFor="step-max-queries-input">{t('playbooks.editor.maxQueries')}</label>
             <input
               id="step-max-queries-input"
               type="number"
               className="input-text"
-              aria-label="Max Search Queries"
+              aria-label={t('playbooks.editor.maxQueriesAria')}
               min={1}
               max={5}
               value={step.config?.max_queries ?? 2}
@@ -137,11 +153,11 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
         )}
 
         <div className="pb-form-field">
-          <label htmlFor="step-llm-role-select">LLM Role</label>
+          <label htmlFor="step-llm-role-select">{t('playbooks.editor.role')}</label>
           <select
             id="step-llm-role-select"
             className="input-select"
-            aria-label="LLM Role"
+            aria-label={t('playbooks.editor.role')}
             value={
               step.config?.role ||
               (step.kind === 'plan' ? 'research_plan' : 'research_synthesis')
@@ -152,17 +168,17 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
               })
             }
           >
-            <option value="research_synthesis">Synthesis & Reasoning (Strong model)</option>
-            <option value="research_plan">Planning & Fast (Cheaper model)</option>
+            <option value="research_synthesis">{t('playbooks.editor.roleSynthesis')}</option>
+            <option value="research_plan">{t('playbooks.editor.rolePlanning')}</option>
           </select>
         </div>
       </div>
 
       {/* Input Bindings Chips */}
       <div className="pb-form-field" style={{ marginTop: 10 }}>
-        <label>Input Bindings</label>
+        <label>{t('playbooks.editor.bindings')}</label>
         <div className="pb-input-bindings">
-          {INPUT_BINDING_OPTIONS.map(({ key, label }) => {
+          {INPUT_BINDING_OPTIONS.map(({ key }) => {
             const activeInputs = getDefaultInputsForStep(step);
             const checked = activeInputs.includes(key);
             return (
@@ -173,7 +189,7 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
                 <input
                   type="checkbox"
                   checked={checked}
-                  aria-label={`Input binding ${key}`}
+                  aria-label={t('playbooks.editor.bindingAria', { key })}
                   onChange={() => {
                     const next = checked
                       ? activeInputs.filter((k) => k !== key)
@@ -181,7 +197,7 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
                     onUpdateConfig({ inputs: next });
                   }}
                 />
-                <span>{label}</span>
+                <span>{bindingLabel(key)}</span>
               </label>
             );
           })}
@@ -202,10 +218,10 @@ export const StepEditorModal: React.FC<StepEditorModalProps> = ({
           type="button"
           className="btn-secondary btn-sm"
           onClick={() => onSaveToLibrary(step)}
-          title="Save this step configuration to your custom template library"
+          title={t('playbooks.editor.saveTitle')}
         >
           <Sparkles size={13} />
-          <span>Save to Library</span>
+          <span>{t('playbooks.editor.save')}</span>
         </button>
       </div>
     </div>
@@ -235,6 +251,7 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
   onAddLibraryStep,
   onAddBlankStep,
 }) => {
+  const { t, tp } = useLocale();
   if (!isOpen) return null;
 
   return (
@@ -242,10 +259,8 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
       <div className="pb-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="pb-modal-header">
           <div>
-            <h4 className="pb-modal-title">Add Step to Playbook</h4>
-            <p className="pb-modal-subtitle">
-              Pick a ready-made step from our tuned library or craft a custom blank step.
-            </p>
+            <h4 className="pb-modal-title">{t('playbooks.addStep.title')}</h4>
+            <p className="pb-modal-subtitle">{t('playbooks.addStep.subtitle')}</p>
           </div>
           <button type="button" className="btn-icon" onClick={onClose}>
             <X size={16} />
@@ -259,7 +274,7 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
             onClick={() => onTabChange('library')}
           >
             <Sparkles size={13} />
-            <span>Step Library ({libraryTemplates.length + userStepTemplates.length})</span>
+            <span>{tp('playbooks.addStep.libraryTab', libraryTemplates.length + userStepTemplates.length)}</span>
           </button>
           <button
             type="button"
@@ -267,7 +282,7 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
             onClick={() => onTabChange('blank')}
           >
             <Plus size={13} />
-            <span>Blank Custom Step</span>
+            <span>{t('playbooks.addStep.blankTab')}</span>
           </button>
         </div>
 
@@ -290,7 +305,7 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                       >
                         <Sparkles size={11} />
-                        <span>Custom Templates</span>
+                        <span>{t('playbooks.addStep.customTemplates')}</span>
                       </span>
                       <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
                         ({userStepTemplates.length})
@@ -307,8 +322,8 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
                             <h5 className="pb-lib-name">{tpl.name}</h5>
                             <span className="pb-lib-policy">
                               {tpl.tool_policy === 'search'
-                                ? '🔍 Live Web Search'
-                                : '🧠 Source Reasoning'}
+                                ? t('playbooks.addStep.liveSearch')
+                                : t('playbooks.addStep.reasoning')}
                             </span>
                           </div>
                           <button
@@ -319,15 +334,15 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
                               e.stopPropagation();
                               onDeleteUserTemplate(tpl.id, tpl.name);
                             }}
-                            title="Remove template"
-                            aria-label={`Delete ${tpl.name} template`}
+                            title={t('playbooks.addStep.removeTemplate')}
+                            aria-label={t('playbooks.addStep.deleteAria', { name: tpl.name })}
                           >
                             <Trash2 size={12} />
                           </button>
                         </div>
                         <p className="pb-lib-desc">{tpl.description}</p>
                         <div className="pb-lib-preview">
-                          <strong>Heading:</strong> {tpl.heading}
+                          <strong>{t('playbooks.addStep.heading')}</strong> {tpl.heading}
                         </div>
                         <button
                           type="button"
@@ -335,7 +350,7 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
                           onClick={() => onAddLibraryStep(tpl)}
                         >
                           <Plus size={12} />
-                          <span>Add to Playbook</span>
+                          <span>{t('playbooks.addStep.add')}</span>
                         </button>
                       </div>
                     ))}
@@ -354,7 +369,7 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
                       letterSpacing: '0.04em',
                     }}
                   >
-                    Standard Step Library ({libraryTemplates.length})
+                    {tp('playbooks.addStep.standardLibrary', libraryTemplates.length)}
                   </span>
                 </div>
               )}
@@ -367,14 +382,14 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
                         <h5 className="pb-lib-name">{tpl.name}</h5>
                         <span className="pb-lib-policy">
                           {tpl.tool_policy === 'search'
-                            ? '🔍 Live Web Search'
-                            : '🧠 Source Reasoning'}
+                            ? t('playbooks.addStep.liveSearch')
+                            : t('playbooks.addStep.reasoning')}
                         </span>
                       </div>
                     </div>
                     <p className="pb-lib-desc">{tpl.description}</p>
                     <div className="pb-lib-preview">
-                      <strong>Heading:</strong> {tpl.heading}
+                      <strong>{t('playbooks.addStep.heading')}</strong> {tpl.heading}
                     </div>
                     <button
                       type="button"
@@ -382,7 +397,7 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
                       onClick={() => onAddLibraryStep(tpl)}
                     >
                       <Plus size={12} />
-                      <span>Add to Playbook</span>
+                      <span>{t('playbooks.addStep.add')}</span>
                     </button>
                   </div>
                 ))}
@@ -390,10 +405,7 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
             </div>
           ) : (
             <div className="pb-blank-box">
-              <p>
-                Create a blank custom step that analyzes existing sources or searches the web using
-                a custom LLM prompt instruction.
-              </p>
+              <p>{t('playbooks.addStep.blankBody')}</p>
               <button
                 type="button"
                 className="btn-primary"
@@ -401,7 +413,7 @@ export const AddStepModal: React.FC<AddStepModalProps> = ({
                 onClick={onAddBlankStep}
               >
                 <Plus size={14} />
-                <span>Create Blank Custom Step</span>
+                <span>{t('playbooks.addStep.createBlank')}</span>
               </button>
             </div>
           )}
@@ -438,9 +450,52 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
   onSelectRecipe,
   onCloneBuiltin,
 }) => {
+  const { t, tp } = useLocale();
   const [selectedDomain, setSelectedDomain] = React.useState<TemplateDomain>('All');
 
   if (!isOpen) return null;
+
+  const domainLabel = (domain: TemplateDomain): string => {
+    switch (domain) {
+      case 'All':
+        return t('playbooks.gallery.domains.all');
+      case 'Market Intelligence':
+        return t('playbooks.gallery.domains.market');
+      case 'Due Diligence & Risk':
+        return t('playbooks.gallery.domains.due');
+      case 'Academic & Science':
+        return t('playbooks.gallery.domains.academic');
+      case 'Fast Fact-Check':
+        return t('playbooks.gallery.domains.fact');
+      default:
+        return t('playbooks.gallery.domains.general');
+    }
+  };
+
+  const pillarName = (id: (typeof ALL_PILLARS)[number]['id']): string => {
+    switch (id) {
+      case 'grounding':
+        return t('playbooks.health.pillars.grounding');
+      case 'retrieval':
+        return t('playbooks.health.pillars.retrieval');
+      case 'extraction':
+        return t('playbooks.health.pillars.extraction');
+      case 'verification':
+        return t('playbooks.health.pillars.verification');
+      default:
+        return t('playbooks.health.pillars.delivery');
+    }
+  };
+
+  const templateName = (template: PlaybookTemplate) => {
+    const keys = TEMPLATE_I18N_KEYS[template.id];
+    return keys ? t(keys.name) : template.name;
+  };
+
+  const templateDescription = (template: PlaybookTemplate) => {
+    const keys = TEMPLATE_I18N_KEYS[template.id];
+    return keys ? t(keys.description) : template.description;
+  };
 
   const handleSelect = (template: PlaybookTemplate) => {
     if (onSelectTemplate) {
@@ -464,24 +519,21 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
       >
         <div className="pb-modal-header">
           <div>
-            <h4 className="pb-modal-title">Playbook Template Gallery</h4>
-            <p className="pb-modal-subtitle">
-              Select a domain-tailored research pipeline archetype or clone a built-in playbook into
-              your builder canvas.
-            </p>
+            <h4 className="pb-modal-title">{t('playbooks.gallery.title')}</h4>
+            <p className="pb-modal-subtitle">{t('playbooks.gallery.subtitle')}</p>
           </div>
           <button
             type="button"
             className="btn-icon"
             onClick={onClose}
-            aria-label="Close template gallery"
+            aria-label={t('playbooks.gallery.closeAria')}
           >
             <X size={16} />
           </button>
         </div>
 
         {/* Domain Filter Tabs */}
-        <div className="pb-template-domain-nav" role="tablist" aria-label="Template Domains">
+        <div className="pb-template-domain-nav" role="tablist" aria-label={t('playbooks.gallery.domainsAria')}>
           {TEMPLATE_DOMAINS.map((domain) => {
             const count =
               domain === 'All'
@@ -497,7 +549,7 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                 className={`pb-domain-tab ${isActive ? 'active' : ''}`}
                 onClick={() => setSelectedDomain(domain)}
               >
-                <span>{domain}</span>
+                <span>{domainLabel(domain)}</span>
                 <span className="pb-domain-count">{count}</span>
               </button>
             );
@@ -517,19 +569,21 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                     <span className="pb-lib-icon">{template.icon}</span>
                     <div className="pb-lib-title-box">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <h5 className="pb-lib-name">{template.name}</h5>
-                        <span className="pb-template-domain-badge">{template.domain}</span>
+                        <h5 className="pb-lib-name">{templateName(template)}</h5>
+                        <span className="pb-template-domain-badge">{domainLabel(template.domain)}</span>
                       </div>
-                      <span className="pb-lib-policy">{template.steps.length} Steps</span>
+                      <span className="pb-lib-policy">
+                        {tp('playbooks.gallery.steps', template.steps.length)}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <p className="pb-lib-desc">{template.description}</p>
+                <p className="pb-lib-desc">{templateDescription(template)}</p>
 
                 {/* Step Flow Badges */}
                 <div className="pb-template-flow-strip">
-                  <span className="pb-flow-label">Pipeline:</span>
+                  <span className="pb-flow-label">{t('playbooks.gallery.pipeline')}</span>
                   <div className="pb-flow-badges">
                     {template.steps.map((s, idx) => (
                       <React.Fragment key={idx}>
@@ -544,15 +598,20 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
 
                 {/* Meta Bar: 5-Pillar Readiness, Cost & Latency */}
                 <div className="pb-template-meta-bar">
-                  <div className="pb-template-pillars" title="5-Pillar Pipeline Readiness">
-                    <span className="pb-meta-title">5-Pillars:</span>
+                  <div className="pb-template-pillars" title={t('playbooks.gallery.pillarsTitle')}>
+                    <span className="pb-meta-title">{t('playbooks.gallery.pillars')}</span>
                     {ALL_PILLARS.map((p) => {
                       const isReady = template.pillarsReady.includes(p.id);
                       return (
                         <span
                           key={p.id}
                           className={`pb-pillar-pill ${isReady ? 'ready' : 'missing'}`}
-                          title={`${p.label}: ${isReady ? 'Satisfied' : 'Missing'}`}
+                          title={t('playbooks.gallery.pillarTooltip', {
+                            label: pillarName(p.id),
+                            status: isReady
+                              ? t('playbooks.gallery.satisfied')
+                              : t('playbooks.gallery.missing'),
+                          })}
                         >
                           {p.abbr}
                         </span>
@@ -561,10 +620,10 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                   </div>
 
                   <div className="pb-template-metrics">
-                    <span className="pb-template-metric" title="Estimated execution cost">
+                    <span className="pb-template-metric" title={t('playbooks.gallery.costTitle')}>
                       🪙 {template.estCost}
                     </span>
-                    <span className="pb-template-metric" title="Estimated execution latency">
+                    <span className="pb-template-metric" title={t('playbooks.gallery.latencyTitle')}>
                       ⏱️ {template.estLatency}
                     </span>
                   </div>
@@ -573,7 +632,7 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                 {/* Suited Card Types */}
                 {template.card_types.length > 0 && (
                   <div className="pb-template-ct-row">
-                    <span className="pb-meta-title">Suited for:</span>
+                    <span className="pb-meta-title">{t('playbooks.gallery.suited')}</span>
                     {template.card_types.map((ct) => (
                       <span key={ct} className="pb-template-ct-tag">
                         #{ct}
@@ -586,10 +645,10 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                   type="button"
                   className="btn-primary btn-sm pb-lib-btn pb-template-use-btn"
                   onClick={() => handleSelect(template)}
-                  aria-label={`Use this Template: ${template.name}`}
+                  aria-label={t('playbooks.gallery.useTplAria', { name: templateName(template) })}
                 >
                   <Plus size={13} />
-                  <span>Use this Template</span>
+                  <span>{t('playbooks.gallery.useTpl')}</span>
                 </button>
               </div>
             ))}
@@ -607,7 +666,7 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                   letterSpacing: '0.04em',
                 }}
               >
-                Built-in Playbooks
+                {t('playbooks.gallery.builtinTitle')}
               </div>
               <div className="pb-templates-grid">
                 {builtinPlaybooks.map((pb) => (
@@ -620,15 +679,17 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                         <span className="pb-lib-icon">🏛️</span>
                         <div className="pb-lib-title-box">
                           <h5 className="pb-lib-name">{pb.name}</h5>
-                          <span className="pb-lib-policy">{pb.steps?.length || 0} Steps</span>
+                          <span className="pb-lib-policy">
+                            {tp('playbooks.gallery.steps', pb.steps?.length || 0)}
+                          </span>
                         </div>
                       </div>
                     </div>
                     <p className="pb-lib-desc">
-                      {pb.description || 'System built-in research pipeline.'}
+                      {pb.description || t('playbooks.gallery.builtinDesc')}
                     </p>
                     <div className="pb-template-flow-strip">
-                      <span className="pb-flow-label">Pipeline:</span>
+                      <span className="pb-flow-label">{t('playbooks.gallery.pipeline')}</span>
                       <div className="pb-flow-badges">
                         {pb.steps?.map((s, idx) => (
                           <React.Fragment key={idx}>
@@ -637,7 +698,9 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                               <span className="pb-flow-arrow">→</span>
                             )}
                           </React.Fragment>
-                        )) || <span className="pb-flow-step-badge">No steps</span>}
+                        )) || (
+                          <span className="pb-flow-step-badge">{t('playbooks.gallery.noSteps')}</span>
+                        )}
                       </div>
                     </div>
                     <button
@@ -647,7 +710,7 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                       onClick={() => onCloneBuiltin(pb)}
                     >
                       <Copy size={12} />
-                      <span>Clone Built-in Steps</span>
+                      <span>{t('playbooks.gallery.clone')}</span>
                     </button>
                   </div>
                 ))}
@@ -679,6 +742,7 @@ export const ImportPlaybookModal: React.FC<ImportPlaybookModalProps> = ({
   importError,
   onApplyImport,
 }) => {
+  const { t } = useLocale();
   if (!isOpen) return null;
 
   return (
@@ -690,16 +754,14 @@ export const ImportPlaybookModal: React.FC<ImportPlaybookModalProps> = ({
       >
         <div className="pb-modal-header">
           <div>
-            <h4 className="pb-modal-title">Import Playbook JSON</h4>
-            <p className="pb-modal-subtitle">
-              Paste a valid playbook JSON definition to load it into the builder.
-            </p>
+            <h4 className="pb-modal-title">{t('playbooks.import.title')}</h4>
+            <p className="pb-modal-subtitle">{t('playbooks.import.subtitle')}</p>
           </div>
           <button
             type="button"
             className="btn-icon"
             onClick={onClose}
-            aria-label="Close import modal"
+            aria-label={t('playbooks.import.closeAria')}
           >
             <X size={16} />
           </button>
@@ -713,7 +775,7 @@ export const ImportPlaybookModal: React.FC<ImportPlaybookModalProps> = ({
             </div>
           )}
           <div className="pb-form-field">
-            <label htmlFor="import-json-textarea">Playbook JSON</label>
+            <label htmlFor="import-json-textarea">{t('playbooks.import.label')}</label>
             <textarea
               id="import-json-textarea"
               className="input-textarea"
@@ -722,15 +784,15 @@ export const ImportPlaybookModal: React.FC<ImportPlaybookModalProps> = ({
               placeholder={`{\n  "name": "Exported Pipeline",\n  "description": "...",\n  "card_types": ["tool"],\n  "steps": [\n    {\n      "kind": "custom",\n      "name": "Analysis",\n      "config": { "output_heading": "Analysis" }\n    }\n  ]\n}`}
               value={importJsonText}
               onChange={(e) => onImportJsonChange(e.target.value)}
-              aria-label="Playbook JSON input"
+              aria-label={t('playbooks.import.aria')}
             />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
             <button type="button" className="btn-secondary" onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="button" className="btn-primary" onClick={onApplyImport}>
-              Import and Load
+              {t('playbooks.import.apply')}
             </button>
           </div>
         </div>

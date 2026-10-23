@@ -328,6 +328,75 @@ describe('DigestView', () => {
     expect(downloads).toEqual([]);
   });
 
+  it('exports Romanian headings and body when the UI locale is Romanian', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText, true);
+
+    render(
+      <LocaleProvider locale="ro">
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={mockPopulatedDigest} {...dummyProps} showToast={vi.fn()} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      </LocaleProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Exportă Markdown/i }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+    const markdown = writeText.mock.calls[0][0] as string;
+    expect(markdown).toContain('# 📊 Rezumat de inteligență Sparkkeep');
+    expect(markdown).toContain('**Perioadă:**');
+    expect(markdown).toContain('**Total scântei:**');
+    expect(markdown).toContain('## ⚡ Briefing executiv');
+  });
+
+  it('exports DONE / FINALIZATĂ for harvest cards without a verdict', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText, true);
+    const digestNoVerdict = {
+      ...mockPopulatedDigest,
+      research_harvest: [{ id: 202, title: 'Harvest Without Verdict' } as unknown as Card],
+    };
+
+    const english = render(
+      <LocaleProvider locale="en">
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={digestNoVerdict} {...dummyProps} showToast={vi.fn()} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      </LocaleProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Export Markdown/i }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+    expect(writeText.mock.calls[0][0]).toContain('**DONE**');
+    english.unmount();
+
+    writeText.mockClear();
+    render(
+      <LocaleProvider locale="ro">
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={digestNoVerdict} {...dummyProps} showToast={vi.fn()} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      </LocaleProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Exportă Markdown/i }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+    expect(writeText.mock.calls[0][0]).toContain('**FINALIZATĂ**');
+  });
+
   it('downloads a .md file from the primary action when the clipboard is unavailable', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     stubClipboard(writeText, false);

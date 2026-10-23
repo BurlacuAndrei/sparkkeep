@@ -22,8 +22,13 @@ import {
   Radio,
 } from 'lucide-react';
 import * as api from '../api';
+import { useLocale } from '../i18n';
+import type { Locale } from '../i18n';
+import { enumLabel } from '../utils/cardEnumLabels';
 import { isClipboardAvailable, downloadMarkdown } from '../utils/exportUtils';
 import '../styles/digest-brief.css';
+
+const COUNT_MARKER = '\u0000count\u0000';
 
 interface DigestViewProps {
   digest: DigestData | null;
@@ -36,13 +41,13 @@ interface DigestViewProps {
   onRefresh?: () => void;
 }
 
-function formatDateRange(daysCount: number): string {
+function formatDateRange(daysCount: number, locale: Locale): string {
   const end = new Date();
   const start = new Date();
   start.setDate(end.getDate() - daysCount);
 
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}, ${end.getFullYear()}`;
+  return `${start.toLocaleDateString(locale, opts)} – ${end.toLocaleDateString(locale, opts)}, ${end.getFullYear()}`;
 }
 
 function toIsoDate(date: Date): string {
@@ -65,6 +70,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
   onRetry,
   showToast,
 }) => {
+  const { t, tp, locale } = useLocale();
   const [windowDays, setWindowDays] = useState<number>(7);
   const [customDigest, setCustomDigest] = useState<DigestData | null>(null);
   const [synthesis, setSynthesis] = useState<DigestSynthesisResult | null>(null);
@@ -172,7 +178,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
       const formattedTitle = tag.length > 2 ? tag.charAt(0).toUpperCase() + tag.slice(1) : tag.toUpperCase();
       generated.push({
         title: formattedTitle,
-        summary: `${ids.length} spark${ids.length > 1 ? 's' : ''} tagged with #${tag}`,
+        summary: tp('research.digest.themeTagged', ids.length, { tag }),
         card_ids: ids,
       });
       ids.forEach((id) => usedCardIds.add(id));
@@ -182,14 +188,14 @@ export const DigestView: React.FC<DigestViewProps> = ({
     const leftovers = allCards.filter((c) => !usedCardIds.has(c.id)).map((c) => c.id);
     if (leftovers.length > 0 && generated.length < 4) {
       generated.push({
-        title: 'Exploration & Notes',
-        summary: `${leftovers.length} general capture${leftovers.length > 1 ? 's' : ''} from this period`,
+        title: t('research.digest.explorationNotes'),
+        summary: tp('research.digest.leftoverSummary', leftovers.length),
         card_ids: leftovers,
       });
     }
 
     return generated;
-  }, [synthesis, allCards]);
+  }, [synthesis, allCards, t, tp]);
 
   // Status counts (including to-do!)
   const byStatus = digest?.by_status || {};
@@ -224,9 +230,9 @@ export const DigestView: React.FC<DigestViewProps> = ({
       const res = await api.synthesizeDigest(windowDays);
       if (res.ok) {
         setSynthesis(res);
-        showToast?.('✨ Executive synthesis generated!');
+        showToast?.(t('research.digest.toasts.synthGenerated'));
       } else {
-        showToast?.('Failed to synthesize with AI model');
+        showToast?.(t('research.digest.toasts.synthFailed'));
       }
     } catch (err: unknown) {
       showToast?.(api.getErrorMessage(err));
@@ -276,7 +282,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
   const getChannelDisplayName = (id: string): string => {
     switch (id) {
       case 'all':
-        return 'Integrations';
+        return t('research.digest.integrationsLabel');
       case 'telegram':
         return 'Telegram';
       case 'discord':
@@ -284,7 +290,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
       case 'slack':
         return 'Slack';
       case 'openclaw':
-        return 'OpenClaw Bridge';
+        return t('research.digest.channels.openclaw');
       default:
         return id.charAt(0).toUpperCase() + id.slice(1);
     }
@@ -294,20 +300,20 @@ export const DigestView: React.FC<DigestViewProps> = ({
     const defaultList = [
       {
         id: 'telegram',
-        name: 'Telegram Bot',
-        desc: 'Direct message via bot chat',
+        name: t('research.digest.channels.telegram'),
+        desc: t('research.digest.channels.telegramDesc'),
         icon: <Send size={14} style={{ color: '#0ea5e9', flexShrink: 0 }} />,
       },
       {
         id: 'discord',
-        name: 'Discord Bot',
-        desc: 'Post to configured server channel',
+        name: t('research.digest.channels.discord'),
+        desc: t('research.digest.channels.discordDesc'),
         icon: <MessageSquare size={14} style={{ color: '#5865F2', flexShrink: 0 }} />,
       },
       {
         id: 'slack',
-        name: 'Slack Webhook',
-        desc: 'Post to configured channel webhook',
+        name: t('research.digest.channels.slack'),
+        desc: t('research.digest.channels.slackDesc'),
         icon: <Zap size={14} style={{ color: '#eab308', flexShrink: 0 }} />,
       },
     ];
@@ -316,8 +322,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
     if (openclaw && openclaw.enabled) {
       defaultList.push({
         id: 'openclaw',
-        name: 'OpenClaw Bridge',
-        desc: 'Route via OpenClaw gateway',
+        name: t('research.digest.channels.openclaw'),
+        desc: t('research.digest.channels.openclawDesc'),
         icon: <Radio size={14} style={{ color: '#10b981', flexShrink: 0 }} />,
       });
     }
@@ -330,7 +336,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
         hasStatus: availableChannels.length > 0 && match !== undefined,
       };
     });
-  }, [availableChannels]);
+  }, [availableChannels, t]);
 
   // Handle Omnichannel Digest Push
   const handleSendDigest = async (channelOverride?: string) => {
@@ -340,13 +346,13 @@ export const DigestView: React.FC<DigestViewProps> = ({
       const res = await api.pushDigestToChannel(channelToUse, windowDays);
       if (res.ok) {
         if (channelToUse === 'all') {
-          showToast?.(res.message || '✈️ Digest successfully sent to your integrations!');
+          showToast?.(res.message || t('research.digest.toasts.sendAll'));
         } else {
           const chanName = getChannelDisplayName(channelToUse);
-          showToast?.(res.message || `✈️ Digest successfully sent to ${chanName}!`);
+          showToast?.(res.message || t('research.digest.toasts.sendChannel', { channel: chanName }));
         }
       } else {
-        showToast?.(res.message || 'Failed to send digest to integrations');
+        showToast?.(res.message || t('research.digest.toasts.sendFailed'));
       }
     } catch (err: unknown) {
       showToast?.(api.getErrorMessage(err));
@@ -420,36 +426,45 @@ export const DigestView: React.FC<DigestViewProps> = ({
     };
   }, [isExportMenuOpen]);
 
-  // Build Markdown digest content
+  // Build Markdown digest content.
+  // shortcut: exported headings follow the UI locale; server push stays English until backend i18n lands.
   const buildDigestMarkdown = (): string => {
     const mdLines: string[] = [];
-    mdLines.push(`# 📊 Sparkkeep Intelligence Digest`);
-    mdLines.push(`**Period:** ${formatDateRange(windowDays)}`);
-    mdLines.push(`**Total Sparks:** ${totalSparks} | **Triage Clearance:** ${clearanceRate}% | **Completed Wins:** ${doneCount}`);
+    mdLines.push(`# 📊 ${t('research.digest.md.title')}`);
+    mdLines.push(t('research.digest.md.period', { range: formatDateRange(windowDays, locale) }));
+    mdLines.push(
+      t('research.digest.md.stats', {
+        total: totalSparks,
+        clearance: clearanceRate,
+        done: doneCount,
+      })
+    );
     mdLines.push('');
 
     // Executive briefing
-    mdLines.push(`## ⚡ Executive Briefing`);
+    mdLines.push(`## ⚡ ${t('research.digest.md.briefing')}`);
     if (synthesis?.briefing) {
       mdLines.push(synthesis.briefing);
     } else {
-      mdLines.push(`- Captured ${totalSparks} sparks across ${themes.length} emergent themes.`);
-      mdLines.push(`- Cleared ${decidedCount} items from inbox (${clearanceRate}% clearance).`);
-      mdLines.push(`- ${doneCount} cards completed as weekly wins.`);
+      mdLines.push(`${tp('research.digest.md.captured', totalSparks)} ${tp('research.digest.md.acrossThemes', themes.length)}`);
+      mdLines.push(tp('research.digest.md.cleared', decidedCount, { percent: clearanceRate }));
+      mdLines.push(tp('research.digest.md.completed', doneCount));
       if (researchHarvest.length > 0) {
-        mdLines.push(`- ${researchHarvest.length} deep research investigations concluded.`);
+        mdLines.push(tp('research.digest.md.research', researchHarvest.length));
       }
     }
     mdLines.push('');
 
     // Emergent themes
     if (themes.length > 0) {
-      mdLines.push(`## 🧭 Emergent Themes`);
-      for (const t of themes) {
-        mdLines.push(`### ${t.title} (${t.card_ids?.length || 0} sparks)`);
-        mdLines.push(`${t.summary}`);
-        if (t.card_ids) {
-          for (const id of t.card_ids) {
+      mdLines.push(`## 🧭 ${t('research.digest.md.themes')}`);
+      for (const theme of themes) {
+        mdLines.push(
+          tp('research.digest.md.themeHeading', theme.card_ids?.length || 0, { title: theme.title })
+        );
+        mdLines.push(`${theme.summary}`);
+        if (theme.card_ids) {
+          for (const id of theme.card_ids) {
             const card = cardById.get(id);
             if (card) {
               mdLines.push(`- **${card.title}** [${card.horizon}] ${card.source_url ? `(${card.source_url})` : ''}`);
@@ -462,9 +477,17 @@ export const DigestView: React.FC<DigestViewProps> = ({
 
     // Research Harvest
     if (researchHarvest.length > 0) {
-      mdLines.push(`## 🔬 Deep Research Harvest`);
+      mdLines.push(`## 🔬 ${t('research.digest.md.harvest')}`);
       for (const c of researchHarvest) {
-        mdLines.push(`- **${c.title}** — Verdict: **${(c.research_verdict || 'DONE').toUpperCase()}** (Confidence: ${c.research_confidence || 'medium'})`);
+        mdLines.push(
+          t('research.digest.md.harvestLine', {
+            title: c.title,
+            verdict: c.research_verdict
+              ? enumLabel(t, 'verdict', c.research_verdict).toUpperCase()
+              : enumLabel(t, 'researchStatus', 'done').toUpperCase(),
+            confidence: enumLabel(t, 'confidence', c.research_confidence || 'medium'),
+          })
+        );
       }
       mdLines.push('');
     }
@@ -472,14 +495,14 @@ export const DigestView: React.FC<DigestViewProps> = ({
     return mdLines.join('\n');
   };
 
-  const COPY_FAILED_TOAST = 'Could not copy to clipboard. Use Download .md file instead.';
+  const COPY_FAILED_TOAST = t('research.digest.toasts.copyFailed');
 
   const handleCopyMarkdown = () => {
     try {
       navigator.clipboard
         .writeText(buildDigestMarkdown())
         .then(() => {
-          showToast?.('📋 Markdown digest copied to clipboard!');
+          showToast?.(t('research.digest.toasts.copied'));
           setExportCopied(true);
           setExportCopyFlash(true);
           setTimeout(() => setExportCopyFlash(false), 600);
@@ -497,7 +520,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
   const handleDownloadMarkdown = () => {
     const filename = buildDigestFilename(windowDays);
     downloadMarkdown(buildDigestMarkdown(), filename);
-    showToast?.(`📥 Downloaded ${filename}`);
+    showToast?.(t('research.digest.toasts.downloaded', { filename }));
   };
 
   // Primary action: copy when the clipboard is usable, otherwise download the file
@@ -508,6 +531,22 @@ export const DigestView: React.FC<DigestViewProps> = ({
     } else {
       handleDownloadMarkdown();
     }
+  };
+
+  // Emphasize only the numeric count, leaving the surrounding words plain.
+  const withStrongCount = (
+    text: string,
+    count: number,
+    style?: React.CSSProperties
+  ): React.ReactNode => {
+    const [before, after = ''] = text.split(COUNT_MARKER);
+    return (
+      <>
+        {before}
+        <strong style={style}>{count}</strong>
+        {after}
+      </>
+    );
   };
 
   const toggleDayExpanded = (date: string, defaultExpanded: boolean) => {
@@ -521,9 +560,11 @@ export const DigestView: React.FC<DigestViewProps> = ({
     return (
       <div className="digest-container" style={{ textAlign: 'center', padding: '60px 20px' }}>
         <Calendar size={48} color="var(--text-muted)" style={{ margin: '0 auto 16px' }} />
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-main)' }}>No captures in this window</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-main)' }}>
+          {t('research.digest.emptyTitle')}
+        </h2>
         <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>
-          Sparks captured during the selected {windowDays} days will be analyzed and organized here.
+          {tp('research.digest.emptyBody', windowDays)}
         </p>
         <div style={{ marginTop: 20 }}>
           <select
@@ -534,9 +575,9 @@ export const DigestView: React.FC<DigestViewProps> = ({
               setUserToggledDays({});
             }}
           >
-            <option value={7}>Past 7 Days</option>
-            <option value={14}>Past 14 Days</option>
-            <option value={30}>Past 30 Days</option>
+            <option value={7}>{tp('research.digest.pastDays', 7)}</option>
+            <option value={14}>{tp('research.digest.pastDays', 14)}</option>
+            <option value={30}>{tp('research.digest.pastDays', 30)}</option>
           </select>
         </div>
       </div>
@@ -548,10 +589,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
       {/* 1. Header Bar with Window Controls & Review Ritual */}
       <div className="digest-header-bar">
         <div className="digest-header-title-group">
-          <h1 className="digest-title">Weekly Intelligence Digest</h1>
+          <h1 className="digest-title">{t('research.digest.title')}</h1>
           <div className="digest-date-pill">
             <Calendar size={13} color="#818cf8" />
-            <span>{formatDateRange(windowDays)}</span>
+            <span>{formatDateRange(windowDays, locale)}</span>
           </div>
         </div>
 
@@ -564,9 +605,9 @@ export const DigestView: React.FC<DigestViewProps> = ({
               setUserToggledDays({});
             }}
           >
-            <option value={7}>Past 7 Days</option>
-            <option value={14}>Past 14 Days</option>
-            <option value={30}>Past 30 Days</option>
+            <option value={7}>{tp('research.digest.pastDays', 7)}</option>
+            <option value={14}>{tp('research.digest.pastDays', 14)}</option>
+            <option value={30}>{tp('research.digest.pastDays', 30)}</option>
           </select>
 
           <div className="digest-split-btn-group" ref={channelMenuRef}>
@@ -575,15 +616,21 @@ export const DigestView: React.FC<DigestViewProps> = ({
               className="digest-btn digest-btn-integrations"
               onClick={() => handleSendDigest()}
               disabled={isSendingDigest}
-              title={`Push digest (${windowDays}d) to ${selectedChannel === 'all' ? 'configured integrations' : getChannelDisplayName(selectedChannel)}`}
+              title={t('research.digest.pushTitle', {
+                days: windowDays,
+                channel:
+                  selectedChannel === 'all'
+                    ? t('research.digest.allIntegrations')
+                    : getChannelDisplayName(selectedChannel),
+              })}
             >
               <Send size={13} />
               <span>
                 {isSendingDigest
-                  ? 'Sending…'
+                  ? t('research.digest.sending')
                   : selectedChannel === 'all'
-                  ? 'Send to Integrations'
-                  : `Send to ${getChannelDisplayName(selectedChannel)}`}
+                  ? t('research.digest.send')
+                  : t('research.digest.sendTo', { channel: getChannelDisplayName(selectedChannel) })}
               </span>
             </button>
 
@@ -592,10 +639,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
               className={`digest-btn-integrations-arrow ${isChannelMenuOpen ? 'open' : ''}`}
               onClick={() => setIsChannelMenuOpen((prev) => !prev)}
               disabled={isSendingDigest}
-              aria-label="Select integration channel"
+              aria-label={t('research.digest.selectChannelAria')}
               aria-haspopup="menu"
               aria-expanded={isChannelMenuOpen}
-              title="Choose integration"
+              title={t('research.digest.chooseIntegration')}
             >
               <ChevronDown size={13} className={isChannelMenuOpen ? 'chevron-rotated' : ''} />
             </button>
@@ -603,7 +650,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
             {isChannelMenuOpen && (
               <div className="digest-integrations-dropdown" role="menu">
                 <div className="digest-dropdown-header">
-                  <span>Send Digest Window ({windowDays}d)</span>
+                  <span>{tp('research.digest.windowHeader', windowDays)}</span>
                 </div>
 
                 <button
@@ -615,11 +662,11 @@ export const DigestView: React.FC<DigestViewProps> = ({
                   <div className="digest-dropdown-item-main">
                     <Globe size={14} style={{ color: '#818cf8', flexShrink: 0 }} />
                     <div className="digest-dropdown-item-text">
-                      <span className="channel-title">All Integrations</span>
-                      <span className="channel-desc">Broadcast to all active channels</span>
+                      <span className="channel-title">{t('research.digest.allIntegrations')}</span>
+                      <span className="channel-desc">{t('research.digest.broadcastDesc')}</span>
                     </div>
                   </div>
-                  <span className="channel-badge broadcast">Broadcast</span>
+                  <span className="channel-badge broadcast">{t('research.digest.broadcast')}</span>
                 </button>
 
                 <div className="digest-dropdown-divider" />
@@ -643,7 +690,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
                       </div>
                       {ch.hasStatus && (
                         <span className={`channel-status-pill ${ch.enabled ? 'configured' : 'inactive'}`}>
-                          {ch.enabled ? 'Active' : 'Not setup'}
+                          {ch.enabled ? t('common.active') : t('research.digest.notSetup')}
                         </span>
                       )}
                     </button>
@@ -660,8 +707,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
               onClick={handlePrimaryExport}
               title={
                 clipboardAvailable
-                  ? 'Copy Markdown digest to clipboard'
-                  : 'Download Markdown digest as a .md file'
+                  ? t('research.digest.copyTitle')
+                  : t('research.digest.downloadTitle')
               }
               disabled={exportCopied}
               style={{ position: 'relative', overflow: 'visible' }}
@@ -671,12 +718,12 @@ export const DigestView: React.FC<DigestViewProps> = ({
                 {exportCopied ? (
                   <>
                     <CheckCircle2 size={13} color="#34d399" style={{ animation: 'popIn 0.2s ease-out' }} />
-                    <span>Copied!</span>
+                    <span>{t('research.digest.copied')}</span>
                   </>
                 ) : clipboardAvailable ? (
-                  'Export Markdown'
+                  t('research.digest.exportMarkdown')
                 ) : (
-                  'Download Markdown'
+                  t('research.digest.downloadMarkdown')
                 )}
               </span>
               {exportCopyFlash && (
@@ -696,10 +743,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
               ref={exportArrowRef}
               className={`digest-btn-export-arrow ${isExportMenuOpen ? 'open' : ''}`}
               onClick={() => setIsExportMenuOpen((prev) => !prev)}
-              aria-label="More export options"
+              aria-label={t('research.digest.moreExport')}
               aria-haspopup="menu"
               aria-expanded={isExportMenuOpen}
-              title="More export options"
+              title={t('research.digest.moreExport')}
             >
               <ChevronDown size={13} className={isExportMenuOpen ? 'chevron-rotated' : ''} />
             </button>
@@ -712,7 +759,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
                 onKeyDown={handleExportMenuKeyDown}
               >
                 <div className="digest-dropdown-header" role="presentation">
-                  <span>Export Markdown</span>
+                  <span>{t('research.digest.exportHeader')}</span>
                 </div>
 
                 <button
@@ -726,16 +773,18 @@ export const DigestView: React.FC<DigestViewProps> = ({
                   disabled={!clipboardAvailable}
                   title={
                     clipboardAvailable
-                      ? 'Copy digest Markdown to clipboard'
-                      : 'Clipboard unavailable: requires a secure (HTTPS) connection'
+                      ? t('research.digest.copyDigestTitle')
+                      : t('research.digest.clipboardUnavailable')
                   }
                 >
                   <div className="digest-dropdown-item-main">
                     <Copy size={14} style={{ color: '#818cf8', flexShrink: 0 }} />
                     <div className="digest-dropdown-item-text">
-                      <span className="channel-title">Copy to clipboard</span>
+                      <span className="channel-title">{t('research.digest.copyToClipboard')}</span>
                       <span className="channel-desc">
-                        {clipboardAvailable ? 'Paste into Obsidian, Notion or Logseq' : 'Requires HTTPS connection'}
+                        {clipboardAvailable
+                          ? t('research.digest.pasteInto')
+                          : t('research.digest.requiresHttps')}
                       </span>
                     </div>
                   </div>
@@ -749,12 +798,12 @@ export const DigestView: React.FC<DigestViewProps> = ({
                     setIsExportMenuOpen(false);
                     handleDownloadMarkdown();
                   }}
-                  title="Download digest as a .md file"
+                  title={t('research.digest.downloadFileTitle')}
                 >
                   <div className="digest-dropdown-item-main">
                     <Download size={14} style={{ color: '#38bdf8', flexShrink: 0 }} />
                     <div className="digest-dropdown-item-text">
-                      <span className="channel-title">Download .md file</span>
+                      <span className="channel-title">{t('research.digest.downloadFile')}</span>
                       <span className="channel-desc">{buildDigestFilename(windowDays)}</span>
                     </div>
                   </div>
@@ -770,7 +819,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
         <div className="digest-hero-header">
           <div className="digest-hero-title">
             <Sparkles size={16} color="#818cf8" />
-            <span>Executive Briefing</span>
+            <span>{t('research.digest.executiveBriefing')}</span>
           </div>
 
           <button
@@ -780,7 +829,11 @@ export const DigestView: React.FC<DigestViewProps> = ({
             disabled={isSynthesizing}
           >
             {isSynthesizing ? <RotateCw size={12} className="spin" /> : <Sparkles size={12} />}
-            <span>{isSynthesizing ? 'Synthesizing…' : '✨ Synthesize with AI'}</span>
+            <span>
+              {isSynthesizing
+                ? t('research.digest.synthesizing')
+                : t('research.digest.synthesize')}
+            </span>
           </button>
         </div>
 
@@ -793,24 +846,42 @@ export const DigestView: React.FC<DigestViewProps> = ({
             <li className="digest-hero-bullet-item">
               <span className="digest-hero-bullet-dot">•</span>
               <span>
-                Ingested <strong style={{ color: 'var(--text-main)' }}>{totalSparks} sparks</strong> across{' '}
-                <strong style={{ color: 'var(--accent-indigo)' }}>{themes.length} emergent themes</strong> this window.
+                {withStrongCount(
+                  tp('research.digest.heroIngested', totalSparks, { count: COUNT_MARKER }),
+                  totalSparks,
+                  { color: 'var(--text-main)' }
+                )}{' '}
+                {withStrongCount(
+                  tp('research.digest.heroAcrossThemes', themes.length, { count: COUNT_MARKER }),
+                  themes.length,
+                  { color: 'var(--accent-indigo)' }
+                )}{' '}
+                {t('research.digest.heroThisWindow')}
               </span>
             </li>
             <li className="digest-hero-bullet-item">
               <span className="digest-hero-bullet-dot">•</span>
               <span>
-                Triage funnel cleared <strong style={{ color: '#38bdf8' }}>{clearanceRate}%</strong> of captured items (
-                {decidedCount} decided, {inboxCount} pending triage).
+                {t('research.digest.funnelCleared')}{' '}
+                <strong style={{ color: '#38bdf8' }}>{clearanceRate}%</strong>{' '}
+                {t('research.digest.funnelOfCaptured')} ({tp('research.digest.funnelDecided', decidedCount)},{' '}
+                {tp('research.digest.funnelPending', inboxCount)}).
               </span>
             </li>
             <li className="digest-hero-bullet-item">
               <span className="digest-hero-bullet-dot">•</span>
               <span>
-                Achieved <strong style={{ color: '#34d399' }}>{doneCount} completed wins</strong>.
+                <strong style={{ color: '#34d399' }}>
+                  {tp('research.digest.heroAchieved', doneCount)}
+                </strong>
+                .{' '}
                 {researchHarvest.length > 0 && (
                   <span>
-                    {' '}Concluded <strong style={{ color: '#c084fc' }}>{researchHarvest.length} deep research reports</strong>.
+                    {' '}
+                    <strong style={{ color: '#c084fc' }}>
+                      {tp('research.digest.heroConcluded', researchHarvest.length)}
+                    </strong>
+                    .
                   </span>
                 )}
               </span>
@@ -823,7 +894,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
       <div className="digest-kpi-strip">
         <div className="digest-kpi-card">
           <span className="digest-kpi-label">
-            <span>Total Sparks</span>
+            <span>{t('research.digest.kpiTotal')}</span>
             <Layers size={13} color="#94a3b8" />
           </span>
           <div className="digest-kpi-val-row">
@@ -834,55 +905,58 @@ export const DigestView: React.FC<DigestViewProps> = ({
                   digest.wow_delta_percent >= 0 ? 'digest-kpi-badge-green' : 'digest-kpi-badge-cyan'
                 }`}
               >
-                {digest.wow_delta_percent >= 0 ? `+${digest.wow_delta_percent}%` : `${digest.wow_delta_percent}%`} WoW
+                {digest.wow_delta_percent >= 0 ? `+${digest.wow_delta_percent}%` : `${digest.wow_delta_percent}%`}{' '}
+                {t('research.digest.wow')}
               </span>
             )}
           </div>
           <span className="digest-kpi-sub">
-            {digest.prev_total !== undefined ? `${digest.prev_total} sparks prior window` : 'ingested captures'}
+            {digest.prev_total !== undefined
+              ? tp('research.digest.priorWindow', digest.prev_total)
+              : t('research.digest.ingestedCaptures')}
           </span>
         </div>
 
         <div className="digest-kpi-card">
           <span className="digest-kpi-label">
-            <span>Triage Clearance</span>
+            <span>{t('research.digest.kpiClearance')}</span>
             <TrendingUp size={13} color="#38bdf8" />
           </span>
           <div className="digest-kpi-val-row">
             <span className="digest-kpi-val" style={{ color: '#38bdf8' }}>{clearanceRate}%</span>
             <span className="digest-kpi-badge digest-kpi-badge-cyan">
-              {decidedCount} decided
+              {tp('research.digest.decided', decidedCount)}
             </span>
           </div>
-          <span className="digest-kpi-sub">{inboxCount} awaiting triage</span>
+          <span className="digest-kpi-sub">{tp('research.digest.awaitingTriage', inboxCount)}</span>
         </div>
 
         <div className="digest-kpi-card">
           <span className="digest-kpi-label">
-            <span>Weekly Wins</span>
+            <span>{t('research.digest.kpiWins')}</span>
             <CheckCircle2 size={13} color="#34d399" />
           </span>
           <div className="digest-kpi-val-row">
             <span className="digest-kpi-val" style={{ color: '#34d399' }}>{doneCount}</span>
             <span className="digest-kpi-badge digest-kpi-badge-green">
-              Done
+              {t('research.digest.doneBadge')}
             </span>
           </div>
-          <span className="digest-kpi-sub">closed action loops</span>
+          <span className="digest-kpi-sub">{t('research.digest.closedLoops')}</span>
         </div>
 
         <div className="digest-kpi-card">
           <span className="digest-kpi-label">
-            <span>Research Harvest</span>
+            <span>{t('research.digest.kpiResearch')}</span>
             <Sparkles size={13} color="#c084fc" />
           </span>
           <div className="digest-kpi-val-row">
             <span className="digest-kpi-val" style={{ color: '#c084fc' }}>{researchHarvest.length}</span>
             <span className="digest-kpi-badge digest-kpi-badge-purple">
-              Reports
+              {t('research.digest.reportsBadge')}
             </span>
           </div>
-          <span className="digest-kpi-sub">verdicts & synthesis</span>
+          <span className="digest-kpi-sub">{t('research.digest.verdictsSynthesis')}</span>
         </div>
       </div>
 
@@ -892,7 +966,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
         <div className="digest-themes-section">
           <div className="digest-section-title">
             <Compass size={16} color="#818cf8" />
-            <span>Emergent Themes Radar</span>
+            <span>{t('research.digest.themesTitle')}</span>
           </div>
 
           <div className="digest-themes-list">
@@ -903,7 +977,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
                     {theme.title}
                   </span>
                   <span className="digest-theme-pill-count">
-                    {theme.card_ids?.length || 0} sparks
+                    {tp('research.digest.themeSparks', theme.card_ids?.length || 0)}
                   </span>
                 </div>
                 <div className="digest-theme-desc">{theme.summary}</div>
@@ -929,7 +1003,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
                             className={`digest-verdict-tag digest-verdict-${card.research_verdict}`}
                             style={{ fontSize: 9, padding: '1px 4px' }}
                           >
-                            {card.research_verdict}
+                            {enumLabel(t, 'verdict', card.research_verdict)}
                           </span>
                         )}
                       </button>
@@ -947,12 +1021,12 @@ export const DigestView: React.FC<DigestViewProps> = ({
           <div className="digest-side-card">
             <div className="digest-section-title" style={{ marginBottom: 8 }}>
               <Sparkles size={15} color="#c084fc" />
-              <span>Deep Research Harvest</span>
+              <span>{t('research.digest.harvestTitle')}</span>
             </div>
 
             {researchHarvest.length === 0 ? (
               <div style={{ fontSize: 12, color: '#64748b', padding: '12px 0' }}>
-                No deep research runs concluded in this window. Trigger research during Triage to surface verdicts here.
+                {t('research.digest.harvestEmpty')}
               </div>
             ) : (
               <div>
@@ -972,7 +1046,9 @@ export const DigestView: React.FC<DigestViewProps> = ({
                           : 'digest-verdict-watch'
                       }`}
                     >
-                      {c.research_verdict || 'DONE'}
+                      {c.research_verdict
+                        ? enumLabel(t, 'verdict', c.research_verdict)
+                        : enumLabel(t, 'researchStatus', 'done').toUpperCase()}
                     </span>
                   </div>
                 ))}
@@ -984,31 +1060,31 @@ export const DigestView: React.FC<DigestViewProps> = ({
           <div className="digest-side-card">
             <div className="digest-section-title" style={{ marginBottom: 6 }}>
               <Layers size={15} color="#38bdf8" />
-              <span>Focus Horizon Balance</span>
+              <span>{t('research.digest.horizonTitle')}</span>
             </div>
 
             <div className="digest-horizon-bar">
               <div
                 className="digest-horizon-segment-now"
                 style={{ width: `${nowPct}%` }}
-                title={`Now: ${nowPct}%`}
+                title={t('research.digest.horizonNowTitle', { percent: nowPct })}
               />
               <div
                 className="digest-horizon-segment-next"
                 style={{ width: `${nextPct}%` }}
-                title={`Next: ${nextPct}%`}
+                title={t('research.digest.horizonNextTitle', { percent: nextPct })}
               />
               <div
                 className="digest-horizon-segment-later"
                 style={{ width: `${laterPct}%` }}
-                title={`Later: ${laterPct}%`}
+                title={t('research.digest.horizonLaterTitle', { percent: laterPct })}
               />
             </div>
 
             <div className="digest-horizon-legend">
-              <span style={{ color: '#818cf8' }}>Now ({nowPct}%)</span>
-              <span style={{ color: '#34d399' }}>Next ({nextPct}%)</span>
-              <span style={{ color: '#38bdf8' }}>Later ({laterPct}%)</span>
+              <span style={{ color: '#818cf8' }}>{t('research.digest.horizonNow', { percent: nowPct })}</span>
+              <span style={{ color: '#34d399' }}>{t('research.digest.horizonNext', { percent: nextPct })}</span>
+              <span style={{ color: '#38bdf8' }}>{t('research.digest.horizonLater', { percent: laterPct })}</span>
             </div>
 
             {/* Stale Alert if short-term items haven't moved */}
@@ -1016,7 +1092,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
               <div className="digest-stale-alert">
                 <AlertTriangle size={15} />
                 <span>
-                  <strong>{digest.stale_count} Stale Sparks</strong> in Now (&gt;5 days inactive).
+                  {withStrongCount(
+                    tp('research.digest.stale', digest.stale_count || 0, { count: COUNT_MARKER }),
+                    digest.stale_count || 0
+                  )}
                 </span>
               </div>
             )}
@@ -1028,7 +1107,10 @@ export const DigestView: React.FC<DigestViewProps> = ({
       <div style={{ marginTop: 12 }}>
         <div className="digest-section-title">
           <Calendar size={16} color="#06b6d4" />
-          <span>Day-by-Day Activity Stream {query.trim() ? `(Filtering by "${query}")` : ''}</span>
+          <span>
+            {t('research.digest.activityTitle')}{' '}
+            {query.trim() ? t('research.digest.filteringBy', { query }) : ''}
+          </span>
         </div>
 
         {query.trim() && filteredDays.length === 0 ? (
@@ -1044,7 +1126,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
               marginTop: 8,
             }}
           >
-            No sparks in this activity stream match &ldquo;{query}&rdquo;.
+            {t('research.digest.noMatch', { query })}
           </div>
         ) : (
           <div className="digest-days-accordion">
@@ -1061,7 +1143,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
                     <Calendar size={14} color="var(--accent-cyan)" />
                     <span>{day.date}</span>
                     <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>
-                      ({day.cards.length} card{day.cards.length > 1 ? 's' : ''})
+                      ({tp('research.digest.cards', day.cards.length)})
                     </span>
                   </div>
                   {isExpanded ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}

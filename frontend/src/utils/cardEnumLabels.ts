@@ -5,7 +5,12 @@ export type CardEnumGroup =
   | 'worthiness'
   | 'verdict'
   | 'confidence'
-  | 'claimStatus';
+  | 'claimStatus'
+  | 'researchStatus'
+  | 'stepStatus'
+  | 'stepKind'
+  | 'stage'
+  | 'origin';
 
 /**
  * Translate a known backend enum value (e.g. `high`, `pursue`) and keep the raw

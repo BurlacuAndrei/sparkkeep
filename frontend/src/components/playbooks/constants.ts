@@ -1,4 +1,5 @@
 import { Playbook, PlaybookStep, CustomStepConfig } from '../../types';
+import type { TranslationKey } from '../../i18n';
 
 export interface PillarHealth {
   id: 'grounding' | 'retrieval' | 'extraction' | 'verification' | 'delivery';
@@ -124,6 +125,20 @@ export const CORE_STEP_DESCRIPTIONS: Record<string, string> = {
   verdict: 'Synthesize decision recommendation, confidence, and action items',
   report: 'Compile finalized Markdown briefing with [S#] citations',
   custom: 'User-configured custom research analysis step',
+};
+
+/** Catalog keys for the UI fallback description of a step kind. */
+export const STEP_DESCRIPTION_KEYS: Record<string, TranslationKey> = {
+  ground: 'playbooks.stepDescriptions.ground',
+  resolve_refs: 'playbooks.stepDescriptions.resolve_refs',
+  plan: 'playbooks.stepDescriptions.plan',
+  search: 'playbooks.stepDescriptions.search',
+  read: 'playbooks.stepDescriptions.read',
+  verify_claims: 'playbooks.stepDescriptions.verify_claims',
+  landscape: 'playbooks.stepDescriptions.landscape',
+  verdict: 'playbooks.stepDescriptions.verdict',
+  report: 'playbooks.stepDescriptions.report',
+  custom: 'playbooks.stepDescriptions.custom',
 };
 
 export const STEP_STAGE_LABELS: Record<string, string> = {
@@ -341,6 +356,37 @@ export const PLAYBOOK_TEMPLATES: PlaybookTemplate[] = [
 
 export const PLAYBOOK_RECIPES = PLAYBOOK_TEMPLATES;
 
+/** Catalog keys for gallery display names/descriptions; inserted template payloads stay English. */
+export const TEMPLATE_I18N_KEYS: Record<
+  string,
+  { name: TranslationKey; description: TranslationKey }
+> = {
+  competitor: {
+    name: 'playbooks.gallery.templates.competitor.name',
+    description: 'playbooks.gallery.templates.competitor.description',
+  },
+  due_diligence: {
+    name: 'playbooks.gallery.templates.due_diligence.name',
+    description: 'playbooks.gallery.templates.due_diligence.description',
+  },
+  academic: {
+    name: 'playbooks.gallery.templates.academic.name',
+    description: 'playbooks.gallery.templates.academic.description',
+  },
+  fact_check: {
+    name: 'playbooks.gallery.templates.fact_check.name',
+    description: 'playbooks.gallery.templates.fact_check.description',
+  },
+  deep_dive: {
+    name: 'playbooks.gallery.templates.deep_dive.name',
+    description: 'playbooks.gallery.templates.deep_dive.description',
+  },
+  blank: {
+    name: 'playbooks.gallery.templates.blank.name',
+    description: 'playbooks.gallery.templates.blank.description',
+  },
+};
+
 export interface UserSavedStepTemplate {
   id: string;
   name: string;
@@ -487,31 +533,70 @@ export const DEFAULT_PROMPT_STARTERS: PromptStarter[] = [
   },
 ];
 
+/** Catalog keys for starter pill labels; inserted prompt text stays English. */
+export const STARTER_LABEL_KEYS: Record<string, TranslationKey> = {
+  'Architecture Vectors': 'playbooks.starters.architectureVectors',
+  'Moat & Economics': 'playbooks.starters.moatEconomics',
+  'Risk & Compliance': 'playbooks.starters.riskCompliance',
+  'Competitor Pricing': 'playbooks.starters.competitorPricing',
+  'Benchmarks & Whitepapers': 'playbooks.starters.benchmarksWhitepapers',
+  '2x2 Feature Matrix': 'playbooks.starters.featureMatrix',
+  'Open-Source vs SaaS': 'playbooks.starters.openSourceSaas',
+  'Buy / Build / Partner': 'playbooks.starters.buyBuildPartner',
+  '10-Point Scorecard': 'playbooks.starters.scorecard',
+  'Bear Case Stress-Test': 'playbooks.starters.bearCase',
+  'SWOT Analysis': 'playbooks.starters.swot',
+  'Pricing & Moat': 'playbooks.starters.pricingMoat',
+  'Regulatory & Risk': 'playbooks.starters.regulatoryRisk',
+  'Executive Brief': 'playbooks.starters.executiveBrief',
+  'Context Extraction': 'playbooks.starters.contextExtraction',
+  'Key Entities': 'playbooks.starters.keyEntities',
+  'Primary Sources': 'playbooks.starters.primarySources',
+  'Benchmark Citations': 'playbooks.starters.benchmarkCitations',
+  'Deep Extraction': 'playbooks.starters.deepExtraction',
+  'Evidence Quotes': 'playbooks.starters.evidenceQuotes',
+  'Source Fact-Check': 'playbooks.starters.sourceFactCheck',
+  'Discrepancy Audit': 'playbooks.starters.discrepancyAudit',
+  'Executive Briefing': 'playbooks.starters.executiveBriefing',
+  'Action Roadmap': 'playbooks.starters.actionRoadmap',
+  'Deep Dive Analysis': 'playbooks.starters.deepDiveAnalysis',
+  'Key Findings': 'playbooks.starters.keyFindings',
+};
+
 export function generateStepTemplateId(): string {
   return `user_step_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 }
 
-export function validatePlaybook(playbook: Playbook | null): string[] {
+export interface PlaybookValidationError {
+  key: TranslationKey;
+  vars?: Record<string, string | number>;
+}
+
+export function validatePlaybook(playbook: Playbook | null): PlaybookValidationError[] {
   if (!playbook) return [];
-  const errors: string[] = [];
+  const errors: PlaybookValidationError[] = [];
 
   if (!playbook.name.trim()) {
-    errors.push('Playbook name is required.');
+    errors.push({ key: 'playbooks.validation.nameRequired' });
   }
   if (playbook.steps.length === 0) {
-    errors.push('Playbook must contain at least one step.');
+    errors.push({ key: 'playbooks.validation.stepsRequired' });
   }
   if (playbook.steps.length > 12) {
-    errors.push(`Maximum 12 steps allowed (currently ${playbook.steps.length}).`);
+    errors.push({
+      key: 'playbooks.validation.maxSteps',
+      vars: { count: playbook.steps.length },
+    });
   }
 
   let hasSearchOrRefs = false;
   playbook.steps.forEach((step, idx) => {
     if (step.enabled) {
       if (step.kind === 'read' && !hasSearchOrRefs) {
-        errors.push(
-          `Step ${idx + 1} (${step.name}): "Read" requires "Search" or "Resolve References" before it.`
-        );
+        errors.push({
+          key: 'playbooks.validation.readRequiresSearch',
+          vars: { step: idx + 1, name: step.name },
+        });
       }
       if (step.kind === 'search' || step.kind === 'resolve_refs') {
         hasSearchOrRefs = true;
@@ -519,11 +604,17 @@ export function validatePlaybook(playbook: Playbook | null): string[] {
     }
 
     if ((step.config?.instruction || '').length > 8000) {
-      errors.push(`Step ${idx + 1} (${step.name}): Instruction exceeds 8,000 characters limit.`);
+      errors.push({
+        key: 'playbooks.validation.instructionTooLong',
+        vars: { step: idx + 1, name: step.name },
+      });
     }
 
     if (step.kind === 'custom' && !step.config?.output_heading?.trim()) {
-      errors.push(`Step ${idx + 1} (${step.name}): Output Heading is required.`);
+      errors.push({
+        key: 'playbooks.validation.outputHeadingRequired',
+        vars: { step: idx + 1, name: step.name },
+      });
     }
   });
 
@@ -574,23 +665,29 @@ export function exportPlaybookToFile(playbook: Playbook): void {
   }
 }
 
+export interface PlaybookImportResult {
+  playbook?: Playbook;
+  errorKey?: TranslationKey;
+  errorVars?: Record<string, string>;
+}
+
 export function parseImportedPlaybook(
   jsonText: string,
   prev?: Playbook | null
-): { playbook?: Playbook; error?: string } {
+): PlaybookImportResult {
   if (!jsonText.trim()) {
-    return { error: 'Please paste valid JSON.' };
+    return { errorKey: 'playbooks.importErrors.pasteJson' };
   }
   try {
     const parsed = JSON.parse(jsonText);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return { error: 'Invalid JSON structure: expected an object.' };
+      return { errorKey: 'playbooks.importErrors.invalidStructure' };
     }
     if (!parsed.name || typeof parsed.name !== 'string' || !parsed.name.trim()) {
-      return { error: 'Playbook name is required in JSON.' };
+      return { errorKey: 'playbooks.importErrors.nameRequired' };
     }
     if (!Array.isArray(parsed.steps) || parsed.steps.length === 0) {
-      return { error: 'Playbook must contain a non-empty "steps" array.' };
+      return { errorKey: 'playbooks.importErrors.stepsRequired' };
     }
 
     const normalizedSteps: PlaybookStep[] = parsed.steps.map(
@@ -620,7 +717,8 @@ export function parseImportedPlaybook(
     };
   } catch (err: unknown) {
     return {
-      error: `JSON parse error: ${err instanceof Error ? err.message : String(err)}`,
+      errorKey: 'playbooks.importErrors.parseError',
+      errorVars: { detail: err instanceof Error ? err.message : String(err) },
     };
   }
 }

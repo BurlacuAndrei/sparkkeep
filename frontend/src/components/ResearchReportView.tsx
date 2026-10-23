@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { Card, ResearchItem, ResearchSource, Playbook } from '../types';
 import { fetchCardResearchRuns, triggerResearch, fetchPlaybooks, submitResearchFeedback } from '../api';
+import { useLocale } from '../i18n';
+import { enumLabel } from '../utils/cardEnumLabels';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 
 interface ResearchReportViewProps {
@@ -167,6 +169,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
   onAddActions,
   showToast,
 }) => {
+  const { t, tp, formatDate, formatNumber } = useLocale();
   const [history, setHistory] = useState<ResearchItem[]>([]);
   const [selectedRun, setSelectedRun] = useState<ResearchItem | null>(initialResearch || null);
   const [loading, setLoading] = useState(false);
@@ -228,8 +231,11 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
     setIsPickerOpen(false);
     try {
       const res = await triggerResearch(card.id, playbookId);
-      const pbName = res.playbook?.name ? ` with "${res.playbook.name}"` : '';
-      showToast?.(`Research started${pbName}`);
+      showToast?.(
+        res.playbook?.name
+          ? t('research.report.toasts.startedWith', { name: res.playbook.name })
+          : t('research.report.toasts.started')
+      );
       // Refresh after short delay
       setTimeout(() => {
         fetchCardResearchRuns(card.id).then((res) => {
@@ -239,7 +245,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
         });
       }, 500);
     } catch (err: any) {
-      showToast?.(err.message || 'Failed to trigger research');
+      showToast?.(err.message || t('research.report.errors.trigger'));
       setLoading(false);
     }
   };
@@ -249,9 +255,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
     try {
       await onUpdateCard(card.id, { horizon: horizon as any });
       setAppliedHorizon(true);
-      showToast?.(`Applied horizon: ${horizon}`);
+      showToast?.(t('research.report.toasts.horizonApplied', { horizon: horizonLabel(horizon) }));
     } catch (err: any) {
-      showToast?.(err.message || 'Failed to update horizon');
+      showToast?.(err.message || t('research.report.errors.horizon'));
     }
   };
 
@@ -262,9 +268,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
       tags.forEach((t) => existing.add(t));
       await onUpdateCard(card.id, { tags: Array.from(existing) });
       setAppliedTags(true);
-      showToast?.(`Applied suggested tags`);
+      showToast?.(t('research.report.toasts.tagsApplied'));
     } catch (err: any) {
-      showToast?.(err.message || 'Failed to update tags');
+      showToast?.(err.message || t('research.report.errors.tags'));
     }
   };
 
@@ -273,11 +279,11 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
     const actions = verdict?.next_actions || [];
     const toAdd = actions.filter((_, idx) => selectedActions[idx]);
     if (toAdd.length === 0) {
-      showToast?.('Select at least one action to add');
+      showToast?.(t('research.report.toasts.selectAction'));
       return;
     }
     onAddActions?.(toAdd);
-    showToast?.(`Added ${toAdd.length} action(s) to card`);
+    showToast?.(tp('research.report.toasts.addedActions', toAdd.length));
   };
 
   const handleAddAllActions = () => {
@@ -285,7 +291,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
     const actions = verdict?.next_actions || [];
     if (actions.length === 0) return;
     onAddActions?.(actions);
-    showToast?.(`Added ${actions.length} actions to card`);
+    showToast?.(tp('research.report.toasts.addedActions', actions.length));
   };
 
   const handleFeedback = async (rating: 'thumbs_up' | 'thumbs_down', commentText?: string) => {
@@ -297,9 +303,13 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
       setFeedbackRating(rating);
       setFeedbackSaved(true);
       setSelectedRun(updated);
-      showToast?.(rating === 'thumbs_up' ? 'Feedback recorded: Helpful! 👍' : 'Feedback recorded: Needs improvement 👎');
+      showToast?.(
+        rating === 'thumbs_up'
+          ? t('research.report.toasts.feedbackHelpful')
+          : t('research.report.toasts.feedbackNeedsWork')
+      );
     } catch (err: any) {
-      showToast?.(err.message || 'Failed to submit feedback');
+      showToast?.(err.message || t('research.report.errors.feedback'));
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -314,15 +324,20 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
   const sources = selectedRun?.sources || [];
   const isActive = selectedRun?.status === 'queued' || selectedRun?.status === 'running';
 
+  const horizonLabel = (horizon: string): string => {
+    if (horizon === 'short-term') return t('cards.horizon.short');
+    if (horizon === 'medium-term') return t('cards.horizon.medium');
+    if (horizon === 'long-term') return t('cards.horizon.long');
+    return horizon;
+  };
+
   const recommendation = verdict?.recommendation?.toLowerCase();
   let badgeClass = 'badge-watch';
-  let badgeText = 'WATCH';
+  const badgeText = enumLabel(t, 'verdict', recommendation || 'watch').toUpperCase();
   if (recommendation === 'pursue') {
     badgeClass = 'badge-pursue';
-    badgeText = 'PURSUE';
   } else if (recommendation === 'skip') {
     badgeClass = 'badge-skip';
-    badgeText = 'SKIP';
   }
 
   const scrollToSource = (sourceId: string) => {
@@ -353,7 +368,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <History size={15} color="var(--text-dim)" />
-          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-main)' }}>Research Run:</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-main)' }}>
+            {t('research.report.researchRun')}
+          </span>
           {history.length > 0 ? (
             <select
               className="form-input"
@@ -366,13 +383,19 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             >
               {history.map((run, idx) => (
                 <option key={run.id} value={run.id}>
-                  #{run.id} · {run.status.toUpperCase()} ({new Date(run.created_at).toLocaleDateString()})
-                  {idx === 0 ? ' (Latest)' : ''}
+                  {t('research.report.runOption', {
+                    id: run.id,
+                    status: enumLabel(t, 'researchStatus', run.status).toUpperCase(),
+                    date: formatDate(run.created_at),
+                    latest: idx === 0 ? ` ${t('research.report.latestSuffix')}` : '',
+                  })}
                 </option>
               ))}
             </select>
           ) : (
-            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>None yet</span>
+            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+              {t('research.report.noneYet')}
+            </span>
           )}
         </div>
 
@@ -386,10 +409,14 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                 fontSize: 12,
                 color: 'var(--text-dim)',
               }}
-              title="Total tokens consumed in this run"
+              title={t('research.report.tokensTitle')}
             >
               <Coins size={13} color="var(--color-warning-text, #d97706)" />
-              <span>{selectedRun.tokens.toLocaleString()} tokens</span>
+              <span>
+                {tp('research.report.tokens', selectedRun.tokens, {
+                  tokens: formatNumber(selectedRun.tokens),
+                })}
+              </span>
             </div>
           )}
 
@@ -402,7 +429,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
               style={{ fontSize: 12, padding: '5px 10px' }}
             >
               <RotateCw size={13} className={loading || isActive ? 'spin-slow' : ''} />
-              <span>{isActive ? 'Running...' : 'Re-run Research'}</span>
+              <span>{isActive ? t('research.report.running') : t('research.report.rerun')}</span>
             </button>
             <button
               type="button"
@@ -410,7 +437,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
               onClick={() => setIsPickerOpen((v) => !v)}
               disabled={loading || isActive}
               style={{ fontSize: 12, padding: '5px 8px' }}
-              title="Pick playbook for re-run"
+              title={t('research.report.pickPlaybook')}
             >
               <ChevronDown size={13} />
             </button>
@@ -419,7 +446,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
               <div className="pb-picker-dropdown">
                 <div className="pb-picker-header">
                   <BookOpen size={13} />
-                  <span>Choose Playbook</span>
+                  <span>{t('research.report.choosePlaybook')}</span>
                 </div>
                 <div className="pb-picker-list">
                   {playbooks.map((pb) => (
@@ -432,7 +459,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       <div className="pb-picker-item-main">
                         <span className="pb-picker-name">{pb.name}</span>
                       </div>
-                      <span className="pb-picker-desc">{pb.description || `${pb.steps?.length || 0} steps`}</span>
+                      <span className="pb-picker-desc">
+                        {pb.description || tp('research.report.steps', pb.steps?.length || 0)}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -459,7 +488,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
         <>
           {/* Quick Section Anchor Pills */}
           <div className="research-anchor-pills">
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginRight: 4 }}>Jump to:</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginRight: 4 }}>
+              {t('research.report.jumpTo')}
+            </span>
             {verdict && (
               <button
                 type="button"
@@ -469,7 +500,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
               >
-                Verdict
+                {t('research.report.verdict')}
               </button>
             )}
             {claims.length > 0 && (
@@ -481,7 +512,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
               >
-                Claims ({claims.length})
+                {tp('research.report.claims', claims.length)}
               </button>
             )}
             {landscape.length > 0 && (
@@ -493,7 +524,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
               >
-                Landscape ({landscape.length})
+                {tp('research.report.landscape', landscape.length)}
               </button>
             )}
             {(risks.length > 0 || nextActions.length > 0) && (
@@ -505,7 +536,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
               >
-                Risks & Actions
+                {t('research.report.risksActions')}
               </button>
             )}
             {selectedRun.findings && (
@@ -517,7 +548,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
               >
-                Findings
+                {t('research.report.findings')}
               </button>
             )}
             {sources.length > 0 && (
@@ -529,7 +560,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
               >
-                Sources ({sources.length})
+                {tp('research.report.sources', sources.length)}
               </button>
             )}
           </div>
@@ -560,15 +591,16 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     {badgeText}
                   </span>
                   <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-                    Confidence:{' '}
+                    {t('research.report.confidence')}{' '}
                     <strong style={{ color: 'var(--text-main)', textTransform: 'capitalize' }}>
-                      {verdict.confidence || 'Medium'}
+                      {enumLabel(t, 'confidence', verdict.confidence || 'medium')}
                     </strong>
                   </span>
                 </div>
                 {verdict.for_whom && (
                   <div style={{ fontSize: 12.5, color: 'var(--text-main)' }}>
-                    <span style={{ color: 'var(--text-dim)' }}>Target:</span> <em>{verdict.for_whom}</em>
+                    <span style={{ color: 'var(--text-dim)' }}>{t('research.report.target')}</span>{' '}
+                    <em>{verdict.for_whom}</em>
                   </div>
                 )}
               </div>
@@ -591,7 +623,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   {verdict.suggested_horizon && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Compass size={13} color="var(--accent-blue)" />
-                      <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 500 }}>Suggested Horizon:</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 500 }}>
+                        {t('research.report.suggestedHorizon')}
+                      </span>
                       <span
                         style={{
                           fontSize: 12,
@@ -600,7 +634,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                           textTransform: 'capitalize',
                         }}
                       >
-                        {verdict.suggested_horizon}
+                        {horizonLabel(verdict.suggested_horizon)}
                       </span>
                       <button
                         type="button"
@@ -612,10 +646,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                         {appliedHorizon || card.horizon === verdict.suggested_horizon ? (
                           <>
                             <Check size={11} color="var(--color-success-text, #10b981)" />
-                            <span>Applied</span>
+                            <span>{t('research.report.applied')}</span>
                           </>
                         ) : (
-                          'Apply'
+                          t('research.report.apply')
                         )}
                       </button>
                     </div>
@@ -624,11 +658,13 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   {verdict.suggested_tags && verdict.suggested_tags.length > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Tag size={13} color="var(--accent-purple)" />
-                      <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 500 }}>Suggested Tags:</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 500 }}>
+                        {t('research.report.suggestedTags')}
+                      </span>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        {verdict.suggested_tags.map((t) => (
+                        {verdict.suggested_tags.map((tag) => (
                           <span
-                            key={t}
+                            key={tag}
                             style={{
                               fontSize: 11,
                               padding: '1px 6px',
@@ -639,7 +675,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                               fontWeight: 600,
                             }}
                           >
-                            #{t}
+                            #{tag}
                           </span>
                         ))}
                       </div>
@@ -653,10 +689,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                         {appliedTags ? (
                           <>
                             <Check size={11} color="var(--color-success-text, #10b981)" />
-                            <span>Applied</span>
+                            <span>{t('research.report.applied')}</span>
                           </>
                         ) : (
-                          'Apply'
+                          t('research.report.apply')
                         )}
                       </button>
                     </div>
@@ -688,34 +724,39 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                 }}
               >
                 <CheckCircle2 size={16} color="var(--accent-emerald)" />
-                <span>Claim Verification</span>
+                <span>{t('research.report.claimVerification')}</span>
               </h4>
 
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '35%' }}>Claim</th>
-                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '15%' }}>Status</th>
-                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '35%' }}>Rationale</th>
-                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '15%' }}>Sources</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '35%' }}>
+                        {t('research.report.claim')}
+                      </th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '15%' }}>
+                        {t('research.report.status')}
+                      </th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '35%' }}>
+                        {t('research.report.rationale')}
+                      </th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '15%' }}>
+                        {t('research.report.sourcesHeader')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {claims.map((cl, idx) => {
                       let statusIcon = <CheckCircle2 size={14} color="var(--color-success-text, #16a34a)" />;
                       let statusColor = 'var(--color-success-text, #16a34a)';
-                      let statusText = 'Supported';
-
                       if (cl.status === 'disputed') {
                         statusIcon = <AlertTriangle size={14} color="var(--color-error-text, #dc2626)" />;
                         statusColor = 'var(--color-error-text, #dc2626)';
-                        statusText = 'Disputed';
                       } else if (cl.status === 'unverified') {
                         statusIcon = <HelpCircle size={14} color="var(--color-warning-text, #d97706)" />;
                         statusColor = 'var(--color-warning-text, #d97706)';
-                        statusText = 'Unverified';
                       }
+                      const statusText = enumLabel(t, 'claimStatus', cl.status || 'supported');
 
                       return (
                         <tr
@@ -731,7 +772,9 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                           <td style={{ padding: '10px 10px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: statusColor }}>
                               {statusIcon}
-                              <span style={{ fontWeight: 600, fontSize: 12 }}>{statusText}</span>
+                              <span style={{ fontWeight: 600, fontSize: 12, textTransform: 'capitalize' }}>
+                                {statusText}
+                              </span>
                             </div>
                           </td>
                           <td style={{ padding: '10px 10px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
@@ -791,17 +834,25 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                 }}
               >
                 <Compass size={16} color="var(--accent-blue)" />
-                <span>Competitive Landscape</span>
+                <span>{t('research.report.competitiveLandscape')}</span>
               </h4>
 
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '25%' }}>Name</th>
-                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '35%' }}>Summary</th>
-                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '25%' }}>How It Differs</th>
-                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '15%' }}>Sources</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '25%' }}>
+                        {t('research.report.name')}
+                      </th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '35%' }}>
+                        {t('research.report.summary')}
+                      </th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '25%' }}>
+                        {t('research.report.howItDiffers')}
+                      </th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-dim)', width: '15%' }}>
+                        {t('research.report.sourcesHeader')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -901,7 +952,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                   }}
                 >
                   <ShieldAlert size={16} />
-                  <span>Identified Risks</span>
+                  <span>{t('research.report.identifiedRisks')}</span>
                 </h4>
                 <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-main)', fontSize: 13, lineHeight: 1.6 }}>
                   {risks.map((risk, i) => (
@@ -942,7 +993,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     }}
                   >
                     <ListTodo size={16} />
-                    <span>Recommended Next Actions</span>
+                    <span>{t('research.report.recommendedActions')}</span>
                   </h4>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
@@ -952,7 +1003,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       style={{ fontSize: 11, padding: '3px 8px' }}
                     >
                       <Plus size={11} color="var(--color-success-text, #10b981)" />
-                      <span>Add Selected</span>
+                      <span>{t('research.report.addSelected')}</span>
                     </button>
                     <button
                       type="button"
@@ -960,7 +1011,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       onClick={handleAddAllActions}
                       style={{ fontSize: 11, padding: '3px 8px' }}
                     >
-                      <span>Add All</span>
+                      <span>{t('research.report.addAll')}</span>
                     </button>
                   </div>
                 </div>
@@ -1019,7 +1070,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                 }}
               >
                 <FileText size={16} color="var(--text-dim)" />
-                <span>Detailed Findings</span>
+                <span>{t('research.report.detailedFindings')}</span>
               </h4>
               <SafeMarkdown text={selectedRun.findings} />
             </div>
@@ -1047,7 +1098,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                 }}
               >
                 <Sparkles size={16} color="var(--accent-amber)" />
-                <span>Cited Sources ({sources.length})</span>
+                <span>{tp('research.report.citedSources', sources.length)}</span>
               </h4>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1096,7 +1147,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                         </a>
                       ) : (
                         <span style={{ color: 'var(--text-main)', fontSize: 13, fontWeight: 600 }}>
-                          {s.title || 'Untitled'}
+                          {s.title || t('research.report.untitled')}
                         </span>
                       )}
                       <span
@@ -1109,7 +1160,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                           textTransform: 'uppercase',
                         }}
                       >
-                        {s.origin}
+                        {enumLabel(t, 'origin', s.origin)}
                       </span>
                     </div>
 
@@ -1158,7 +1209,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
-                  Was this research report useful?
+                  {t('research.report.feedbackQuestion')}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button
@@ -1180,7 +1231,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     onClick={() => handleFeedback('thumbs_up')}
                   >
                     <ThumbsUp size={14} />
-                    <span>Helpful</span>
+                    <span>{t('research.report.helpful')}</span>
                   </button>
                   <button
                     type="button"
@@ -1201,7 +1252,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     onClick={() => handleFeedback('thumbs_down')}
                   >
                     <ThumbsDown size={14} />
-                    <span>Needs work</span>
+                    <span>{t('research.report.needsWork')}</span>
                   </button>
                 </div>
               </div>
@@ -1210,7 +1261,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
                   <input
                     type="text"
-                    placeholder="Optional comment on what worked or what was missing..."
+                    placeholder={t('research.report.feedbackPlaceholder')}
                     value={feedbackComment}
                     onChange={(e) => setFeedbackComment(e.target.value)}
                     style={{
@@ -1235,7 +1286,7 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                     disabled={feedbackSubmitting}
                     onClick={() => handleFeedback(feedbackRating, feedbackComment)}
                   >
-                    {feedbackSaved ? 'Update' : 'Save'}
+                    {feedbackSaved ? t('research.report.update') : t('common.save')}
                   </button>
                 </div>
               )}
@@ -1256,11 +1307,11 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
           }}
         >
           <p style={{ color: 'var(--text-dim)', margin: '0 0 12px', fontSize: 13 }}>
-            No research report generated for this card yet.
+            {t('research.report.empty')}
           </p>
           <button type="button" className="btn-primary" onClick={() => handleReRun()} disabled={loading}>
             <RotateCw size={13} className={loading ? 'spin-slow' : ''} />
-            <span>Start Deep Research</span>
+            <span>{t('research.report.start')}</span>
           </button>
         </div>
       )}

@@ -998,5 +998,26 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
       expect(screen.getByLabelText(/Default Playbook for Untyped Cards/i)).toBeDefined();
     });
   });
+
+  it('renders the playbook manager chrome in Romanian', async () => {
+    render(
+      <LocaleProvider locale="ro">
+        <PlaybookManager showToast={vi.fn()} />
+      </LocaleProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+    });
+
+    expect(screen.getByText('Manuale de cercetare')).toBeDefined();
+    expect(screen.getByText('Manual implicit pentru cardurile fără tip')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /Manual nou/i }));
+
+    expect(screen.getByLabelText(/Nume manual/i)).toBeDefined();
+    expect(screen.getAllByText('Fundamentare').length).toBeGreaterThan(0);
+    expect(screen.getByText('Pași pipeline (4 / 12)')).toBeDefined();
+  });
 });
 

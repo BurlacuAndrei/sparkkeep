@@ -80,5 +80,7 @@ export function translatePlural(
     resolveString(en, primary) ??
     resolveString(en, other);
   if (value === undefined) return primary;
-  return interpolate(value, { ...vars, count });
+  // `count` stays the numeric fallback, but callers may override it with a
+  // formatted string or marker through `vars.count`.
+  return interpolate(value, { count, ...vars });
 }

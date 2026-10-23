@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Eye, Search, Sparkles, ExternalLink, Zap, CheckCircle2 } from 'lucide-react';
 import { Card, PlaybookStep } from '../../types';
+import { useLocale } from '../../i18n';
 import { CORE_STEP_DESCRIPTIONS, getDefaultInputsForStep } from './constants';
 import { extractHostname } from '../../utils/cardUtils';
 
@@ -13,6 +14,7 @@ export interface MockDryRunCard {
   sources: string[];
 }
 
+// shortcut: fallback dry-run card content stays English (compiled prompt/LLM seed).
 // oxlint-disable-next-line react/only-export-components
 export const FALLBACK_TEST_CARDS: MockDryRunCard[] = [
   {
@@ -153,6 +155,7 @@ export interface DryRunInspectorProps {
 }
 
 export const DryRunInspector: React.FC<DryRunInspectorProps> = ({ steps, cards = [] }) => {
+  const { t, tp } = useLocale();
   const [selectedCardId, setSelectedCardId] = useState<string>(
     cards.length > 0 ? String(cards[0].id) : '-1'
   );
@@ -177,6 +180,7 @@ export const DryRunInspector: React.FC<DryRunInspectorProps> = ({ steps, cards =
           existingCard.source_note ||
           existingCard.summary ||
           existingCard.executive_summary ||
+          // shortcut: dry-run prompt content stays English (compiled prompt/LLM seed), UI labels are translated.
           'Saved card research context.',
         sources: allSources,
       };
@@ -200,36 +204,34 @@ export const DryRunInspector: React.FC<DryRunInspectorProps> = ({ steps, cards =
   }, [steps, activeCard]);
 
   return (
-    <div className="pb-dryrun-container" aria-label="Dry-Run Inspector Panel">
+    <div className="pb-dryrun-container" aria-label={t('playbooks.dryRun.panelAria')}>
       <div className="pb-dryrun-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Eye size={18} className="pb-dryrun-icon" />
           <div>
-            <h4 className="pb-dryrun-title">Dry-Run & Prompt Inspector</h4>
-            <p className="pb-dryrun-subtitle">
-              Simulate prompt compilation and search queries before running pipelines.
-            </p>
+            <h4 className="pb-dryrun-title">{t('playbooks.dryRun.title')}</h4>
+            <p className="pb-dryrun-subtitle">{t('playbooks.dryRun.subtitle')}</p>
           </div>
         </div>
         <div className="pb-dryrun-guarantee-badge">
           <Zap size={12} />
-          <span>$0 Token Cost · 0ms Latency</span>
+          <span>{t('playbooks.dryRun.guarantee')}</span>
         </div>
       </div>
 
       {/* Card Context Picker */}
       <div className="pb-dryrun-card-picker">
         <label htmlFor="dryrun-card-select" className="pb-dryrun-picker-label">
-          Test Card Context:
+          {t('playbooks.dryRun.testCard')}
         </label>
         <select
           id="dryrun-card-select"
           className="input-select pb-dryrun-select"
-          aria-label="Select Card for Dry-Run"
+          aria-label={t('playbooks.dryRun.selectAria')}
           value={selectedCardId}
           onChange={(e) => setSelectedCardId(e.target.value)}
         >
-          <optgroup label="Fallback Archetype Cards">
+          <optgroup label={t('playbooks.dryRun.fallbackGroup')}>
             {FALLBACK_TEST_CARDS.map((fc) => (
               <option key={fc.id} value={String(fc.id)}>
                 {fc.title} ({fc.type})
@@ -237,10 +239,10 @@ export const DryRunInspector: React.FC<DryRunInspectorProps> = ({ steps, cards =
             ))}
           </optgroup>
           {cards.length > 0 && (
-            <optgroup label="Your Saved Cards">
+            <optgroup label={t('playbooks.dryRun.savedGroup')}>
               {cards.map((c) => (
                 <option key={c.id} value={String(c.id)}>
-                  {c.title} ({c.type || 'note'})
+                  {c.title} ({c.type || t('playbooks.dryRun.noteType')})
                 </option>
               ))}
             </optgroup>
@@ -270,7 +272,7 @@ export const DryRunInspector: React.FC<DryRunInspectorProps> = ({ steps, cards =
       {/* Step by Step Compiled Instructions */}
       <div className="pb-dryrun-steps-deck">
         <div className="pb-dryrun-steps-count">
-          <span>Compiled Pipeline Sequence ({compiledSteps.length} active steps):</span>
+          <span>{tp('playbooks.dryRun.sequence', compiledSteps.length)}</span>
         </div>
 
         {compiledSteps.map((cs, idx) => (
@@ -286,11 +288,13 @@ export const DryRunInspector: React.FC<DryRunInspectorProps> = ({ steps, cards =
                   className={`pb-policy-chip ${cs.tool_policy === 'search' ? 'search' : 'none'}`}
                 >
                   {cs.tool_policy === 'search'
-                    ? `🔍 Search (${cs.max_queries} queries)`
-                    : '🧠 Reasoning Only'}
+                    ? tp('playbooks.dryRun.policySearch', cs.max_queries)
+                    : t('playbooks.dryRun.policyReasoning')}
                 </span>
                 <span className="pb-role-chip">
-                  {cs.role === 'research_plan' ? '⚡ Planning' : '🧠 Synthesis'}
+                  {cs.role === 'research_plan'
+                    ? t('playbooks.dryRun.rolePlanning')
+                    : t('playbooks.dryRun.roleSynthesis')}
                 </span>
               </div>
             </div>
@@ -300,7 +304,7 @@ export const DryRunInspector: React.FC<DryRunInspectorProps> = ({ steps, cards =
               <div className="pb-dryrun-queries-box">
                 <span className="pb-dryrun-queries-label">
                   <Search size={11} />
-                  <span>Planned Web Queries ({cs.plannedQueries.length}):</span>
+                  <span>{tp('playbooks.dryRun.planned', cs.plannedQueries.length)}</span>
                 </span>
                 <div className="pb-dryrun-queries-list">
                   {cs.plannedQueries.map((q, qIdx) => (
@@ -316,7 +320,7 @@ export const DryRunInspector: React.FC<DryRunInspectorProps> = ({ steps, cards =
             <div className="pb-dryrun-prompt-box">
               <span className="pb-dryrun-prompt-label">
                 <Sparkles size={11} />
-                <span>Compiled LLM Prompt:</span>
+                <span>{t('playbooks.dryRun.compiledPrompt')}</span>
               </span>
               <pre className="pb-dryrun-prompt-code">{cs.compiledPrompt}</pre>
             </div>
@@ -325,7 +329,7 @@ export const DryRunInspector: React.FC<DryRunInspectorProps> = ({ steps, cards =
             <div className="pb-dryrun-sim-output">
               <div className="pb-dryrun-sim-header">
                 <CheckCircle2 size={11} />
-                <span>Simulated Output Heading:</span>
+                <span>{t('playbooks.dryRun.simulatedHeading')}</span>
                 <strong>{cs.heading}</strong>
               </div>
               <div className="pb-dryrun-sim-text">{cs.simulatedOutput}</div>

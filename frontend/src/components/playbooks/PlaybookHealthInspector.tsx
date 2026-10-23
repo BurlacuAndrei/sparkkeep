@@ -10,6 +10,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { PlaybookStep } from '../../types';
+import { useLocale } from '../../i18n';
 import { PillarHealth, SoftLinterAdvisory } from './constants';
 
 export interface PlaybookHealthInspectorProps {
@@ -23,7 +24,10 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
   onUpdateSteps,
   showToast,
 }) => {
-  // 1-Click Auto-Fix Step Inserters for Missing Pillars
+  const { t, tp } = useLocale();
+
+  // 1-Click Auto-Fix Step Inserters for Missing Pillars.
+  // shortcut: inserted step names/instructions stay English by design (DB/export/LLM prompts).
   const insertGroundingStep = useCallback(() => {
     const newStep: PlaybookStep = {
       position: 1,
@@ -41,8 +45,8 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
     const nextSteps = [newStep, ...steps];
     nextSteps.forEach((s, i) => (s.position = i + 1));
     onUpdateSteps(nextSteps);
-    showToast('Inserted Grounding step');
-  }, [steps, onUpdateSteps, showToast]);
+    showToast(t('playbooks.health.toasts.grounding'));
+  }, [steps, onUpdateSteps, showToast, t]);
 
   const insertSearchStep = useCallback(() => {
     const newStep: PlaybookStep = {
@@ -65,8 +69,8 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
     nextSteps.splice(insertIdx, 0, newStep);
     nextSteps.forEach((s, i) => (s.position = i + 1));
     onUpdateSteps(nextSteps);
-    showToast('Inserted Web Search step');
-  }, [steps, onUpdateSteps, showToast]);
+    showToast(t('playbooks.health.toasts.search'));
+  }, [steps, onUpdateSteps, showToast, t]);
 
   const insertReaderStep = useCallback(() => {
     const newStep: PlaybookStep = {
@@ -100,8 +104,8 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
     nextSteps.splice(insertIdx, 0, newStep);
     nextSteps.forEach((s, i) => (s.position = i + 1));
     onUpdateSteps(nextSteps);
-    showToast('Inserted Source Reader step');
-  }, [steps, onUpdateSteps, showToast]);
+    showToast(t('playbooks.health.toasts.reader'));
+  }, [steps, onUpdateSteps, showToast, t]);
 
   const insertVerificationStep = useCallback(() => {
     const newStep: PlaybookStep = {
@@ -123,8 +127,8 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
     nextSteps.splice(insertIdx, 0, newStep);
     nextSteps.forEach((s, i) => (s.position = i + 1));
     onUpdateSteps(nextSteps);
-    showToast('Inserted Claims Verification step');
-  }, [steps, onUpdateSteps, showToast]);
+    showToast(t('playbooks.health.toasts.verification'));
+  }, [steps, onUpdateSteps, showToast, t]);
 
   const insertReportStep = useCallback(() => {
     const newStep: PlaybookStep = {
@@ -143,8 +147,8 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
     const nextSteps = [...steps, newStep];
     nextSteps.forEach((s, i) => (s.position = i + 1));
     onUpdateSteps(nextSteps);
-    showToast('Inserted Briefing Report step');
-  }, [steps, onUpdateSteps, showToast]);
+    showToast(t('playbooks.health.toasts.report'));
+  }, [steps, onUpdateSteps, showToast, t]);
 
   // Active (enabled) steps for analysis and inspector
   const activeSteps = useMemo(() => {
@@ -186,36 +190,46 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
     () => [
       {
         id: 'grounding',
-        name: 'Grounding',
+        name: t('playbooks.health.pillars.grounding'),
         ready: hasGrounding,
-        hint: hasGrounding ? 'Card context & note memory anchored' : 'Context not anchored',
+        hint: hasGrounding
+          ? t('playbooks.health.groundingReady')
+          : t('playbooks.health.groundingMissing'),
       },
       {
         id: 'retrieval',
-        name: 'Retrieval',
+        name: t('playbooks.health.pillars.retrieval'),
         ready: hasRetrieval,
-        hint: hasRetrieval ? 'Active external search / refs' : 'Hallucination risk: no search',
+        hint: hasRetrieval
+          ? t('playbooks.health.retrievalReady')
+          : t('playbooks.health.retrievalMissing'),
       },
       {
         id: 'extraction',
-        name: 'Extraction',
+        name: t('playbooks.health.pillars.extraction'),
         ready: hasExtraction,
-        hint: hasExtraction ? 'Deep source reader enabled' : 'Unextracted sources',
+        hint: hasExtraction
+          ? t('playbooks.health.extractionReady')
+          : t('playbooks.health.extractionMissing'),
       },
       {
         id: 'verification',
-        name: 'Verification',
+        name: t('playbooks.health.pillars.verification'),
         ready: hasVerification,
-        hint: hasVerification ? 'Cross-checked citations' : 'Unverified claims',
+        hint: hasVerification
+          ? t('playbooks.health.verificationReady')
+          : t('playbooks.health.verificationMissing'),
       },
       {
         id: 'delivery',
-        name: 'Delivery',
+        name: t('playbooks.health.pillars.delivery'),
         ready: hasDelivery,
-        hint: hasDelivery ? 'Synthesized briefing / verdict' : 'Fallback synthesizer active',
+        hint: hasDelivery
+          ? t('playbooks.health.deliveryReady')
+          : t('playbooks.health.deliveryMissing'),
       },
     ],
-    [hasGrounding, hasRetrieval, hasExtraction, hasVerification, hasDelivery]
+    [hasGrounding, hasRetrieval, hasExtraction, hasVerification, hasDelivery, t]
   );
 
   const readyPillarsCount = useMemo(() => {
@@ -230,9 +244,9 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
       list.push({
         id: 'grounding_missing',
         pillarId: 'grounding',
-        title: 'Context Not Anchored',
-        description: 'Context not anchored: Research run will lack card context, note body, and source URL metadata.',
-        actionLabel: '+ Insert Grounding',
+        title: t('playbooks.health.adv.groundingTitle'),
+        description: t('playbooks.health.adv.groundingDesc'),
+        actionLabel: t('playbooks.health.adv.groundingAction'),
         onFix: insertGroundingStep,
       });
     }
@@ -241,9 +255,9 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
       list.push({
         id: 'retrieval_missing',
         pillarId: 'retrieval',
-        title: 'Hallucination Risk',
-        description: 'Hallucination risk: No search or live retrieval configured to fetch external facts.',
-        actionLabel: '+ Insert Web Search',
+        title: t('playbooks.health.adv.retrievalTitle'),
+        description: t('playbooks.health.adv.retrievalDesc'),
+        actionLabel: t('playbooks.health.adv.retrievalAction'),
         onFix: insertSearchStep,
       });
     }
@@ -252,9 +266,9 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
       list.push({
         id: 'extraction_missing',
         pillarId: 'extraction',
-        title: 'Unextracted Sources',
-        description: 'Unextracted sources: Discovered web links will not be scraped or read into source context.',
-        actionLabel: '+ Insert Source Reader',
+        title: t('playbooks.health.adv.extractionTitle'),
+        description: t('playbooks.health.adv.extractionDesc'),
+        actionLabel: t('playbooks.health.adv.extractionAction'),
         onFix: insertReaderStep,
       });
     }
@@ -263,9 +277,9 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
       list.push({
         id: 'verification_missing',
         pillarId: 'verification',
-        title: 'Unverified Claims',
-        description: 'Unverified claims: Findings will not be cross-verified against source citations for factual rigor.',
-        actionLabel: '+ Insert Claims Verification',
+        title: t('playbooks.health.adv.verificationTitle'),
+        description: t('playbooks.health.adv.verificationDesc'),
+        actionLabel: t('playbooks.health.adv.verificationAction'),
         onFix: insertVerificationStep,
       });
     }
@@ -274,9 +288,9 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
       list.push({
         id: 'delivery_missing',
         pillarId: 'delivery',
-        title: 'No Delivery Step',
-        description: 'Notice: Fallback Report Synthesizer will compile final outputs if omitted.',
-        actionLabel: '+ Insert Briefing Report',
+        title: t('playbooks.health.adv.deliveryTitle'),
+        description: t('playbooks.health.adv.deliveryDesc'),
+        actionLabel: t('playbooks.health.adv.deliveryAction'),
         onFix: insertReportStep,
       });
     }
@@ -293,6 +307,7 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
     insertReaderStep,
     insertVerificationStep,
     insertReportStep,
+    t,
   ]);
 
   // Dynamic Resource & Cost Estimator
@@ -301,7 +316,7 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
       return {
         llmCalls: 0,
         fetches: 0,
-        tokenRange: '0 tokens',
+        tokenRange: tp('playbooks.health.zeroTokens', 0),
         latency: '0s',
       };
     }
@@ -405,28 +420,33 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
     return {
       llmCalls: llm,
       fetches,
-      tokenRange: `~${formatK(minTokens)}–${formatK(maxTokens)} tokens`,
-      latency: `~${minSec}–${maxSec}s`,
+      tokenRange: t('playbooks.health.tokensRange', {
+        min: formatK(minTokens),
+        max: formatK(maxTokens),
+      }),
+      latency: t('playbooks.health.latencyRange', { min: minSec, max: maxSec }),
     };
-  }, [activeSteps]);
+  }, [activeSteps, t, tp]);
 
   return (
-    <aside className="pb-inspector-dock" aria-label="Research Health Inspector">
+    <aside className="pb-inspector-dock" aria-label={t('playbooks.health.header')}>
       <div className="pb-inspector-header">
         <div className="pb-inspector-title">
           <Activity size={16} className="pb-inspector-icon" />
-          <span>Research Health Inspector</span>
+          <span>{t('playbooks.health.header')}</span>
         </div>
         <span
           className={`pb-health-score-badge ${readyPillarsCount === 5 ? 'ready' : 'incomplete'}`}
           data-testid="health-score-badge"
         >
-          {readyPillarsCount === 5 ? '5 / 5 Pillars Ready' : `${readyPillarsCount} / 5 Incomplete`}
+          {readyPillarsCount === 5
+            ? t('playbooks.health.scoreReady')
+            : tp('playbooks.health.scoreIncomplete', readyPillarsCount)}
         </span>
       </div>
 
       {/* 5-Pillar Research Model Checklist */}
-      <div className="pb-pillars-list" aria-label="5-Pillar Research Model">
+      <div className="pb-pillars-list" aria-label={t('playbooks.health.pillarsAria')}>
         {pillars.map((p) => (
           <div key={p.id} className={`pb-pillar-item ${p.ready ? 'ready' : 'missing'}`}>
             <div className="pb-pillar-status">
@@ -437,7 +457,9 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
               )}
               <span className="pb-pillar-name">{p.name}</span>
             </div>
-            <span className="pb-pillar-tag">{p.ready ? 'Ready' : 'Missing'}</span>
+            <span className="pb-pillar-tag">
+              {p.ready ? t('playbooks.health.ready') : t('playbooks.health.missing')}
+            </span>
           </div>
         ))}
       </div>
@@ -446,13 +468,13 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
       <div className="pb-inspector-section">
         <div className="pb-inspector-section-title">
           <AlertCircle size={13} className="pb-section-icon" />
-          <span>Health Linter Advisories</span>
+          <span>{t('playbooks.health.advisoriesTitle')}</span>
         </div>
 
         {advisories.length === 0 ? (
           <div className="pb-linter-clean">
             <CheckCircle2 size={15} className="pb-clean-icon" />
-            <span>All 5 research pillars ready. Rigorous, hallucination-resistant methodology verified.</span>
+            <span>{t('playbooks.health.clean')}</span>
           </div>
         ) : (
           <div className="pb-advisories-list">
@@ -480,34 +502,34 @@ export const PlaybookHealthInspector: React.FC<PlaybookHealthInspectorProps> = (
       <div className="pb-inspector-section">
         <div className="pb-inspector-section-title">
           <Sparkles size={13} className="pb-section-icon" />
-          <span>Dynamic Cost & Resource Estimator</span>
+          <span>{t('playbooks.health.costTitle')}</span>
         </div>
         <div className="pb-cost-grid">
           <div className="pb-cost-card">
             <span className="pb-cost-label">
               <Sparkles size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-              LLM Calls
+              {t('playbooks.health.llmCalls')}
             </span>
             <span className="pb-cost-val" data-testid="est-llm-calls">≈ {estimates.llmCalls}</span>
           </div>
           <div className="pb-cost-card">
             <span className="pb-cost-label">
               <Globe size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-              Web Fetches
+              {t('playbooks.health.webFetches')}
             </span>
             <span className="pb-cost-val" data-testid="est-fetches">≈ {estimates.fetches}</span>
           </div>
           <div className="pb-cost-card">
             <span className="pb-cost-label">
               <Layers size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-              Estimated Tokens
+              {t('playbooks.health.tokens')}
             </span>
             <span className="pb-cost-val" data-testid="est-tokens">{estimates.tokenRange}</span>
           </div>
           <div className="pb-cost-card">
             <span className="pb-cost-label">
               <Clock size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-              Est. Latency
+              {t('playbooks.health.latency')}
             </span>
             <span className="pb-cost-val" data-testid="est-latency">{estimates.latency}</span>
           </div>

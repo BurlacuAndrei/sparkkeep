@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Loader2, CheckCircle2, XCircle, Clock, MinusCircle, AlertCircle } from 'lucide-react';
 import { ResearchItem, ResearchStep } from '../types';
 import { fetchCardResearchRuns } from '../api';
+import { useLocale } from '../i18n';
+import { enumLabel } from '../utils/cardEnumLabels';
 
 interface ResearchProgressStripProps {
   cardId: number;
@@ -12,13 +14,13 @@ interface ResearchProgressStripProps {
 }
 
 const DEFAULT_STEPS = [
-  { id: 'planning', label: 'Planning' },
-  { id: 'search', label: 'Search' },
-  { id: 'reading', label: 'Reading' },
-  { id: 'claims', label: 'Claims' },
-  { id: 'landscape', label: 'Landscape' },
-  { id: 'synthesis', label: 'Verdict' },
-];
+  { id: 'planning', labelKey: 'research.progress.steps.planning' },
+  { id: 'search', labelKey: 'research.progress.steps.search' },
+  { id: 'reading', labelKey: 'research.progress.steps.reading' },
+  { id: 'claims', labelKey: 'research.progress.steps.claims' },
+  { id: 'landscape', labelKey: 'research.progress.steps.landscape' },
+  { id: 'synthesis', labelKey: 'research.progress.steps.verdict' },
+] as const;
 
 export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
   cardId,
@@ -27,6 +29,7 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
   onComplete,
   className = '',
 }) => {
+  const { t } = useLocale();
   const [polledResearch, setPolledResearch] = useState<ResearchItem | null>(null);
   const [prevInitialResearch, setPrevInitialResearch] = useState(initialResearch);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
@@ -112,7 +115,7 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
     }
     return {
       id: def.id,
-      label: def.label,
+      label: t(def.labelKey),
       status,
       note: existing?.note,
     };
@@ -145,13 +148,17 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
           <>
             <Clock size={12} color="var(--accent-indigo)" />
             <span style={{ fontWeight: 600, color: 'var(--accent-indigo)' }}>
-              Queued {research.queue_position ? `(#${research.queue_position})` : ''}
+              {research.queue_position
+                ? t('research.progress.queuedPosition', { position: research.queue_position })
+                : t('research.progress.queued')}
             </span>
           </>
         ) : (
           <>
             <Loader2 size={12} className="spin-slow" />
-            <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Researching</span>
+            <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+              {t('research.progress.researching')}
+            </span>
             <span style={{ color: 'var(--text-dim)' }}>· {formatElapsed(elapsedSeconds)}</span>
           </>
         )}
@@ -164,7 +171,10 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
             return (
               <span
                 key={st.id}
-                title={`${st.label}: ${st.status}`}
+                title={t('research.progress.stepTitle', {
+                  label: st.label,
+                  status: enumLabel(t, 'stepStatus', st.status),
+                })}
                 style={{
                   width: 5,
                   height: 5,
@@ -210,11 +220,11 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
           <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-main)' }}>
             {isActive
               ? research.status === 'queued'
-                ? `Research Queued (Position #${research.queue_position || 1})`
-                : 'Researching in Progress'
+                ? t('research.progress.queuedLong', { position: research.queue_position || 1 })
+                : t('research.progress.inProgress')
               : research.status === 'done'
-              ? 'Research Completed'
-              : 'Research Failed'}
+              ? t('research.progress.completed')
+              : t('research.progress.failed')}
           </span>
           {research.query && (
             <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>· {research.query}</span>
@@ -290,7 +300,14 @@ export const ResearchProgressStrip: React.FC<ResearchProgressStripProps> = ({
                 textAlign: 'center',
                 gap: 4,
               }}
-              title={step.note ? `${step.label}: ${step.note}` : `${step.label} (${step.status})`}
+              title={
+                step.note
+                  ? t('research.progress.stepNoteTitle', { label: step.label, note: step.note })
+                  : t('research.progress.stepStatusTitle', {
+                      label: step.label,
+                      status: enumLabel(t, 'stepStatus', step.status),
+                    })
+              }
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {icon}
