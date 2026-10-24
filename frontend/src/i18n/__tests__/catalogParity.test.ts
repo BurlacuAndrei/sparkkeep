@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { en } from '../en';
-import { ro } from '../ro';
+import { catalogs } from '..';
+import type { Catalog } from '../types';
 
 type Tree = Record<string, unknown>;
 
@@ -12,30 +13,43 @@ function leafPaths(node: Tree, prefix = ''): string[] {
   });
 }
 
+function valueAt(catalog: Catalog, key: string): unknown {
+  return key.split('.').reduce<unknown>((node, part) => (node as Tree)[part], catalog);
+}
+
+const enKeys = leafPaths(en).sort();
+const registered = Object.entries(catalogs) as [string, Catalog][];
+
 describe('catalog parity', () => {
-  const enKeys = leafPaths(en).sort();
-  const roKeys = leafPaths(ro).sort();
-
-  it('has every English key in Romanian', () => {
-    expect(roKeys.filter((key) => !enKeys.includes(key))).toEqual([]);
+  it('registers the English source catalog', () => {
+    expect(registered.map(([code]) => code)).toContain('en');
   });
 
-  it('has no Romanian key missing from English', () => {
-    expect(enKeys.filter((key) => !roKeys.includes(key))).toEqual([]);
-  });
+  for (const [code, catalog] of registered) {
+    if (code === 'en') continue;
 
-  it('has the same key count in both catalogs', () => {
-    expect(roKeys.length).toBe(enKeys.length);
-  });
+    describe(code, () => {
+      const keys = leafPaths(catalog).sort();
 
-  it('keeps every Romanian leaf a non-empty string', () => {
-    for (const key of roKeys) {
-      const value = key.split('.').reduce<unknown>(
-        (node, part) => (node as Tree)[part],
-        ro as unknown as Tree
-      );
-      expect(typeof value, key).toBe('string');
-      expect((value as string).trim(), key).not.toBe('');
-    }
-  });
+      it('has no key missing from English', () => {
+        expect(keys.filter((key) => !enKeys.includes(key))).toEqual([]);
+      });
+
+      it('has every English key', () => {
+        expect(enKeys.filter((key) => !keys.includes(key))).toEqual([]);
+      });
+
+      it('has the same key count as English', () => {
+        expect(keys.length).toBe(enKeys.length);
+      });
+
+      it('keeps every leaf a non-empty string', () => {
+        for (const key of keys) {
+          const value = valueAt(catalog, key);
+          expect(typeof value, key).toBe('string');
+          expect((value as string).trim(), key).not.toBe('');
+        }
+      });
+    });
+  }
 });

@@ -13,7 +13,7 @@ describe('LanguageSelector', () => {
     document.documentElement.removeAttribute('lang');
   });
 
-  it('renders a select with English and Română options', () => {
+  it('renders the six supported locales with native labels', () => {
     render(
       <LocaleProvider locale="en">
         <LanguageSelector />
@@ -23,8 +23,14 @@ describe('LanguageSelector', () => {
     const select = screen.getByLabelText('Interface language') as HTMLSelectElement;
     expect(select.tagName).toBe('SELECT');
     expect(select.value).toBe('en');
-    expect(screen.getByRole('option', { name: 'English' })).toBeDefined();
-    expect(screen.getByRole('option', { name: 'Română' })).toBeDefined();
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'English',
+      'Română',
+      'Español',
+      'Português (Brasil)',
+      'Français',
+      'Deutsch',
+    ]);
   });
 
   it('persists the choice and applies documentElement.lang on change', () => {

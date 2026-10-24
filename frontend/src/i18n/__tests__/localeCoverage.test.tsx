@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { en } from '../en';
-import type { TranslationKey } from '../types';
-import { LocaleProvider, useLocale } from '..';
+import type { Locale, TranslationKey } from '../types';
+import { LocaleProvider, catalogs, useLocale } from '..';
 
 function leafPaths(node: Record<string, unknown>, prefix = ''): string[] {
   return Object.entries(node).flatMap(([key, value]) => {
@@ -12,6 +12,9 @@ function leafPaths(node: Record<string, unknown>, prefix = ''): string[] {
 }
 
 const keys = leafPaths(en);
+
+/** Every locale with a catalog; English is the fallback, not a translation. */
+const translatedLocales = (Object.keys(catalogs) as Locale[]).filter((code) => code !== 'en');
 
 function AllTranslations() {
   const { t } = useLocale();
@@ -26,10 +29,10 @@ function AllTranslations() {
   );
 }
 
-describe('Romanian catalog coverage', () => {
+describe.each(translatedLocales)('%s catalog coverage', (locale) => {
   it('returns a non-empty translation for every English key', () => {
     render(
-      <LocaleProvider locale="ro">
+      <LocaleProvider locale={locale}>
         <AllTranslations />
       </LocaleProvider>
     );

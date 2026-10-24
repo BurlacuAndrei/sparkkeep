@@ -74,8 +74,15 @@ describe('LocaleProvider', () => {
   it('exposes the supported locales', () => {
     const { result } = renderHook(() => useLocale(), { wrapper });
     expect(result.current.locales).toBe(locales);
-    expect(locales.map((option) => option.code)).toEqual(['en', 'ro']);
-    expect(locales.map((option) => option.label)).toEqual(['English', 'Română']);
+    expect(locales.map((option) => option.code)).toEqual(['en', 'ro', 'es', 'pt-BR', 'fr', 'de']);
+    expect(locales.map((option) => option.label)).toEqual([
+      'English',
+      'Română',
+      'Español',
+      'Português (Brasil)',
+      'Français',
+      'Deutsch',
+    ]);
   });
 
   it('restores a stored locale', () => {
@@ -84,10 +91,22 @@ describe('LocaleProvider', () => {
     expect(result.current.locale).toBe('ro');
   });
 
+  it('restores a stored regional locale', () => {
+    localStorage.setItem('sparkkeep_locale', 'pt-BR');
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(result.current.locale).toBe('pt-BR');
+  });
+
   it('normalizes a stored locale to lowercase', () => {
     localStorage.setItem('sparkkeep_locale', 'RO');
     const { result } = renderHook(() => useLocale(), { wrapper });
     expect(result.current.locale).toBe('ro');
+  });
+
+  it('normalizes a stored regional locale to lowercase', () => {
+    localStorage.setItem('sparkkeep_locale', 'PT-br');
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(result.current.locale).toBe('pt-BR');
   });
 
   it('prefers a stored locale over the browser language', () => {
@@ -98,7 +117,7 @@ describe('LocaleProvider', () => {
   });
 
   it('ignores an invalid stored locale and falls through to the browser', () => {
-    localStorage.setItem('sparkkeep_locale', 'de');
+    localStorage.setItem('sparkkeep_locale', 'zh-CN');
     Object.defineProperty(navigator, 'language', { value: 'ro-RO', configurable: true });
     const { result } = renderHook(() => useLocale(), { wrapper });
     expect(result.current.locale).toBe('ro');
@@ -130,9 +149,37 @@ describe('LocaleProvider', () => {
   });
 
   it('falls back to English for an unknown browser language', () => {
-    Object.defineProperty(navigator, 'language', { value: 'fr-FR', configurable: true });
+    Object.defineProperty(navigator, 'language', { value: 'zh-CN', configurable: true });
     const { result } = renderHook(() => useLocale(), { wrapper });
     expect(result.current.locale).toBe('en');
+  });
+
+  it('detects a regional browser locale by its base language', () => {
+    Object.defineProperty(navigator, 'language', { value: 'es-419', configurable: true });
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(result.current.locale).toBe('es');
+  });
+
+  it('maps the Portuguese base language to pt-BR', () => {
+    Object.defineProperty(navigator, 'language', { value: 'pt', configurable: true });
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(result.current.locale).toBe('pt-BR');
+  });
+
+  it('matches a full regional browser locale case-insensitively', () => {
+    Object.defineProperty(navigator, 'language', { value: 'pt-br', configurable: true });
+    const { result } = renderHook(() => useLocale(), { wrapper });
+    expect(result.current.locale).toBe('pt-BR');
+  });
+
+  it('maps de-AT and fr-CA to their base locales', () => {
+    Object.defineProperty(navigator, 'language', { value: 'de-AT', configurable: true });
+    const { result: austrian } = renderHook(() => useLocale(), { wrapper });
+    expect(austrian.current.locale).toBe('de');
+
+    Object.defineProperty(navigator, 'language', { value: 'fr-CA', configurable: true });
+    const { result: canadian } = renderHook(() => useLocale(), { wrapper });
+    expect(canadian.current.locale).toBe('fr');
   });
 
   it('persists setLocale and applies documentElement.lang', () => {

@@ -422,7 +422,9 @@ Sparkkeep uses forward-only SQLite migrations. When upgrading your instance:
 
 ## 🌐 Localization
 
-The UI ships in **English** (default) and **Romanian**. Users switch language in **Settings → Appearance**; the choice persists in `localStorage` under `sparkkeep_locale`, and the browser language is used as the first-run fallback. `<html lang>` follows the active locale.
+The UI offers six interface languages: **English** (default), **Romanian**, **Spanish**, **Portuguese (Brasil)**, **French**, and **German**. English and Romanian have catalogs; the other four are selectable now and render English until their catalogs land. Users switch language in **Settings → Appearance**; the choice persists in `localStorage` under `sparkkeep_locale`. `<html lang>` follows the active locale.
+
+On first run the browser language picks the locale: an exact match first (so `pt-BR` resolves to Portuguese (Brasil)), then the base language (`es-419` → `es`, `de-AT` → `de`, `fr-CA` → `fr`, `pt` → `pt-BR`), else English. Translating a locale is a later step: a locale without a registered catalog renders English through the resolver fallback.
 
 The frontend uses a small typed catalog module in [`frontend/src/i18n/`](frontend/src/i18n/): `en.ts` is the source of truth and `ro.ts` is the Romanian catalog. `index.tsx` exposes `LocaleProvider`, `useLocale()` (`t`, `tp`, `formatNumber`, `formatDate`), and the formatting helpers.
 
@@ -430,10 +432,9 @@ To add a locale:
 
 1. Create `frontend/src/i18n/<code>.ts` exporting a `satisfies Catalog` object with the same shape as `en.ts`. TypeScript rejects missing or extra keys at compile time.
 2. Add the code to the `Locale` union in `frontend/src/i18n/types.ts`.
-3. Register the catalog in the `catalogs` map in `frontend/src/i18n/index.tsx`, and add a `locales` option (code plus native-language label).
-4. Extend `frontend/src/i18n/__tests__/catalogParity.test.ts` and `localeCoverage.test.tsx` so key parity and full coverage cover the new catalog.
-5. Extend `pluralCategory` in `frontend/src/i18n/translate.ts` and `plural.test.ts` when the new locale needs different plural categories.
-6. Run `cd frontend && npm test` and `npm run build`; commit the rebuilt `internal/web/dist`.
+3. Register the catalog in the `catalogs` map in `frontend/src/i18n/index.tsx`, and add a `locales` option (code plus native-language label). Check that detection maps the new code in `BASE_LANGUAGE` when it has no exact browser match.
+4. Add the locale's plural rules to `pluralCategory` in `frontend/src/i18n/translate.ts` and cover them in `plural.test.ts`. Parity, coverage, and placeholder tests iterate every registered catalog, so they need no edits.
+5. Run `cd frontend && npm test` and `npm run build`; commit the rebuilt `internal/web/dist`.
 
 Persisted playbook seed data and third-party UI labels stay in English by design (see the `shortcut:` comments where relevant). Card copy is persisted in the locale that was active when it was written.
 

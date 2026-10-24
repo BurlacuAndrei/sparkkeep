@@ -48,11 +48,13 @@ export function translate(
 /**
  * Plural category for a count. Romanian puts 0 and every count whose last two
  * digits are 1..19 in the "few" form ("0 carduri", "101 carduri"), everything
- * else uses "other" ("120 de carduri"); 1 keeps its own form. English only
- * splits 1.
+ * else uses "other" ("120 de carduri"); 1 keeps its own form. Spanish and
+ * German split only 1, like English. Portuguese (Brazil) and French put 0 and
+ * fractional counts with an integer part of 1 or less in "one" ("0 carte",
+ * "1,5 carte"), matching `Intl.PluralRules`.
  *
- * shortcut: non-en/ro locales fall back to English plural categories; add
- * rules here when a third locale lands.
+ * shortcut: locales needing more categories (ar, ru, pl) require widening
+ * `PluralCategory` before their rules land here.
  */
 export function pluralCategory(locale: Locale, count: number): PluralCategory {
   const n = Math.abs(count);
@@ -61,6 +63,11 @@ export function pluralCategory(locale: Locale, count: number): PluralCategory {
     const mod100 = n % 100;
     if (n === 0 || (mod100 >= 1 && mod100 <= 19)) return 'few';
     return 'other';
+  }
+  if (locale === 'pt-BR' || locale === 'fr') {
+    // Truncate first: CLDR keys these locales on the integer part, so 0.5 and
+    // 1.5 take the "one" form like `Intl.PluralRules` does.
+    return Math.trunc(n) <= 1 ? 'one' : 'other';
   }
   return n === 1 ? 'one' : 'other';
 }

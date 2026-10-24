@@ -1,6 +1,6 @@
 import { en } from './en';
 
-export type Locale = 'en' | 'ro';
+export type Locale = 'en' | 'ro' | 'es' | 'pt-BR' | 'fr' | 'de';
 
 export interface LocaleOption {
   code: Locale;
@@ -28,6 +28,8 @@ type StripPluralSuffix<T> = T extends `${infer Base}_one` ? Base : never;
 export type PluralBaseKey = StripPluralSuffix<TranslationKey>;
 
 export type PluralCategory = 'one' | 'few' | 'other';
+// shortcut: only one/few/other are modelled; locales with more categories
+// (ar, ru, pl) need this type widened before their catalogs ship.
 
 export interface TranslateFn {
   (key: TranslationKey, vars?: TranslationVars): string;

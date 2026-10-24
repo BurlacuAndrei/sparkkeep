@@ -39,29 +39,45 @@ const LOCALE_STORAGE_KEY = 'sparkkeep_locale';
 export const locales: LocaleOption[] = [
   { code: 'en', label: 'English' },
   { code: 'ro', label: 'Română' },
+  { code: 'es', label: 'Español' },
+  { code: 'pt-BR', label: 'Português (Brasil)' },
+  { code: 'fr', label: 'Français' },
+  { code: 'de', label: 'Deutsch' },
 ];
 
 /**
  * Registered catalogs. A missing entry falls back to English, so a locale can
  * be offered before its catalog lands.
  */
-const catalogs: Partial<Record<Locale, Catalog>> = { en, ro };
+export const catalogs: Readonly<Partial<Record<Locale, Catalog>>> = { en, ro };
 
-function isLocale(value: string | null): value is Locale {
-  return locales.some((option) => option.code === value);
+/**
+ * Browser base language to locale, derived from `locales`. The first registered
+ * code for a base wins, so `pt` resolves to `pt-BR`.
+ */
+const BASE_LANGUAGE: Record<string, Locale> = {};
+for (const { code } of locales) {
+  BASE_LANGUAGE[code.split('-')[0].toLowerCase()] ??= code;
+}
+
+function matchLocale(value: string | null | undefined): Locale | undefined {
+  if (!value) return undefined;
+  const normalized = value.toLowerCase();
+  return locales.find((option) => option.code.toLowerCase() === normalized)?.code;
 }
 
 function detectLocale(): Locale {
   if (typeof window === 'undefined') return 'en';
   try {
-    const stored = localStorage.getItem(LOCALE_STORAGE_KEY)?.toLowerCase() ?? null;
-    if (isLocale(stored)) return stored;
+    const stored = matchLocale(localStorage.getItem(LOCALE_STORAGE_KEY));
+    if (stored) return stored;
   } catch {
     // Fallback if localStorage is inaccessible
   }
   const browser = typeof navigator !== 'undefined' ? navigator.language : '';
-  const prefix = browser.split('-')[0].toLowerCase();
-  return isLocale(prefix) ? prefix : 'en';
+  const exact = matchLocale(browser);
+  if (exact) return exact;
+  return BASE_LANGUAGE[browser.split('-')[0].toLowerCase()] ?? 'en';
 }
 
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
