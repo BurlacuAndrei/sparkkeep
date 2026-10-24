@@ -916,9 +916,24 @@
 }
 
 [data-theme="light"] .triage-view {
+  --deck-dismiss: 190, 18, 60;
   --deck-keep: 2, 132, 199;
   --deck-research: 147, 51, 234;
+  --deck-skip: 71, 85, 105;
   --deck-ready: 5, 150, 105;
+}
+
+/* Dark-theme zone alphas wash out on white: raise the resting opacity. */
+[data-theme="light"] .deck-zone-dismiss {
+  color: rgba(var(--deck-dismiss), calc(0.9 + var(--zone-strength) * 0.1));
+}
+
+[data-theme="light"] .deck-zone-research {
+  color: rgba(var(--deck-research), calc(0.9 + var(--zone-strength) * 0.1));
+}
+
+[data-theme="light"] .deck-zone-skip {
+  color: rgba(var(--deck-skip), calc(0.9 + var(--zone-strength) * 0.1));
 }
 
 /* ---- Responsive -------------------------------------------------------- */

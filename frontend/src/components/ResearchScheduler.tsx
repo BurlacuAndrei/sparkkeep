@@ -192,7 +192,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
               gap: 12,
-              opacity: quietWindow.enabled ? 1 : 0.5,
+              opacity: quietWindow.enabled ? 1 : 0.8,
               pointerEvents: quietWindow.enabled ? 'auto' : 'none',
             }}
           >
@@ -278,7 +278,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
             style={{
               padding: 24,
               textAlign: 'center',
-              color: '#94a3b8',
+              color: 'var(--text-muted)',
               background: 'var(--bg-surface-elevated)',
               borderRadius: 10,
               border: '1px dashed var(--border-subtle)',
@@ -329,7 +329,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11.5, color: '#94a3b8' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11.5, color: 'var(--text-muted)' }}>
                       <span>⏰ <strong>{rule.time}</strong></span>
                       <span>· {t('settings.schedule.rules.status')} <strong>{rule.filters.status || t('settings.schedule.rules.all')}</strong></span>
                       {rule.filters.worthiness && <span>· {t('settings.schedule.rules.worthiness')} <strong>{rule.filters.worthiness}</strong></span>}

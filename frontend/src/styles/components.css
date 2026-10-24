@@ -813,6 +813,56 @@
   transform: translateY(-1px);
 }
 
+/* Light theme: dark-theme pastel text is invisible on white. */
+[data-theme="light"] .card-todo-actions-count {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .card-primary-action-btn.commit {
+  background: #eef2ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
+}
+
+[data-theme="light"] .card-primary-action-btn.start {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #bae6fd;
+}
+
+[data-theme="light"] .card-primary-action-btn.done,
+[data-theme="light"] .card-primary-action-btn.accept {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+[data-theme="light"] .card-primary-action-btn.watch,
+[data-theme="light"] .card-primary-action-btn.retry {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+[data-theme="light"] .card-primary-action-btn.skip {
+  background: #fff1f2;
+  color: #be123c;
+  border-color: #fecdd3;
+}
+
+[data-theme="light"] .card-primary-action-btn.synthesize {
+  background: #faf5ff;
+  color: #7e22ce;
+  border-color: #e9d5ff;
+}
+
+[data-theme="light"] .card-primary-action-btn.restore,
+[data-theme="light"] .card-primary-action-btn.reopen {
+  background: #eef2ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
+}
+
 .card-more-btn.active {
   background: rgba(255, 255, 255, 0.15) !important;
   color: var(--text-main);
