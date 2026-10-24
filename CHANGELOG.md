@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session cookies now expire after 30 days instead of 365 (user-visible: you
   will need to sign in again sooner).
 
+## [0.9.2] - 2026-10-24
+
+### Added
+- Spanish, Brazilian Portuguese, French, and German interface languages. All
+  six locales (English, Romanian, Spanish, Portuguese (Brasil), French, German)
+  now ship complete catalogs.
+- Per-locale plural rules: Romanian one/few/other, Portuguese (Brasil) and
+  French one for counts up to 1 including 0, matching `Intl.PluralRules`.
+- Regional browser-language detection: `pt` → `pt-BR`, `de-AT` → `de`,
+  `es-419` → `es`, `fr-CA` → `fr`.
+- Plural-aware counts across scheduler, triage, and card age surfaces.
+
 ## [0.9.1] - 2026-10-23
 
 ### Added

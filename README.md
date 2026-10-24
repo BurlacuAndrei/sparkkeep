@@ -139,7 +139,7 @@ docker compose up -d
 Download the latest lightweight (~24MB) binary for Linux, macOS, or Windows from [Releases](https://github.com/BurlacuAndrei/sparkkeep/releases):
 
 ```bash
-# Example for Linux AMD64 (replace VERSION with the latest release, e.g. v0.9.1)
+# Example for Linux AMD64 (replace VERSION with the latest release, e.g. v0.9.2)
 tar -xzf sparkkeep-<VERSION>-linux-amd64.tar.gz
 ./sparkkeep-linux-amd64
 ```
@@ -422,11 +422,11 @@ Sparkkeep uses forward-only SQLite migrations. When upgrading your instance:
 
 ## 🌐 Localization
 
-The UI offers six interface languages: **English** (default), **Romanian**, **Spanish**, **Portuguese (Brasil)**, **French**, and **German**. English and Romanian have catalogs; the other four are selectable now and render English until their catalogs land. Users switch language in **Settings → Appearance**; the choice persists in `localStorage` under `sparkkeep_locale`. `<html lang>` follows the active locale.
+The UI offers six interface languages: **English** (default), **Romanian**, **Spanish**, **Portuguese (Brasil)**, **French**, and **German**. All six have complete catalogs, each with the plural forms its language needs. Users switch language in **Settings → Appearance**; the choice persists in `localStorage` under `sparkkeep_locale`. `<html lang>` follows the active locale.
 
-On first run the browser language picks the locale: an exact match first (so `pt-BR` resolves to Portuguese (Brasil)), then the base language (`es-419` → `es`, `de-AT` → `de`, `fr-CA` → `fr`, `pt` → `pt-BR`), else English. Translating a locale is a later step: a locale without a registered catalog renders English through the resolver fallback.
+On first run the browser language picks the locale: an exact match first (so `pt-BR` resolves to Portuguese (Brasil)), then the base language (`es-419` → `es`, `de-AT` → `de`, `fr-CA` → `fr`, `pt` → `pt-BR`), else English. A browser language with no registered catalog renders English through the resolver fallback.
 
-The frontend uses a small typed catalog module in [`frontend/src/i18n/`](frontend/src/i18n/): `en.ts` is the source of truth and `ro.ts` is the Romanian catalog. `index.tsx` exposes `LocaleProvider`, `useLocale()` (`t`, `tp`, `formatNumber`, `formatDate`), and the formatting helpers.
+The frontend uses a small typed catalog module in [`frontend/src/i18n/`](frontend/src/i18n/): `en.ts` is the source of truth and `ro.ts`, `es.ts`, `pt-BR.ts`, `fr.ts`, and `de.ts` hold the translations. `index.tsx` exposes `LocaleProvider`, `useLocale()` (`t`, `tp`, `formatNumber`, `formatDate`), and the formatting helpers.
 
 To add a locale:
 

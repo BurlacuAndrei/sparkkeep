@@ -54,6 +54,12 @@ Add a small typed i18n module (dictionary + React context + hook) following the 
 - Adding locales beyond English and Romanian.
 - Backend API changes to store the UI locale.
 
+## Wave 2
+
+Wave 2 extends the i18n foundation to six locales (adds Spanish, Portuguese-Brazil, French, German) with a generalized detection algorithm, per-locale plural rules, and a test suite that iterates every registered catalog. Full specification and implementation tickets live in `.scratch/i18n-locales/`. See that spec for scope, user stories, and implementation decisions.
+
+---
+
 ## Further Notes
 
 - The `satisfies` trick requires TypeScript 4.9+ (already satisfied by the project's TS version).
