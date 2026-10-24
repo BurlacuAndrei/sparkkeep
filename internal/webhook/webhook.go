@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"sparkkeep/internal/port"
@@ -34,6 +35,9 @@ type Dispatcher struct {
 	store  port.SettingsStore
 	client *http.Client
 	logf   func(format string, args ...any)
+	wg     sync.WaitGroup
+	mu     sync.RWMutex
+	joinWG *sync.WaitGroup
 }
 
 func NewDispatcher(store port.SettingsStore, logf func(format string, args ...any)) *Dispatcher {
@@ -45,6 +49,28 @@ func NewDispatcher(store port.SettingsStore, logf func(format string, args ...an
 		client: &http.Client{Timeout: 10 * time.Second},
 		logf:   logf,
 	}
+}
+
+// JoinWaitGroup registers an external WaitGroup that will be incremented for each in-flight dispatch.
+func (d *Dispatcher) JoinWaitGroup(wg *sync.WaitGroup) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.joinWG = wg
+}
+
+// SetWaitGroup is an alias for JoinWaitGroup.
+func (d *Dispatcher) SetWaitGroup(wg *sync.WaitGroup) {
+	d.JoinWaitGroup(wg)
+}
+
+// Wait blocks until all in-flight background webhook dispatches have completed.
+func (d *Dispatcher) Wait() {
+	d.wg.Wait()
+}
+
+// Close waits for all in-flight background webhook dispatches to complete.
+func (d *Dispatcher) Close() {
+	d.Wait()
 }
 
 // Dispatch triggers an asynchronous outbound HTTP POST if a webhook URL is configured.
@@ -66,8 +92,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event EventType, data any) {
 		Data:      data,
 	}
 
-	// Fire and forget in background
+	d.mu.RLock()
+	joinWG := d.joinWG
+	d.mu.RUnlock()
+
+	d.wg.Add(1)
+	if joinWG != nil {
+		joinWG.Add(1)
+	}
+
+	// Fire and forget in background, tracked by WaitGroup
 	go func() {
+		defer d.wg.Done()
+		if joinWG != nil {
+			defer joinWG.Done()
+		}
+
 		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := d.send(bgCtx, url, secret, payload); err != nil {

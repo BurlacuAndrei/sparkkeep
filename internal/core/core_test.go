@@ -23,6 +23,7 @@ import (
 	"sparkkeep/internal/config"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/research"
+	"sparkkeep/internal/store"
 	"sparkkeep/internal/webhook"
 )
 
@@ -165,6 +166,9 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	}
 	if p.AnalysisFailed != nil {
 		c.AnalysisFailed = *p.AnalysisFailed
+	}
+	if p.ResearchState != nil {
+		c.ResearchState = *p.ResearchState
 	}
 	c.UpdatedAt = time.Now().UTC()
 	s.cards[id] = c
@@ -573,11 +577,14 @@ func (s *stubStore) Close() error { return nil }
 
 // stubChannel records notifications; when err is set Notify returns it.
 type stubChannel struct {
+	mu       sync.Mutex
 	notifies []port.Notification
 	err      error
 }
 
 func (c *stubChannel) Notify(_ context.Context, n port.Notification) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.notifies = append(c.notifies, n)
 	return c.err
 }
@@ -2798,4 +2805,221 @@ func TestForceCapture(t *testing.T) {
 	if card2.ID != card.ID {
 		t.Errorf("second call created new card %d, want existing card %d", card2.ID, card.ID)
 	}
+}
+
+func TestAutoExportSettings(t *testing.T) {
+	st := newStubStore()
+	s := baseSvc(t, st, &stubChannel{}, nil)
+
+	ctx := context.Background()
+	_ = st.SetSetting(ctx, "obsidian_auto_export", "true")
+	_ = st.SetSetting(ctx, "notion_auto_export", "true")
+	_ = st.SetSetting(ctx, "joplin_auto_export", "true")
+
+	s.loadAutoExportSettings(ctx)
+	if !s.autoExportObsidian || !s.autoExportNotion || !s.autoExportJoplin {
+		t.Fatalf("expected all auto-export settings true, got obs=%v notion=%v joplin=%v",
+			s.autoExportObsidian, s.autoExportNotion, s.autoExportJoplin)
+	}
+
+	// Toggle to false
+	_ = st.SetSetting(ctx, "obsidian_auto_export", "false")
+	_ = st.SetSetting(ctx, "notion_auto_export", "false")
+	_ = st.SetSetting(ctx, "joplin_auto_export", "false")
+
+	s.loadAutoExportSettings(ctx)
+	if s.autoExportObsidian || s.autoExportNotion || s.autoExportJoplin {
+		t.Fatalf("expected all auto-export settings false, got obs=%v notion=%v joplin=%v",
+			s.autoExportObsidian, s.autoExportNotion, s.autoExportJoplin)
+	}
+}
+
+func TestAutoExport(t *testing.T) {
+	st := newStubStore()
+	s := baseSvc(t, st, &stubChannel{}, nil)
+
+	ctx := context.Background()
+	vaultDir := t.TempDir()
+	_ = st.SetSetting(ctx, "obsidian_auto_export", "true")
+	_ = st.SetSetting(ctx, "obsidian_vault_path", vaultDir)
+
+	card, err := st.CreateCard(ctx, port.Card{
+		Title:  "Test Auto Export",
+		Status: port.StatusInbox,
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	s.loadAutoExportSettings(ctx)
+	s.autoExportCard(ctx, card.ID)
+
+	s.WG.Wait()
+
+	entries, err := os.ReadDir(vaultDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatalf("expected exported markdown file in vaultDir, found 0 files")
+	}
+}
+
+func TestConcurrentCaptureShare(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "concurrent.db")
+	st, err := store.New(dbPath)
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+	defer st.Close()
+
+	llm := llmStub(http.StatusOK, `[{"title":"Concurrent Article","summary":"test","horizon":"short-term","tags":["tech"],"links":[]}]`)
+	defer llm.Close()
+
+	ch := &stubChannel{}
+	s := baseSvc(t, st, ch, llm)
+	s.Fetcher = textFetcher()
+
+	url := "https://example.com/item-1"
+	const concurrency = 10
+	var wg sync.WaitGroup
+	errCh := make(chan error, concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_, err := s.CaptureShare(context.Background(), capture.Share{
+				URL:     url,
+				Caption: fmt.Sprintf("Caption from user %d", idx),
+			})
+			if err != nil {
+				errCh <- err
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Fatalf("unexpected CaptureShare error: %v", err)
+	}
+
+	cards, err := st.ListCards(context.Background(), port.CardFilter{Limit: 100})
+	if err != nil {
+		t.Fatalf("ListCards: %v", err)
+	}
+	if len(cards) != 1 {
+		t.Fatalf("expected exactly 1 card created, got %d", len(cards))
+	}
+	if cards[0].Title != "Concurrent Article" {
+		t.Errorf("expected card title %q, got %q", "Concurrent Article", cards[0].Title)
+	}
+}
+
+func TestPanicRecovery(t *testing.T) {
+	t.Run("GoResearch_CatchesPanicAndFailsTask", func(t *testing.T) {
+		st := newStubStore()
+		ch := &stubChannel{}
+		s := baseSvc(t, st, ch, nil)
+
+		s.Runner = &research.Runner{
+			Fetcher: stubFetcher{
+				fetchWithCtx: func(ctx context.Context, share capture.Share) capture.Fetched {
+					panic("simulated panic in research worker")
+				},
+			},
+		}
+
+		ctx := context.Background()
+		card, err := st.CreateCard(ctx, port.Card{
+			Title:      "Panic Test Card",
+			References: []port.Reference{{URL: "https://example.com/panic-ref"}},
+		})
+		if err != nil {
+			t.Fatalf("CreateCard: %v", err)
+		}
+
+		s.GoResearch(ctx, card.ID)
+		s.WG.Wait()
+
+		history, err := st.ListResearchByCard(ctx, card.ID)
+		if err != nil {
+			t.Fatalf("ListResearchByCard: %v", err)
+		}
+		if len(history) == 0 {
+			t.Fatalf("expected research record created")
+		}
+		res := history[0]
+		if res.Status != "failed" {
+			t.Errorf("research status = %q, want 'failed'", res.Status)
+		}
+		if !strings.Contains(res.Error, "panic") {
+			t.Errorf("research error = %q, want containing 'panic'", res.Error)
+		}
+
+		updatedCard, err := st.GetCard(ctx, card.ID)
+		if err != nil {
+			t.Fatalf("GetCard: %v", err)
+		}
+		if updatedCard.ResearchState != port.ResearchStateFailed {
+			t.Errorf("card research_state = %q, want %q", updatedCard.ResearchState, port.ResearchStateFailed)
+		}
+	})
+
+	t.Run("ProcessNextQueued_CatchesPanicAndFailsTask", func(t *testing.T) {
+		st := newStubStore()
+		ch := &stubChannel{}
+		s := baseSvc(t, st, ch, nil)
+
+		s.Runner = &research.Runner{
+			Fetcher: stubFetcher{
+				fetchWithCtx: func(ctx context.Context, share capture.Share) capture.Fetched {
+					panic("simulated panic in queued worker")
+				},
+			},
+		}
+
+		ctx := context.Background()
+		card, err := st.CreateCard(ctx, port.Card{
+			Title:      "Queued Panic Card",
+			References: []port.Reference{{URL: "https://example.com/panic-ref"}},
+		})
+		if err != nil {
+			t.Fatalf("CreateCard: %v", err)
+		}
+
+		now := time.Now()
+		queued, err := st.BatchQueueResearch(ctx, []int64{card.ID}, nil, &now, "b1")
+		if err != nil || len(queued) == 0 {
+			t.Fatalf("BatchQueueResearch: %v", err)
+		}
+
+		processed, err := s.ProcessNextQueued(ctx, now)
+		if !processed {
+			t.Errorf("expected ProcessNextQueued to return processed=true")
+		}
+		if err == nil || !strings.Contains(err.Error(), "panic") {
+			t.Errorf("expected panic error returned, got %v", err)
+		}
+
+		res, err := st.GetResearch(ctx, queued[0].ID)
+		if err != nil {
+			t.Fatalf("GetResearch: %v", err)
+		}
+		if res.Status != "failed" {
+			t.Errorf("research status = %q, want 'failed'", res.Status)
+		}
+		if !strings.Contains(res.Error, "panic") {
+			t.Errorf("research error = %q, want containing 'panic'", res.Error)
+		}
+
+		updatedCard, err := st.GetCard(ctx, card.ID)
+		if err != nil {
+			t.Fatalf("GetCard: %v", err)
+		}
+		if updatedCard.ResearchState != port.ResearchStateFailed {
+			t.Errorf("card research_state = %q, want %q", updatedCard.ResearchState, port.ResearchStateFailed)
+		}
+	})
 }

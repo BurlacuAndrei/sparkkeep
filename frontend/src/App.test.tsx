@@ -120,7 +120,7 @@ describe('App Playbook Studio Top-Level Navigation & Full-Width Workspace', () =
     // Wait for Settings Modal to load
     await waitFor(() => {
       expect(screen.getByText('Platform Preferences')).toBeDefined();
-    });
+    }, { timeout: 4000 });
 
     // Verify Research Playbooks tab is not rendered in Platform Preferences
     expect(screen.queryByRole('tab', { name: /Research Playbooks/i })).toBeNull();

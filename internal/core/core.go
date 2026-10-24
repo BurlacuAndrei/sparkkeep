@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -52,6 +53,11 @@ var (
 	scriptStyleRe = regexp.MustCompile(`(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>`)
 )
 
+type urlLock struct {
+	mu       sync.Mutex
+	refCount int
+}
+
 // Service wires the pipeline together. Channel is left nil until the
 // channel adapter attaches it (web/main wiring); a nil Channel is a no-op
 // in Notify.
@@ -85,6 +91,9 @@ type Service struct {
 	researchMu        sync.Mutex
 	ctx               context.Context
 	mu                sync.RWMutex
+
+	captureMu    sync.Mutex
+	captureLocks map[string]*urlLock
 
 	// Auto-export settings (populated from store on demand)
 	autoExportMu       sync.RWMutex
@@ -150,6 +159,13 @@ func (s *Service) GoResearch(ctx context.Context, cardID int64, playbookID ...*i
 	s.WG.Add(1)
 	go func() {
 		defer s.WG.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				buf := make([]byte, 4096)
+				n := runtime.Stack(buf, false)
+				s.Logf("core: panic in GoResearch (card %d): %v\n%s", cardID, r, buf[:n])
+			}
+		}()
 		if err := s.Research(bgCtx, cardID, playbookID...); err != nil && !errors.Is(err, port.ErrResearchActive) {
 			s.Logf("core: background research %d: %v", cardID, err)
 		}
@@ -237,6 +253,9 @@ func New(ctx context.Context, st port.Store, cfg config.Config, logf func(format
 		Config:            cfg,
 		queueWakeup:       make(chan struct{}, 1),
 		ctx:               ctx,
+	}
+	if s.Webhook != nil {
+		s.Webhook.JoinWaitGroup(&s.WG)
 	}
 	if s.Logf == nil {
 		s.Logf = log.Printf
@@ -392,6 +411,35 @@ func (s *Service) Capture(ctx context.Context, raw string) ([]int64, error) {
 func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int64, error) {
 	var existingCap *port.Capture
 	sourceURL := strings.TrimSpace(share.URL)
+	if sourceURL != "" {
+		s.captureMu.Lock()
+		if s.captureLocks == nil {
+			s.captureLocks = make(map[string]*urlLock)
+		}
+		lk, ok := s.captureLocks[sourceURL]
+		if !ok {
+			lk = &urlLock{}
+			s.captureLocks[sourceURL] = lk
+		}
+		lk.refCount++
+		s.captureMu.Unlock()
+
+		lk.mu.Lock()
+		defer func() {
+			lk.mu.Unlock()
+			s.captureMu.Lock()
+			lk.refCount--
+			if lk.refCount == 0 {
+				delete(s.captureLocks, sourceURL)
+			}
+			s.captureMu.Unlock()
+		}()
+
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+
 	if sourceURL != "" && s.Store != nil {
 		if capRec, err := s.Store.GetCaptureBySourceURL(ctx, sourceURL); err == nil {
 			if _, cardErr := s.Store.GetCardBySourceURL(ctx, sourceURL); cardErr == nil {
@@ -714,7 +762,26 @@ func (s *Service) Research(ctx context.Context, cardID int64, playbookID ...*int
 	return s.executeResearch(ctx, row, card)
 }
 
-func (s *Service) executeResearch(ctx context.Context, row port.Research, card port.Card) error {
+func (s *Service) executeResearch(ctx context.Context, row port.Research, card port.Card) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			buf := make([]byte, 4096)
+			n := runtime.Stack(buf, false)
+			panicErr := fmt.Sprintf("panic: %v", r)
+			s.Logf("core: research execution panic (row %d, card %d): %v\n%s", row.ID, card.ID, r, buf[:n])
+			if s.Store != nil {
+				_, _ = s.Store.SetResearch(ctx, row.ID, "failed", "", panicErr)
+				rsFailed := port.ResearchStateFailed
+				_, _ = s.Store.UpdateCard(ctx, card.ID, port.CardPatch{ResearchState: &rsFailed})
+			}
+			_ = s.notify(ctx, port.Notification{
+				Kind: "research_failed",
+				Res:  &port.Research{ID: row.ID, CardID: card.ID, Status: "failed", Error: panicErr},
+				Text: panicErr,
+			})
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
 	if s.Runner == nil {
 		return errors.New("core: research runner not initialized")
 	}
@@ -1951,15 +2018,14 @@ func (s *Service) loadAutoExportSettings(ctx context.Context) {
 	s.autoExportMu.Lock()
 	defer s.autoExportMu.Unlock()
 
-	if v, _ := s.Store.GetSetting(ctx, "obsidian_auto_export"); v == "true" {
-		s.autoExportObsidian = true
-	}
-	if v, _ := s.Store.GetSetting(ctx, "notion_auto_export"); v == "true" {
-		s.autoExportNotion = true
-	}
-	if v, _ := s.Store.GetSetting(ctx, "joplin_auto_export"); v == "true" {
-		s.autoExportJoplin = true
-	}
+	obsVal, _ := s.Store.GetSetting(ctx, "obsidian_auto_export")
+	s.autoExportObsidian = obsVal == "true"
+
+	notionVal, _ := s.Store.GetSetting(ctx, "notion_auto_export")
+	s.autoExportNotion = notionVal == "true"
+
+	joplinVal, _ := s.Store.GetSetting(ctx, "joplin_auto_export")
+	s.autoExportJoplin = joplinVal == "true"
 }
 
 // TriggerAutoExportOnStatusChange fires when card status enters doing/done states.
@@ -1998,11 +2064,11 @@ func (s *Service) autoExportCard(ctx context.Context, cardID int64) {
 
 	// Run detached with 15s timeout
 	exportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
-	defer cancel()
 
 	s.WG.Add(1)
 	go func() {
 		defer s.WG.Done()
+		defer cancel()
 
 		if obsidian {
 			if err := s.ExportCardToSink(exportCtx, port.SinkObsidian, cardID); err != nil {

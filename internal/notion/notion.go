@@ -25,12 +25,20 @@ const (
 type Config struct {
 	Token      string // Internal Integration Token (secret_...)
 	DatabaseID string // Target database ID
+	BaseURL    string // Optional API base URL override
 }
 
 // Client is a Notion API client for Sparkkeep exports.
 type Client struct {
 	config Config
 	http   *http.Client
+}
+
+func (c *Client) baseURL() string {
+	if c.config.BaseURL != "" {
+		return strings.TrimRight(c.config.BaseURL, "/")
+	}
+	return notionAPIBase
 }
 
 // NewClient creates a new Notion client.
@@ -62,7 +70,7 @@ func (c *Client) TestConnection(ctx context.Context) (SinkTestResult, error) {
 	}
 
 	// Test token by retrieving the database
-	url := fmt.Sprintf("%s/databases/%s", notionAPIBase, c.config.DatabaseID)
+	url := fmt.Sprintf("%s/databases/%s", c.baseURL(), c.config.DatabaseID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return SinkTestResult{Success: false, Message: err.Error()}, err
@@ -144,7 +152,7 @@ func (c *Client) EnsureDatabaseSchema(ctx context.Context) error {
 	}
 
 	// Get current database schema
-	url := fmt.Sprintf("%s/databases/%s", notionAPIBase, c.config.DatabaseID)
+	url := fmt.Sprintf("%s/databases/%s", c.baseURL(), c.config.DatabaseID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -281,7 +289,7 @@ func (c *Client) EnsureDatabaseSchema(ctx context.Context) error {
 	}
 
 	// PATCH database to add properties
-	patchURL := fmt.Sprintf("%s/databases/%s", notionAPIBase, c.config.DatabaseID)
+	patchURL := fmt.Sprintf("%s/databases/%s", c.baseURL(), c.config.DatabaseID)
 	patchReq, err := http.NewRequestWithContext(ctx, http.MethodPatch, patchURL, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -339,7 +347,7 @@ func (c *Client) UpsertCardExport(ctx context.Context, exp port.CardExport) (str
 
 // findPageBySparkkeepID queries the database for a page with matching Sparkkeep ID.
 func (c *Client) findPageBySparkkeepID(ctx context.Context, sparkkeepID int64) (string, error) {
-	url := fmt.Sprintf("%s/databases/%s/query", notionAPIBase, c.config.DatabaseID)
+	url := fmt.Sprintf("%s/databases/%s/query", c.baseURL(), c.config.DatabaseID)
 
 	filter := map[string]any{
 		"filter": map[string]any{
@@ -573,14 +581,21 @@ func (c *Client) buildResearchDossierBlocks(res *port.Research) []map[string]any
 
 // createPage creates a new page in the database.
 func (c *Client) createPage(ctx context.Context, props map[string]any, blocks []map[string]any) (string, error) {
-	url := fmt.Sprintf("%s/pages", notionAPIBase)
+	url := fmt.Sprintf("%s/pages", c.baseURL())
+
+	initialBlocks := blocks
+	var remainingBlocks []map[string]any
+	if len(blocks) > maxBlocksPerBatch {
+		initialBlocks = blocks[:maxBlocksPerBatch]
+		remainingBlocks = blocks[maxBlocksPerBatch:]
+	}
 
 	payload := map[string]any{
 		"parent": map[string]any{
 			"database_id": c.config.DatabaseID,
 		},
 		"properties": props,
-		"children":   blocks,
+		"children":   initialBlocks,
 	}
 
 	body, err := json.Marshal(payload)
@@ -612,13 +627,19 @@ func (c *Client) createPage(ctx context.Context, props map[string]any, blocks []
 		return "", err
 	}
 
+	if len(remainingBlocks) > 0 {
+		if err := c.appendBlocks(ctx, pageResp.ID, remainingBlocks); err != nil {
+			return pageResp.ID, err
+		}
+	}
+
 	return pageResp.ID, nil
 }
 
 // updatePage updates an existing page's properties and replaces all blocks.
 func (c *Client) updatePage(ctx context.Context, pageID string, props map[string]any, blocks []map[string]any) error {
 	// 1. Update page properties
-	url := fmt.Sprintf("%s/pages/%s", notionAPIBase, pageID)
+	url := fmt.Sprintf("%s/pages/%s", c.baseURL(), pageID)
 	payload := map[string]any{"properties": props}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -653,7 +674,7 @@ func (c *Client) updatePage(ctx context.Context, pageID string, props map[string
 // archiveAllBlocks archives all child blocks of a page.
 func (c *Client) archiveAllBlocks(ctx context.Context, blockID string) error {
 	// Get all blocks
-	url := fmt.Sprintf("%s/blocks/%s/children?page_size=100", notionAPIBase, blockID)
+	url := fmt.Sprintf("%s/blocks/%s/children?page_size=100", c.baseURL(), blockID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -683,7 +704,7 @@ func (c *Client) archiveAllBlocks(ctx context.Context, blockID string) error {
 
 	// Archive each block
 	for _, child := range childrenResp.Results {
-		archiveURL := fmt.Sprintf("%s/blocks/%s", notionAPIBase, child.ID)
+		archiveURL := fmt.Sprintf("%s/blocks/%s", c.baseURL(), child.ID)
 		archivePayload := map[string]any{"archived": true}
 		archiveBody, _ := json.Marshal(archivePayload)
 		archiveReq, _ := http.NewRequestWithContext(ctx, http.MethodPatch, archiveURL, bytes.NewReader(archiveBody))
@@ -707,7 +728,7 @@ func (c *Client) appendBlocks(ctx context.Context, parentID string, blocks []map
 		}
 		batch := blocks[i:end]
 
-		url := fmt.Sprintf("%s/blocks/%s/children", notionAPIBase, parentID)
+		url := fmt.Sprintf("%s/blocks/%s/children", c.baseURL(), parentID)
 		payload := map[string]any{"children": batch}
 		body, err := json.Marshal(payload)
 		if err != nil {

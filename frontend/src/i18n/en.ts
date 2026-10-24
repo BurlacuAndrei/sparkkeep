@@ -107,6 +107,7 @@ export const en = {
         aria: 'Interface theme selector',
         dark: { label: 'Dark Mode', sub: 'Deep obsidian slate' },
         light: { label: 'Light Mode', sub: 'Crisp high-contrast' },
+        oled: { label: 'OLED Mode', sub: 'Pure pitch black' },
         system: { label: 'System Default', sub: 'Auto-sync with OS' },
       },
       palette: {
@@ -1922,6 +1923,7 @@ export const en = {
         theme: 'Appearance Theme',
         themeDark: 'Dark',
         themeLight: 'Light',
+        themeOled: 'OLED',
         themeMode: '{{theme}} Mode',
         themeSystem: 'System ({{theme}})',
         protection: 'Access Protection',

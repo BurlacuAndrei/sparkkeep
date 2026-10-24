@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, Monitor, Check } from 'lucide-react';
+import { Sun, Moon, Monitor, Check, Contrast } from 'lucide-react';
 import { useTheme, Theme } from '../context/ThemeContext';
 import { useLocale } from '../i18n';
 
@@ -23,6 +23,12 @@ export function ThemeSelector({ className = '' }: ThemeSelectorProps) {
       label: t('settings.appearance.theme.light.label'),
       sub: t('settings.appearance.theme.light.sub'),
       icon: Sun,
+    },
+    {
+      id: 'oled',
+      label: t('settings.appearance.theme.oled.label'),
+      sub: t('settings.appearance.theme.oled.sub'),
+      icon: Contrast,
     },
     {
       id: 'system',

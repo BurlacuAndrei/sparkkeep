@@ -519,3 +519,24 @@ func TestMediaMetaInstagramEmbedExtraction(t *testing.T) {
 		t.Errorf("Files[1] = %+v", f.Files[1])
 	}
 }
+
+func TestHeadlessExtractRefusesMetadata(t *testing.T) {
+	blockedURLs := []string{
+		"http://169.254.169.254/latest/meta-data/",
+		"http://169.254.1.1/secret",
+		"http://[fe80::1]/info",
+		"http://[::ffff:169.254.169.254]/data",
+	}
+
+	for _, u := range blockedURLs {
+		t.Run(u, func(t *testing.T) {
+			_, _, _, err := HeadlessExtract(context.Background(), u)
+			if err == nil {
+				t.Fatalf("HeadlessExtract(%q) succeeded, want error blocking metadata", u)
+			}
+			if !strings.Contains(err.Error(), "netguard") && !strings.Contains(err.Error(), "metadata") {
+				t.Errorf("error %q does not mention netguard or metadata", err)
+			}
+		})
+	}
+}

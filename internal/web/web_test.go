@@ -1,6 +1,8 @@
 package web
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1708,6 +1710,31 @@ func TestStaticIndexServed(t *testing.T) {
 	}
 }
 
+func TestSPAFallback(t *testing.T) {
+	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
+
+	routes := []string{"/cards", "/triage", "/playbooks", "/settings", "/cards/123"}
+	for _, route := range routes {
+		rr := doJSON(t, h, http.MethodGet, route, "")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET %s: status = %d, want 200", route, rr.Code)
+		}
+		if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+			t.Fatalf("GET %s: Content-Type = %q, want text/html", route, ct)
+		}
+		if !strings.Contains(rr.Body.String(), "app.js") {
+			t.Fatalf("GET %s: index.html does not reference app.js", route)
+		}
+	}
+
+	for _, notFoundPath := range []string{"/missing.js", "/style.css", "/api/v1/nonexistent", "/api"} {
+		rr := doJSON(t, h, http.MethodGet, notFoundPath, "")
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("GET %s: status = %d, want 404", notFoundPath, rr.Code)
+		}
+	}
+}
+
 func TestStaticAssetCached(t *testing.T) {
 	h := webHandler(newStubStore(), &core.Service{Logf: t.Logf})
 
@@ -2148,6 +2175,10 @@ func TestAuthMiddleware_WebhookIngressAndMethodSafeValidation(t *testing.T) {
 	}
 
 	st := newStubStore()
+	st.cards[1] = port.Card{
+		ID:    1,
+		Title: "Test Card",
+	}
 	st.researches[42] = port.Research{
 		ID:        42,
 		CardID:    1,
@@ -3975,6 +4006,31 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestSetupDemo(t *testing.T) {
+	st := newStubStore()
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	// First invocation succeeds when unconfigured.
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/setup/demo", `{"auth_token":"demopass"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("first setup/demo: status = %d, want 200", rr.Code)
+	}
+
+	// Subsequent invocation must be rejected with 403 Forbidden because instance is configured.
+	rrConfigured := doJSON(t, h, http.MethodPost, "/api/v1/setup/demo", `{"auth_token":"attacker"}`)
+	if rrConfigured.Code != http.StatusForbidden {
+		t.Fatalf("subsequent setup/demo: status = %d, want 403", rrConfigured.Code)
+	}
+	var errResp map[string]string
+	if err := json.Unmarshal(rrConfigured.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error json: %v", err)
+	}
+	if errResp["error"] != "instance already configured" {
+		t.Fatalf("expected error 'instance already configured', got %q", errResp["error"])
+	}
+}
+
 func TestSetupDemoAndLibraryExport(t *testing.T) {
 	st := newStubStore()
 	svc := &core.Service{Store: st, Logf: t.Logf}
@@ -4095,5 +4151,60 @@ func TestObsidianSinkEndpoints(t *testing.T) {
 	rrMissing := doJSON(t, h, http.MethodPost, "/api/v1/cards/99999/export/obsidian", "")
 	if rrMissing.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing card, got %d", rrMissing.Code)
+	}
+}
+
+func TestExportLibraryZip(t *testing.T) {
+	st := newStubStore()
+	svc := &core.Service{Store: st, Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	statuses := []string{
+		port.StatusInbox,
+		port.StatusToDo,
+		port.StatusInProgress,
+		port.StatusReview,
+		port.StatusDone,
+	}
+
+	for _, s := range statuses {
+		_, err := st.CreateCard(context.Background(), port.Card{
+			Title:  fmt.Sprintf("Card in %s", s),
+			Status: s,
+		})
+		if err != nil {
+			t.Fatalf("create card with status %s: %v", s, err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/export/archive.zip", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "application/zip" {
+		t.Fatalf("Content-Type = %s, want application/zip", ct)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(rr.Body.Bytes()), int64(rr.Body.Len()))
+	if err != nil {
+		t.Fatalf("read zip archive: %v", err)
+	}
+
+	foundFolders := make(map[string]bool)
+	for _, f := range zr.File {
+		parts := strings.Split(f.Name, "/")
+		if len(parts) >= 2 && parts[0] == "cards" {
+			foundFolders[parts[1]] = true
+		}
+	}
+
+	expectedFolders := []string{"Inbox", "To-Do", "Doing", "Review", "Done"}
+	for _, expected := range expectedFolders {
+		if !foundFolders[expected] {
+			t.Errorf("expected folder %q in archive, found: %v", expected, foundFolders)
+		}
 	}
 }

@@ -96,6 +96,8 @@ func (a *api) exportLibraryZip(w http.ResponseWriter, r *http.Request) {
 		c := exp.Card
 		folder := "Inbox"
 		switch c.Status {
+		case port.StatusToDo:
+			folder = "To-Do"
 		case port.StatusInProgress:
 			folder = "Doing"
 		case port.StatusReview:

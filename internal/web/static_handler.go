@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -33,7 +34,8 @@ func cacheAssets(h http.Handler) http.Handler {
 }
 
 func (a *api) index(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
+	p := r.URL.Path
+	if p == "/api" || strings.HasPrefix(p, "/api/") || path.Ext(p) != "" {
 		http.NotFound(w, r)
 		return
 	}

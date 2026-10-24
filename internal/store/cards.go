@@ -13,13 +13,12 @@ import (
 )
 
 func (s *Store) CreateCard(ctx context.Context, c port.Card) (port.Card, error) {
-	return s.createCard(ctx, s.db, c)
-}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return port.Card{}, err
+	}
+	defer tx.Rollback()
 
-func (s *Store) createCard(ctx context.Context, exec interface {
-	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
-	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
-}, c port.Card) (port.Card, error) {
 	ts := now()
 	actionsJSON := "[]"
 	if len(c.ProposedActions) > 0 {
@@ -118,7 +117,7 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	if sourceMsgID == "" {
 		sourceMsgID = c.Provenance.MsgID
 	}
-	res, err := exec.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		`INSERT INTO cards (capture_id, title, summary, horizon, status, source_url, source_note, executive_summary, value_proposition, proposed_actions, completed_actions, type, tldr, why_care, claims, open_questions, signals, worthiness, actions_source, analysis_failed, research_verdict, research_confidence, suggested_horizon, suggested_tags, research_state, source_channel, source_channel_chat_id, source_channel_msg_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		captureID, c.Title, summary, c.Horizon, c.Status, c.SourceURL, c.SourceNote, execSummary, valProp, actionsJSON, completedActionsJSON, cardType, tldr, whyCare, claimsJSON, oqJSON, signalsJSON, worthinessJSON, actionsSource, analysisFailedInt, c.ResearchVerdict, c.ResearchConfidence, c.SuggestedHorizon, suggestedTagsJSON, researchState, sourceChannel, sourceChatID, sourceMsgID, ts, ts)
@@ -169,36 +168,24 @@ func (s *Store) createCard(ctx context.Context, exec interface {
 	if c.References == nil {
 		c.References = []port.Reference{}
 	}
-	if len(c.Tags) > 0 || len(c.References) > 0 {
-		tx, ok := exec.(*sql.Tx)
-		if !ok {
-			tx, err = s.db.BeginTx(ctx, nil)
-			if err != nil {
-				return port.Card{}, err
-			}
-			defer tx.Rollback()
+	for _, name := range c.Tags {
+		tagID, err := s.upsertTag(ctx, tx, name)
+		if err != nil {
+			return port.Card{}, err
 		}
-		for _, name := range c.Tags {
-			tagID, err := s.upsertTag(ctx, tx, name)
-			if err != nil {
-				return port.Card{}, err
-			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO cards_tags (card_id, tag_id) VALUES (?, ?)`, id, tagID); err != nil {
-				return port.Card{}, err
-			}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO cards_tags (card_id, tag_id) VALUES (?, ?)`, id, tagID); err != nil {
+			return port.Card{}, err
 		}
-		for i, ref := range c.References {
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO card_references (card_id, kind, label, url, position) VALUES (?, ?, ?, ?, ?)`,
-				id, ref.Kind, ref.Label, ref.URL, i); err != nil {
-				return port.Card{}, err
-			}
+	}
+	for i, ref := range c.References {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO card_references (card_id, kind, label, url, position) VALUES (?, ?, ?, ?, ?)`,
+			id, ref.Kind, ref.Label, ref.URL, i); err != nil {
+			return port.Card{}, err
 		}
-		if !ok {
-			if err := tx.Commit(); err != nil {
-				return port.Card{}, err
-			}
-		}
+	}
+	if err := tx.Commit(); err != nil {
+		return port.Card{}, err
 	}
 	return c, nil
 }
@@ -392,6 +379,7 @@ func (s *Store) cardTags(ctx context.Context, cardID int64) ([]string, error) {
 // It handles phrase queries, multi-word tokens with prefix matching, and sanitizes
 // characters that could cause FTS5 syntax errors.
 func sanitizeFTSQuery(raw string) string {
+	raw = strings.ReplaceAll(raw, "\x00", " ")
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return `""`

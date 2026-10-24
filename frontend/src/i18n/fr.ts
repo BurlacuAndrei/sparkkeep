@@ -116,6 +116,10 @@ export const fr = {
           label: 'Mode clair',
           sub: 'Contraste net et élevé',
         },
+        oled: {
+          label: 'Mode OLED',
+          sub: 'Noir absolu pur',
+        },
         system: {
           label: 'Paramètre système',
           sub: "Synchronisation automatique avec le système",
@@ -1894,6 +1898,7 @@ export const fr = {
         theme: 'Apparence',
         themeDark: 'Sombre',
         themeLight: 'Clair',
+        themeOled: 'OLED',
         themeMode: 'Mode {{theme}}',
         themeSystem: 'Système ({{theme}})',
         protection: "Protection de l'accès",

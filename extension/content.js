@@ -18,12 +18,44 @@
 
     // 2. Magic Pairing Handshake
     if (event.data && event.data.type === 'SPARKKEEP_PAIR_EXTENSION') {
+      // Validate origin matches current window origin
+      if (event.origin && event.origin !== window.location.origin) return;
+
       const { serverUrl, token } = event.data;
       if (!serverUrl) return;
+
+      // Validate serverUrl matches message origin
+      let serverOrigin;
+      try {
+        serverOrigin = new URL(serverUrl).origin;
+      } catch {
+        return;
+      }
+
+      const expectedOrigin = event.origin || window.location.origin;
+      if (serverOrigin !== expectedOrigin) return;
 
       const cleanUrl = serverUrl.replace(/\/+$/, '');
       try {
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          // If already configured, ensure message matches configured server origin
+          const stored = await chrome.storage.local.get(['sparkkeep_url']);
+          if (stored && stored.sparkkeep_url) {
+            try {
+              const configuredOrigin = new URL(stored.sparkkeep_url).origin;
+              if (configuredOrigin !== expectedOrigin) {
+                window.postMessage({
+                  type: 'SPARKKEEP_PAIR_ACK',
+                  ok: false,
+                  error: 'Rejected: Origin does not match configured Sparkkeep server',
+                }, '*');
+                return;
+              }
+            } catch {
+              // Ignore invalid stored url
+            }
+          }
+
           await chrome.storage.local.set({
             sparkkeep_url: cleanUrl,
             sparkkeep_token: token || '',

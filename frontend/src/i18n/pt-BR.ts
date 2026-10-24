@@ -111,6 +111,7 @@ export const ptBR = {
         aria: 'Seletor de tema da interface',
         dark: { label: 'Modo escuro', sub: 'Ardósia obsidiana profunda' },
         light: { label: 'Modo claro', sub: 'Alto contraste nítido' },
+        oled: { label: 'Modo OLED', sub: 'Preto puro absoluto' },
         system: { label: 'Padrão do sistema', sub: 'Sincronização automática com o SO' },
       },
       palette: {
@@ -1944,6 +1945,7 @@ export const ptBR = {
         theme: 'Tema de aparência',
         themeDark: 'Escuro',
         themeLight: 'Claro',
+        themeOled: 'OLED',
         themeMode: 'Modo {{theme}}',
         themeSystem: 'Sistema ({{theme}})',
         protection: 'Proteção de acesso',

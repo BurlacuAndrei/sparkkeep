@@ -761,6 +761,32 @@ func TestCreateCardWithEmptyTags(t *testing.T) {
 	}
 }
 
+func TestCreateCardAtomicRollbackOnTagFailure(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	_, err := s.db.Exec(`CREATE TRIGGER fail_cards_tags BEFORE INSERT ON cards_tags BEGIN SELECT RAISE(ABORT, 'forced tag failure'); END;`)
+	if err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	_, err = s.CreateCard(ctx, port.Card{
+		Title:   "Atomic Card",
+		Summary: "Should not persist on tag failure",
+		Tags:    []string{"tag-fail"},
+	})
+	if err == nil {
+		t.Fatal("expected CreateCard to fail due to trigger, got nil")
+	}
+
+	var count int
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM cards").Scan(&count); err != nil {
+		t.Fatalf("count cards: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 cards after rollback, got %d", count)
+	}
+}
+
 func TestGetCardBySourceURL_NotFound(t *testing.T) {
 	s, ctx := newTestStore(t)
 	if _, err := s.GetCardBySourceURL(ctx, "https://nonexistent.test"); !errors.Is(err, port.ErrNotFound) {
@@ -2381,6 +2407,8 @@ func TestCardsFTSSearch(t *testing.T) {
 		{"quoted phrase", `"Ultra fast memory caching"`, c1.ID, 1},
 		{"whitespace and quotes", `  "Distributed Key-Value Engine"  `, c1.ID, 1},
 		{"wildcard only", `*`, 0, 0},
+		{"null byte in query", "test\x00nullbyte", 0, 0},
+		{"complex query with null byte", `""" NOT AND OR NEAR C++ && ` + "\x00", 0, 0},
 	}
 
 	for _, tc := range testCases {
@@ -2394,6 +2422,36 @@ func TestCardsFTSSearch(t *testing.T) {
 			}
 			if tc.wantCount > 0 && cards[0].ID != tc.wantID {
 				t.Fatalf("ListCards(Query=%q) got card ID %d, want %d", tc.query, cards[0].ID, tc.wantID)
+			}
+		})
+	}
+}
+
+func TestSearchCards(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	_, err := s.CreateCard(ctx, port.Card{
+		Title:   "Machine Learning Observability with C++",
+		Summary: "Realtime metrics and tracing pipeline with nullbyte handling",
+		Tags:    []string{"c++", "mlops"},
+	})
+	if err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	queries := []string{
+		`""" NOT AND OR NEAR C++ && ` + "\x00",
+		"test\x00nullbyte",
+		"\x00",
+		"C++\x00",
+		"Observability\x00stack",
+	}
+
+	for _, q := range queries {
+		t.Run(fmt.Sprintf("%q", q), func(t *testing.T) {
+			_, err := s.ListCards(ctx, port.CardFilter{Query: q})
+			if err != nil {
+				t.Fatalf("ListCards(Query=%q) failed: %v", q, err)
 			}
 		})
 	}

@@ -189,4 +189,99 @@ describe('TriageView', () => {
 
     expect(screen.getByText('First Triage Card')).toBeDefined();
   });
+
+  it('triggers 5s countdown on research and cancels api.triggerResearch if undone within 2s', async () => {
+    vi.useFakeTimers();
+    let undoCallback: (() => Promise<void> | void) | undefined;
+    const showToast = vi.fn((_msg: string, onUndo?: () => Promise<void> | void) => {
+      undoCallback = onUndo;
+    });
+
+    renderTriage(
+      <TriageView
+        cards={[dummyCards[0]]}
+        onUpdateCard={vi.fn()}
+        onResearch={vi.fn()}
+        onRetry={vi.fn()}
+        onOpenCardDetail={vi.fn()}
+        showToast={showToast}
+      />
+    );
+
+    // Press 'r' to trigger research
+    fireEvent.keyDown(window, { key: 'r', code: 'KeyR' });
+
+    // Wait for exit transition (DECK_EXIT_MS = 320ms)
+    vi.advanceTimersByTime(350);
+
+    expect(showToast).toHaveBeenCalled();
+    expect(undoCallback).toBeDefined();
+
+    // Advance 2 seconds
+    vi.advanceTimersByTime(2000);
+    expect(api.triggerResearch).not.toHaveBeenCalled();
+
+    // Click Undo
+    if (undoCallback) {
+      undoCallback();
+    }
+
+    // Advance past remaining 5 seconds
+    vi.advanceTimersByTime(5000);
+
+    expect(api.triggerResearch).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('multi-idea cards sharing capture_id display sibling dismissal and discard all matching ideas', async () => {
+    const siblingCards: Card[] = [
+      {
+        id: 201,
+        title: 'Idea A from article',
+        summary: 'First extracted concept',
+        status: 'inbox',
+        horizon: 'short-term',
+        source_url: 'https://example.com/multi',
+        source_note: '',
+        tags: [],
+        capture_id: 99,
+        created_at: '2026-10-17T10:00:00Z',
+        updated_at: '2026-10-17T10:00:00Z',
+      },
+      {
+        id: 202,
+        title: 'Idea B from article',
+        summary: 'Second extracted concept',
+        status: 'inbox',
+        horizon: 'short-term',
+        source_url: 'https://example.com/multi',
+        source_note: '',
+        tags: [],
+        capture_id: 99,
+        created_at: '2026-10-17T10:01:00Z',
+        updated_at: '2026-10-17T10:01:00Z',
+      },
+    ];
+
+    renderTriage(
+      <TriageView
+        cards={siblingCards}
+        onUpdateCard={vi.fn()}
+        onResearch={vi.fn()}
+        onRetry={vi.fn()}
+        onOpenCardDetail={vi.fn()}
+        showToast={vi.fn()}
+      />
+    );
+
+    const dismissBtn = screen.getByRole('button', { name: /Dismiss remaining 2/i });
+    expect(dismissBtn).toBeDefined();
+
+    fireEvent.click(dismissBtn);
+
+    await waitFor(() => {
+      expect(api.updateCard).toHaveBeenCalledWith(201, { status: 'dismissed' });
+      expect(api.updateCard).toHaveBeenCalledWith(202, { status: 'dismissed' });
+    });
+  });
 });

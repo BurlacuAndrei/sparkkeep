@@ -27,6 +27,7 @@ type Service interface {
 	CaptureShare(ctx context.Context, share capture.Share) ([]int64, error)
 	GoResearch(ctx context.Context, cardID int64, playbookID ...*int64)
 	UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error)
+	GetCard(ctx context.Context, id int64) (port.Card, error)
 }
 
 // Adapter connects Sparkkeep with a local or remote OpenClaw Gateway.
@@ -307,8 +308,17 @@ func (a *Adapter) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Check if this is a command action replying to an existing card
-	if handled, msg := a.handleActionCommand(ctx, text); handled {
+	if handled, msg, err := a.handleActionCommand(ctx, text); handled {
 		w.Header().Set("Content-Type", "application/json")
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, port.ErrNotFound) {
+				status = http.StatusNotFound
+			}
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "message": msg})
 		return
 	}
@@ -364,50 +374,55 @@ func (a *Adapter) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleActionCommand parses action commands like "/research 42", "/short 42", "/discard 42".
-func (a *Adapter) handleActionCommand(ctx context.Context, text string) (bool, string) {
+func (a *Adapter) handleActionCommand(ctx context.Context, text string) (bool, string, error) {
 	fields := strings.Fields(text)
 	if len(fields) < 2 {
-		return false, ""
+		return false, "", nil
 	}
 	cmd := strings.ToLower(strings.TrimPrefix(fields[0], "/"))
 	cardID, err := strconv.ParseInt(fields[1], 10, 64)
 	if err != nil || cardID <= 0 {
-		return false, ""
+		return false, "", nil
+	}
+
+	if a.Service == nil {
+		return false, "", nil
 	}
 
 	switch cmd {
 	case "research", "deep", "1":
-		if a.Service != nil {
-			a.Service.GoResearch(context.Background(), cardID)
-			return true, fmt.Sprintf("Started Deep Research for card %d", cardID)
+		if _, err := a.Service.GetCard(ctx, cardID); err != nil {
+			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
+		a.Service.GoResearch(context.Background(), cardID)
+		return true, fmt.Sprintf("Started Deep Research for card %d", cardID), nil
 	case "short", "2":
 		h := port.HorizonShortTerm
 		st := port.StatusInProgress
-		if a.Service != nil {
-			_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st})
-			return true, fmt.Sprintf("Card %d moved to Short-term (Doing)", cardID)
+		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st}); err != nil {
+			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
+		return true, fmt.Sprintf("Card %d moved to Short-term (Doing)", cardID), nil
 	case "med", "medium", "3":
 		h := port.HorizonMediumTerm
 		st := port.StatusToDo
-		if a.Service != nil {
-			_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st})
-			return true, fmt.Sprintf("Card %d moved to Medium-term (To Do)", cardID)
+		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st}); err != nil {
+			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
+		return true, fmt.Sprintf("Card %d moved to Medium-term (To Do)", cardID), nil
 	case "long", "4":
 		h := port.HorizonLongTerm
 		st := port.StatusToDo
-		if a.Service != nil {
-			_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st})
-			return true, fmt.Sprintf("Card %d moved to Long-term", cardID)
+		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st}); err != nil {
+			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
+		return true, fmt.Sprintf("Card %d moved to Long-term", cardID), nil
 	case "discard", "x", "shelve":
 		st := port.StatusShelved
-		if a.Service != nil {
-			_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &st})
-			return true, fmt.Sprintf("Card %d shelved", cardID)
+		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &st}); err != nil {
+			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
+		return true, fmt.Sprintf("Card %d shelved", cardID), nil
 	}
-	return false, ""
+	return false, "", nil
 }

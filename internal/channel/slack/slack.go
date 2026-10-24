@@ -133,6 +133,9 @@ func (a *Adapter) buildBlockPayload(n port.Notification) map[string]any {
 		if desc == "" {
 			desc = strings.TrimSpace(c.Summary)
 		}
+		if desc == "" {
+			desc = "_No notes provided_"
+		}
 
 		blocks := []map[string]any{
 			{

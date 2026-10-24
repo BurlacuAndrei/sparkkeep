@@ -113,6 +113,7 @@ export const de = {
         aria: 'Auswahl des Oberflächenthemas',
         dark: { label: 'Dunkler Modus', sub: 'Tiefes Obsidian-Schiefer' },
         light: { label: 'Heller Modus', sub: 'Klar und kontrastreich' },
+        oled: { label: 'OLED-Modus', sub: 'Reines Tiefschwarz' },
         system: { label: 'Systemstandard', sub: 'Automatisch mit dem Betriebssystem' },
       },
       palette: {
@@ -1953,6 +1954,7 @@ export const de = {
         theme: 'Darstellungsthema',
         themeDark: 'Dunkel',
         themeLight: 'Hell',
+        themeOled: 'OLED',
         themeMode: '{{theme}}-Modus',
         themeSystem: 'System ({{theme}})',
         protection: 'Zugriffsschutz',

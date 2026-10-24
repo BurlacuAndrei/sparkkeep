@@ -11,6 +11,7 @@ import { useLocale } from '../i18n';
 const THEME_SHORT_KEYS = {
   dark: 'shell.setup.review.themeDark',
   light: 'shell.setup.review.themeLight',
+  oled: 'shell.setup.review.themeOled',
 } as const;
 
 interface SetupWizardProps {

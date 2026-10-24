@@ -122,3 +122,50 @@ func TestWebhook_DeliveryAndSignature(t *testing.T) {
 func stringsHasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
+
+func TestWebhook_WaitBlocksUntilDispatchDone(t *testing.T) {
+	var done atomic.Bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+		done.Store(true)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	store := newMemoryStore()
+	store.SetSetting(context.Background(), "webhook_url", ts.URL)
+
+	d := NewDispatcher(store, t.Logf)
+	d.Dispatch(context.Background(), EventCardCreated, map[string]string{"title": "Wait Test"})
+
+	d.Wait()
+
+	if !done.Load() {
+		t.Fatalf("expected dispatch to complete before Wait() returns")
+	}
+}
+
+func TestWebhook_JoinWaitGroup(t *testing.T) {
+	var done atomic.Bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+		done.Store(true)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	store := newMemoryStore()
+	store.SetSetting(context.Background(), "webhook_url", ts.URL)
+
+	d := NewDispatcher(store, t.Logf)
+	var externalWG sync.WaitGroup
+	d.JoinWaitGroup(&externalWG)
+
+	d.Dispatch(context.Background(), EventCardCreated, map[string]string{"title": "JoinWG Test"})
+
+	externalWG.Wait()
+
+	if !done.Load() {
+		t.Fatalf("expected external WaitGroup to wait until dispatch completes")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -270,13 +271,33 @@ func (s *Service) WakeQueueWorker() {
 
 // ProcessNextQueued checks and processes one queued research item if allowed.
 // Returns (true, err) if an item was processed, or (false, nil) if no item was processed.
-func (s *Service) ProcessNextQueued(ctx context.Context, asOf time.Time) (bool, error) {
+func (s *Service) ProcessNextQueued(ctx context.Context, asOf time.Time) (processed bool, err error) {
 	if s.Store == nil {
 		return false, nil
 	}
 	if !s.isRunAllowed(ctx, asOf) {
 		return false, nil
 	}
+
+	var runningID int64
+	var cardID int64
+	defer func() {
+		if r := recover(); r != nil {
+			buf := make([]byte, 4096)
+			n := runtime.Stack(buf, false)
+			panicMsg := fmt.Sprintf("panic: %v", r)
+			s.Logf("core: panic in ProcessNextQueued: %v\n%s", r, buf[:n])
+			if runningID > 0 && s.Store != nil {
+				_, _ = s.Store.SetResearch(ctx, runningID, "failed", "", panicMsg)
+			}
+			if cardID > 0 && s.Store != nil {
+				rsFailed := port.ResearchStateFailed
+				_, _ = s.Store.UpdateCard(ctx, cardID, port.CardPatch{ResearchState: &rsFailed})
+			}
+			processed = true
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
 
 	s.workerMu.Lock()
 	item, err := s.Store.GetNextQueuedResearch(ctx, asOf)
@@ -295,6 +316,9 @@ func (s *Service) ProcessNextQueued(ctx context.Context, asOf time.Time) (bool, 
 	if err != nil {
 		return false, err
 	}
+
+	runningID = runningItem.ID
+	cardID = runningItem.CardID
 
 	card, err := s.Store.GetCard(ctx, runningItem.CardID)
 	if err != nil {
@@ -442,6 +466,13 @@ func (s *Service) StartQueueWorker(parentCtx context.Context) {
 		go func(workerID int) {
 			defer s.WG.Done()
 			defer workerWG.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					buf := make([]byte, 4096)
+					n := runtime.Stack(buf, false)
+					s.Logf("core: panic in queue worker %d: %v\n%s", workerID, r, buf[:n])
+				}
+			}()
 
 			ticker := time.NewTicker(pollInterval)
 			defer ticker.Stop()

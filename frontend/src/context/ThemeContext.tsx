@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 
-export type Theme = 'dark' | 'light' | 'system';
-export type ResolvedTheme = 'dark' | 'light';
+export type Theme = 'dark' | 'light' | 'oled' | 'system';
+export type ResolvedTheme = 'dark' | 'light' | 'oled';
 
 export interface ThemeContextValue {
   theme: Theme;
@@ -30,7 +30,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children, defaultT
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-        if (saved === 'dark' || saved === 'light' || saved === 'system') {
+        if (saved === 'dark' || saved === 'light' || saved === 'oled' || saved === 'system') {
           return saved;
         }
       } catch {

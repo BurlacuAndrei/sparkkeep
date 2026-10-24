@@ -318,12 +318,17 @@ func (c Capture) MediaMeta(share Share) Fetched {
 // HeadlessExtract loads targetURL in a headless browser via chromedp and
 // extracts the rendered title, meta description, and innerText.
 func HeadlessExtract(ctx context.Context, targetURL string, chromeBin ...string) (title string, desc string, text string, err error) {
+	if err := netguard.ValidateURL(ctx, targetURL); err != nil {
+		return "", "", "", fmt.Errorf("capture: headless %s: %w", targetURL, err)
+	}
+
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.NoSandbox,
 		chromedp.Headless,
 		chromedp.DisableGPU,
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("disable-extensions", true),
+		chromedp.Flag("host-resolver-rules", "MAP 169.254.169.254 ~NOTFOUND, MAP 169.254.* ~NOTFOUND, MAP [fe80::]* ~NOTFOUND"),
 		chromedp.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
 	)
 	var bin string

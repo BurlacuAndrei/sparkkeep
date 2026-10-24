@@ -303,6 +303,9 @@ func main() {
 		waitDone := make(chan struct{})
 		go func() {
 			svc.WG.Wait()
+			if svc.Webhook != nil {
+				svc.Webhook.Wait()
+			}
 			close(waitDone)
 		}()
 		select {

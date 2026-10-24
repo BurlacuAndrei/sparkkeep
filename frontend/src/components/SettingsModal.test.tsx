@@ -497,6 +497,38 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
       expect(screen.queryByLabelText('Remove guide')).toBeNull();
     });
   });
+
+  it('updates data-reduce-motion and persists to localStorage on save', async () => {
+    document.documentElement.removeAttribute('data-reduce-motion');
+    localStorage.clear();
+
+    render(
+      <LocaleProvider locale="en">
+        <ThemeProvider>
+          <SettingsModal onClose={() => {}} showToast={() => {}} />
+        </ThemeProvider>
+      </LocaleProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Platform Preferences')).toBeDefined();
+    });
+
+    const motionSelect = screen.getByLabelText('Visual effects') as HTMLSelectElement;
+    expect(motionSelect.value).toBe('default');
+
+    fireEvent.change(motionSelect, { target: { value: 'reduced' } });
+    expect(motionSelect.value).toBe('reduced');
+
+    const saveButton = screen.getByRole('button', { name: /save changes/i });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute('data-reduce-motion')).toBe('reduced');
+      expect(localStorage.getItem('sparkkeep_reduce_motion')).toBe('reduced');
+    });
+  });
 });
+
 
 

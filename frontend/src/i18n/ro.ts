@@ -111,6 +111,7 @@ export const ro = {
         aria: 'Selector de temă al interfeței',
         dark: { label: 'Mod întunecat', sub: 'Ardezie obsidiană profundă' },
         light: { label: 'Mod luminos', sub: 'Contrast ridicat, clar' },
+        oled: { label: 'Mod OLED', sub: 'Negru absolut profund' },
         system: { label: 'Implicit al sistemului', sub: 'Sincronizare automată cu sistemul' },
       },
       palette: {
@@ -1939,6 +1940,7 @@ export const ro = {
         theme: 'Tema aspectului',
         themeDark: 'întunecat',
         themeLight: 'luminos',
+        themeOled: 'OLED',
         themeMode: 'Mod {{theme}}',
         themeSystem: 'Sistem ({{theme}})',
         protection: 'Protecția accesului',

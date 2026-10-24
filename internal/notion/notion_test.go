@@ -3,9 +3,12 @@ package notion
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -194,13 +197,11 @@ func TestClientUpsertCardExport(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Override API base for testing
 	client := NewClient(Config{
 		Token:      "secret_test",
 		DatabaseID: "test_db",
+		BaseURL:    server.URL + "/v1",
 	})
-	// Note: In real implementation, we'd inject the base URL. For this test,
-	// we verify the client structure compiles and basic logic works.
 
 	exp := port.CardExport{
 		Card: port.Card{
@@ -224,9 +225,99 @@ func TestClientUpsertCardExport(t *testing.T) {
 		Research: nil,
 	}
 
-	// This would need a configurable base URL to test fully
-	// For now, verify the struct compiles and methods exist
-	_ = exp
-	_ = server
-	_ = client
+	pageID, err := client.UpsertCardExport(context.Background(), exp)
+	if err != nil {
+		t.Fatalf("UpsertCardExport error: %v", err)
+	}
+	if pageID != "page_123" {
+		t.Errorf("got pageID %q, want 'page_123'", pageID)
+	}
+}
+
+func TestCreatePage_BatchesExceeding100Blocks(t *testing.T) {
+	var mu sync.Mutex
+	createBlocksCount := 0
+	var appendBatches []int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		var payload struct {
+			Children []map[string]any `json:"children"`
+		}
+		_ = json.Unmarshal(bodyBytes, &payload)
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		switch {
+		case r.URL.Path == "/v1/pages" && r.Method == http.MethodPost:
+			// Notion rejects children > 100 with HTTP 400
+			if len(payload.Children) > 100 {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"object":"error","status":400,"message":"children length > 100"}`))
+				return
+			}
+			createBlocksCount = len(payload.Children)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "page_split_123"})
+
+		case strings.HasPrefix(r.URL.Path, "/v1/blocks/page_split_123/children") && r.Method == http.MethodPatch:
+			// Notion rejects append children > 100 with HTTP 400
+			if len(payload.Children) > 100 {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"object":"error","status":400,"message":"append children length > 100"}`))
+				return
+			}
+			appendBatches = append(appendBatches, len(payload.Children))
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"results": []any{}})
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{
+		Token:      "secret_test",
+		DatabaseID: "test_db",
+		BaseURL:    server.URL + "/v1",
+	})
+
+	// Generate 235 dummy blocks (> 100, spanning 3 batches: 100 create, 100 patch, 35 patch)
+	const totalBlocks = 235
+	blocks := make([]map[string]any, totalBlocks)
+	for i := 0; i < totalBlocks; i++ {
+		blocks[i] = paragraphBlock(fmt.Sprintf("Block content %d", i+1))
+	}
+
+	pageID, err := client.createPage(context.Background(), map[string]any{}, blocks)
+	if err != nil {
+		t.Fatalf("createPage failed: %v", err)
+	}
+	if pageID != "page_split_123" {
+		t.Fatalf("pageID = %q, want 'page_split_123'", pageID)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if createBlocksCount != 100 {
+		t.Errorf("createBlocksCount = %d, want 100", createBlocksCount)
+	}
+
+	expectedBatches := []int{100, 35}
+	if len(appendBatches) != len(expectedBatches) {
+		t.Fatalf("len(appendBatches) = %d, want %d (got %v)", len(appendBatches), len(expectedBatches), appendBatches)
+	}
+	for i, count := range expectedBatches {
+		if appendBatches[i] != count {
+			t.Errorf("appendBatches[%d] = %d, want %d", i, appendBatches[i], count)
+		}
+	}
 }

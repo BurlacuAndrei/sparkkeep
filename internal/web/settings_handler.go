@@ -197,6 +197,10 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) setupDemo(w http.ResponseWriter, r *http.Request) {
+	if a.isConfigured(r.Context()) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "instance already configured"})
+		return
+	}
 	ctx := r.Context()
 	var b struct {
 		AuthToken string `json:"auth_token"`

@@ -17,6 +17,8 @@ type mockService struct {
 	captured     bool
 	updatedID    int64
 	updatedPatch port.CardPatch
+	updateErr    error
+	getCardErr   error
 }
 
 func (m *mockService) CaptureShare(_ context.Context, _ capture.Share) ([]int64, error) {
@@ -27,8 +29,18 @@ func (m *mockService) CaptureShare(_ context.Context, _ capture.Share) ([]int64,
 func (m *mockService) GoResearch(ctx context.Context, cardID int64, playbookID ...*int64) {}
 
 func (m *mockService) UpdateCard(ctx context.Context, id int64, patch port.CardPatch) (port.Card, error) {
+	if m.updateErr != nil {
+		return port.Card{}, m.updateErr
+	}
 	m.updatedID = id
 	m.updatedPatch = patch
+	return port.Card{ID: id}, nil
+}
+
+func (m *mockService) GetCard(ctx context.Context, id int64) (port.Card, error) {
+	if m.getCardErr != nil {
+		return port.Card{}, m.getCardErr
+	}
 	return port.Card{ID: id}, nil
 }
 
@@ -107,6 +119,68 @@ func TestOpenClawHandleActionCommand(t *testing.T) {
 	}
 	if svc.updatedPatch.Horizon == nil || *svc.updatedPatch.Horizon != port.HorizonShortTerm {
 		t.Errorf("expected horizon short-term, got %+v", svc.updatedPatch.Horizon)
+	}
+}
+
+func TestOpenClawHandleActionCommand_CardNotFound(t *testing.T) {
+	svc := &mockService{updateErr: port.ErrNotFound}
+	adapter := New(Config{HookToken: "tok"}, svc, "", nil)
+
+	payload := InboundWebhookPayload{
+		Channel: "whatsapp",
+		Sender:  "+1555123456",
+		Text:    "/discard 999999",
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/openclaw/webhook", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer tok")
+	rec := httptest.NewRecorder()
+
+	adapter.HandleWebhook(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 Not Found, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse json response: %v", err)
+	}
+	if ok, _ := resp["ok"].(bool); ok {
+		t.Errorf("expected ok = false for non-existent card, got true")
+	}
+	errMsg, _ := resp["error"].(string)
+	if errMsg == "" {
+		t.Errorf("expected error message in response, got empty")
+	}
+}
+
+func TestOpenClawHandleResearchCommand_CardNotFound(t *testing.T) {
+	svc := &mockService{getCardErr: port.ErrNotFound}
+	adapter := New(Config{HookToken: "tok"}, svc, "", nil)
+
+	payload := InboundWebhookPayload{
+		Channel: "whatsapp",
+		Sender:  "+1555123456",
+		Text:    "/research 999999",
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/openclaw/webhook", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer tok")
+	rec := httptest.NewRecorder()
+
+	adapter.HandleWebhook(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 Not Found, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse json response: %v", err)
+	}
+	if ok, _ := resp["ok"].(bool); ok {
+		t.Errorf("expected ok = false for non-existent card, got true")
 	}
 }
 

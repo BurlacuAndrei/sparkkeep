@@ -1,7 +1,9 @@
 #!/bin/sh
-# Ensure /data is writable by appuser (uid 1000)
-if [ -d /data ]; then
-    chown -R appuser:appuser /data 2>/dev/null || true
+if [ "$(id -u)" = "0" ]; then
+    if [ -d /data ]; then
+        chown -R appuser:appuser /data 2>/dev/null || true
+    fi
+    exec su-exec appuser sparkkeep "$@"
 fi
 
-exec su-exec appuser sparkkeep "$@"
+exec sparkkeep "$@"

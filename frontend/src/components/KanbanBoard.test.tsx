@@ -169,4 +169,115 @@ describe('KanbanBoard Density & Usability', () => {
     expect(screen.getByText(/Dismissed Cards:/i)).toBeDefined();
     expect(densityBtn).toBeDefined();
   });
+
+  it('collapses cards marked Done older than 7 days into View Archived and expands when clicked', () => {
+    const now = Date.now();
+    const freshDoneCards: Card[] = [1, 2, 3].map((id) => ({
+      id,
+      title: `Fresh Done Card ${id}`,
+      summary: `Summary ${id}`,
+      horizon: 'short-term',
+      status: 'done',
+      source_url: 'https://example.com',
+      source_note: '',
+      tags: [],
+      created_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      updated_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    }));
+
+    const oldDoneCards: Card[] = Array.from({ length: 10 }, (_, i) => ({
+      id: 100 + i,
+      title: `Old Done Card ${i + 1}`,
+      summary: `Summary old ${i + 1}`,
+      horizon: 'short-term',
+      status: 'done',
+      source_url: 'https://example.com',
+      source_note: '',
+      tags: [],
+      created_at: new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString(),
+      updated_at: new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString(),
+    }));
+
+    renderWithProvider(
+      <KanbanBoard
+        cards={[...freshDoneCards, ...oldDoneCards]}
+        horizon="all"
+        onHorizonChange={vi.fn()}
+        onSelectCard={vi.fn()}
+        onUpdateCard={vi.fn()}
+        onResearch={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    );
+
+    // Initial state: Only 3 fresh done cards are visible in the Done column
+    expect(screen.getByText('Fresh Done Card 1')).toBeDefined();
+    expect(screen.getByText('Fresh Done Card 2')).toBeDefined();
+    expect(screen.getByText('Fresh Done Card 3')).toBeDefined();
+    expect(screen.queryByText('Old Done Card 1')).toBeNull();
+
+    // The archive toggle button shows "View Archived (10)"
+    const archiveBtn = screen.getByRole('button', { name: /view archived \(10\)/i });
+    expect(archiveBtn).toBeDefined();
+
+    // Click to expand archived cards
+    fireEvent.click(archiveBtn);
+
+    // All 13 cards should now be rendered
+    expect(screen.getByText('Old Done Card 1')).toBeDefined();
+    expect(screen.getByText('Old Done Card 10')).toBeDefined();
+    expect(screen.getByRole('button', { name: /hide archived/i })).toBeDefined();
+
+    // Click again to collapse
+    fireEvent.click(screen.getByRole('button', { name: /hide archived/i }));
+    expect(screen.queryByText('Old Done Card 1')).toBeNull();
+  });
+
+  it('updates card status via onUpdateCard on HTML5 drop into Done column', () => {
+    const onUpdateCard = vi.fn();
+    const showToast = vi.fn();
+
+    render(
+      <LocaleProvider locale="en">
+        <CardActionsProvider value={mockActions}>
+          <KanbanBoard
+            cards={mockCards}
+            horizon="all"
+            onHorizonChange={vi.fn()}
+            onSelectCard={vi.fn()}
+            onUpdateCard={onUpdateCard}
+            onResearch={vi.fn()}
+            onRetry={vi.fn()}
+            showToast={showToast}
+          />
+        </CardActionsProvider>
+      </LocaleProvider>
+    );
+
+    // Target the Done column
+    const doneCol = screen.getByText('Completed').closest('.kanban-column')!;
+    expect(doneCol).toBeDefined();
+
+    // Simulate drop with card id 1
+    const dropEvent = {
+      preventDefault: vi.fn(),
+      dataTransfer: {
+        getData: vi.fn().mockReturnValue('1'),
+      },
+    };
+
+    fireEvent.drop(doneCol, dropEvent);
+
+    expect(onUpdateCard).toHaveBeenCalledWith(1, { status: 'done' });
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining('#1'),
+      expect.any(Function)
+    );
+
+    // Verify undo callback reverts status back to previous status
+    const undoCallback = showToast.mock.calls[0][1];
+    expect(undoCallback).toBeDefined();
+    undoCallback();
+    expect(onUpdateCard).toHaveBeenCalledWith(1, { status: 'to-do' });
+  });
 });

@@ -129,6 +129,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     if (!isNaN(cardId) && cardId > 0) {
       const targetCard = cards.find((c) => c.id === cardId);
       if (targetCard && targetCard.status !== colStatus) {
+        const prevStatus = targetCard.status;
         onUpdateCard(cardId, { status: colStatus as any });
         const label =
           colStatus === 'to-do'
@@ -136,7 +137,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             : colStatus === 'in-progress'
             ? t('cards.status.inProgress')
             : t('cards.status.done');
-        showToast?.(t('cards.board.moved', { id: cardId, label }));
+        showToast?.(t('cards.board.moved', { id: cardId, label }), () => {
+          onUpdateCard(cardId, { status: prevStatus as any });
+        });
       }
     }
   };

@@ -1,6 +1,7 @@
 package netguard
 
 import (
+	"context"
 	"net"
 	"strings"
 	"syscall"
@@ -70,5 +71,32 @@ func TestDialContextChainsNextControl(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("expected next Control to be called for allowed address")
+	}
+}
+
+func TestValidateURL(t *testing.T) {
+	ctx := context.Background()
+	blockedURLs := []string{
+		"http://169.254.169.254/latest/meta-data/",
+		"http://169.254.1.1/secret",
+		"http://[fe80::1]/info",
+		"http://[::ffff:169.254.169.254]/data",
+		"169.254.169.254",
+	}
+	for _, u := range blockedURLs {
+		if err := ValidateURL(ctx, u); err == nil {
+			t.Errorf("ValidateURL(%q) want error, got nil", u)
+		}
+	}
+
+	allowedURLs := []string{
+		"http://127.0.0.1:8080/test",
+		"http://localhost:3000",
+		"https://example.com/page",
+	}
+	for _, u := range allowedURLs {
+		if err := ValidateURL(ctx, u); err != nil {
+			t.Errorf("ValidateURL(%q) want allowed, got %v", u, err)
+		}
 	}
 }

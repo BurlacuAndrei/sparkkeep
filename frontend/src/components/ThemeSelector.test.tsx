@@ -26,15 +26,17 @@ describe('ThemeSelector', () => {
     });
   });
 
-  it('renders all three theme radio options', () => {
+  it('renders all four theme radio options', () => {
     render(
       <ThemeProvider defaultTheme="light">
         <ThemeSelector />
       </ThemeProvider>
     );
 
-    expect(screen.getByRole('radiogroup', { name: 'Interface theme selector' })).toBeDefined();    expect(screen.getByRole('radio', { name: /Dark Mode/i })).toBeDefined();
+    expect(screen.getByRole('radiogroup', { name: 'Interface theme selector' })).toBeDefined();
+    expect(screen.getByRole('radio', { name: /Dark Mode/i })).toBeDefined();
     expect(screen.getByRole('radio', { name: /Light Mode/i })).toBeDefined();
+    expect(screen.getByRole('radio', { name: /OLED Mode/i })).toBeDefined();
     expect(screen.getByRole('radio', { name: /System Default/i })).toBeDefined();
   });
 
@@ -68,6 +70,14 @@ describe('ThemeSelector', () => {
     expect(darkButton.classList.contains('active')).toBe(true);
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(localStorage.getItem('sparkkeep_theme')).toBe('dark');
+
+    const oledButton = screen.getByRole('radio', { name: /OLED Mode/i });
+    fireEvent.click(oledButton);
+
+    expect(oledButton.getAttribute('aria-checked')).toBe('true');
+    expect(oledButton.classList.contains('active')).toBe(true);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('oled');
+    expect(localStorage.getItem('sparkkeep_theme')).toBe('oled');
 
     const systemButton = screen.getByRole('radio', { name: /System Default/i });
     fireEvent.click(systemButton);

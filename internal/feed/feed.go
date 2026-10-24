@@ -382,9 +382,9 @@ func buildItemHTML(card port.Card, research *port.Research, origin string) strin
 
 // xmlEscape escapes special XML characters
 func xmlEscape(s string) string {
-	s = strings.ReplaceAll(s, "&", "&")
-	s = strings.ReplaceAll(s, "<", "<")
-	s = strings.ReplaceAll(s, ">", ">")
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
 	s = strings.ReplaceAll(s, "\"", "&quot;")
 	s = strings.ReplaceAll(s, "'", "&apos;")
 	return s

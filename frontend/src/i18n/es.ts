@@ -112,6 +112,7 @@ export const es = {
         aria: 'Selector de tema de la interfaz',
         dark: { label: 'Modo oscuro', sub: 'Pizarra obsidiana profunda' },
         light: { label: 'Modo claro', sub: 'Alto contraste nítido' },
+        oled: { label: 'Modo OLED', sub: 'Negro absoluto puro' },
         system: {
           label: 'Predeterminado del sistema',
           sub: 'Sincronización automática con el sistema',
@@ -1964,6 +1965,7 @@ export const es = {
         theme: 'Tema de apariencia',
         themeDark: 'Oscuro',
         themeLight: 'Claro',
+        themeOled: 'OLED',
         themeMode: 'Modo {{theme}}',
         themeSystem: 'Sistema ({{theme}})',
         protection: 'Protección de acceso',

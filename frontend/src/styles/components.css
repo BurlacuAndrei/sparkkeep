@@ -2573,11 +2573,17 @@
 /* --- Theme Selector Visual Radio Cards --- */
 .theme-options-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
 
-@media (max-width: 540px) {
+@media (max-width: 640px) {
+  .theme-options-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
   .theme-options-grid {
     grid-template-columns: 1fr;
   }
@@ -2720,6 +2726,25 @@
 .preview-light .preview-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
+}
+
+/* OLED mode preview styles */
+.preview-oled {
+  background: #000000;
+}
+.preview-oled .preview-topbar {
+  background: #050505;
+  border-bottom: 1px solid #18181b;
+}
+.preview-oled .preview-dot {
+  background: #27272a;
+}
+.preview-oled .preview-sidebar {
+  background: #09090b;
+}
+.preview-oled .preview-card {
+  background: #0c0c0e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* System default split preview */
