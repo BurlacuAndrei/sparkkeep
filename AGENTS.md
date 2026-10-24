@@ -1,6 +1,6 @@
 # Sparkkeep Agent Navigation Pointers
 
-Read [`CODING_STANDARDS.md`](CODING_STANDARDS.md) during code review for architectural seams and standards.
+Read [`CODING_STANDARDS.md`](CODING_STANDARDS.md) during code review for architectural seams and standards. Refer to [`TEST_PLAN.md`](TEST_PLAN.md) for the production verification checklist and prefilled execution templates.
 
 ## Navigation Pointers
 
