@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Sparkles, Shield, Cpu, ArrowRight, CheckCircle2, Lock, AlertCircle, Eye, EyeOff, Palette } from 'lucide-react';
 import * as api from '../api';
 import { ThemeSelector } from './ThemeSelector';
+import { LanguageSelector } from './settings/LanguageSelector';
 import { useTheme } from '../context/ThemeContext';
 import { useLocale } from '../i18n';
 
@@ -174,6 +175,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         {/* Step 1: Security & Master Auth */}
         {step === 1 && (
           <div className="setup-body">
+            {/* Interface language, applied immediately */}
+            <LanguageSelector />
+
             {/* Visual Appearance & Theme Selection */}
             <div className="setup-section-intro">
               <Palette className="section-icon" size={20} />

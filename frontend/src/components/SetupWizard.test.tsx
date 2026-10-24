@@ -38,6 +38,18 @@ describe('SetupWizard', () => {
     expect(screen.getByLabelText(/Confirm Passphrase/i)).toBeDefined();
   });
 
+  it('lets the user pick the interface language during setup', () => {
+    renderWizard();
+
+    const select = screen.getByLabelText('Interface language');
+    expect(screen.getByText('Welcome to Sparkkeep')).toBeDefined();
+
+    fireEvent.change(select, { target: { value: 'de' } });
+
+    expect(screen.getByText('Willkommen bei Sparkkeep')).toBeDefined();
+    expect(localStorage.getItem('sparkkeep_locale')).toBe('de');
+  });
+
   it('displays error if master token is submitted empty', () => {
     renderWizard();
 
