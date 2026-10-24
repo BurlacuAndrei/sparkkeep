@@ -1581,7 +1581,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   <span style={{ color: platform.color }}>{platform.icon}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{platform.name}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-faint)', marginLeft: 'auto' }}>
-                    {formatRelativeAge(card.created_at, t)}
+                    {formatRelativeAge(card.created_at, t, tp)}
                   </span>
                 </div>
 

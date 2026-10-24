@@ -1,6 +1,6 @@
 import React from 'react';
 import { Video, Camera, Share2, Code2, AtSign, Send, Globe } from 'lucide-react';
-import type { TranslateFn } from '../i18n';
+import type { TranslateFn, TranslatePluralFn } from '../i18n';
 
 export function getPlatformInfo(url?: string): { name: string; icon: React.ReactNode; color: string } {
   if (!url) return { name: 'Web', icon: <Globe size={11} />, color: 'var(--text-dim, #64748b)' };
@@ -26,7 +26,11 @@ export function getPlatformInfo(url?: string): { name: string; icon: React.React
   return { name: 'Web', icon: <Globe size={11} />, color: 'var(--text-dim, #64748b)' };
 }
 
-export function formatRelativeAge(dateStr: string | undefined, t: TranslateFn): string {
+export function formatRelativeAge(
+  dateStr: string | undefined,
+  t: TranslateFn,
+  tp: TranslatePluralFn
+): string {
   if (!dateStr) return '';
   const time = new Date(dateStr).getTime();
   if (isNaN(time)) return '';
@@ -39,7 +43,7 @@ export function formatRelativeAge(dateStr: string | undefined, t: TranslateFn): 
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 30) return t('cards.age.days', { count: diffDays });
   const diffMonths = Math.floor(diffDays / 30);
-  return t('cards.age.months', { count: diffMonths });
+  return tp('cards.age.months', diffMonths);
 }
 
 export function extractHostname(rawUrl?: string): string {

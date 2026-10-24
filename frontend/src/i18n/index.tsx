@@ -3,7 +3,11 @@
 // oxlint-disable react/only-export-components
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { de } from './de';
 import { en } from './en';
+import { es } from './es';
+import { fr } from './fr';
+import { ptBR } from './pt-BR';
 import { ro } from './ro';
 import { translate, translatePlural } from './translate';
 import type {
@@ -49,7 +53,14 @@ export const locales: LocaleOption[] = [
  * Registered catalogs. A missing entry falls back to English, so a locale can
  * be offered before its catalog lands.
  */
-export const catalogs: Readonly<Partial<Record<Locale, Catalog>>> = { en, ro };
+export const catalogs: Readonly<Partial<Record<Locale, Catalog>>> = {
+  en,
+  ro,
+  es,
+  'pt-BR': ptBR,
+  fr,
+  de,
+};
 
 /**
  * Browser base language to locale, derived from `locales`. The first registered

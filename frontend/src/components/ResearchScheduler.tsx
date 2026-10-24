@@ -20,7 +20,7 @@ interface ResearchSchedulerProps {
 export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
   showToast,
 }) => {
-  const { t } = useLocale();
+  const { t, tp } = useLocale();
   const [loading, setLoading] = useState(true);
   const [quietWindow, setQuietWindow] = useState<QuietWindowConfig>({
     enabled: false,
@@ -334,7 +334,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                       <span>· {t('settings.schedule.rules.status')} <strong>{rule.filters.status || t('settings.schedule.rules.all')}</strong></span>
                       {rule.filters.worthiness && <span>· {t('settings.schedule.rules.worthiness')} <strong>{rule.filters.worthiness}</strong></span>}
                       {rule.filters.type && <span>· {t('settings.schedule.rules.type')} <strong>{rule.filters.type}</strong></span>}
-                      <span>· {t('settings.schedule.rules.max')} <strong>{t('settings.schedule.rules.maxCards', { count: rule.max_cards })}</strong></span>
+                      <span>· {t('settings.schedule.rules.max')} <strong>{tp('settings.schedule.rules.maxCards', rule.max_cards)}</strong></span>
                       <span>· {t('settings.schedule.rules.playbook')} <strong>{pbName}</strong></span>
                     </div>
                   </div>

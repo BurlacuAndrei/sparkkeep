@@ -78,7 +78,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
   onCommit,
 }) => {
   const ref = useRef<HTMLElement>(null);
-  const { t } = useLocale();
+  const { t, tp } = useLocale();
   const drag = useRef<{
     id: number;
     x0: number;
@@ -96,7 +96,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
   const analysisFailed = isAnalysisFailed(card);
   const verdict = (card.research_verdict || '').toLowerCase();
   const platform = getPlatformInfo(card.source_url);
-  const age = formatRelativeAge(card.created_at, t);
+  const age = formatRelativeAge(card.created_at, t, tp);
   const worthLevel = (card.worthiness?.level || '').toLowerCase();
   const researchActions =
     ready && card.actions_source === 'research' ? (card.proposed_actions || []).slice(0, 3) : [];
@@ -314,7 +314,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           </span>
           {remainingSiblings > 1 && (
             <button type="button" className="deck-link-btn" onClick={onDismissSiblings}>
-              <X size={11} /> {t('cards.swipe.dismissRemaining', { count: remainingSiblings })}
+              <X size={11} /> {tp('cards.swipe.dismissRemaining', remainingSiblings)}
             </button>
           )}
         </div>

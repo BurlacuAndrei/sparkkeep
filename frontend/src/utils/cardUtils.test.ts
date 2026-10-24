@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { formatRelativeAge, getPlatformInfo, extractHostname } from './cardUtils';
 import { translate } from '../i18n';
-import type { TranslateFn } from '../i18n';
+import { translatePlural } from '../i18n/translate';
+import type { TranslateFn, TranslatePluralFn } from '../i18n';
 import { ro } from '../i18n/ro';
 
 const enT: TranslateFn = (key, vars) => translate(undefined, key, vars);
+const enTp: TranslatePluralFn = (key, count, vars) =>
+  translatePlural(undefined, 'en', key, count, vars);
 const roT: TranslateFn = (key, vars) => translate(ro, key, vars);
+const roTp: TranslatePluralFn = (key, count, vars) =>
+  translatePlural(ro, 'ro', key, count, vars);
 
 describe('cardUtils', () => {
   describe('formatRelativeAge', () => {
@@ -21,53 +26,62 @@ describe('cardUtils', () => {
     });
 
     it('returns empty string for undefined or empty input', () => {
-      expect(formatRelativeAge(undefined, enT)).toBe('');
-      expect(formatRelativeAge('', enT)).toBe('');
+      expect(formatRelativeAge(undefined, enT, enTp)).toBe('');
+      expect(formatRelativeAge('', enT, enTp)).toBe('');
     });
 
     it('returns empty string for invalid date format', () => {
-      expect(formatRelativeAge('invalid-date-string', enT)).toBe('');
+      expect(formatRelativeAge('invalid-date-string', enT, enTp)).toBe('');
     });
 
     it('returns "now" for duration under 60 seconds', () => {
       const thirtySecondsAgo = new Date(fixedNow - 30 * 1000).toISOString();
-      expect(formatRelativeAge(thirtySecondsAgo, enT)).toBe('now');
+      expect(formatRelativeAge(thirtySecondsAgo, enT, enTp)).toBe('now');
     });
 
     it('returns minute string for durations under 60 minutes', () => {
       const fiveMinutesAgo = new Date(fixedNow - 5 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(fiveMinutesAgo, enT)).toBe('5m');
+      expect(formatRelativeAge(fiveMinutesAgo, enT, enTp)).toBe('5m');
       const fiftyNineMinutesAgo = new Date(fixedNow - 59 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(fiftyNineMinutesAgo, enT)).toBe('59m');
+      expect(formatRelativeAge(fiftyNineMinutesAgo, enT, enTp)).toBe('59m');
     });
 
     it('returns hour string for durations under 24 hours', () => {
       const oneHourAgo = new Date(fixedNow - 60 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(oneHourAgo, enT)).toBe('1h');
+      expect(formatRelativeAge(oneHourAgo, enT, enTp)).toBe('1h');
       const twentyHoursAgo = new Date(fixedNow - 20 * 60 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(twentyHoursAgo, enT)).toBe('20h');
+      expect(formatRelativeAge(twentyHoursAgo, enT, enTp)).toBe('20h');
     });
 
     it('returns day string for durations under 30 days', () => {
       const oneDayAgo = new Date(fixedNow - 24 * 60 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(oneDayAgo, enT)).toBe('1d');
+      expect(formatRelativeAge(oneDayAgo, enT, enTp)).toBe('1d');
       const twentyNineDaysAgo = new Date(fixedNow - 29 * 24 * 60 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(twentyNineDaysAgo, enT)).toBe('29d');
+      expect(formatRelativeAge(twentyNineDaysAgo, enT, enTp)).toBe('29d');
     });
 
     it('returns month string for durations 30 days or greater', () => {
       const thirtyDaysAgo = new Date(fixedNow - 30 * 24 * 60 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(thirtyDaysAgo, enT)).toBe('1mo');
+      expect(formatRelativeAge(thirtyDaysAgo, enT, enTp)).toBe('1mo');
       const ninetyDaysAgo = new Date(fixedNow - 90 * 24 * 60 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(ninetyDaysAgo, enT)).toBe('3mo');
+      expect(formatRelativeAge(ninetyDaysAgo, enT, enTp)).toBe('3mo');
+    });
+
+    it('pluralizes the month template per locale', () => {
+      const oneMonthAgo = new Date(fixedNow - 31 * 24 * 60 * 60 * 1000).toISOString();
+      const threeMonthsAgo = new Date(fixedNow - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const twentyMonthsAgo = new Date(fixedNow - 600 * 24 * 60 * 60 * 1000).toISOString();
+      expect(formatRelativeAge(oneMonthAgo, roT, roTp)).toBe('1 lună');
+      expect(formatRelativeAge(threeMonthsAgo, roT, roTp)).toBe('3 luni');
+      expect(formatRelativeAge(twentyMonthsAgo, roT, roTp)).toBe('20 de luni');
     });
 
     it('renders Romanian age templates', () => {
       const oneHourAgo = new Date(fixedNow - 60 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(oneHourAgo, roT)).toBe('1 h');
+      expect(formatRelativeAge(oneHourAgo, roT, roTp)).toBe('1 h');
       const twoDaysAgo = new Date(fixedNow - 2 * 24 * 60 * 60 * 1000).toISOString();
-      expect(formatRelativeAge(twoDaysAgo, roT)).toBe('2 z');
-      expect(formatRelativeAge(undefined, roT)).toBe('');
+      expect(formatRelativeAge(twoDaysAgo, roT, roTp)).toBe('2 z');
+      expect(formatRelativeAge(undefined, roT, roTp)).toBe('');
     });
   });
 

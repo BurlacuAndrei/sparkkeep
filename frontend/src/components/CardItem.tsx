@@ -98,7 +98,7 @@ export const CardItem: React.FC<CardItemProps> = ({
 
   const isFailed = Boolean(card.analysis_failed || card.title === 'Analysis failed');
   const platform = getPlatformInfo(card.source_url);
-  const relativeAge = formatRelativeAge(card.created_at, t);
+  const relativeAge = formatRelativeAge(card.created_at, t, tp);
 
   const completedCount = card.completed_actions?.length || 0;
   const totalActions = card.proposed_actions?.length || 0;

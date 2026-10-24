@@ -30,7 +30,7 @@ export const TriageList: React.FC<TriageListProps> = ({
 }) => {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const { t } = useLocale();
+  const { t, tp } = useLocale();
 
   const toggle = (id: number) =>
     setSelected((prev) => {
@@ -69,7 +69,7 @@ export const TriageList: React.FC<TriageListProps> = ({
             >
               {t('cards.list.selectAll', { count: cards.length })}
             </button>
-            <span className="triage-list-sel">{t('cards.list.selected', { count: selected.size })}</span>
+            <span className="triage-list-sel">{tp('cards.list.selected', selected.size)}</span>
             <div className="triage-list-bulk">
               <button type="button" className="deck-pill-btn keep" disabled={!selected.size} onClick={() => run(onBulkKeep)}>
                 <ArrowRight size={13} /> {t('cards.list.keep')}
