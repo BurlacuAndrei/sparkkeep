@@ -1,5 +1,6 @@
 import React from 'react';
-import type { TranslateFn } from '../i18n';
+import type { TranslateFn, TranslationKey } from '../i18n';
+import { cardTypeLabel } from '../utils/cardEnumLabels';
 
 export interface SelectOption<T extends string = string> {
   value: T;
@@ -37,14 +38,44 @@ export const cardStatusOptions = (
   { value: 'dismissed', label: t('cards.select.statusDismissed') },
 ];
 
-export const cardTypeOptions = (t: TranslateFn): SelectOption<import('../types').CardType>[] => [
-  { value: 'tool', label: t('cards.select.typeTool') },
-  { value: 'repo', label: t('cards.select.typeRepo') },
-  { value: 'article', label: t('cards.select.typeArticle') },
-  { value: 'idea', label: t('cards.select.typeIdea') },
-  { value: 'claim', label: t('cards.select.typeClaim') },
-  { value: 'tutorial', label: t('cards.select.typeTutorial') },
-  { value: 'product', label: t('cards.select.typeProduct') },
-  { value: 'collection', label: t('cards.select.typeCollection') },
-  { value: 'other', label: t('cards.select.typeOther') },
-];
+export const cardTypeOptions = (
+  t: TranslateFn,
+  extraTypes: string[] = []
+): SelectOption<import('../types').CardType>[] => {
+  const canonicalValues: Array<{ value: import('../types').CanonicalCardType; key: TranslationKey }> = [
+    { value: 'tool', key: 'cards.select.typeTool' },
+    { value: 'repo', key: 'cards.select.typeRepo' },
+    { value: 'article', key: 'cards.select.typeArticle' },
+    { value: 'video', key: 'cards.select.typeVideo' },
+    { value: 'book', key: 'cards.select.typeBook' },
+    { value: 'guide', key: 'cards.select.typeGuide' },
+    { value: 'product', key: 'cards.select.typeProduct' },
+    { value: 'place', key: 'cards.select.typePlace' },
+    { value: 'idea', key: 'cards.select.typeIdea' },
+    { value: 'quote', key: 'cards.select.typeQuote' },
+    { value: 'paper', key: 'cards.select.typePaper' },
+    { value: 'company', key: 'cards.select.typeCompany' },
+    { value: 'claim', key: 'cards.select.typeClaim' },
+    { value: 'tutorial', key: 'cards.select.typeTutorial' },
+    { value: 'collection', key: 'cards.select.typeCollection' },
+    { value: 'other', key: 'cards.select.typeOther' },
+  ];
+
+  const options: SelectOption<import('../types').CardType>[] = canonicalValues.map(({ value, key }) => ({
+    value,
+    label: t(key),
+  }));
+
+  const existing = new Set<string>(canonicalValues.map((v) => v.value));
+  for (const extra of extraTypes) {
+    if (extra && !existing.has(extra)) {
+      existing.add(extra);
+      options.push({
+        value: extra,
+        label: cardTypeLabel(t, extra),
+      });
+    }
+  }
+
+  return options;
+};

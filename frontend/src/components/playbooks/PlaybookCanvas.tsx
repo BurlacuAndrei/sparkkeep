@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Card, Playbook, PlaybookStep, CustomStepConfig, StepLibraryTemplate } from '../../types';
 import { useLocale } from '../../i18n';
-import { enumLabel } from '../../utils/cardEnumLabels';
+import { enumLabel, cardTypeLabel } from '../../utils/cardEnumLabels';
 import {
   PlaybookValidationError,
   STEP_DESCRIPTION_KEYS,
@@ -250,7 +250,7 @@ export const PlaybookCanvas: React.FC<PlaybookCanvasProps> = ({
                   onChangePlaybook({ ...playbook, card_types: next });
                 }}
               >
-                <span>{type}</span>
+                <span>{cardTypeLabel(t, type)}</span>
               </button>
             );
           })}

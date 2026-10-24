@@ -602,7 +602,7 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 		var cleaned []string
 		seen := make(map[string]bool)
 		for _, ct := range *b.CardTypes {
-			t := strings.ToLower(strings.TrimSpace(ct))
+			t := port.ResolveCardType(ct)
 			if t == "" || t == "other" {
 				continue
 			}

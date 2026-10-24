@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
@@ -20,32 +21,127 @@ const (
 	StatusShelved     = "shelved"
 	StatusDismissed   = "dismissed"
 
-	RefKindURL       = "url"
-	RefKindRepo      = "repo"
-	RefKindTool      = "tool"
-	RefKindProduct   = "product"
-	RefKindPerson    = "person"
-	RefKindOrg       = "org"
-	RefKindPaper     = "paper"
-	RefKindOther     = "other"
-	CardTypeTool     = "tool"
-	CardTypeRepo     = "repo"
-	CardTypeArticle  = "article"
-	CardTypeIdea     = "idea"
-	CardTypeClaim    = "claim"
-	CardTypeTutorial = "tutorial"
-	CardTypeProduct  = "product"
-	CardTypeCompany  = "company"
-	CardTypePaper    = "paper"
-	CardTypeVideo    = "video"
-	CardTypeBook     = "book"
-	CardTypeGuide    = "guide"
-	CardTypePlace    = "place"
-	CardTypeQuote    = "quote"
-	CardTypeOther    = "other"
+	RefKindURL         = "url"
+	RefKindRepo        = "repo"
+	RefKindTool        = "tool"
+	RefKindProduct     = "product"
+	RefKindPerson      = "person"
+	RefKindOrg         = "org"
+	RefKindPaper       = "paper"
+	RefKindOther       = "other"
+	CardTypeTool       = "tool"
+	CardTypeRepo       = "repo"
+	CardTypeArticle    = "article"
+	CardTypeIdea       = "idea"
+	CardTypeClaim      = "claim"
+	CardTypeTutorial   = "tutorial"
+	CardTypeProduct    = "product"
+	CardTypeCompany    = "company"
+	CardTypePaper      = "paper"
+	CardTypeVideo      = "video"
+	CardTypeBook       = "book"
+	CardTypeGuide      = "guide"
+	CardTypePlace      = "place"
+	CardTypeQuote      = "quote"
+	CardTypeCollection = "collection"
+	CardTypeOther      = "other"
 
 	DefaultInterfaceLocale = "en"
 )
+
+var AllCanonicalCardTypes = []string{
+	CardTypeArticle,
+	CardTypeVideo,
+	CardTypeBook,
+	CardTypeGuide,
+	CardTypeProduct,
+	CardTypePlace,
+	CardTypeIdea,
+	CardTypeQuote,
+	CardTypeTool,
+	CardTypeRepo,
+	CardTypePaper,
+	CardTypeCompany,
+	CardTypeClaim,
+	CardTypeTutorial,
+	CardTypeCollection,
+}
+
+var canonicalTypeAliases = map[string]string{
+	// article
+	"article": CardTypeArticle, "articol": CardTypeArticle, "articulo": CardTypeArticle, "artigo": CardTypeArticle, "artikel": CardTypeArticle,
+	// video
+	"video": CardTypeVideo,
+	// book
+	"book": CardTypeBook, "carte": CardTypeBook, "libro": CardTypeBook, "livro": CardTypeBook, "livre": CardTypeBook, "buch": CardTypeBook,
+	// guide
+	"guide": CardTypeGuide, "ghid": CardTypeGuide, "guia": CardTypeGuide, "leitfaden": CardTypeGuide,
+	// product
+	"product": CardTypeProduct, "produs": CardTypeProduct, "producto": CardTypeProduct, "produto": CardTypeProduct, "produit": CardTypeProduct, "produkt": CardTypeProduct,
+	// place
+	"place": CardTypePlace, "loc": CardTypePlace, "lugar": CardTypePlace, "lieu": CardTypePlace, "ort": CardTypePlace,
+	// idea
+	"idea": CardTypeIdea, "idee": CardTypeIdea, "ideia": CardTypeIdea,
+	// quote
+	"quote": CardTypeQuote, "citat": CardTypeQuote, "cita": CardTypeQuote, "citacao": CardTypeQuote, "citation": CardTypeQuote, "zitat": CardTypeQuote,
+	// tool
+	"tool": CardTypeTool, "tools": CardTypeTool, "instrument": CardTypeTool, "herramienta": CardTypeTool, "ferramenta": CardTypeTool, "outil": CardTypeTool, "werkzeug": CardTypeTool,
+	// repo
+	"repo": CardTypeRepo, "repository": CardTypeRepo, "depozit": CardTypeRepo, "repositorio": CardTypeRepo, "depot": CardTypeRepo,
+	// paper
+	"paper": CardTypePaper, "lucrare": CardTypePaper, "articulo cientifico": CardTypePaper, "artigo cientifico": CardTypePaper, "publication": CardTypePaper, "facharbeit": CardTypePaper,
+	// company
+	"company": CardTypeCompany, "companie": CardTypeCompany, "empresa": CardTypeCompany, "entreprise": CardTypeCompany, "unternehmen": CardTypeCompany,
+	// claim
+	"claim": CardTypeClaim, "afirmatie": CardTypeClaim, "afirmacion": CardTypeClaim, "afirmacao": CardTypeClaim, "behauptung": CardTypeClaim,
+	// tutorial
+	"tutorial": CardTypeTutorial, "tutoriel": CardTypeTutorial,
+	// collection
+	"collection": CardTypeCollection, "colectie": CardTypeCollection, "coleccion": CardTypeCollection, "colecao": CardTypeCollection, "sammlung": CardTypeCollection,
+	// other
+	"other": CardTypeOther, "altul": CardTypeOther, "otro": CardTypeOther, "outro": CardTypeOther, "autre": CardTypeOther, "sonstiges": CardTypeOther,
+}
+
+func stripDiacritics(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		switch r {
+		case 'á', 'à', 'ä', 'â', 'ã', 'å', 'ā':
+			b.WriteRune('a')
+		case 'é', 'è', 'ë', 'ê', 'ē':
+			b.WriteRune('e')
+		case 'í', 'ì', 'ï', 'î', 'ī':
+			b.WriteRune('i')
+		case 'ó', 'ò', 'ö', 'ô', 'õ', 'ō':
+			b.WriteRune('o')
+		case 'ú', 'ù', 'ü', 'û', 'ū':
+			b.WriteRune('u')
+		case 'ç':
+			b.WriteRune('c')
+		case 'ñ':
+			b.WriteRune('n')
+		case 'ș', 'ş':
+			b.WriteRune('s')
+		case 'ț', 'ţ':
+			b.WriteRune('t')
+		case 'ă':
+			b.WriteRune('a')
+		default:
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == ' ' {
+				b.WriteRune(unicode.ToLower(r))
+			}
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func ResolveCardType(raw string) string {
+	cleaned := stripDiacritics(raw)
+	if slug, ok := canonicalTypeAliases[cleaned]; ok {
+		return slug
+	}
+	return strings.ToLower(strings.TrimSpace(raw))
+}
 
 var SupportedLocales = []string{"en", "ro", "es", "pt-BR", "fr", "de"}
 

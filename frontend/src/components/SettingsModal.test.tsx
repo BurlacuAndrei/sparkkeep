@@ -281,10 +281,11 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
       expect(screen.getByText('8 / 20 active types')).toBeDefined();
     });
 
-    for (const t of ['article', 'video', 'book', 'guide', 'product', 'place', 'idea', 'quote']) {
+    for (const t of ['Article', 'Video', 'Book', 'Guide', 'Product', 'Place', 'Idea', 'Quote']) {
       expect(screen.getByText(t)).toBeDefined();
     }
     // Immutable fallback chip
+    expect(screen.getByText('Other')).toBeDefined();
     expect(screen.getByText('(fallback)')).toBeDefined();
   });
 
@@ -309,6 +310,41 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     });
   });
 
+  it('resolves localized aliases when adding card types and renders suggestion chips', async () => {
+    renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('8 / 20 active types')).toBeDefined();
+    });
+
+    // Verify suggestion chips render for inactive canonical types (e.g. Tool)
+    expect(screen.getByRole('button', { name: /Add Tool/i })).toBeDefined();
+
+    // Type Spanish alias "Herramienta" into input
+    const input = screen.getByLabelText('New card type');
+    fireEvent.change(input, { target: { value: 'Herramienta' } });
+
+    const addBtn = screen.getByRole('button', { name: /Add Type/i });
+    expect(addBtn.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(addBtn);
+
+    // Should resolve to "tool" and render as "Tool"
+    await waitFor(() => {
+      expect(screen.getByText('9 / 20 active types')).toBeDefined();
+      expect(screen.getByText('Tool')).toBeDefined();
+    });
+
+    // Click quick-add suggestion chip for "Paper"
+    const paperSuggestionBtn = screen.getByRole('button', { name: /Add Paper/i });
+    fireEvent.click(paperSuggestionBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('10 / 20 active types')).toBeDefined();
+      expect(screen.getByText('Paper')).toBeDefined();
+    });
+  });
+
   it('allows removing a card type and updates active count', async () => {
     renderWithTheme(<SettingsModal onClose={mockOnClose} showToast={mockShowToast} />);
 
@@ -316,12 +352,13 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
       expect(screen.getByText('8 / 20 active types')).toBeDefined();
     });
 
-    const removeQuoteBtn = screen.getByLabelText('Remove quote');
+    const removeQuoteBtn = screen.getByLabelText('Remove Quote');
     fireEvent.click(removeQuoteBtn);
 
     await waitFor(() => {
       expect(screen.getByText('7 / 20 active types')).toBeDefined();
-      expect(screen.queryByText('quote')).toBeNull();
+      expect(screen.queryByLabelText('Remove Quote')).toBeNull();
+      expect(screen.getByRole('button', { name: /Add Quote/i })).toBeDefined();
     });
   });
 
@@ -382,7 +419,7 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     });
 
     // Click delete on 'guide', which is referenced by 2 playbooks
-    const removeGuideBtn = screen.getByLabelText('Remove guide');
+    const removeGuideBtn = screen.getByLabelText('Remove Guide');
     fireEvent.click(removeGuideBtn);
 
     // Impact confirmation modal should appear and list only the 2 affected playbooks
@@ -452,7 +489,7 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     });
 
     // Click delete on 'guide'
-    fireEvent.click(screen.getByLabelText('Remove guide'));
+    fireEvent.click(screen.getByLabelText('Remove Guide'));
 
     const impactModal = await screen.findByTestId('taxonomy-impact-modal');
     const detachBtn = within(impactModal).getByRole('button', {
@@ -494,7 +531,7 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('taxonomy-impact-modal')).toBeNull();
       expect(screen.getByText('7 / 20 active types')).toBeDefined();
-      expect(screen.queryByLabelText('Remove guide')).toBeNull();
+      expect(screen.queryByLabelText('Remove Guide')).toBeNull();
     });
   });
 

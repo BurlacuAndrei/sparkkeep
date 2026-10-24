@@ -417,7 +417,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
 
     const canonicalTypes = ['article', 'video', 'book', 'guide', 'product', 'place', 'idea', 'quote'];
     for (const type of canonicalTypes) {
-      expect(screen.getByRole('button', { name: type })).toBeDefined();
+      expect(screen.getByRole('button', { name: new RegExp(`^${type}$`, 'i') })).toBeDefined();
     }
 
     // Legacy non-canonical types must not appear

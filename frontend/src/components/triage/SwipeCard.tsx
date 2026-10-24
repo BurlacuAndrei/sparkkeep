@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { Card } from '../../types';
 import { getPlatformInfo, formatRelativeAge } from '../../utils/cardUtils';
-import { enumLabel } from '../../utils/cardEnumLabels';
+import { enumLabel, cardTypeLabel } from '../../utils/cardEnumLabels';
 import {
   Horizon,
   horizonLabel,
@@ -296,7 +296,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           {platform.icon}
           <span>{platform.name}</span>
         </span>
-        {card.type && <span className="deck-chip type">{card.type}</span>}
+        {card.type && <span className="deck-chip type">{cardTypeLabel(t, card.type)}</span>}
         {card.signals?.extraction && card.signals.extraction !== 'full' && (
           <span className="deck-chip warn" title={t('cards.swipe.partialRead')}>
             <AlertTriangle size={10} /> {enumLabel(t, 'extraction', card.signals.extraction)}

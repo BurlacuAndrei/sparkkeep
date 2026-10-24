@@ -14,11 +14,13 @@ import {
   MessageSquare,
   Coffee,
   Heart,
+  Plus,
 } from 'lucide-react';
 import * as api from '../api';
 import { LLMProfile, Playbook } from '../types';
 import { useLocale } from '../i18n';
 import type { Locale } from '../i18n';
+import { CANONICAL_CARD_TYPES, resolveCardTypeAlias, cardTypeLabel } from '../utils/cardEnumLabels';
 import { ThemeSelector } from './ThemeSelector';
 import { ResearchScheduler } from './ResearchScheduler';
 import {
@@ -484,15 +486,16 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
     }
   };
 
-  const handleAddCardType = () => {
-    const trimmed = newCardTypeInput.trim().toLowerCase();
-    if (!trimmed) return;
-    if (trimmed === 'other') {
+  const handleAddCardType = (customType?: string) => {
+    const raw = typeof customType === 'string' ? customType : newCardTypeInput;
+    if (!raw.trim()) return;
+    const resolved = resolveCardTypeAlias(raw.trim());
+    if (resolved === 'other') {
       setError(t('settings.modal.taxonomy.otherExists'));
       return;
     }
-    if (cardTypes.includes(trimmed)) {
-      setError(t('settings.modal.taxonomy.exists', { type: trimmed }));
+    if (cardTypes.includes(resolved)) {
+      setError(t('settings.modal.taxonomy.exists', { type: cardTypeLabel(t, resolved) }));
       return;
     }
     if (cardTypes.length >= 20) {
@@ -500,8 +503,10 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
       return;
     }
     setError(null);
-    setCardTypes([...cardTypes, trimmed]);
-    setNewCardTypeInput('');
+    setCardTypes([...cardTypes, resolved]);
+    if (!customType) {
+      setNewCardTypeInput('');
+    }
   };
 
   const handleRemoveCardType = (type: string) => {
@@ -836,7 +841,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                               color: 'var(--text-main)',
                             }}
                           >
-                            <span>{type}</span>
+                            <span>{cardTypeLabel(t, type)}</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveCardType(type)}
@@ -852,8 +857,8 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                                 borderRadius: '4px',
                                 marginLeft: '2px',
                               }}
-                              aria-label={t('settings.modal.taxonomy.remove', { type })}
-                              title={t('settings.modal.taxonomy.remove', { type })}
+                              aria-label={t('settings.modal.taxonomy.remove', { type: cardTypeLabel(t, type) })}
+                              title={t('settings.modal.taxonomy.remove', { type: cardTypeLabel(t, type) })}
                             >
                               <X size={13} />
                             </button>
@@ -874,7 +879,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                           }}
                           title={t('settings.modal.taxonomy.immutable')}
                         >
-                          <span>other</span>
+                          <span>{cardTypeLabel(t, 'other')}</span>
                           <span style={{ fontSize: '10px', opacity: 0.6 }}>{t('settings.modal.taxonomy.fallback')}</span>
                         </div>
                       </div>
@@ -901,17 +906,57 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                           type="button"
                           className="setup-btn-secondary"
                           style={{ padding: '8px 14px' }}
-                          onClick={handleAddCardType}
+                          onClick={() => handleAddCardType()}
                           disabled={
                             cardTypes.length >= 20 ||
                             !newCardTypeInput.trim() ||
-                            cardTypes.includes(newCardTypeInput.trim().toLowerCase()) ||
-                            newCardTypeInput.trim().toLowerCase() === 'other'
+                            cardTypes.includes(resolveCardTypeAlias(newCardTypeInput.trim())) ||
+                            resolveCardTypeAlias(newCardTypeInput.trim()) === 'other'
                           }
                         >
                           {t('settings.modal.taxonomy.add')}
                         </button>
                       </div>
+
+                      {/* Suggestion Chips for inactive canonical card types */}
+                      {CANONICAL_CARD_TYPES.filter((ct) => !cardTypes.includes(ct)).length > 0 && cardTypes.length < 20 && (
+                        <div style={{ marginTop: '12px' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                            {t('settings.modal.taxonomy.suggestions')}:
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {CANONICAL_CARD_TYPES.filter((ct) => !cardTypes.includes(ct)).map((canonicalType) => (
+                              <button
+                                key={canonicalType}
+                                type="button"
+                                onClick={() => handleAddCardType(canonicalType)}
+                                className="setup-btn-ghost"
+                                style={{
+                                  fontSize: '11px',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px dashed var(--border-subtle)',
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  color: 'var(--text-muted)',
+                                }}
+                                title={t('settings.modal.taxonomy.quickAdd', {
+                                  type: cardTypeLabel(t, canonicalType),
+                                })}
+                                aria-label={t('settings.modal.taxonomy.quickAdd', {
+                                  type: cardTypeLabel(t, canonicalType),
+                                })}
+                              >
+                                <Plus size={11} />
+                                <span>{cardTypeLabel(t, canonicalType)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1120,7 +1165,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                 id="taxonomy-impact-modal-title"
                 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--text-main)' }}
               >
-                {t('settings.modal.taxonomy.confirmTitle', { type: pendingDeleteCardType.type })}
+                {t('settings.modal.taxonomy.confirmTitle', { type: cardTypeLabel(t, pendingDeleteCardType.type) })}
               </h3>
             </div>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -1129,7 +1174,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                   ? 'settings.modal.taxonomy.confirmBodySingular'
                   : 'settings.modal.taxonomy.confirmBodyPlural',
                 {
-                  type: pendingDeleteCardType.type,
+                  type: cardTypeLabel(t, pendingDeleteCardType.type),
                   count: pendingDeleteCardType.affectedPlaybooks.length,
                 }
               )}

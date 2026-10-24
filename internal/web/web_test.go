@@ -3456,7 +3456,30 @@ func TestCardTypesSettings_RoundTripAndValidation(t *testing.T) {
 		}
 	}
 
-	// 3. PATCH /api/v1/settings with > 20 entries is rejected (400)
+	// 3. PATCH /api/v1/settings with localized alias names resolves to canonical slugs
+	aliasPatch := `{"card_types": ["Herramienta", "Instrument", "Artículo", "Depozit", "my_custom_type"]}`
+	rrAlias := doJSON(t, h, http.MethodPatch, "/api/v1/settings", aliasPatch)
+	if rrAlias.Code != http.StatusOK {
+		t.Fatalf("PATCH with aliases failed: %d: %s", rrAlias.Code, rrAlias.Body.String())
+	}
+	rrGetAlias := doJSON(t, h, http.MethodGet, "/api/v1/settings", "")
+	var getRespAlias struct {
+		Settings struct {
+			CardTypes []string `json:"card_types"`
+		} `json:"settings"`
+	}
+	_ = json.Unmarshal(rrGetAlias.Body.Bytes(), &getRespAlias)
+	expectedAliasCleaned := []string{"tool", "article", "repo", "my_custom_type"}
+	if len(getRespAlias.Settings.CardTypes) != len(expectedAliasCleaned) {
+		t.Fatalf("expected %d card_types after alias resolution, got %d: %v", len(expectedAliasCleaned), len(getRespAlias.Settings.CardTypes), getRespAlias.Settings.CardTypes)
+	}
+	for i, v := range expectedAliasCleaned {
+		if getRespAlias.Settings.CardTypes[i] != v {
+			t.Errorf("at index %d: expected %q, got %q", i, v, getRespAlias.Settings.CardTypes[i])
+		}
+	}
+
+	// 4. PATCH /api/v1/settings with > 20 entries is rejected (400)
 	var tooMany []string
 	for i := 1; i <= 21; i++ {
 		tooMany = append(tooMany, fmt.Sprintf("type%d", i))

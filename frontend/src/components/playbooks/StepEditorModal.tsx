@@ -2,6 +2,7 @@ import React from 'react';
 import { Sparkles, Plus, Trash2, X, Copy, AlertCircle } from 'lucide-react';
 import { Playbook, PlaybookStep, CustomStepConfig, StepLibraryTemplate } from '../../types';
 import { useLocale } from '../../i18n';
+import { cardTypeLabel } from '../../utils/cardEnumLabels';
 import {
   INPUT_BINDING_OPTIONS,
   getDefaultInputsForStep,
@@ -635,7 +636,7 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                     <span className="pb-meta-title">{t('playbooks.gallery.suited')}</span>
                     {template.card_types.map((ct) => (
                       <span key={ct} className="pb-template-ct-tag">
-                        #{ct}
+                        #{cardTypeLabel(t, ct)}
                       </span>
                     ))}
                   </div>

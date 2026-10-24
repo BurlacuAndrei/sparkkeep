@@ -7,6 +7,7 @@ import { CustomSelect } from './CustomSelect';
 import * as api from '../api';
 import { useLocale } from '../i18n';
 import { Card, Playbook, PlaybookStep, StepLibraryTemplate } from '../types';
+import { cardTypeLabel } from '../utils/cardEnumLabels';
 import {
   DEFAULT_CARD_TYPES, DEFAULT_LEAN_STARTER_STEPS, PlaybookTemplate,
   UserSavedStepTemplate, validatePlaybook, exportPlaybookToFile,
@@ -478,7 +479,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                         <div className="pb-card-types-row">
                           {p.card_types.map((ct) => (
                             <span key={ct} className="pb-card-type-chip">
-                              {ct}
+                              {cardTypeLabel(t, ct)}
                             </span>
                           ))}
                         </div>
@@ -562,7 +563,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                           <div className="pb-card-types-row">
                             {p.card_types.map((ct) => (
                               <span key={ct} className="pb-card-type-chip">
-                                {ct}
+                                {cardTypeLabel(t, ct)}
                               </span>
                             ))}
                           </div>

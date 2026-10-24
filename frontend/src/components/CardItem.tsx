@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 import { getPlatformInfo, formatRelativeAge } from '../utils/cardUtils';
-import { enumLabel, statusLabel } from '../utils/cardEnumLabels';
+import { enumLabel, statusLabel, cardTypeLabel } from '../utils/cardEnumLabels';
 import { useLocale } from '../i18n';
 
 export interface CardItemProps {
@@ -216,7 +216,7 @@ export const CardItem: React.FC<CardItemProps> = ({
           {/* Type Badge */}
           {card.type && (
             <span className="card-type-badge">
-              {card.type}
+              {cardTypeLabel(t, card.type)}
             </span>
           )}
 

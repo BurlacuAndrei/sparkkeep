@@ -16,16 +16,25 @@ export interface Reference {
   url?: string;
 }
 
-export type CardType =
+export type CanonicalCardType =
+  | 'article'
+  | 'video'
+  | 'book'
+  | 'guide'
+  | 'product'
+  | 'place'
+  | 'idea'
+  | 'quote'
   | 'tool'
   | 'repo'
-  | 'article'
-  | 'idea'
+  | 'paper'
+  | 'company'
   | 'claim'
   | 'tutorial'
-  | 'product'
   | 'collection'
   | 'other';
+
+export type CardType = CanonicalCardType | (string & {});
 
 export interface CardSignals {
   extraction?: 'full' | 'partial' | 'thin' | string;
