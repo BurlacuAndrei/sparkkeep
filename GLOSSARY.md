@@ -79,3 +79,19 @@ _Avoid_: Native plugin, desktop bridge
 **Outbox Feed**:
 An authenticated, filterable syndication feed exposing curated cards and completed research dossiers to external readers and automation tools.
 _Avoid_: Public RSS, inbound feed
+
+**Interface Locale**:
+The active display language governing workspace UI chrome, built-in taxonomy labels, and outbound channel notifications.
+_Avoid_: UI language, profile language, translation mode
+
+**Output Language**:
+The user-configured target language in which the intelligence engine synthesizes card triage briefs, claims, and research dossiers.
+_Avoid_: Interface locale, system language, translation filter
+
+**Canonical Card Type**:
+A system-defined Card Type identified by an immutable English slug for routing and classification while rendered with a locale-specific display label in the interface.
+_Avoid_: Translated category key, localized type slug
+
+**Custom Card Type**:
+A user-defined Card Type stored and displayed verbatim in the language entered by the user.
+_Avoid_: Custom category, freeform tag
