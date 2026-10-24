@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { SettingsModal } from './SettingsModal';
 import { ThemeProvider } from '../context/ThemeContext';
 import { LocaleProvider } from '../i18n';
@@ -24,7 +24,7 @@ vi.mock('../api', async () => {
           },
         ],
         llm_roles: {},
-        token_caps: {},
+        llm_token_caps: {},
         user_profile: {
           goals: 'Build scalable software',
           skills: ['TypeScript', 'Go', 'React'],
@@ -526,6 +526,129 @@ describe('Card Taxonomy Management in Platform Preferences', () => {
     await waitFor(() => {
       expect(document.documentElement.getAttribute('data-reduce-motion')).toBe('reduced');
       expect(localStorage.getItem('sparkkeep_reduce_motion')).toBe('reduced');
+    });
+  });
+
+  it('automatically updates aligned Output Language on interface locale change with 1-click undo', async () => {
+    const showToast = vi.fn();
+    render(
+      <LocaleProvider locale="en">
+        <ThemeProvider>
+          <SettingsModal onClose={() => {}} showToast={showToast} />
+        </ThemeProvider>
+      </LocaleProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Platform Preferences')).toBeDefined();
+    });
+
+    const langSelect = screen.getByLabelText('Interface language') as HTMLSelectElement;
+    expect(langSelect.value).toBe('en');
+
+    await act(async () => {
+      fireEvent.change(langSelect, { target: { value: 'de' } });
+    });
+
+    await waitFor(() => {
+      expect(api.patchSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          interface_locale: 'de',
+          user_profile: expect.objectContaining({
+            language: 'German',
+          }),
+        })
+      );
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining('German'),
+        expect.any(Function)
+      );
+    });
+
+    // Invoke undo
+    const undoCallback = showToast.mock.calls[0][1];
+    await act(async () => {
+      await undoCallback();
+    });
+
+    await waitFor(() => {
+      expect(api.patchSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_profile: expect.objectContaining({
+            language: 'English',
+          }),
+        })
+      );
+    });
+  });
+
+  it('preserves decoupled Output Language on interface locale change and offers 1-click switch action', async () => {
+    vi.mocked(api.getSettings).mockResolvedValueOnce({
+      ok: true,
+      settings: {
+        has_auth_token: false,
+        has_llm_key: false,
+        llm_model: 'gpt-4o',
+        llm_profiles: [],
+        llm_roles: {},
+        llm_token_caps: {},
+        user_profile: {
+          goals: 'Custom',
+          skills: [],
+          stack: [],
+          interests: [],
+          constraints: '',
+          language: 'Spanish', // Decoupled: Spanish while interface is en
+        },
+      },
+    });
+
+    const showToast = vi.fn();
+    render(
+      <LocaleProvider locale="en">
+        <ThemeProvider>
+          <SettingsModal onClose={() => {}} showToast={showToast} />
+        </ThemeProvider>
+      </LocaleProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Platform Preferences')).toBeDefined();
+    });
+
+    const langSelect = screen.getByLabelText('Interface language') as HTMLSelectElement;
+    await act(async () => {
+      fireEvent.change(langSelect, { target: { value: 'de' } });
+    });
+
+    await waitFor(() => {
+      // interface_locale is patched, but user_profile is NOT updated to German
+      expect(api.patchSettings).toHaveBeenCalledWith({
+        interface_locale: 'de',
+      });
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining('German'),
+        expect.objectContaining({
+          actionLabel: expect.stringContaining('German'),
+          onAction: expect.any(Function),
+        })
+      );
+    });
+
+    // Invoke 1-click switch action
+    const toastOpts = showToast.mock.calls[0][1];
+    await act(async () => {
+      await toastOpts.onAction();
+    });
+
+    await waitFor(() => {
+      expect(api.patchSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_profile: expect.objectContaining({
+            language: 'German',
+          }),
+        })
+      );
     });
   });
 });

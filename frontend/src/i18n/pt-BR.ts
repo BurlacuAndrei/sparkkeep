@@ -136,6 +136,11 @@ export const ptBR = {
         full: 'Glassmorphism completo',
         reduced: 'Desfoque e movimento reduzidos',
       },
+      toast: {
+        languageFollow: 'Idioma da interface atualizado. Idioma de saída definido para {{language}}.',
+        localeChangedDecoupled: 'Idioma da interface atualizado para {{language}}. Idioma de saída preservado.',
+        switchOutputLanguage: 'Mudar idioma de saída para {{language}}',
+      },
     },
     profile: {
       title: 'Ajuste pessoal e sobre mim',

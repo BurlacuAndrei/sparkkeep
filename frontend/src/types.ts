@@ -387,6 +387,7 @@ export interface StepLibraryTemplate {
 }
 
 export interface Settings {
+  interface_locale?: string;
   card_types?: string[];
   llm_base?: string;
   llm_model?: string;

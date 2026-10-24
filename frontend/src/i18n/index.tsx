@@ -136,9 +136,11 @@ export interface LocaleProviderProps {
   children: ReactNode;
   /** Initial locale, overriding detection. */
   locale?: Locale;
+  /** Whether to sync with backend workspace settings (default: true). */
+  syncBackend?: boolean;
 }
 
-export function LocaleProvider({ children, locale: initialLocale }: LocaleProviderProps) {
+export function LocaleProvider({ children, locale: initialLocale, syncBackend = true }: LocaleProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() => {
     const initial = initialLocale ?? detectLocale();
     activeLocale = initial;
@@ -156,15 +158,47 @@ export function LocaleProvider({ children, locale: initialLocale }: LocaleProvid
     };
   }, [locale]);
 
-  const setLocale = useCallback((next: Locale) => {
-    activeLocale = next;
-    setLocaleState(next);
-    try {
-      localStorage.setItem(LOCALE_STORAGE_KEY, next);
-    } catch {
-      // In case localStorage is blocked
+  useEffect(() => {
+    let mounted = true;
+    if (typeof window !== 'undefined' && syncBackend && !initialLocale) {
+      import('../api')
+        .then((api) => api.getSettings())
+        .then((res) => {
+          if (mounted && res?.ok && res.settings?.interface_locale) {
+            const serverLocale = matchLocale(res.settings.interface_locale);
+            if (serverLocale && serverLocale !== activeLocale) {
+              activeLocale = serverLocale;
+              setLocaleState(serverLocale);
+              try {
+                localStorage.setItem(LOCALE_STORAGE_KEY, serverLocale);
+              } catch {}
+            }
+          }
+        })
+        .catch(() => {});
     }
-  }, []);
+    return () => {
+      mounted = false;
+    };
+  }, [syncBackend, initialLocale]);
+
+  const setLocale = useCallback(
+    (next: Locale) => {
+      activeLocale = next;
+      setLocaleState(next);
+      try {
+        localStorage.setItem(LOCALE_STORAGE_KEY, next);
+      } catch {
+        // In case localStorage is blocked
+      }
+      if (syncBackend) {
+        import('../api')
+          .then((api) => api.patchSettings({ interface_locale: next }))
+          .catch(() => {});
+      }
+    },
+    [syncBackend]
+  );
 
   const t = useCallback<TranslateFn>(
     (key, vars) => translate(catalogs[locale], key, vars),

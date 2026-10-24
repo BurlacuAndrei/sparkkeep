@@ -1,11 +1,15 @@
 import { useLocale } from '../../i18n';
 import type { Locale } from '../../i18n';
 
+export interface LanguageSelectorProps {
+  onChange?: (newLocale: Locale) => void;
+}
+
 /**
  * Language switcher for Settings → Appearance. Native `<select>` so the
  * existing `pref-select` styling and change-event tests keep working.
  */
-export function LanguageSelector() {
+export function LanguageSelector({ onChange }: LanguageSelectorProps = {}) {
   const { locale, setLocale, locales, t } = useLocale();
 
   return (
@@ -16,7 +20,14 @@ export function LanguageSelector() {
       </div>
       <select
         value={locale}
-        onChange={(e) => setLocale(e.target.value as Locale)}
+        onChange={(e) => {
+          const next = e.target.value as Locale;
+          if (onChange) {
+            onChange(next);
+          } else {
+            setLocale(next);
+          }
+        }}
         className="pref-select"
         aria-label={t('settings.appearance.language')}
       >

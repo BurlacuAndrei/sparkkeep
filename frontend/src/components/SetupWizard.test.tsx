@@ -122,6 +122,7 @@ describe('SetupWizard', () => {
         llm_key: '',
         llm_model: 'llama3:8b',
         tg_token: '',
+        interface_locale: 'en',
       });
       expect(onComplete).toHaveBeenCalledTimes(1);
     });

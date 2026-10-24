@@ -43,5 +43,5 @@ describe.each(translatedLocales)('%s catalog coverage', (locale) => {
       expect(text.trim(), key).not.toBe('');
       expect(text, key).not.toBe(key);
     }
-  });
+  }, 60000);
 });

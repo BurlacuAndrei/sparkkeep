@@ -140,6 +140,11 @@ export const es = {
         full: 'Glassmorphism completo',
         reduced: 'Desenfoque y movimiento reducidos',
       },
+      toast: {
+        languageFollow: 'Idioma de interfaz actualizado. Idioma de salida establecido en {{language}}.',
+        localeChangedDecoupled: 'Idioma de interfaz actualizado a {{language}}. Idioma de salida conservado.',
+        switchOutputLanguage: 'Cambiar idioma de salida a {{language}}',
+      },
     },
     profile: {
       title: 'Encaje personal y sobre mí',

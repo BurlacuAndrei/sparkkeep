@@ -138,6 +138,11 @@ export const de = {
         full: 'Voller Glasmorphismus',
         reduced: 'Reduzierte Unschärfe & Bewegung',
       },
+      toast: {
+        languageFollow: 'Oberflächensprache aktualisiert. Ausgabesprache auf {{language}} gesetzt.',
+        localeChangedDecoupled: 'Oberflächensprache auf {{language}} aktualisiert. Ausgabesprache beibehalten.',
+        switchOutputLanguage: 'Ausgabesprache auf {{language}} umstellen',
+      },
     },
     profile: {
       title: 'Persönlicher Fit & Über mich',

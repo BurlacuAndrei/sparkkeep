@@ -20,7 +20,7 @@ interface SetupWizardProps {
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const { theme, resolvedTheme } = useTheme();
-  const { t } = useLocale();
+  const { locale, setLocale, t } = useLocale();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [authToken, setAuthToken] = useState('');
   const [confirmToken, setConfirmToken] = useState('');
@@ -40,7 +40,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     setError(null);
     setSubmitting(true);
     try {
-      await api.submitDemoSetup(authToken.trim() || undefined);
+      await api.submitDemoSetup(authToken.trim() || undefined, locale);
       onComplete();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('shell.setup.demoFailed'));
@@ -93,6 +93,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         llm_key: llmKey.trim(),
         llm_model: llmModel.trim(),
         tg_token: tgToken.trim(),
+        interface_locale: locale,
       });
       onComplete();
     } catch (err: unknown) {
@@ -177,7 +178,14 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         {step === 1 && (
           <div className="setup-body">
             {/* Interface language, applied immediately */}
-            <LanguageSelector />
+            <LanguageSelector
+              onChange={async (newLoc) => {
+                setLocale(newLoc);
+                try {
+                  await api.patchSettings({ interface_locale: newLoc });
+                } catch {}
+              }}
+            />
 
             {/* Visual Appearance & Theme Selection */}
             <div className="setup-section-intro">

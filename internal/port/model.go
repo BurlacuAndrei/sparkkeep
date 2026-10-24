@@ -43,7 +43,37 @@ const (
 	CardTypePlace    = "place"
 	CardTypeQuote    = "quote"
 	CardTypeOther    = "other"
+
+	DefaultInterfaceLocale = "en"
 )
+
+var SupportedLocales = []string{"en", "ro", "es", "pt-BR", "fr", "de"}
+
+func IsValidInterfaceLocale(loc string) bool {
+	for _, s := range SupportedLocales {
+		if s == loc {
+			return true
+		}
+	}
+	return false
+}
+
+func LocaleToLanguageName(loc string) string {
+	switch loc {
+	case "ro":
+		return "Romanian"
+	case "es":
+		return "Spanish"
+	case "pt-BR":
+		return "Portuguese"
+	case "fr":
+		return "French"
+	case "de":
+		return "German"
+	default:
+		return "English"
+	}
+}
 
 var DefaultCardTypes = []string{
 	CardTypeArticle,

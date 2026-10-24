@@ -3263,6 +3263,140 @@ func TestUserProfileSettings_RoundTripAndLengthValidation(t *testing.T) {
 	}
 }
 
+func TestInterfaceLocale_SettingsRoundTripAndValidation(t *testing.T) {
+	st := newStubStore()
+	h := webHandler(st, &core.Service{Store: st, Logf: t.Logf})
+
+	// 1. Initial GET /api/v1/settings returns interface_locale default "en"
+	rrGet := doJSON(t, h, http.MethodGet, "/api/v1/settings", "")
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings failed: %d", rrGet.Code)
+	}
+	var getResp struct {
+		Settings struct {
+			InterfaceLocale string `json:"interface_locale"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(rrGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("unmarshal GET settings: %v", err)
+	}
+	if getResp.Settings.InterfaceLocale != "en" {
+		t.Fatalf("expected interface_locale 'en' initially, got %q", getResp.Settings.InterfaceLocale)
+	}
+
+	// 2. Initial GET /api/v1/setup/status returns interface_locale default "en"
+	rrSetupStatus := doJSON(t, h, http.MethodGet, "/api/v1/setup/status", "")
+	if rrSetupStatus.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/setup/status failed: %d", rrSetupStatus.Code)
+	}
+	var statusResp struct {
+		InterfaceLocale string `json:"interface_locale"`
+	}
+	if err := json.Unmarshal(rrSetupStatus.Body.Bytes(), &statusResp); err != nil {
+		t.Fatalf("unmarshal setup status: %v", err)
+	}
+	if statusResp.InterfaceLocale != "en" {
+		t.Fatalf("expected setup status interface_locale 'en', got %q", statusResp.InterfaceLocale)
+	}
+
+	// 3. PATCH with invalid locale returns 400
+	rrInvalid := doJSON(t, h, http.MethodPatch, "/api/v1/settings", `{"interface_locale":"invalid-lang"}`)
+	if rrInvalid.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid interface_locale, got %d", rrInvalid.Code)
+	}
+
+	// 4. Test all six supported locales can be patched and persisted
+	for _, loc := range port.SupportedLocales {
+		patchBody := fmt.Sprintf(`{"interface_locale":%q}`, loc)
+		rrPatch := doJSON(t, h, http.MethodPatch, "/api/v1/settings", patchBody)
+		if rrPatch.Code != http.StatusOK {
+			t.Fatalf("PATCH interface_locale %q failed: %d: %s", loc, rrPatch.Code, rrPatch.Body.String())
+		}
+
+		rrGetVal := doJSON(t, h, http.MethodGet, "/api/v1/settings", "")
+		var getValResp struct {
+			Settings struct {
+				InterfaceLocale string `json:"interface_locale"`
+			} `json:"settings"`
+		}
+		_ = json.Unmarshal(rrGetVal.Body.Bytes(), &getValResp)
+		if getValResp.Settings.InterfaceLocale != loc {
+			t.Errorf("expected interface_locale %q, got %q", loc, getValResp.Settings.InterfaceLocale)
+		}
+	}
+}
+
+func TestSetupWizard_LocalePersistenceAndOutputLanguageAlignment(t *testing.T) {
+	// 1. Setup with interface_locale "de" aligns UserProfile.Language to "German"
+	st := newStubStore()
+	h := webHandler(st, &core.Service{Store: st, Logf: t.Logf})
+
+	setupBody := `{"auth_token":"secret123","llm_base":"http://localhost:11434/v1","llm_model":"llama3.2","interface_locale":"de"}`
+	rrSetup := doJSON(t, h, http.MethodPost, "/api/v1/setup", setupBody)
+	if rrSetup.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/setup failed: %d: %s", rrSetup.Code, rrSetup.Body.String())
+	}
+
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+	reqGet.Header.Set("Authorization", "Bearer secret123")
+	rrGet := httptest.NewRecorder()
+	h.ServeHTTP(rrGet, reqGet)
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings failed: %d: %s", rrGet.Code, rrGet.Body.String())
+	}
+	var getResp struct {
+		Settings struct {
+			InterfaceLocale string           `json:"interface_locale"`
+			UserProfile     port.UserProfile `json:"user_profile"`
+		} `json:"settings"`
+	}
+	_ = json.Unmarshal(rrGet.Body.Bytes(), &getResp)
+	if getResp.Settings.InterfaceLocale != "de" {
+		t.Errorf("expected interface_locale 'de', got %q", getResp.Settings.InterfaceLocale)
+	}
+	if getResp.Settings.UserProfile.Language != "German" {
+		t.Errorf("expected UserProfile.Language 'German', got %q", getResp.Settings.UserProfile.Language)
+	}
+
+	// 2. Demo setup with interface_locale "fr" aligns UserProfile.Language to "French"
+	stDemo := newStubStore()
+	hDemo := webHandler(stDemo, &core.Service{Store: stDemo, Logf: t.Logf})
+
+	rrDemo := doJSON(t, hDemo, http.MethodPost, "/api/v1/setup/demo", `{"auth_token":"demopass","interface_locale":"fr"}`)
+	if rrDemo.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/setup/demo failed: %d: %s", rrDemo.Code, rrDemo.Body.String())
+	}
+
+	reqGetDemo := httptest.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+	reqGetDemo.Header.Set("Authorization", "Bearer demopass")
+	rrGetDemo := httptest.NewRecorder()
+	hDemo.ServeHTTP(rrGetDemo, reqGetDemo)
+	if rrGetDemo.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings (demo) failed: %d: %s", rrGetDemo.Code, rrGetDemo.Body.String())
+	}
+	var getDemoResp struct {
+		Settings struct {
+			InterfaceLocale string           `json:"interface_locale"`
+			UserProfile     port.UserProfile `json:"user_profile"`
+		} `json:"settings"`
+	}
+	_ = json.Unmarshal(rrGetDemo.Body.Bytes(), &getDemoResp)
+	if getDemoResp.Settings.InterfaceLocale != "fr" {
+		t.Errorf("expected interface_locale 'fr', got %q", getDemoResp.Settings.InterfaceLocale)
+	}
+	if getDemoResp.Settings.UserProfile.Language != "French" {
+		t.Errorf("expected UserProfile.Language 'French', got %q", getDemoResp.Settings.UserProfile.Language)
+	}
+
+	// 3. Setup with invalid locale fails
+	stBad := newStubStore()
+	hBad := webHandler(stBad, &core.Service{Store: stBad, Logf: t.Logf})
+	rrBad := doJSON(t, hBad, http.MethodPost, "/api/v1/setup", `{"auth_token":"pass123","interface_locale":"bad-locale"}`)
+	if rrBad.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for bad interface_locale in setup, got %d", rrBad.Code)
+	}
+}
+
 func TestCardTypesSettings_RoundTripAndValidation(t *testing.T) {
 	st := newStubStore()
 	h := webHandler(st, &core.Service{Store: st, Logf: t.Logf})

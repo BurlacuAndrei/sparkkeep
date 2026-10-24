@@ -18,6 +18,7 @@ import {
 import * as api from '../api';
 import { LLMProfile, Playbook } from '../types';
 import { useLocale } from '../i18n';
+import type { Locale } from '../i18n';
 import { ThemeSelector } from './ThemeSelector';
 import { ResearchScheduler } from './ResearchScheduler';
 import {
@@ -32,7 +33,16 @@ import {
 
 export interface SettingsModalProps {
   onClose: () => void;
-  showToast: (msg: string) => void;
+  showToast: (
+    msg: string,
+    onUndoOrOpts?:
+      | (() => Promise<void> | void)
+      | {
+          onUndo?: () => Promise<void> | void;
+          actionLabel?: string;
+          onAction?: () => Promise<void> | void;
+        }
+  ) => void;
   initialTab?: SettingsTab | null;
 }
 
@@ -60,8 +70,17 @@ interface SettingsBaseline {
   discordChannelId: string;
 }
 
+const LOCALE_TO_LANGUAGE_NAME: Record<string, string> = {
+  en: 'English',
+  ro: 'Romanian',
+  es: 'Spanish',
+  'pt-BR': 'Portuguese',
+  fr: 'French',
+  de: 'German',
+};
+
 export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalProps) {
-  const { t } = useLocale();
+  const { locale, setLocale, t } = useLocale();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'appearance');
   const bodyRef = React.useRef<HTMLDivElement>(null);
 
@@ -290,6 +309,85 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
+
+  const handleInterfaceLocaleChange = async (newLocale: Locale) => {
+    const oldLocale = locale;
+    if (newLocale === oldLocale) return;
+
+    const oldLangName = LOCALE_TO_LANGUAGE_NAME[oldLocale] || 'English';
+    const newLangName = LOCALE_TO_LANGUAGE_NAME[newLocale] || 'English';
+
+    const isAligned =
+      !profileLanguage ||
+      profileLanguage.trim() === '' ||
+      profileLanguage === oldLangName ||
+      (oldLocale === 'en' && profileLanguage === 'Same as source / English');
+
+    setLocale(newLocale);
+
+    if (isAligned) {
+      const prevLang = profileLanguage;
+      setProfileLanguage(newLangName);
+      try {
+        await api.patchSettings({
+          interface_locale: newLocale,
+          user_profile: {
+            goals: profileGoals.trim(),
+            skills: parseTags(profileSkills),
+            stack: parseTags(profileStack),
+            interests: parseTags(profileInterests),
+            constraints: profileConstraints.trim(),
+            language: newLangName,
+          },
+        });
+      } catch {}
+
+      showToast(
+        t('settings.appearance.toast.languageFollow', { language: newLangName }),
+        async () => {
+          setProfileLanguage(prevLang);
+          try {
+            await api.patchSettings({
+              user_profile: {
+                goals: profileGoals.trim(),
+                skills: parseTags(profileSkills),
+                stack: parseTags(profileStack),
+                interests: parseTags(profileInterests),
+                constraints: profileConstraints.trim(),
+                language: prevLang,
+              },
+            });
+          } catch {}
+        }
+      );
+    } else {
+      try {
+        await api.patchSettings({ interface_locale: newLocale });
+      } catch {}
+
+      showToast(
+        t('settings.appearance.toast.localeChangedDecoupled', { language: newLangName }),
+        {
+          actionLabel: t('settings.appearance.toast.switchOutputLanguage', { language: newLangName }),
+          onAction: async () => {
+            setProfileLanguage(newLangName);
+            try {
+              await api.patchSettings({
+                user_profile: {
+                  goals: profileGoals.trim(),
+                  skills: parseTags(profileSkills),
+                  stack: parseTags(profileStack),
+                  interests: parseTags(profileInterests),
+                  constraints: profileConstraints.trim(),
+                  language: newLangName,
+                },
+              });
+            } catch {}
+          },
+        }
+      );
+    }
+  };
 
   const profileCharCount =
     profileGoals.length +
@@ -691,7 +789,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                     </div>
 
                     <div className="settings-section">
-                      <LanguageSelector />
+                      <LanguageSelector onChange={handleInterfaceLocaleChange} />
                     </div>
 
                     <div className="settings-section">

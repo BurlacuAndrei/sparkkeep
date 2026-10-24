@@ -67,7 +67,12 @@ function AppContent() {
   // Modals & Feedback
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
-  const [toast, setToast] = useState<{ message: string; onUndo?: () => void } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    onUndo?: () => void;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
 
   // Auth (SPARKKEEP_AUTH_TOKEN): a 401 anywhere raises the lock screen.
   const [isAuthRequired, setIsAuthRequired] = useState(false);
@@ -76,20 +81,55 @@ function AppContent() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | null>(null);
 
-  const showToast = useCallback((msg: string, onUndo?: () => Promise<void> | void) => {
-    if (msg === 'unauthorized' || msg === 'HTTP 401') {
-      setIsAuthRequired(true);
-      return;
-    }
-    const undoWrapper = onUndo ? () => { void onUndo(); } : undefined;
-    setToast({ message: msg, onUndo: undoWrapper });
-    const flashEl = document.getElementById('flash');
-    if (flashEl) flashEl.textContent = msg;
-    setTimeout(() => {
-      setToast((cur) => (cur?.message === msg ? null : cur));
-      if (flashEl && flashEl.textContent === msg) flashEl.textContent = '';
-    }, onUndo ? 5000 : 3500);
-  }, []);
+  const showToast = useCallback(
+    (
+      msg: string,
+      onUndoOrOpts?:
+        | (() => Promise<void> | void)
+        | {
+            onUndo?: () => Promise<void> | void;
+            actionLabel?: string;
+            onAction?: () => Promise<void> | void;
+          }
+    ) => {
+      if (msg === 'unauthorized' || msg === 'HTTP 401') {
+        setIsAuthRequired(true);
+        return;
+      }
+      let undoWrapper: (() => void) | undefined;
+      let actionLabel: string | undefined;
+      let actionWrapper: (() => void) | undefined;
+
+      if (typeof onUndoOrOpts === 'function') {
+        undoWrapper = () => {
+          void onUndoOrOpts();
+        };
+      } else if (onUndoOrOpts && typeof onUndoOrOpts === 'object') {
+        if (onUndoOrOpts.onUndo) {
+          const u = onUndoOrOpts.onUndo;
+          undoWrapper = () => {
+            void u();
+          };
+        }
+        actionLabel = onUndoOrOpts.actionLabel;
+        if (onUndoOrOpts.onAction) {
+          const a = onUndoOrOpts.onAction;
+          actionWrapper = () => {
+            void a();
+          };
+        }
+      }
+
+      setToast({ message: msg, onUndo: undoWrapper, actionLabel, onAction: actionWrapper });
+      const flashEl = document.getElementById('flash');
+      if (flashEl) flashEl.textContent = msg;
+      setTimeout(() => {
+        setToast((cur) => (cur?.message === msg ? null : cur));
+        if (flashEl && flashEl.textContent === msg) flashEl.textContent = '';
+      }, (undoWrapper || actionWrapper) ? 5000 : 3500);
+    },
+    []
+  );
 
   const loadCards = useCallback(async () => {
     try {
@@ -515,6 +555,29 @@ function AppContent() {
               }}
             >
               {t('common.undo')}
+            </button>
+          )}
+          {toast.onAction && toast.actionLabel && (
+            <button
+              type="button"
+              className="toast-action-btn"
+              onClick={() => {
+                const actFn = toast.onAction;
+                setToast(null);
+                actFn?.();
+              }}
+              style={{
+                background: 'rgba(99, 102, 241, 0.25)',
+                border: '1px solid rgba(99, 102, 241, 0.5)',
+                color: '#e0e7ff',
+                borderRadius: 4,
+                padding: '3px 8px',
+                fontSize: 11.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {toast.actionLabel}
             </button>
           )}
         </div>

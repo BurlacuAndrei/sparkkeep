@@ -132,6 +132,11 @@ export const en = {
         full: 'Full Glassmorphism',
         reduced: 'Reduced Blur & Motion',
       },
+      toast: {
+        languageFollow: 'Interface language updated. Output language set to {{language}}.',
+        localeChangedDecoupled: 'Interface language updated to {{language}}. Output language preserved.',
+        switchOutputLanguage: 'Switch Output Language to {{language}}',
+      },
     },
     profile: {
       title: 'Personal Fit & About Me',

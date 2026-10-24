@@ -136,6 +136,11 @@ export const ro = {
         full: 'Glassmorphism complet',
         reduced: 'Estompare și mișcare reduse',
       },
+      toast: {
+        languageFollow: 'Limba interfeței actualizată. Limba de ieșire setată la {{language}}.',
+        localeChangedDecoupled: 'Limba interfeței actualizată la {{language}}. Limba de ieșire păstrată.',
+        switchOutputLanguage: 'Schimbă limba de ieșire la {{language}}',
+      },
     },
     profile: {
       title: 'Potrivire personală și despre mine',

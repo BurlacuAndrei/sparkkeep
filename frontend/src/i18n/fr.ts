@@ -147,6 +147,11 @@ export const fr = {
         full: 'Glassmorphism complet',
         reduced: 'Flous et animations réduits',
       },
+      toast: {
+        languageFollow: "Langue de l'interface mise à jour. Langue de sortie définie sur {{language}}.",
+        localeChangedDecoupled: "Langue de l'interface mise à jour en {{language}}. Langue de sortie conservée.",
+        switchOutputLanguage: 'Changer la langue de sortie vers {{language}}',
+      },
     },
     profile: {
       title: 'Profil personnel et à propos de moi',

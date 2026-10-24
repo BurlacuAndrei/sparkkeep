@@ -84,14 +84,19 @@ func (a *api) setupStatus(w http.ResponseWriter, r *http.Request) {
 	hasLLMKey := settings["llm_key"] != ""
 	llmBase := settings["llm_base"]
 	llmModel := settings["llm_model"]
+	interfaceLocale := settings["interface_locale"]
+	if interfaceLocale == "" || !port.IsValidInterfaceLocale(interfaceLocale) {
+		interfaceLocale = port.DefaultInterfaceLocale
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":            true,
-		"is_configured": configured,
-		"has_auth":      hasAuth,
-		"has_llm_key":   hasLLMKey,
-		"llm_base":      llmBase,
-		"llm_model":     llmModel,
+		"ok":               true,
+		"is_configured":    configured,
+		"has_auth":         hasAuth,
+		"has_llm_key":      hasLLMKey,
+		"llm_base":         llmBase,
+		"llm_model":        llmModel,
+		"interface_locale": interfaceLocale,
 	})
 }
 
@@ -106,11 +111,12 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var b struct {
-		AuthToken string `json:"auth_token"`
-		LLMBase   string `json:"llm_base"`
-		LLMKey    string `json:"llm_key"`
-		LLMModel  string `json:"llm_model"`
-		TGToken   string `json:"tg_token,omitempty"`
+		AuthToken       string `json:"auth_token"`
+		LLMBase         string `json:"llm_base"`
+		LLMKey          string `json:"llm_key"`
+		LLMModel        string `json:"llm_model"`
+		TGToken         string `json:"tg_token,omitempty"`
+		InterfaceLocale string `json:"interface_locale,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
@@ -157,6 +163,37 @@ func (a *api) setup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	if b.InterfaceLocale != "" {
+		if !port.IsValidInterfaceLocale(b.InterfaceLocale) {
+			writeErr(w, http.StatusBadRequest, "unsupported interface_locale")
+			return
+		}
+		if err := a.store.SetSetting(ctx, "interface_locale", b.InterfaceLocale); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	targetLocale := b.InterfaceLocale
+	if targetLocale == "" {
+		targetLocale, _ = a.store.GetSetting(ctx, "interface_locale")
+		if targetLocale == "" || !port.IsValidInterfaceLocale(targetLocale) {
+			targetLocale = port.DefaultInterfaceLocale
+		}
+	}
+	langName := port.LocaleToLanguageName(targetLocale)
+	upJSON, _ := a.store.GetSetting(ctx, "user_profile")
+	var up port.UserProfile
+	if strings.TrimSpace(upJSON) != "" {
+		_ = json.Unmarshal([]byte(upJSON), &up)
+	}
+	if up.Language == "" || up.Language == "English" || up.Language == "Same as source / English" || !a.isConfigured(ctx) {
+		up.Language = langName
+		if data, err := json.Marshal(up); err == nil {
+			_ = a.store.SetSetting(ctx, "user_profile", string(data))
+		}
+	}
+
 	if err := a.store.SetSetting(ctx, "setup_completed", "true"); err != nil {
 		a.fail(w, err)
 		return
@@ -203,9 +240,35 @@ func (a *api) setupDemo(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	var b struct {
-		AuthToken string `json:"auth_token"`
+		AuthToken       string `json:"auth_token"`
+		InterfaceLocale string `json:"interface_locale,omitempty"`
 	}
 	_ = decodeJSON(w, r, &b)
+
+	if b.InterfaceLocale != "" {
+		if !port.IsValidInterfaceLocale(b.InterfaceLocale) {
+			writeErr(w, http.StatusBadRequest, "unsupported interface_locale")
+			return
+		}
+		_ = a.store.SetSetting(ctx, "interface_locale", b.InterfaceLocale)
+	}
+	targetLocale := b.InterfaceLocale
+	if targetLocale == "" {
+		targetLocale, _ = a.store.GetSetting(ctx, "interface_locale")
+		if targetLocale == "" || !port.IsValidInterfaceLocale(targetLocale) {
+			targetLocale = port.DefaultInterfaceLocale
+		}
+	}
+	langName := port.LocaleToLanguageName(targetLocale)
+	upJSON, _ := a.store.GetSetting(ctx, "user_profile")
+	var up port.UserProfile
+	if strings.TrimSpace(upJSON) != "" {
+		_ = json.Unmarshal([]byte(upJSON), &up)
+	}
+	up.Language = langName
+	if data, err := json.Marshal(up); err == nil {
+		_ = a.store.SetSetting(ctx, "user_profile", string(data))
+	}
 
 	pass := b.AuthToken
 	if pass == "" {
@@ -427,6 +490,11 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 	obsidianVaultPath, _ := a.store.GetSetting(ctx, "obsidian_vault_path")
 	obsidianAutoExport, _ := a.store.GetSetting(ctx, "obsidian_auto_export")
 
+	interfaceLocale, _ := a.store.GetSetting(ctx, "interface_locale")
+	if interfaceLocale == "" || !port.IsValidInterfaceLocale(interfaceLocale) {
+		interfaceLocale = port.DefaultInterfaceLocale
+	}
+
 	cardTypes, err := a.store.GetCardTypes(ctx)
 	if err != nil || cardTypes == nil {
 		cardTypes = append([]string(nil), port.DefaultCardTypes...)
@@ -435,6 +503,7 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
+			"interface_locale":       interfaceLocale,
 			"card_types":             cardTypes,
 			"llm_base":               activeBase,
 			"llm_model":              activeModel,
@@ -493,10 +562,36 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 		SlackChannelID     *string            `json:"slack_channel_id,omitempty"`
 		ObsidianVaultPath  *string            `json:"obsidian_vault_path,omitempty"`
 		ObsidianAutoExport *bool              `json:"obsidian_auto_export,omitempty"`
+		InterfaceLocale    *string            `json:"interface_locale,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request: "+err.Error())
 		return
+	}
+
+	if b.InterfaceLocale != nil {
+		if !port.IsValidInterfaceLocale(*b.InterfaceLocale) {
+			writeErr(w, http.StatusBadRequest, "unsupported interface_locale")
+			return
+		}
+		if err := a.store.SetSetting(ctx, "interface_locale", *b.InterfaceLocale); err != nil {
+			a.fail(w, err)
+			return
+		}
+		if !a.isConfigured(ctx) && b.UserProfile == nil {
+			langName := port.LocaleToLanguageName(*b.InterfaceLocale)
+			upJSON, _ := a.store.GetSetting(ctx, "user_profile")
+			var up port.UserProfile
+			if strings.TrimSpace(upJSON) != "" {
+				_ = json.Unmarshal([]byte(upJSON), &up)
+			}
+			if up.Language == "" || up.Language == "English" || up.Language == "Same as source / English" {
+				up.Language = langName
+				if data, err := json.Marshal(up); err == nil {
+					_ = a.store.SetSetting(ctx, "user_profile", string(data))
+				}
+			}
+		}
 	}
 
 	if b.CardTypes != nil {

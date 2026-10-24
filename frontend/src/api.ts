@@ -172,12 +172,12 @@ export async function fetchPipelineMetrics(): Promise<PipelineMetrics> {
 }
 
 
-export async function getSetupStatus(): Promise<{ ok: boolean; is_configured: boolean; has_auth: boolean; has_llm_key: boolean; llm_base?: string; llm_model?: string }> {
+export async function getSetupStatus(): Promise<{ ok: boolean; is_configured: boolean; has_auth: boolean; has_llm_key: boolean; llm_base?: string; llm_model?: string; interface_locale?: string }> {
   const res = await fetch('/api/v1/setup/status');
   return res.json();
 }
 
-export async function submitSetup(payload: { auth_token?: string; llm_base?: string; llm_key?: string; llm_model?: string; tg_token?: string }): Promise<{ ok: boolean; token?: string }> {
+export async function submitSetup(payload: { auth_token?: string; llm_base?: string; llm_key?: string; llm_model?: string; tg_token?: string; interface_locale?: string }): Promise<{ ok: boolean; token?: string }> {
   const res = await fetch('/api/v1/setup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -193,11 +193,11 @@ export async function submitSetup(payload: { auth_token?: string; llm_base?: str
   return data;
 }
 
-export async function submitDemoSetup(passphrase?: string): Promise<{ ok: boolean; token?: string; demo?: boolean }> {
+export async function submitDemoSetup(passphrase?: string, interface_locale?: string): Promise<{ ok: boolean; token?: string; demo?: boolean }> {
   const res = await fetch('/api/v1/setup/demo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ auth_token: passphrase || '' }),
+    body: JSON.stringify({ auth_token: passphrase || '', ...(interface_locale ? { interface_locale } : {}) }),
   });
   const data = await res.json();
   if (!res.ok || !data.ok) {
@@ -315,6 +315,7 @@ export async function getSettings(): Promise<{
 }
 
 export async function patchSettings(payload: {
+  interface_locale?: string;
   card_types?: string[];
   auth_token?: string;
   llm_base?: string;
