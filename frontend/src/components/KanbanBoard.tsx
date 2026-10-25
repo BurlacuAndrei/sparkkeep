@@ -4,6 +4,16 @@ import { CardItem } from './CardItem';
 import { Zap, CheckCircle2, ListTodo, Archive, XCircle, LayoutGrid, Rows3 } from 'lucide-react';
 import * as api from '../api';
 import { useLocale } from '../i18n';
+import { ExecutionPulse } from './board/ExecutionPulse';
+import {
+  computeBoardPulseMetrics,
+  filterBoardCards,
+  sortBoardCards,
+  SignalFilter,
+  BoardSortOrder,
+  SEVEN_DAYS_MS,
+} from '../utils/boardUtils';
+import { cardTypeLabel } from '../utils/cardEnumLabels';
 
 interface KanbanBoardProps {
   cards: Card[];
@@ -18,8 +28,6 @@ interface KanbanBoardProps {
   onSwitchToTriage?: () => void;
 }
 
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   cards,
   horizon,
@@ -29,11 +37,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onResearch,
   onRetry,
   showToast,
+  onRefresh,
   onSwitchToTriage,
 }) => {
   const [boardMode, setBoardMode] = useState<'active' | 'shelved' | 'dismissed'>('active');
   const [showArchivedDone, setShowArchivedDone] = useState(false);
   const { t, tp } = useLocale();
+
+  const [signalFilter, setSignalFilter] = useState<SignalFilter>('all');
+  const [cardTypeFilter, setCardTypeFilter] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<BoardSortOrder>('updated');
+  const [isShelving, setIsShelving] = useState(false);
 
   const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
     if (typeof window !== 'undefined') {
@@ -78,15 +92,25 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   const activeHorizon = horizon || 'all';
 
-  const displayedCards = activeHorizon !== 'all'
+  const horizonCards = activeHorizon !== 'all'
     ? boardCards.filter((c) => (c.horizon || 'short-term') === activeHorizon)
     : boardCards;
 
-  const todoCards = displayedCards.filter((c) => c.status === 'to-do');
-  const inProgressCards = displayedCards.filter((c) => c.status === 'in-progress');
-  const doneCards = displayedCards.filter((c) => c.status === 'done');
-
   const [now] = useState(() => Date.now());
+
+  const pulseMetrics = computeBoardPulseMetrics(horizonCards, now);
+
+  const filteredCards = filterBoardCards(horizonCards, {
+    cardType: cardTypeFilter,
+    signal: signalFilter,
+    nowMs: now,
+  });
+
+  const sortedCards = sortBoardCards(filteredCards, sortOrder);
+
+  const todoCards = sortedCards.filter((c) => c.status === 'to-do');
+  const inProgressCards = sortedCards.filter((c) => c.status === 'in-progress');
+  const doneCards = sortedCards.filter((c) => c.status === 'done');
 
   const isOlderThan7Days = (card: Card) => {
     const timeStr = card.updated_at || card.created_at;
@@ -99,6 +123,32 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const activeDoneCards = doneCards.filter((c) => !isOlderThan7Days(c));
   const archivedDoneCards = doneCards.filter((c) => isOlderThan7Days(c));
   const displayedDoneCards = showArchivedDone ? doneCards : activeDoneCards;
+
+  const availableCardTypes = Array.from(
+    new Set(boardCards.map((c) => c.type).filter(Boolean))
+  ) as string[];
+
+  const currentSortLabel =
+    sortOrder === 'updated'
+      ? t('cards.board.sortUpdated')
+      : sortOrder === 'worthiness'
+      ? t('cards.board.sortWorthiness')
+      : sortOrder === 'progress'
+      ? t('cards.board.sortProgress')
+      : t('cards.board.sortNewest');
+
+  const handleBatchShelveIdle = async () => {
+    try {
+      setIsShelving(true);
+      const res = await api.batchShelveStale(14);
+      showToast?.(t('cards.board.shelvedIdleToast', { count: res.shelved_count }));
+      onRefresh?.();
+    } catch (err: unknown) {
+      showToast?.(api.getErrorMessage(err));
+    } finally {
+      setIsShelving(false);
+    }
+  };
 
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
@@ -167,12 +217,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               <span>{boardMode === 'active' ? t('cards.board.titleActive') : boardMode === 'shelved' ? t('cards.board.titleShelved') : t('cards.board.titleDismissed')}</span>
               <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-dim)' }}>
                 ({boardMode === 'active'
-                  ? activeHorizon !== 'all' && displayedCards.length !== boardCards.length
+                  ? filteredCards.length !== boardCards.length
                     ? t('cards.board.countFiltered', {
-                        shown: displayedCards.length,
+                        shown: filteredCards.length,
                         total: boardCards.length,
                       })
-                    : countLabel(displayedCards.length)
+                    : countLabel(filteredCards.length)
                   : boardMode === 'shelved'
                   ? countLabel(shelvedCards.length)
                   : countLabel(dismissedCards.length)})
@@ -284,24 +334,72 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         {/* Tier 2: Dedicated Contextual Sub-row */}
         <div className="board-header-context-row" style={{ minHeight: 36, display: 'flex', alignItems: 'center' }}>
           {boardMode === 'active' && (
-            <div className="horizon-segmented-control" role="tablist" aria-label={t('cards.board.filterAria')}>
-              {horizonTabs.map((tab) => {
-                const isActive = activeHorizon === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    id={`horizon-tab-${tab.id}`}
-                    aria-selected={isActive}
-                    className={`horizon-segment-btn ${tab.colorClass} ${isActive ? 'active' : ''}`}
-                    onClick={() => onHorizonChange(tab.id === 'all' ? '' : tab.id)}
-                  >
-                    <span className="horizon-segment-label">{tab.label}</span>
-                    <span className="horizon-segment-count">{tab.count}</span>
-                  </button>
-                );
-              })}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12, flexWrap: 'wrap' }}>
+              <div className="horizon-segmented-control" role="tablist" aria-label={t('cards.board.filterAria')}>
+                {horizonTabs.map((tab) => {
+                  const isActive = activeHorizon === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      id={`horizon-tab-${tab.id}`}
+                      aria-selected={isActive}
+                      className={`horizon-segment-btn ${tab.colorClass} ${isActive ? 'active' : ''}`}
+                      onClick={() => onHorizonChange(tab.id === 'all' ? '' : tab.id)}
+                    >
+                      <span className="horizon-segment-label">{tab.label}</span>
+                      <span className="horizon-segment-count">{tab.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Facet Filters & Sort Toolbar */}
+              <div className="board-filters-toolbar">
+                {/* Card Type Facet Filter */}
+                <select
+                  className="board-facet-select"
+                  aria-label={t('cards.board.filterAllTypes')}
+                  value={cardTypeFilter}
+                  onChange={(e) => setCardTypeFilter(e.target.value)}
+                >
+                  <option value="all">{t('cards.board.filterAllTypes')}</option>
+                  {availableCardTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {cardTypeLabel(t, type)}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Signal / Research Verdict Filter */}
+                <select
+                  className="board-facet-select"
+                  aria-label={t('cards.board.filterAllSignals')}
+                  value={signalFilter}
+                  onChange={(e) => setSignalFilter(e.target.value as SignalFilter)}
+                >
+                  <option value="all">{t('cards.board.filterAllSignals')}</option>
+                  <option value="research_ready">{t('cards.item.researchReady')}</option>
+                  <option value="pursue">{t('cards.board.filterPursue')}</option>
+                  <option value="idle">
+                    {t('cards.board.idlePill', { count: pulseMetrics.idleCount14d })}
+                  </option>
+                </select>
+
+                {/* Sort Order Selector */}
+                <select
+                  className="board-facet-select"
+                  aria-label={t('cards.board.sortBy', { sort: currentSortLabel })}
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as BoardSortOrder)}
+                >
+                  <option value="updated">{t('cards.board.sortUpdated')}</option>
+                  <option value="worthiness">{t('cards.board.sortWorthiness')}</option>
+                  <option value="progress">{t('cards.board.sortProgress')}</option>
+                  <option value="newest">{t('cards.board.sortNewest')}</option>
+                </select>
+              </div>
             </div>
           )}
 
@@ -379,7 +477,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
       {/* 1. ACTIVE EXECUTION KANBAN BOARD */}
       {boardMode === 'active' && (
-        <div className="kanban-board" data-view="execution">
+        <>
+          <ExecutionPulse
+            metrics={pulseMetrics}
+            activeSignalFilter={signalFilter}
+            onToggleSignalFilter={(f) => setSignalFilter(f)}
+            onBatchShelveIdle={handleBatchShelveIdle}
+            isShelving={isShelving}
+          />
+          <div className="kanban-board" data-view="execution">
           {/* To Do Column */}
           <div
             className={`kanban-column ${dragOverCol === 'to-do' ? 'drag-over' : ''}`}
@@ -495,7 +601,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
           </div>
         </div>
-      )}
+      </>
+    )}
 
       {/* 2. SHELVED ARCHIVE VIEW */}
       {boardMode === 'shelved' && (
