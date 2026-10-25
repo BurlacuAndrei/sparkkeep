@@ -1,4 +1,6 @@
-import { Card } from '../types';
+import { Card, Settings } from '../types';
+import * as api from '../api';
+import type { TranslateFn, TranslatePluralFn } from '../i18n';
 
 export interface ActionProgressMetrics {
   completedActionsCount: number;
@@ -322,4 +324,161 @@ export function sortBoardCards(cards: Card[], sortOrder: BoardSortOrder): Card[]
         return 0;
     }
   });
+}
+
+export interface ApplyStepToggleOptions {
+  onUpdateCard?: (id: number, patch: Partial<Card>) => Promise<void> | void;
+  showToast?: (msg: string, onUndoOrOpts?: any) => void;
+  t: TranslateFn;
+  tp?: TranslatePluralFn;
+  settings?: Settings | null;
+  onCelebration?: () => void;
+  targetElement?: HTMLElement | null;
+  moveToInProgressIfToDo?: boolean;
+  startInProgressToast?: boolean;
+}
+
+/**
+ * Handles toggling an action step, checking if it is the final step, computing `nextCompleted`,
+ * triggering the celebratory visual class (`.is-completing-celebration`), updating the card
+ * (`status: 'done'` if final, else `completed_actions`), and showing the toast with 1-click Undo
+ * restoring previous status and actions.
+ * If the card reaches 'done' and an export sink is configured in settings, exposes a 1-click export
+ * button in the toast.
+ */
+export function applyStepToggleWithCompletion(
+  card: Card,
+  stepText: string,
+  options: ApplyStepToggleOptions
+): void {
+  const {
+    onUpdateCard,
+    showToast,
+    t,
+    tp,
+    settings,
+    onCelebration,
+    targetElement,
+    moveToInProgressIfToDo,
+    startInProgressToast,
+  } = options;
+  const prevCompleted = card.completed_actions || [];
+  const completedSet = new Set(prevCompleted);
+  const isChecked = completedSet.has(stepText);
+  const prevStatus = card.status;
+
+  const nextCompleted = isChecked
+    ? prevCompleted.filter((s) => s !== stepText)
+    : [...prevCompleted, stepText];
+
+  const nextCompletedSet = new Set(nextCompleted);
+  const proposedActions = card.proposed_actions || [];
+  const willAllBeCompleted =
+    !isChecked &&
+    proposedActions.length > 0 &&
+    proposedActions.every((s) => nextCompletedSet.has(s));
+
+  if (willAllBeCompleted) {
+    onCelebration?.();
+    if (targetElement) {
+      targetElement.classList.add('is-completing-celebration');
+      setTimeout(() => {
+        targetElement.classList.remove('is-completing-celebration');
+      }, 1200);
+    }
+
+    onUpdateCard?.(card.id, {
+      status: 'done',
+      completed_actions: nextCompleted,
+    });
+
+    const onUndo = async () => {
+      await onUpdateCard?.(card.id, {
+        status: prevStatus,
+        completed_actions: prevCompleted,
+      });
+    };
+
+    let actionLabel: string | undefined;
+    let onAction: (() => Promise<void> | void) | undefined;
+
+    if (settings?.obsidian_vault_path) {
+      actionLabel = t('cards.board.syncObsidian');
+      onAction = async () => {
+        try {
+          const res = await api.syncObsidian(settings.obsidian_vault_path);
+          const msg = tp ? tp('cards.board.syncedObsidian', res.written) : t('cards.board.syncObsidian');
+          showToast?.(msg);
+        } catch (err: unknown) {
+          showToast?.(api.getErrorMessage(err));
+        }
+      };
+    } else if (settings?.notion_token) {
+      actionLabel = 'Sync Notion';
+      onAction = async () => {
+        try {
+          const res = await api.syncNotion();
+          const msg = tp ? tp('shell.header.syncedNotes', res.written) : 'Synced to Notion';
+          showToast?.(msg);
+        } catch (err: unknown) {
+          showToast?.(api.getErrorMessage(err));
+        }
+      };
+    } else if (settings?.joplin_token || settings?.joplin_base_url) {
+      actionLabel = 'Sync Joplin';
+      onAction = async () => {
+        try {
+          const res = await api.syncJoplin();
+          const msg = tp ? tp('shell.header.syncedNotes', res.written) : 'Synced to Joplin';
+          showToast?.(msg);
+        } catch (err: unknown) {
+          showToast?.(api.getErrorMessage(err));
+        }
+      };
+    }
+
+    const toastMsg = t('cards.item.autoMovedDone', { id: card.id });
+    if (actionLabel && onAction) {
+      const undoCallback: any = onUndo;
+      undoCallback.onUndo = onUndo;
+      undoCallback.actionLabel = actionLabel;
+      undoCallback.onAction = onAction;
+      showToast?.(toastMsg, undoCallback);
+    } else {
+      showToast?.(toastMsg, onUndo);
+    }
+  } else if (moveToInProgressIfToDo && !isChecked && card.status === 'to-do') {
+    onUpdateCard?.(card.id, {
+      status: 'in-progress',
+      completed_actions: nextCompleted,
+    });
+
+    const onUndo = async () => {
+      await onUpdateCard?.(card.id, {
+        status: prevStatus,
+        completed_actions: prevCompleted,
+      });
+    };
+
+    const msg = startInProgressToast
+      ? t('cards.item.startedInProgress', { id: card.id })
+      : t('cards.board.moved', {
+          id: card.id,
+          label: t('cards.status.inProgress'),
+        });
+
+    showToast?.(msg, onUndo);
+  } else {
+    onUpdateCard?.(card.id, {
+      completed_actions: nextCompleted,
+    });
+
+    const onUndo = async () => {
+      await onUpdateCard?.(card.id, {
+        completed_actions: prevCompleted,
+      });
+    };
+
+    showToast?.(t('shell.toasts.saved', { id: card.id }), onUndo);
+  }
 }

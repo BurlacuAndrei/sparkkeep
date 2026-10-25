@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Card } from '../types';
+import { Card, Settings } from '../types';
 import { useCardActions } from '../context/CardActionsContext';
 import {
   ArrowRight,
@@ -20,6 +20,8 @@ import {
 import { ResearchProgressStrip } from './ResearchProgressStrip';
 import { getPlatformInfo, formatRelativeAge } from '../utils/cardUtils';
 import { enumLabel, statusLabel, cardTypeLabel } from '../utils/cardEnumLabels';
+import { horizonLabel } from '../utils/triage';
+import { applyStepToggleWithCompletion } from '../utils/boardUtils';
 import { useLocale } from '../i18n';
 
 export interface CardItemProps {
@@ -37,6 +39,7 @@ export interface CardItemProps {
   selectable?: boolean;
   selected?: boolean;
   onToggleSelect?: (id: number) => void;
+  settings?: Settings | null;
 }
 
 export const CardItem: React.FC<CardItemProps> = ({
@@ -54,6 +57,7 @@ export const CardItem: React.FC<CardItemProps> = ({
   selectable = false,
   selected = false,
   onToggleSelect,
+  settings,
 }) => {
   const actions = useCardActions();
   const { t, tp } = useLocale();
@@ -131,79 +135,45 @@ export const CardItem: React.FC<CardItemProps> = ({
     ? proposedActions
     : uncheckedActions.slice(0, 2);
 
-  const remainingCount = proposedActions.length - Math.min(2, uncheckedActions.length);
+  const remainingUncheckedCount = Math.max(0, uncheckedActions.length - 2);
 
   const handleNextStepCheck = (step: string) => {
-    const prevStatus = card.status;
-    const prevCompleted = card.completed_actions || [];
-    const nextCompleted = [...prevCompleted, step];
-
-    onUpdateCard?.(card.id, {
-      status: 'in-progress',
-      completed_actions: nextCompleted,
-    });
-
-    showToast?.(t('cards.item.startedInProgress', { id: card.id }), async () => {
-      await onUpdateCard?.(card.id, {
-        status: prevStatus,
-        completed_actions: prevCompleted,
-      });
+    applyStepToggleWithCompletion(card, step, {
+      onUpdateCard,
+      showToast,
+      t,
+      tp,
+      settings,
+      moveToInProgressIfToDo: true,
+      startInProgressToast: true,
+      onCelebration: () => {
+        setIsCompleting(true);
+        if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current);
+        celebrationTimerRef.current = setTimeout(() => setIsCompleting(false), 1200);
+      },
     });
   };
 
   const handleToggleStep = (step: string) => {
-    const isChecked = completedSet.has(step);
-    const prevStatus = card.status;
-    const prevCompleted = card.completed_actions || [];
-    const nextCompleted = isChecked
-      ? prevCompleted.filter((s) => s !== step)
-      : [...prevCompleted, step];
-
-    const nextCompletedSet = new Set(nextCompleted);
-    const willAllBeCompleted =
-      !isChecked &&
-      proposedActions.length > 0 &&
-      proposedActions.every((s) => nextCompletedSet.has(s));
-
-    if (willAllBeCompleted) {
-      setIsCompleting(true);
-      if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current);
-      celebrationTimerRef.current = setTimeout(() => setIsCompleting(false), 1200);
-
-      onUpdateCard?.(card.id, {
-        status: 'done',
-        completed_actions: nextCompleted,
-      });
-
-      showToast?.(t('cards.item.autoMovedDone', { id: card.id }), async () => {
-        await onUpdateCard?.(card.id, {
-          status: prevStatus,
-          completed_actions: prevCompleted,
-        });
-      });
-    } else {
-      onUpdateCard?.(card.id, {
-        completed_actions: nextCompleted,
-      });
-
-      showToast?.(t('shell.toasts.saved', { id: card.id }), async () => {
-        await onUpdateCard?.(card.id, {
-          completed_actions: prevCompleted,
-        });
-      });
-    }
+    applyStepToggleWithCompletion(card, step, {
+      onUpdateCard,
+      showToast,
+      t,
+      tp,
+      settings,
+      onCelebration: () => {
+        setIsCompleting(true);
+        if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current);
+        celebrationTimerRef.current = setTimeout(() => setIsCompleting(false), 1200);
+      },
+    });
   };
 
   const verdict = (card.research_verdict || '').toLowerCase();
   const confidence = card.research_confidence || '';
 
   const suggestedHorizon = card.suggested_horizon || card.horizon || 'short-term';
-  const horizonLabel =
-    suggestedHorizon === 'short-term'
-      ? t('cards.horizonShort')
-      : suggestedHorizon === 'medium-term'
-      ? t('cards.horizonMedium')
-      : t('cards.horizonLong');
+  const horizonLabelText = horizonLabel(suggestedHorizon, t);
 
   const handleClick = (e: React.MouseEvent) => {
     if (selectable && onToggleSelect) {
@@ -415,7 +385,7 @@ export const CardItem: React.FC<CardItemProps> = ({
               </span>
             )}
             <span className="card-horizon-hint" title={t('cards.item.suggestedTitle')}>
-              {t('cards.item.suggest')} <strong style={{ textTransform: 'capitalize' }}>{horizonLabel}</strong>
+              {t('cards.item.suggest')} <strong style={{ textTransform: 'capitalize' }}>{horizonLabelText}</strong>
             </span>
           </div>
         ) : card.status === 'review' ? (
@@ -440,11 +410,7 @@ export const CardItem: React.FC<CardItemProps> = ({
           <div className="card-stage-todo">
             <div className="card-todo-meta">
               <span className={`horizon-pill ${card.horizon || 'short-term'}`}>
-                {card.horizon === 'medium-term'
-                  ? t('cards.horizonMedium')
-                  : card.horizon === 'long-term'
-                  ? t('cards.horizonLong')
-                  : t('cards.horizonShort')}
+                {horizonLabel(card.horizon || 'short-term', t)}
               </span>
               <span className="card-todo-actions-count">
                 <CheckCircle2 size={11.5} color={completedCount > 0 ? '#34d399' : '#94a3b8'} />
@@ -544,7 +510,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                   >
                     {t('cards.item.showLessSteps')}
                   </button>
-                ) : remainingCount > 0 ? (
+                ) : remainingUncheckedCount > 0 ? (
                   <button
                     type="button"
                     className="card-step-expand-btn"
@@ -553,7 +519,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                       setIsExpanded(true);
                     }}
                   >
-                    {tp('cards.item.moreSteps', remainingCount)}
+                    {tp('cards.item.moreSteps', remainingUncheckedCount)}
                   </button>
                 ) : null}
               </div>
@@ -611,7 +577,7 @@ export const CardItem: React.FC<CardItemProps> = ({
               type="button"
               className="card-primary-action-btn commit"
               onClick={handlePrimaryAction}
-              title={t('cards.item.commitTitle', { horizon: horizonLabel })}
+              title={t('cards.item.commitTitle', { horizon: horizonLabelText })}
             >
               <ArrowRight size={11.5} />
               <span>{t('cards.item.commit')}</span>
@@ -790,11 +756,7 @@ export const CardItem: React.FC<CardItemProps> = ({
                         actions.onUpdateCard?.(card.id, { horizon: h });
                       }}
                     >
-                      {h === 'short-term'
-                        ? t('cards.horizonShort')
-                        : h === 'medium-term'
-                        ? t('cards.horizonMed')
-                        : t('cards.horizonLong')}
+                      {horizonLabel(h, t)}
                     </button>
                   ))}
                 </div>

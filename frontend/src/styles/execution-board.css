@@ -1047,6 +1047,12 @@
   overflow-y: auto;
 }
 
+@media (max-width: 1199px) {
+  .board-docked-inspector {
+    display: none !important;
+  }
+}
+
 .board-inspector-panel {
   background: var(--bg-surface-elevated, #1e293b);
   border: 1px solid var(--border-subtle);

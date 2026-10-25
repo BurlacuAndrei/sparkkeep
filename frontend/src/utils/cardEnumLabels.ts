@@ -115,3 +115,5 @@ export function cardTypeLabel(t: TranslateFn, type?: string): string {
   }
   return type;
 }
+
+export { horizonLabel } from './triage';

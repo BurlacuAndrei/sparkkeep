@@ -451,6 +451,8 @@ function AppContent() {
               showToast={showToast}
               onRefresh={reloadAll}
               onSwitchToTriage={() => setViewMode('triage')}
+              configuredCardTypes={settings?.card_types}
+              settings={settings}
             />
           )}
 

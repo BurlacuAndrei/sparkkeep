@@ -92,7 +92,7 @@ export const ExecutionPulse: React.FC<ExecutionPulseProps> = ({
               <span>{t('cards.board.idlePill', { count: metrics.idleCount14d })}</span>
             </button>
 
-            {onBatchShelveIdle && (
+            {onBatchShelveIdle && activeSignalFilter === 'idle' && (
               <button
                 type="button"
                 className="pulse-shelve-btn"

@@ -168,14 +168,14 @@ describe('CardItem Stage-Aware Cards & Inline Action Checklist (Ticket 02)', () 
 
     renderWithProvider(card);
 
-    // Initial collapsed state: shows 2 unchecked steps ('Apply VPC', 'Bootstrap K8s') and a +3 more steps button
+    // Initial collapsed state: shows 2 unchecked steps ('Apply VPC', 'Bootstrap K8s') and a +2 more steps button
     expect(screen.getByLabelText('Apply VPC')).toBeDefined();
     expect(screen.getByLabelText('Bootstrap K8s')).toBeDefined();
     expect(screen.queryByLabelText('Install Ingress')).toBeNull();
     expect(screen.queryByLabelText('Init Terraform')).toBeNull();
 
-    // 5 total steps - 2 visible unchecked = 3 more steps
-    const expandBtn = screen.getByRole('button', { name: '+3 more steps' });
+    // 4 unchecked steps - 2 visible = 2 more steps
+    const expandBtn = screen.getByRole('button', { name: '+2 more steps' });
     expect(expandBtn).toBeDefined();
 
     // Click expand
@@ -197,7 +197,7 @@ describe('CardItem Stage-Aware Cards & Inline Action Checklist (Ticket 02)', () 
 
     // Back to collapsed state
     expect(screen.queryByLabelText('Install Ingress')).toBeNull();
-    expect(screen.getByRole('button', { name: '+3 more steps' })).toBeDefined();
+    expect(screen.getByRole('button', { name: '+2 more steps' })).toBeDefined();
   });
 
   it('updates completed_actions with Undo when toggling an intermediate step on an in-progress card', async () => {

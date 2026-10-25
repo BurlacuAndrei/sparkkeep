@@ -4,6 +4,17 @@ import { translateCurrent } from './i18n';
 // Where the dashboard keeps the token it was issued (SPARKKEEP_AUTH_TOKEN).
 export const TOKEN_KEY = 'sparkkeep_token';
 
+export const DefaultCardTypes: string[] = [
+  'article',
+  'video',
+  'book',
+  'guide',
+  'product',
+  'place',
+  'idea',
+  'quote',
+];
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY) || '';
   const res = await fetch(path, {

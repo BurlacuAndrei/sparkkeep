@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card } from '../types';
+import { Card, Settings } from '../types';
 import { CardItem } from './CardItem';
 import { Zap, CheckCircle2, ListTodo, Archive, XCircle, LayoutGrid, Rows3, Layers } from 'lucide-react';
 import * as api from '../api';
@@ -30,6 +30,8 @@ interface KanbanBoardProps {
   showToast?: (msg: string, onUndo?: () => Promise<void> | void) => void;
   onRefresh?: () => void;
   onSwitchToTriage?: () => void;
+  configuredCardTypes?: string[];
+  settings?: Settings | null;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -43,6 +45,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   showToast,
   onRefresh,
   onSwitchToTriage,
+  configuredCardTypes,
+  settings,
 }) => {
   const [boardMode, setBoardMode] = useState<'active' | 'shelved' | 'dismissed'>('active');
   const [showArchivedDone, setShowArchivedDone] = useState(false);
@@ -188,8 +192,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const archivedDoneCards = doneCards.filter((c) => isOlderThan7Days(c));
   const displayedDoneCards = showArchivedDone ? doneCards : activeDoneCards;
 
+  const defaultCardTypes =
+    configuredCardTypes && configuredCardTypes.length > 0
+      ? configuredCardTypes
+      : api.DefaultCardTypes;
+
   const availableCardTypes = Array.from(
-    new Set(boardCards.map((c) => c.type).filter(Boolean))
+    new Set([
+      ...defaultCardTypes,
+      ...boardCards.map((c) => c.type).filter(Boolean),
+    ])
   ) as string[];
 
   const currentSortLabel =
@@ -293,6 +305,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isShortcutsOpen) return;
+      if (
+        typeof document !== 'undefined' &&
+        document.querySelector('.modal-overlay, .modal-content, .drawer-overlay') !== null
+      ) {
+        return;
+      }
 
       const target = e.target as HTMLElement;
       if (
@@ -340,6 +358,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         if (visibleCards.length === 0) return;
         e.preventDefault();
         const targetCard = focusedCard || visibleCards[0];
+        if (typeof window !== 'undefined' && window.innerWidth < 1200) {
+          onSelectCard(targetCard);
+          return;
+        }
         if (inspectedCard && inspectedCard.id === targetCard.id) {
           setInspectedCard(null);
         } else {
@@ -449,6 +471,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       onUpdateCard={onUpdateCard}
       onResearch={onResearch}
       onRetry={onRetry}
+      settings={settings}
     />
   );
 
@@ -803,6 +826,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     setInspectedCard(card);
                     setFocusedCardId(card.id);
                   }}
+                  settings={settings}
                 />
                 <ExecutionPulse
                   metrics={pulseMetrics}
@@ -822,6 +846,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     onRetry={onRetry}
                     showToast={showToast}
                     renderCardItem={renderCardItem}
+                    configuredCardTypes={defaultCardTypes}
                   />
                 ) : (
                   <div className="kanban-board" data-view="execution">
@@ -1004,6 +1029,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   showToast={showToast}
                   isPinnedFocus={pinnedFocusId === (currentInspectedCard || inspectedCard).id}
                   onTogglePinFocus={handleTogglePinFocus}
+                  settings={settings}
                 />
               </aside>
             </div>

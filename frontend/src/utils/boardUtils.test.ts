@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   isResearchReady,
   isShippedWithin7Days,
@@ -13,6 +13,7 @@ import {
   getUncheckedActions,
   getFirstUncheckedStep,
   findFocusCandidates,
+  applyStepToggleWithCompletion,
 } from './boardUtils';
 import { Card } from '../types';
 
@@ -444,6 +445,189 @@ describe('boardUtils', () => {
       // Card 1 is pinned and in-progress (1st)
       // Fallbacks: Card 2 (high worthiness), Card 3 (medium worthiness)
       expect(candidates.map((c) => c.id)).toEqual([1, 2, 3]);
+    });
+  });
+
+  describe('applyStepToggleWithCompletion', () => {
+    const mockT = ((key: string, params?: Record<string, any>) => {
+      if (params) {
+        return Object.entries(params).reduce(
+          (acc, [k, v]) => acc.replace(`{{${k}}}`, String(v)),
+          key
+        );
+      }
+      return key;
+    }) as any;
+
+    it('toggles an intermediate step on an in-progress card and saves with Undo', async () => {
+      const card: Card = {
+        ...baseCard,
+        id: 101,
+        title: 'Work item',
+        status: 'in-progress',
+        proposed_actions: ['Step 1', 'Step 2', 'Step 3'],
+        completed_actions: ['Step 1'],
+        tags: [],
+      };
+
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      applyStepToggleWithCompletion(card, 'Step 2', {
+        onUpdateCard,
+        showToast,
+        t: mockT,
+      });
+
+      expect(onUpdateCard).toHaveBeenCalledWith(101, {
+        completed_actions: ['Step 1', 'Step 2'],
+      });
+      expect(showToast).toHaveBeenCalled();
+
+      // Test undo restores previous completed actions
+      const undoCallback = showToast.mock.calls[0][1];
+      expect(typeof undoCallback === 'function' || typeof undoCallback.onUndo === 'function').toBe(true);
+      await (typeof undoCallback === 'function' ? undoCallback() : undoCallback.onUndo());
+      expect(onUpdateCard).toHaveBeenCalledWith(101, {
+        completed_actions: ['Step 1'],
+      });
+    });
+
+    it('starts a to-do card to in-progress when checking a step', async () => {
+      const card: Card = {
+        ...baseCard,
+        id: 102,
+        title: 'To do item',
+        status: 'to-do',
+        proposed_actions: ['Step A', 'Step B'],
+        completed_actions: [],
+        tags: [],
+      };
+
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      applyStepToggleWithCompletion(card, 'Step A', {
+        onUpdateCard,
+        showToast,
+        t: mockT,
+        moveToInProgressIfToDo: true,
+        startInProgressToast: true,
+      });
+
+      expect(onUpdateCard).toHaveBeenCalledWith(102, {
+        status: 'in-progress',
+        completed_actions: ['Step A'],
+      });
+
+      const undoCallback = showToast.mock.calls[0][1];
+      await (typeof undoCallback === 'function' ? undoCallback() : undoCallback.onUndo());
+      expect(onUpdateCard).toHaveBeenCalledWith(102, {
+        status: 'to-do',
+        completed_actions: [],
+      });
+    });
+
+    it('completes the final step, moves card to done, and triggers celebration', async () => {
+      const card: Card = {
+        ...baseCard,
+        id: 103,
+        title: 'Almost done',
+        status: 'in-progress',
+        proposed_actions: ['Step X', 'Step Y'],
+        completed_actions: ['Step X'],
+        tags: [],
+      };
+
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+      const onCelebration = vi.fn();
+      const el = document.createElement('div');
+
+      applyStepToggleWithCompletion(card, 'Step Y', {
+        onUpdateCard,
+        showToast,
+        t: mockT,
+        onCelebration,
+        targetElement: el,
+      });
+
+      expect(onCelebration).toHaveBeenCalled();
+      expect(el.classList.contains('is-completing-celebration')).toBe(true);
+      expect(onUpdateCard).toHaveBeenCalledWith(103, {
+        status: 'done',
+        completed_actions: ['Step X', 'Step Y'],
+      });
+
+      // Undo restores status: 'in-progress'
+      const undoCallback = showToast.mock.calls[0][1];
+      await (typeof undoCallback === 'function' ? undoCallback() : undoCallback.onUndo());
+      expect(onUpdateCard).toHaveBeenCalledWith(103, {
+        status: 'in-progress',
+        completed_actions: ['Step X'],
+      });
+    });
+
+    it('attaches 1-click knowledge sink export when sink is configured', async () => {
+      const card: Card = {
+        ...baseCard,
+        id: 104,
+        title: 'Sink Export Card',
+        status: 'in-progress',
+        proposed_actions: ['Finish writeup'],
+        completed_actions: [],
+        tags: [],
+      };
+
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      applyStepToggleWithCompletion(card, 'Finish writeup', {
+        onUpdateCard,
+        showToast,
+        t: mockT,
+        settings: {
+          has_llm_key: false,
+          has_auth_token: false,
+          obsidian_vault_path: '/path/to/vault',
+        },
+      });
+
+      expect(showToast).toHaveBeenCalled();
+      const secondArg = showToast.mock.calls[0][1];
+      expect(secondArg.actionLabel).toBeDefined();
+      expect(typeof secondArg.onAction).toBe('function');
+    });
+
+    it('unchecks an already completed step and restores it with Undo', async () => {
+      const card: Card = {
+        ...baseCard,
+        id: 105,
+        title: 'Uncheck item',
+        status: 'in-progress',
+        proposed_actions: ['Step 1', 'Step 2'],
+        completed_actions: ['Step 1', 'Step 2'],
+        tags: [],
+      };
+
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      applyStepToggleWithCompletion(card, 'Step 2', {
+        onUpdateCard,
+        showToast,
+        t: mockT,
+      });
+
+      expect(onUpdateCard).toHaveBeenCalledWith(105, {
+        completed_actions: ['Step 1'],
+      });
+
+      const undoCallback = showToast.mock.calls[0][1];
+      await (typeof undoCallback === 'function' ? undoCallback() : undoCallback.onUndo());
+      expect(onUpdateCard).toHaveBeenCalledWith(105, {
+        completed_actions: ['Step 1', 'Step 2'],
+      });
     });
   });
 });

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Card } from '../../types';
 import { useLocale } from '../../i18n';
 import { cardTypeLabel } from '../../utils/cardEnumLabels';
-import { TranslationKey } from '../../i18n/types';
+import { horizonLabel } from '../../utils/triage';
+import * as api from '../../api';
 import {
   ChevronDown,
   ChevronRight,
@@ -21,6 +22,7 @@ export interface ExecutionSwimlanesProps {
   onRetry: (id: number) => void;
   showToast?: (msg: string, onUndo?: () => Promise<void> | void) => void;
   renderCardItem: (card: Card) => React.ReactNode;
+  configuredCardTypes?: string[];
 }
 
 const STATUS_COLUMNS = ['to-do', 'in-progress', 'done'] as const;
@@ -37,6 +39,7 @@ export const ExecutionSwimlanes: React.FC<ExecutionSwimlanesProps> = ({
   onUpdateCard,
   showToast,
   renderCardItem,
+  configuredCardTypes,
 }) => {
   const { t, tp } = useLocale();
   const [collapsedRows, setCollapsedRows] = useState<Record<string, boolean>>({});
@@ -53,31 +56,33 @@ export const ExecutionSwimlanes: React.FC<ExecutionSwimlanesProps> = ({
   let rows: SwimlaneRowDef[] = [];
 
   if (groupBy === 'horizon') {
-    const horizonConfigs: { id: string; labelKey: TranslationKey }[] = [
-      { id: 'short-term', labelKey: 'cards.horizon.short' },
-      { id: 'medium-term', labelKey: 'cards.horizon.medium' },
-      { id: 'long-term', labelKey: 'cards.horizon.long' },
-    ];
+    const horizonConfigs = (['short-term', 'medium-term', 'long-term'] as const).map((id) => ({
+      id,
+      title: horizonLabel(id, t),
+    }));
 
     rows = horizonConfigs.map((cfg) => ({
       id: cfg.id,
-      title: t(cfg.labelKey),
+      title: cfg.title,
       cards: cards.filter((c) => (c.horizon || 'short-term') === cfg.id),
     }));
   } else {
     // groupBy === 'type'
-    const activeTypes = Array.from(
-      new Set(
-        cards
-          .map((c) => c.type?.trim().toLowerCase())
-          .filter((typ): typ is string => Boolean(typ && typ !== 'other'))
-      )
-    ).sort();
+    const baseTypes =
+      configuredCardTypes && configuredCardTypes.length > 0
+        ? configuredCardTypes
+        : api.DefaultCardTypes;
+
+    const cardTypesOnBoard = cards
+      .map((c) => c.type?.trim().toLowerCase())
+      .filter((typ): typ is string => Boolean(typ && typ !== 'other'));
+
+    const activeTypes = Array.from(new Set([...baseTypes, ...cardTypesOnBoard])).sort();
 
     const hasOther = cards.some(
       (c) => !c.type || c.type.trim().toLowerCase() === 'other'
     );
-    if (hasOther || activeTypes.length === 0) {
+    if (hasOther) {
       activeTypes.push('other');
     }
 
@@ -141,17 +146,12 @@ export const ExecutionSwimlanes: React.FC<ExecutionSwimlanesProps> = ({
           horizon: targetHorizon as any,
         });
 
-        const horizonLabel =
-          targetHorizon === 'short-term'
-            ? t('cards.horizon.short')
-            : targetHorizon === 'medium-term'
-            ? t('cards.horizon.medium')
-            : t('cards.horizon.long');
+        const targetHorizonLabel = horizonLabel(targetHorizon, t);
 
         showToast?.(
           t('cards.board.swimlaneMoved', {
             id: cardId,
-            horizon: horizonLabel,
+            horizon: targetHorizonLabel,
             status: statusLabel,
           }),
           () => {

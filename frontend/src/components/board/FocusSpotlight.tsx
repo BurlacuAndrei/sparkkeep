@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card } from '../../types';
+import { Card, Settings } from '../../types';
 import { useLocale } from '../../i18n';
 import {
   findFocusCandidates,
   getFirstUncheckedStep,
+  applyStepToggleWithCompletion,
 } from '../../utils/boardUtils';
+import { horizonLabel } from '../../utils/triage';
 import {
   Sparkles,
   Target,
@@ -24,6 +26,7 @@ export interface FocusSpotlightProps {
   pinnedId?: number | null;
   onTogglePin?: (cardId: number) => void;
   onInspectCard?: (card: Card) => void;
+  settings?: Settings | null;
 }
 
 export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
@@ -34,8 +37,9 @@ export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
   pinnedId: propPinnedId,
   onTogglePin: propOnTogglePin,
   onInspectCard,
+  settings,
 }) => {
-  const { t } = useLocale();
+  const { t, tp } = useLocale();
 
   const [internalPinnedId, setInternalPinnedId] = useState<number | null>(() => {
     if (typeof window !== 'undefined') {
@@ -124,63 +128,19 @@ export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
     e.stopPropagation();
     if (!nextStep) return;
 
-    const prevStatus = currentCard.status;
-    const prevCompleted = [...completedActions];
-    const nextCompleted = [...completedActions, nextStep];
-    const nextCompletedSet = new Set(nextCompleted);
-
-    if (currentCard.status === 'to-do') {
-      onUpdateCard(currentCard.id, {
-        status: 'in-progress',
-        completed_actions: nextCompleted,
-      });
-
-      showToast?.(
-        t('cards.board.moved', {
-          id: currentCard.id,
-          label: t('cards.status.inProgress'),
-        }),
-        async () => {
-          await onUpdateCard(currentCard.id, {
-            status: prevStatus,
-            completed_actions: prevCompleted,
-          });
-        }
-      );
-      return;
-    }
-
-    // in-progress card
-    const willAllBeCompleted =
-      totalActions > 0 && proposedActions.every((s) => nextCompletedSet.has(s));
-
-    if (willAllBeCompleted) {
-      setIsCompleting(true);
-      if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current);
-      celebrationTimerRef.current = setTimeout(() => setIsCompleting(false), 1200);
-
-      onUpdateCard(currentCard.id, {
-        status: 'done',
-        completed_actions: nextCompleted,
-      });
-
-      showToast?.(t('cards.item.autoMovedDone', { id: currentCard.id }), async () => {
-        await onUpdateCard(currentCard.id, {
-          status: prevStatus,
-          completed_actions: prevCompleted,
-        });
-      });
-    } else {
-      onUpdateCard(currentCard.id, {
-        completed_actions: nextCompleted,
-      });
-
-      showToast?.(t('shell.toasts.saved', { id: currentCard.id }), async () => {
-        await onUpdateCard(currentCard.id, {
-          completed_actions: prevCompleted,
-        });
-      });
-    }
+    applyStepToggleWithCompletion(currentCard, nextStep, {
+      onUpdateCard,
+      showToast,
+      t,
+      tp,
+      settings,
+      moveToInProgressIfToDo: true,
+      onCelebration: () => {
+        setIsCompleting(true);
+        if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current);
+        celebrationTimerRef.current = setTimeout(() => setIsCompleting(false), 1200);
+      },
+    });
   };
 
   const statusLabel =
@@ -190,12 +150,7 @@ export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
       ? t('cards.status.toDo')
       : t('cards.status.done');
 
-  const horizonLabel =
-    currentCard.horizon === 'medium-term'
-      ? t('cards.horizon.medium')
-      : currentCard.horizon === 'long-term'
-      ? t('cards.horizon.long')
-      : t('cards.horizon.short');
+  const horizonLabelText = horizonLabel(currentCard.horizon || 'short-term', t);
 
   // Collapsed sleek 1-line pill view
   if (isCollapsed) {
@@ -300,7 +255,7 @@ export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
               {statusLabel}
             </span>
             <span className="spotlight-horizon-pill">
-              {horizonLabel}
+              {horizonLabelText}
             </span>
             {totalActions > 0 && (
               <span className="spotlight-progress-pill">

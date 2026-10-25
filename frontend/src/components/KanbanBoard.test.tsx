@@ -1293,7 +1293,9 @@ describe('KanbanBoard Density & Usability', () => {
       );
 
       // Open inspector for card 501
-      fireEvent.click(screen.getByText('Alpha Architecture Spark'));
+      const card501 = document.querySelector('.card[data-id="501"]');
+      expect(card501).toBeDefined();
+      fireEvent.click(card501!);
       const inspector = screen.getByTestId('board-inspector');
       expect(inspector).toBeDefined();
 
@@ -1587,6 +1589,180 @@ describe('KanbanBoard Density & Usability', () => {
       // Press 'Escape'
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('disables board keyboard shortcuts when modal or drawer overlay is open', () => {
+      const onUpdateCard = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Create a mock modal overlay in the DOM
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      document.body.appendChild(overlay);
+
+      // Focus card 501 and press status mutation key ']'
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: ']' });
+
+      // Shortcuts must be disabled: onUpdateCard should NOT be called
+      expect(onUpdateCard).not.toHaveBeenCalled();
+
+      // Clean up overlay
+      document.body.removeChild(overlay);
+    });
+
+    it('opens full card modal when Space is pressed on viewport < 1200px', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 900 });
+      const onSelectCard = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={onSelectCard}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Focus first card with 'j'
+      fireEvent.keyDown(window, { key: 'j' });
+      // Press ' '
+      fireEvent.keyDown(window, { key: ' ' });
+
+      // onSelectCard should be called directly on narrow viewport, inspector should not open
+      expect(onSelectCard).toHaveBeenCalledWith(inspectorCards[0]);
+      expect(screen.queryByTestId('board-inspector')).toBeNull();
+    });
+
+    it('renders worthiness chip and tooltip in Board Inspector', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+
+      const cardsWithWorthiness: Card[] = [
+        {
+          ...inspectorCards[0],
+          worthiness: { level: 'high', reason: 'Critical path refactor' },
+        },
+      ];
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={cardsWithWorthiness}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Open inspector for card 501
+      const card501 = document.querySelector('.card[data-id="501"]');
+      expect(card501).toBeDefined();
+      fireEvent.click(card501!);
+
+      const inspector = screen.getByTestId('board-inspector');
+      const chip = within(inspector).getByText('HIGH');
+      expect(chip).toBeDefined();
+      expect(chip.className).toContain('high');
+      expect(chip.getAttribute('title')).toContain('Critical path refactor');
+    });
+
+    it('attaches 1-click knowledge sink export on final step completion in inspector when sink is configured', async () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+              settings={{
+                has_llm_key: false,
+                has_auth_token: false,
+                obsidian_vault_path: '/obsidian/vault',
+              }}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Open inspector for card 502 (in-progress, 'Verify payload' pending)
+      const card502 = document.querySelector('.card[data-id="502"]');
+      fireEvent.click(card502!);
+
+      const inspector = screen.getByTestId('board-inspector');
+      const verifyCheckbox = within(inspector).getByLabelText('Verify payload');
+      fireEvent.click(verifyCheckbox);
+
+      expect(onUpdateCard).toHaveBeenCalledWith(502, {
+        status: 'done',
+        completed_actions: ['Install telemetry client', 'Verify payload'],
+      });
+
+      // showToast receives toast message and object with actionLabel & onAction for 1-click export
+      expect(showToast).toHaveBeenCalled();
+      const secondArg = showToast.mock.calls[showToast.mock.calls.length - 1][1];
+      expect(secondArg.actionLabel).toBe('Sync Obsidian');
+      expect(typeof secondArg.onAction).toBe('function');
+    });
+
+    it('merges configuredCardTypes into card type filter facet options and swimlanes', () => {
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              configuredCardTypes={['tool', 'custom_benchmark', 'guide']}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const filterSelect = screen.getByRole('combobox', { name: /all types/i });
+      expect(within(filterSelect).getByText('Tool')).toBeDefined();
+      expect(within(filterSelect).getByText('Guide')).toBeDefined();
+      expect(within(filterSelect).getByText('custom_benchmark')).toBeDefined();
     });
   });
 });
