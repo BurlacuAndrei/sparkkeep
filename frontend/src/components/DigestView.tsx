@@ -497,23 +497,60 @@ export const DigestView: React.FC<DigestViewProps> = ({
 
   const COPY_FAILED_TOAST = t('research.digest.toasts.copyFailed');
 
-  const handleCopyMarkdown = () => {
+  const copyViaHiddenTextarea = (text: string): boolean => {
+    if (typeof document === 'undefined') return false;
     try {
-      navigator.clipboard
-        .writeText(buildDigestMarkdown())
-        .then(() => {
-          showToast?.(t('research.digest.toasts.copied'));
-          setExportCopied(true);
-          setExportCopyFlash(true);
-          setTimeout(() => setExportCopyFlash(false), 600);
-          setTimeout(() => setExportCopied(false), 2000);
-        })
-        .catch(() => {
-          showToast?.(COPY_FAILED_TOAST);
-        });
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      textArea.style.top = '0';
+      textArea.setAttribute('readonly', '');
+      document.body.appendChild(textArea);
+      textArea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return Boolean(success);
     } catch {
-      // Clipboard API missing or gone: never fail silently
-      showToast?.(COPY_FAILED_TOAST);
+      return false;
+    }
+  };
+
+  const handleCopyMarkdown = () => {
+    const markdown = buildDigestMarkdown();
+    const onCopySuccess = () => {
+      showToast?.(t('research.digest.toasts.copied'));
+      setExportCopied(true);
+      setExportCopyFlash(true);
+      setTimeout(() => setExportCopyFlash(false), 600);
+      setTimeout(() => setExportCopied(false), 2000);
+    };
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function' && window.isSecureContext) {
+      try {
+        navigator.clipboard
+          .writeText(markdown)
+          .then(onCopySuccess)
+          .catch(() => {
+            if (copyViaHiddenTextarea(markdown)) {
+              onCopySuccess();
+            } else {
+              showToast?.(COPY_FAILED_TOAST);
+            }
+          });
+      } catch {
+        if (copyViaHiddenTextarea(markdown)) {
+          onCopySuccess();
+        } else {
+          showToast?.(COPY_FAILED_TOAST);
+        }
+      }
+    } else {
+      if (copyViaHiddenTextarea(markdown)) {
+        onCopySuccess();
+      } else {
+        handleDownloadMarkdown();
+      }
     }
   };
 

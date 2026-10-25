@@ -542,6 +542,13 @@ export const ro = {
     integrations: {
       navAria: 'Secțiuni de integrare',
       toggle: 'Comută secțiunea {{section}}',
+      toggleGroup: 'Comută categoria {{group}}',
+      badges: {
+        inbound: 'Intrare',
+        sinks: 'Colectoare',
+        automation: 'Automatizare',
+        export: 'Ieșire',
+      },
       groups: {
         knowledge: {
           title: 'Destinații de cunoștințe',

@@ -529,6 +529,13 @@ export const fr = {
     integrations: {
       navAria: "Sections d'intégration",
       toggle: 'Afficher ou masquer la section {{section}}',
+      toggleGroup: 'Basculer la catégorie {{group}}',
+      badges: {
+        inbound: 'Entrant',
+        sinks: 'Destinations',
+        automation: 'Automatisation',
+        export: 'Sortant',
+      },
       groups: {
         knowledge: {
           title: 'Destinations de connaissances',

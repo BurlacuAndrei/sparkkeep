@@ -546,6 +546,13 @@ export const de = {
     integrations: {
       navAria: 'Integrationsbereiche',
       toggle: 'Bereich {{section}} ein- oder ausblenden',
+      toggleGroup: 'Kategorie {{group}} ein- oder ausblenden',
+      badges: {
+        inbound: 'Eingang',
+        sinks: 'Wissenssenken',
+        automation: 'Automation',
+        export: 'Ausgang',
+      },
       groups: {
         knowledge: {
           title: 'Wissens-Senken',

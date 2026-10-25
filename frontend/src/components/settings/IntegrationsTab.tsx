@@ -68,6 +68,7 @@ const INTEGRATION_SECTIONS = [
 type SectionSlug = (typeof INTEGRATION_SECTIONS)[number]['slug'];
 
 const COLLAPSED_STORAGE_KEY = 'sparkkeep_integrations_collapsed';
+const GROUP_COLLAPSED_STORAGE_KEY = 'sparkkeep_integrations_groups_collapsed';
 const SECTION_ID_PREFIX = 'integration-';
 const SECTION_HASH_PREFIX = `#${SECTION_ID_PREFIX}`;
 
@@ -76,6 +77,26 @@ const isSectionSlug = (value: string): value is SectionSlug =>
 
 const sectionDefinition = (slug: SectionSlug) =>
   INTEGRATION_SECTIONS.find((section) => section.slug === slug);
+
+const getCategoryForSlug = (slug: SectionSlug): string => {
+  if (slug === 'obsidian' || slug === 'notion' || slug === 'joplin') {
+    return 'settings-group-knowledge-sinks';
+  }
+  if (
+    slug === 'browser-extension' ||
+    slug === 'bookmarklet' ||
+    slug === 'ios-shortcut' ||
+    slug === 'raycast' ||
+    slug === 'mcp' ||
+    slug === 'capture-api'
+  ) {
+    return 'settings-group-inbound-capture-tools';
+  }
+  if (slug === 'webhook' || slug === 'client-apps') {
+    return 'settings-group-automation-testing';
+  }
+  return 'settings-group-export-syndication';
+};
 
 const readCollapsedSections = (): Set<SectionSlug> => {
   try {
@@ -96,6 +117,26 @@ const writeCollapsedSections = (collapsed: Set<SectionSlug>) => {
     window.sessionStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify([...collapsed]));
   } catch {
     // Storage can be unavailable (private mode); collapse state stays in memory.
+  }
+};
+
+const readCollapsedGroups = (): Set<string> => {
+  try {
+    const raw = window.sessionStorage.getItem(GROUP_COLLAPSED_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === 'string'));
+  } catch {
+    return new Set();
+  }
+};
+
+const writeCollapsedGroups = (collapsed: Set<string>) => {
+  try {
+    window.sessionStorage.setItem(GROUP_COLLAPSED_STORAGE_KEY, JSON.stringify([...collapsed]));
+  } catch {
+    // Storage can be unavailable; stays in memory.
   }
 };
 
@@ -211,8 +252,22 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
 
   // Collapsible sections: collapsed slugs persist for the browser session.
   const [collapsedSections, setCollapsedSections] = useState<Set<SectionSlug>>(readCollapsedSections);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(readCollapsedGroups);
   const [activeSection, setActiveSection] = useState<SectionSlug | null>(null);
   const indexNavRef = useRef<HTMLElement | null>(null);
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      writeCollapsedGroups(next);
+      return next;
+    });
+  };
 
   const setSectionExpanded = (slug: SectionSlug, expanded: boolean) => {
     const next = new Set(collapsedSections);
@@ -240,6 +295,15 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
   });
 
   const activateSection = (slug: SectionSlug) => {
+    const parentGroup = getCategoryForSlug(slug);
+    if (collapsedGroups.has(parentGroup)) {
+      setCollapsedGroups((prev) => {
+        const next = new Set(prev);
+        next.delete(parentGroup);
+        writeCollapsedGroups(next);
+        return next;
+      });
+    }
     if (collapsedSections.has(slug)) {
       setSectionExpanded(slug, true);
     }
@@ -262,6 +326,13 @@ export const IntegrationsTab: React.FC<IntegrationsTabProps> = ({
     const slug = hash.slice(SECTION_HASH_PREFIX.length);
     if (!isSectionSlug(slug)) return;
     setActiveSection(slug);
+    const parentGroup = getCategoryForSlug(slug);
+    setCollapsedGroups((prev) => {
+      if (!prev.has(parentGroup)) return prev;
+      const next = new Set(prev);
+      next.delete(parentGroup);
+      return next;
+    });
     // Expand in memory only: stored collapse state stays as the user left it.
     setCollapsedSections((prev) => {
       if (!prev.has(slug)) return prev;
@@ -816,7 +887,8 @@ echo "Saved to Sparkkeep"`;
           <button
             key={slug}
             type="button"
-            className="settings-section-index-chip"
+            className={`settings-section-index-chip settings-section-index-chip--${getCategoryForSlug(slug).replace('settings-group-', '')}`}
+            data-category={getCategoryForSlug(slug)}
             aria-current={activeSection === slug ? 'true' : undefined}
             onClick={() => activateSection(slug)}
           >
@@ -825,14 +897,27 @@ echo "Saved to Sparkkeep"`;
         ))}
       </nav>
 
-      <div className="settings-group" role="group" aria-labelledby="settings-group-knowledge-sinks">
+      <div className="settings-group settings-group--sinks" role="group" aria-labelledby="settings-group-knowledge-sinks">
         <div className="settings-group-header">
           <div className="settings-group-heading">
-            <Library size={20} className="settings-group-icon" aria-hidden="true" />
+            <Library size={20} className="settings-group-icon settings-group-icon--sinks" aria-hidden="true" />
             <h2 className="settings-group-title" id="settings-group-knowledge-sinks">{t('settings.integrations.groups.knowledge.title')}</h2>
+            <span className="settings-group-badge settings-group-badge--sinks">{t('settings.integrations.badges.sinks')}</span>
+            <button
+              type="button"
+              className="settings-group-toggle"
+              aria-expanded={!collapsedGroups.has('settings-group-knowledge-sinks')}
+              aria-controls="settings-group-content-knowledge-sinks"
+              aria-label={t('settings.integrations.toggleGroup', { group: t('settings.integrations.groups.knowledge.title') })}
+              onClick={() => toggleGroup('settings-group-knowledge-sinks')}
+            >
+              <ChevronDown size={18} className="settings-group-chevron" aria-hidden="true" />
+            </button>
           </div>
           <p className="settings-group-desc">{t('settings.integrations.groups.knowledge.desc')}</p>
         </div>
+
+        <div id="settings-group-content-knowledge-sinks" className="settings-group-content" hidden={collapsedGroups.has('settings-group-knowledge-sinks')}>
 
         <CollapsibleSection
           slug="notion"
@@ -1354,19 +1439,30 @@ echo "Saved to Sparkkeep"`;
             </ul>
           </div>
         </CollapsibleSection>
-
-
-
+        </div>
       </div>
 
-      <div className="settings-group" role="group" aria-labelledby="settings-group-inbound-capture-tools">
+      <div className="settings-group settings-group--inbound" role="group" aria-labelledby="settings-group-inbound-capture-tools">
         <div className="settings-group-header">
           <div className="settings-group-heading">
-            <Inbox size={20} className="settings-group-icon" aria-hidden="true" />
+            <Inbox size={20} className="settings-group-icon settings-group-icon--inbound" aria-hidden="true" />
             <h2 className="settings-group-title" id="settings-group-inbound-capture-tools">{t('settings.integrations.groups.inbound.title')}</h2>
+            <span className="settings-group-badge settings-group-badge--inbound">{t('settings.integrations.badges.inbound')}</span>
+            <button
+              type="button"
+              className="settings-group-toggle"
+              aria-expanded={!collapsedGroups.has('settings-group-inbound-capture-tools')}
+              aria-controls="settings-group-content-inbound-capture-tools"
+              aria-label={t('settings.integrations.toggleGroup', { group: t('settings.integrations.groups.inbound.title') })}
+              onClick={() => toggleGroup('settings-group-inbound-capture-tools')}
+            >
+              <ChevronDown size={18} className="settings-group-chevron" aria-hidden="true" />
+            </button>
           </div>
           <p className="settings-group-desc">{t('settings.integrations.groups.inbound.desc')}</p>
         </div>
+
+        <div id="settings-group-content-inbound-capture-tools" className="settings-group-content" hidden={collapsedGroups.has('settings-group-inbound-capture-tools')}>
 
         <CollapsibleSection
           slug="browser-extension"
@@ -1760,18 +1856,30 @@ echo "Saved to Sparkkeep"`;
             </pre>
           </div>
         </CollapsibleSection>
-
-
+        </div>
       </div>
 
-      <div className="settings-group" role="group" aria-labelledby="settings-group-automation-testing">
+      <div className="settings-group settings-group--automation" role="group" aria-labelledby="settings-group-automation-testing">
         <div className="settings-group-header">
           <div className="settings-group-heading">
-            <FlaskConical size={20} className="settings-group-icon" aria-hidden="true" />
+            <FlaskConical size={20} className="settings-group-icon settings-group-icon--automation" aria-hidden="true" />
             <h2 className="settings-group-title" id="settings-group-automation-testing">{t('settings.integrations.groups.automation.title')}</h2>
+            <span className="settings-group-badge settings-group-badge--automation">{t('settings.integrations.badges.automation')}</span>
+            <button
+              type="button"
+              className="settings-group-toggle"
+              aria-expanded={!collapsedGroups.has('settings-group-automation-testing')}
+              aria-controls="settings-group-content-automation-testing"
+              aria-label={t('settings.integrations.toggleGroup', { group: t('settings.integrations.groups.automation.title') })}
+              onClick={() => toggleGroup('settings-group-automation-testing')}
+            >
+              <ChevronDown size={18} className="settings-group-chevron" aria-hidden="true" />
+            </button>
           </div>
           <p className="settings-group-desc">{t('settings.integrations.groups.automation.desc')}</p>
         </div>
+
+        <div id="settings-group-content-automation-testing" className="settings-group-content" hidden={collapsedGroups.has('settings-group-automation-testing')}>
 
         <CollapsibleSection
           slug="webhook"
@@ -1963,18 +2071,30 @@ echo "Saved to Sparkkeep"`;
             </div>
           </div>
         </CollapsibleSection>
-
-
+        </div>
       </div>
 
-      <div className="settings-group" role="group" aria-labelledby="settings-group-export-syndication">
+      <div className="settings-group settings-group--export" role="group" aria-labelledby="settings-group-export-syndication">
         <div className="settings-group-header">
           <div className="settings-group-heading">
-            <Share2 size={20} className="settings-group-icon" aria-hidden="true" />
+            <Share2 size={20} className="settings-group-icon settings-group-icon--export" aria-hidden="true" />
             <h2 className="settings-group-title" id="settings-group-export-syndication">{t('settings.integrations.groups.export.title')}</h2>
+            <span className="settings-group-badge settings-group-badge--export">{t('settings.integrations.badges.export')}</span>
+            <button
+              type="button"
+              className="settings-group-toggle"
+              aria-expanded={!collapsedGroups.has('settings-group-export-syndication')}
+              aria-controls="settings-group-content-export-syndication"
+              aria-label={t('settings.integrations.toggleGroup', { group: t('settings.integrations.groups.export.title') })}
+              onClick={() => toggleGroup('settings-group-export-syndication')}
+            >
+              <ChevronDown size={18} className="settings-group-chevron" aria-hidden="true" />
+            </button>
           </div>
           <p className="settings-group-desc">{t('settings.integrations.groups.export.desc')}</p>
         </div>
+
+        <div id="settings-group-content-export-syndication" className="settings-group-content" hidden={collapsedGroups.has('settings-group-export-syndication')}>
 
         <CollapsibleSection
           slug="library-export"
@@ -2179,8 +2299,7 @@ echo "Saved to Sparkkeep"`;
             )}
           </div>
         </CollapsibleSection>
-
-
+        </div>
       </div>
 
     </div>

@@ -485,3 +485,54 @@ describe('IntegrationsTab section observer', () => {
     expect(observer.disconnect).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('IntegrationsTab category groups and visual hierarchy', () => {
+  it('renders visual direction badges and distinct icons for all 4 categories', () => {
+    render(<IntegrationsTab showToast={vi.fn()} />);
+
+    expect(screen.getByText('Knowledge Sinks', { selector: '.settings-group-badge' })).toBeDefined();
+    expect(screen.getByText('Inbound', { selector: '.settings-group-badge' })).toBeDefined();
+    expect(screen.getByText('Automation', { selector: '.settings-group-badge' })).toBeDefined();
+    expect(screen.getByText('Outbound', { selector: '.settings-group-badge' })).toBeDefined();
+
+    const inboundGroup = screen.getByRole('group', { name: 'Inbound Capture Tools' });
+    expect(inboundGroup.classList.contains('settings-group--inbound')).toBe(true);
+
+    const sinksGroup = screen.getByRole('group', { name: 'Knowledge Sinks' });
+    expect(sinksGroup.classList.contains('settings-group--sinks')).toBe(true);
+  });
+
+  it('collapses and re-expands an entire category group using group toggle', () => {
+    render(<IntegrationsTab showToast={vi.fn()} />);
+
+    const toggle = screen.getByRole('button', { name: 'Toggle Knowledge Sinks category' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const content = document.getElementById('settings-group-content-knowledge-sinks');
+    expect(content?.hidden).toBe(false);
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(content?.hidden).toBe(true);
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(content?.hidden).toBe(false);
+  });
+
+  it('auto-expands collapsed category group when navigating from section index anchor pill', () => {
+    render(<IntegrationsTab showToast={vi.fn()} />);
+
+    const groupToggle = screen.getByRole('button', { name: 'Toggle Inbound Capture Tools category' });
+    fireEvent.click(groupToggle);
+    const content = document.getElementById('settings-group-content-inbound-capture-tools');
+    expect(content?.hidden).toBe(true);
+
+    const nav = screen.getByRole('navigation', { name: 'Integration sections' });
+    const pill = within(nav).getByRole('button', { name: 'Browser Bookmarklet' });
+    fireEvent.click(pill);
+
+    expect(content?.hidden).toBe(false);
+    expect(pill.getAttribute('aria-current')).toBe('true');
+  });
+});
+

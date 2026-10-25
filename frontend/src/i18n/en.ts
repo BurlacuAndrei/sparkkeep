@@ -535,6 +535,13 @@ export const en = {
     integrations: {
       navAria: 'Integration sections',
       toggle: 'Toggle {{section}} section',
+      toggleGroup: 'Toggle {{group}} category',
+      badges: {
+        inbound: 'Inbound',
+        sinks: 'Knowledge Sinks',
+        automation: 'Automation',
+        export: 'Outbound',
+      },
       groups: {
         knowledge: {
           title: 'Knowledge Sinks',

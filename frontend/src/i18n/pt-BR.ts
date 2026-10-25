@@ -542,6 +542,13 @@ export const ptBR = {
     integrations: {
       navAria: 'Seções de integração',
       toggle: 'Alternar seção {{section}}',
+      toggleGroup: 'Alternar categoria {{group}}',
+      badges: {
+        inbound: 'Entrada',
+        sinks: 'Destinos',
+        automation: 'Automação',
+        export: 'Saída',
+      },
       groups: {
         knowledge: {
           title: 'Destinos de conhecimento',

@@ -148,7 +148,7 @@ describe('DigestView', () => {
     ],
   };
 
-  it('renders empty state cleanly in Light mode', () => {
+  it('renders empty state cleanly in Light mode', async () => {
     renderLocalized(
       <ThemeProvider defaultTheme="light">
         <DigestView digest={null} {...dummyProps} />
@@ -157,9 +157,11 @@ describe('DigestView', () => {
 
     expect(screen.getByText('No captures in this window')).toBeDefined();
     expect(screen.getByText(/Sparks captured during the selected/i)).toBeDefined();
+    await waitFor(() => expect(api.fetchDigest).toHaveBeenCalled());
+    await waitFor(() => expect(api.listChannels).toHaveBeenCalled());
   });
 
-  it('renders populated digest with title, KPI metrics, and themes in Light mode', () => {
+  it('renders populated digest with title, KPI metrics, and themes in Light mode', async () => {
     renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
@@ -167,6 +169,7 @@ describe('DigestView', () => {
         </CardActionsProvider>
       </ThemeProvider>
     );
+    await waitFor(() => expect(api.listChannels).toHaveBeenCalled());
 
     // Title should be present
     const heading = screen.getByRole('heading', { level: 1, name: /Weekly Intelligence Digest/i });
@@ -180,7 +183,7 @@ describe('DigestView', () => {
     expect(screen.getByText('Weekly Wins')).toBeDefined();
   });
 
-  it('renders "Send to Integrations" button instead of hardcoded Telegram button', () => {
+  it('renders "Send to Integrations" button instead of hardcoded Telegram button', async () => {
     renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
@@ -188,6 +191,7 @@ describe('DigestView', () => {
         </CardActionsProvider>
       </ThemeProvider>
     );
+    await waitFor(() => expect(api.listChannels).toHaveBeenCalled());
 
     expect(screen.getByRole('button', { name: /Send to Integrations/i })).toBeDefined();
     expect(screen.queryByRole('button', { name: /^Send to Telegram$/i })).toBeNull();
@@ -220,6 +224,7 @@ describe('DigestView', () => {
         </CardActionsProvider>
       </ThemeProvider>
     );
+    await waitFor(() => expect(api.listChannels).toHaveBeenCalled());
 
     const chevronBtn = screen.getByRole('button', { name: /Select integration channel/i });
     fireEvent.click(chevronBtn);
@@ -262,7 +267,7 @@ describe('DigestView', () => {
     expect(localStorage.getItem('sparkkeep_digest_channel')).toBe('discord');
   });
 
-  it('closes channel menu on Escape key', () => {
+  it('closes channel menu on Escape key', async () => {
     renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
@@ -270,6 +275,7 @@ describe('DigestView', () => {
         </CardActionsProvider>
       </ThemeProvider>
     );
+    await waitFor(() => expect(api.listChannels).toHaveBeenCalled());
 
     const chevronBtn = screen.getByRole('button', { name: /Select integration channel/i });
     fireEvent.click(chevronBtn);
@@ -301,14 +307,17 @@ describe('DigestView', () => {
     });
   });
 
-  const renderDigestView = (showToast: (msg: string) => void = vi.fn()) =>
-    renderLocalized(
+  const renderDigestView = async (showToast: (msg: string) => void = vi.fn()) => {
+    const utils = renderLocalized(
       <ThemeProvider defaultTheme="light">
         <CardActionsProvider value={dummyCardActions}>
           <DigestView digest={mockPopulatedDigest} {...dummyProps} showToast={showToast} />
         </CardActionsProvider>
       </ThemeProvider>
     );
+    await waitFor(() => expect(api.listChannels).toHaveBeenCalled());
+    return utils;
+  };
 
   const FILENAME_PATTERN = /^sparkkeep-digest-\d{4}-\d{2}-\d{2}_to_\d{4}-\d{2}-\d{2}\.md$/;
 
@@ -317,7 +326,7 @@ describe('DigestView', () => {
     stubClipboard(writeText, true);
     const showToast = vi.fn();
 
-    renderDigestView(showToast);
+    await renderDigestView(showToast);
     fireEvent.click(screen.getByRole('button', { name: /Export Markdown/i }));
 
     await waitFor(() => {
@@ -341,6 +350,7 @@ describe('DigestView', () => {
         </ThemeProvider>
       </LocaleProvider>
     );
+    await waitFor(() => expect(api.listChannels).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('button', { name: /Exportă Markdown/i }));
 
@@ -371,6 +381,7 @@ describe('DigestView', () => {
         </ThemeProvider>
       </LocaleProvider>
     );
+    await waitFor(() => expect(api.listChannels).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('button', { name: /Export Markdown/i }));
     await waitFor(() => {
@@ -389,6 +400,7 @@ describe('DigestView', () => {
         </ThemeProvider>
       </LocaleProvider>
     );
+    await waitFor(() => expect(api.listChannels).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('button', { name: /Exportă Markdown/i }));
     await waitFor(() => {
@@ -402,7 +414,7 @@ describe('DigestView', () => {
     stubClipboard(writeText, false);
     const showToast = vi.fn();
 
-    renderDigestView(showToast);
+    await renderDigestView(showToast);
     fireEvent.click(screen.getByRole('button', { name: /Download Markdown/i }));
 
     await waitFor(() => {
@@ -415,10 +427,10 @@ describe('DigestView', () => {
     expect(showToast).toHaveBeenCalledWith(expect.stringContaining(downloads[0]));
   });
 
-  it('labels the primary action "Download Markdown" when the clipboard is unavailable', () => {
+  it('labels the primary action "Download Markdown" when the clipboard is unavailable', async () => {
     stubClipboard(vi.fn(), false);
 
-    renderDigestView();
+    await renderDigestView();
 
     expect(screen.getByRole('button', { name: 'Download Markdown' })).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Export Markdown' })).toBeNull();
@@ -428,7 +440,7 @@ describe('DigestView', () => {
     stubClipboard(vi.fn().mockRejectedValue(new Error('denied')), true);
     const showToast = vi.fn();
 
-    renderDigestView(showToast);
+    await renderDigestView(showToast);
     fireEvent.click(screen.getByRole('button', { name: /Export Markdown/i }));
 
     await waitFor(() => {
@@ -437,7 +449,7 @@ describe('DigestView', () => {
     expect(downloads).toEqual([]);
   });
 
-  it('shows a failure toast when the clipboard write throws synchronously', () => {
+  it('shows a failure toast when the clipboard write throws synchronously', async () => {
     stubClipboard(
       vi.fn(() => {
         throw new Error('clipboard vanished');
@@ -446,7 +458,7 @@ describe('DigestView', () => {
     );
     const showToast = vi.fn();
 
-    renderDigestView(showToast);
+    await renderDigestView(showToast);
     fireEvent.click(screen.getByRole('button', { name: /Export Markdown/i }));
 
     expect(showToast).toHaveBeenCalledWith(
@@ -454,10 +466,51 @@ describe('DigestView', () => {
     );
   });
 
-  it('lists copy and download actions in the export menu, disabling copy without a clipboard', () => {
+  it('falls back to hidden textarea copy when clipboard write fails but execCommand succeeds', async () => {
+    stubClipboard(vi.fn().mockRejectedValue(new Error('clipboard rejected')), true);
+    const execCommandMock = vi.fn().mockReturnValue(true);
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      writable: true,
+      value: execCommandMock,
+    });
+    const showToast = vi.fn();
+
+    await renderDigestView(showToast);
+    fireEvent.click(screen.getByRole('button', { name: /Export Markdown/i }));
+
+    await waitFor(() => {
+      expect(execCommandMock).toHaveBeenCalledWith('copy');
+      expect(showToast).toHaveBeenCalledWith('📋 Markdown digest copied to clipboard!');
+    });
+    expect(downloads).toEqual([]);
+    delete (document as unknown as { execCommand?: unknown }).execCommand;
+  });
+
+  it('falls back to downloading markdown file in non-secure context when execCommand is also unavailable', async () => {
+    stubClipboard(vi.fn(), false);
+    const execCommandMock = vi.fn().mockReturnValue(false);
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      writable: true,
+      value: execCommandMock,
+    });
+    const showToast = vi.fn();
+
+    await renderDigestView(showToast);
+    fireEvent.click(screen.getByRole('button', { name: /Download Markdown/i }));
+
+    await waitFor(() => {
+      expect(downloads).toHaveLength(1);
+      expect(showToast).toHaveBeenCalledWith(expect.stringContaining(downloads[0]));
+    });
+    delete (document as unknown as { execCommand?: unknown }).execCommand;
+  });
+
+  it('lists copy and download actions in the export menu, disabling copy without a clipboard', async () => {
     stubClipboard(vi.fn(), false);
 
-    renderDigestView();
+    await renderDigestView();
     fireEvent.click(screen.getByRole('button', { name: /More export options/i }));
 
     expect(screen.getByRole('menu')).toBeDefined();
@@ -470,10 +523,21 @@ describe('DigestView', () => {
     expect(downloadItem.disabled).toBe(false);
   });
 
-  it('skips the disabled copy item when roving focus in an insecure context', () => {
+  it('renders dual-action split button with Copy to Clipboard and Download Markdown options in dropdown', async () => {
+    stubClipboard(vi.fn().mockResolvedValue(undefined), true);
+
+    await renderDigestView();
+    const arrowBtn = screen.getByRole('button', { name: /More export options/i });
+    fireEvent.click(arrowBtn);
+
+    expect(screen.getByRole('menuitem', { name: /Copy to clipboard/i })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Download \.md file/i })).toBeDefined();
+  });
+
+  it('skips the disabled copy item when roving focus in an insecure context', async () => {
     stubClipboard(vi.fn(), false);
 
-    renderDigestView();
+    await renderDigestView();
     fireEvent.click(screen.getByRole('button', { name: /More export options/i }));
 
     const copyItem = screen.getByRole('menuitem', { name: /Copy to clipboard/i });
@@ -484,10 +548,10 @@ describe('DigestView', () => {
     expect(document.activeElement).not.toBe(copyItem);
   });
 
-  it('closes the export menu on outside mousedown', () => {
+  it('closes the export menu on outside mousedown', async () => {
     stubClipboard(vi.fn(), true);
 
-    renderDigestView();
+    await renderDigestView();
     fireEvent.click(screen.getByRole('button', { name: /More export options/i }));
     expect(screen.getByRole('menu')).toBeDefined();
 
@@ -495,10 +559,10 @@ describe('DigestView', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('moves focus between menuitems with ArrowDown and wraps around', () => {
+  it('moves focus between menuitems with ArrowDown and wraps around', async () => {
     stubClipboard(vi.fn(), true);
 
-    renderDigestView();
+    await renderDigestView();
     fireEvent.click(screen.getByRole('button', { name: /More export options/i }));
 
     const copyItem = screen.getByRole('menuitem', { name: /Copy to clipboard/i });
@@ -518,7 +582,7 @@ describe('DigestView', () => {
   it('downloads from the menu action with a date-range filename', async () => {
     stubClipboard(vi.fn(), true);
 
-    renderDigestView();
+    await renderDigestView();
     fireEvent.click(screen.getByRole('button', { name: /More export options/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /Download \.md file/i }));
 
@@ -529,10 +593,10 @@ describe('DigestView', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('closes the export menu on Escape key and returns focus to the menu arrow', () => {
+  it('closes the export menu on Escape key and returns focus to the menu arrow', async () => {
     stubClipboard(vi.fn(), true);
 
-    renderDigestView();
+    await renderDigestView();
     const arrowBtn = screen.getByRole('button', { name: /More export options/i });
     fireEvent.click(arrowBtn);
     expect(screen.getByRole('menu')).toBeDefined();
@@ -544,10 +608,10 @@ describe('DigestView', () => {
     expect(document.activeElement).toBe(arrowBtn);
   });
 
-  it('does not steal focus when the export menu closes on outside mousedown', () => {
+  it('does not steal focus when the export menu closes on outside mousedown', async () => {
     stubClipboard(vi.fn(), true);
 
-    renderDigestView();
+    await renderDigestView();
     const arrowBtn = screen.getByRole('button', { name: /More export options/i });
     fireEvent.click(arrowBtn);
     fireEvent.mouseDown(document.body);

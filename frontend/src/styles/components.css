@@ -3092,6 +3092,22 @@
   flex-shrink: 0;
 }
 
+.settings-group-icon--inbound {
+  color: #38bdf8;
+}
+
+.settings-group-icon--sinks {
+  color: #c084fc;
+}
+
+.settings-group-icon--automation {
+  color: #fbbf24;
+}
+
+.settings-group-icon--export {
+  color: #34d399;
+}
+
 .settings-group-title {
   margin: 0;
   font-size: 15px;
@@ -3099,6 +3115,86 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-main);
+}
+
+.settings-group-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: 6px;
+}
+
+.settings-group-badge--inbound {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+}
+
+.settings-group-badge--sinks {
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.28);
+}
+
+.settings-group-badge--automation {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.settings-group-badge--export {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.settings-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-elevated);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-group-toggle:hover {
+  background: var(--border-hover);
+  color: var(--text-main);
+}
+
+.settings-group-toggle:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.settings-group-chevron {
+  transition: transform 0.18s ease;
+}
+
+.settings-group-toggle[aria-expanded='false'] .settings-group-chevron {
+  transform: rotate(-90deg);
+}
+
+.settings-group-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-group-content[hidden] {
+  display: none;
 }
 
 .settings-group-desc {
