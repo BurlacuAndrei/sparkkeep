@@ -1203,3 +1203,152 @@
 .digest-btn-export.copied .digest-btn-export.flash {
   /* Flash is handled by the pseudo-element */
 }
+
+/* Executive Retrospective Pill & Next Focus */
+.digest-model-badge {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent-indigo);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  margin-left: 4px;
+}
+
+.digest-synth-timestamp {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+.digest-wins-narrative {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.digest-retrospective-subheading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.digest-wins-narrative-text {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.digest-next-focus-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.digest-next-focus-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.digest-next-focus-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-surface-elevated, var(--bg-card));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  transition: all var(--transition-fast);
+}
+
+.digest-next-focus-card:hover {
+  border-color: var(--accent-indigo);
+}
+
+.digest-next-focus-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.digest-next-focus-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.digest-next-focus-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.digest-next-focus-title:hover {
+  color: var(--accent-indigo);
+}
+
+.digest-focus-prio-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.digest-focus-prio-badge.prio-high {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.digest-next-focus-reason {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin: 3px 0 0 0;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.digest-btn-start-focus {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-xs);
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent-emerald, #10b981);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.digest-btn-start-focus:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: var(--accent-emerald, #10b981);
+}

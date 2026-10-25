@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1091,7 +1092,7 @@ func TestSynthesizeDigest(t *testing.T) {
 	st := newStubStore()
 	now := time.Now().UTC()
 	st.cards[1] = port.Card{ID: 1, Title: "AI Agent", Status: port.StatusDone, Tags: []string{"ai", "agents"}, CreatedAt: now.AddDate(0, 0, -1)}
-	st.cards[2] = port.Card{ID: 2, Title: "SQLite WAL", Status: port.StatusToDo, Tags: []string{"sqlite"}, CreatedAt: now.AddDate(0, 0, -2)}
+	st.cards[2] = port.Card{ID: 2, Title: "SQLite WAL", Status: port.StatusToDo, Horizon: "short-term", Tags: []string{"sqlite"}, CreatedAt: now.AddDate(0, 0, -2)}
 	h := webHandler(st, &core.Service{Logf: t.Logf})
 
 	rr := doJSON(t, h, http.MethodPost, "/api/v1/digest/synthesize?days=7", "")
@@ -1099,13 +1100,22 @@ func TestSynthesizeDigest(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rr.Code)
 	}
 	var body struct {
-		OK       bool   `json:"ok"`
-		Briefing string `json:"briefing"`
-		Themes   []struct {
+		OK            bool   `json:"ok"`
+		Briefing      string `json:"briefing"`
+		WinsNarrative string `json:"wins_narrative"`
+		Model         string `json:"model"`
+		GeneratedAt   string `json:"generated_at"`
+		Themes        []struct {
 			Title   string  `json:"title"`
 			Summary string  `json:"summary"`
 			CardIDs []int64 `json:"card_ids"`
 		} `json:"themes"`
+		NextFocus []struct {
+			CardID   int64  `json:"card_id"`
+			Title    string `json:"title"`
+			Reason   string `json:"reason"`
+			Priority string `json:"priority"`
+		} `json:"next_focus"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json: %v", err)
@@ -1113,8 +1123,167 @@ func TestSynthesizeDigest(t *testing.T) {
 	if !body.OK || body.Briefing == "" {
 		t.Fatalf("got empty briefing or ok=false: %+v", body)
 	}
+	if body.WinsNarrative == "" {
+		t.Fatalf("expected wins_narrative, got empty")
+	}
+	if body.Model != "heuristic" {
+		t.Fatalf("expected model=heuristic, got %s", body.Model)
+	}
+	if body.GeneratedAt == "" {
+		t.Fatalf("expected non-empty generated_at")
+	}
 	if len(body.Themes) == 0 {
 		t.Fatalf("expected at least 1 theme in heuristic fallback, got 0")
+	}
+	if len(body.NextFocus) == 0 {
+		t.Fatalf("expected at least 1 next_focus recommendation, got 0")
+	}
+	if body.NextFocus[0].CardID != 2 {
+		t.Fatalf("expected next_focus card_id=2, got %d", body.NextFocus[0].CardID)
+	}
+
+	// Verify persistence in store under digest_synthesis_7
+	persisted, err := st.GetSetting(context.Background(), "digest_synthesis_7")
+	if err != nil || persisted == "" {
+		t.Fatalf("expected persisted digest_synthesis_7 in store: %v", err)
+	}
+
+	// Verify GET /api/v1/digest returns cached synthesis
+	rrGet := doJSON(t, h, http.MethodGet, "/api/v1/digest?days=7", "")
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want 200", rrGet.Code)
+	}
+	var getResp struct {
+		Synthesis struct {
+			Briefing      string `json:"briefing"`
+			WinsNarrative string `json:"wins_narrative"`
+		} `json:"synthesis"`
+	}
+	if err := json.Unmarshal(rrGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("get json unmarshal: %v", err)
+	}
+	if getResp.Synthesis.Briefing == "" || getResp.Synthesis.WinsNarrative == "" {
+		t.Fatalf("expected cached synthesis in GET /api/v1/digest, got: %+v", getResp.Synthesis)
+	}
+}
+
+func TestSynthesizeDigest_MultiWindowCaching(t *testing.T) {
+	st := newStubStore()
+	now := time.Now().UTC()
+	st.cards[1] = port.Card{ID: 1, Title: "AI Agent", Status: port.StatusDone, Tags: []string{"ai"}, CreatedAt: now.AddDate(0, 0, -2)}
+	st.cards[2] = port.Card{ID: 2, Title: "SQLite WAL", Status: port.StatusToDo, Horizon: "short-term", Tags: []string{"sqlite"}, CreatedAt: now.AddDate(0, 0, -10)}
+	st.cards[3] = port.Card{ID: 3, Title: "Long Horizon Task", Status: port.StatusInProgress, Horizon: "long-term", Tags: []string{"infra"}, CreatedAt: now.AddDate(0, 0, -25)}
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	for _, days := range []int{7, 14, 30} {
+		rr := doJSON(t, h, http.MethodPost, fmt.Sprintf("/api/v1/digest/synthesize?days=%d", days), "")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("synthesize days=%d status = %d, want 200", days, rr.Code)
+		}
+		persisted, err := st.GetSetting(context.Background(), fmt.Sprintf("digest_synthesis_%d", days))
+		if err != nil || persisted == "" {
+			t.Fatalf("expected persisted digest_synthesis_%d in store: %v", days, err)
+		}
+
+		rrGet := doJSON(t, h, http.MethodGet, fmt.Sprintf("/api/v1/digest?days=%d", days), "")
+		if rrGet.Code != http.StatusOK {
+			t.Fatalf("get days=%d status = %d, want 200", days, rrGet.Code)
+		}
+		var getResp struct {
+			Synthesis struct {
+				Briefing string `json:"briefing"`
+				Model    string `json:"model"`
+			} `json:"synthesis"`
+		}
+		if err := json.Unmarshal(rrGet.Body.Bytes(), &getResp); err != nil {
+			t.Fatalf("unmarshal get days=%d: %v", days, err)
+		}
+		if getResp.Synthesis.Briefing == "" || getResp.Synthesis.Model != "heuristic" {
+			t.Fatalf("days=%d expected cached heuristic synthesis, got: %+v", days, getResp.Synthesis)
+		}
+	}
+}
+
+func TestSynthesizeDigest_LLMRoutingAndProfileGrounding(t *testing.T) {
+	var receivedPrompt string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		receivedPrompt = string(bodyBytes)
+		respJSON := `{
+			"briefing": "Executive summary from LLM.",
+			"wins_narrative": "Completed project alpha.",
+			"themes": [{"title": "Agentic AI", "summary": "Theme desc", "card_ids": [1]}],
+			"next_focus": [{"card_id": 2, "title": "Database Engine", "reason": "Next priority", "priority": "high"}]
+		}`
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(respJSON))
+	}))
+	defer mockServer.Close()
+
+	st := newStubStore()
+	now := time.Now().UTC()
+	st.cards[1] = port.Card{ID: 1, Title: "AI Agent", Status: port.StatusDone, Tags: []string{"ai"}, CreatedAt: now.AddDate(0, 0, -1)}
+	st.cards[2] = port.Card{ID: 2, Title: "Database Engine", Status: port.StatusToDo, Horizon: "short-term", CreatedAt: now.AddDate(0, 0, -2)}
+
+	_ = st.SetSetting(context.Background(), "user_profile", `{"goals":"Build local AI suite","stack":["Go","TypeScript"],"language":"French"}`)
+
+	router := analyze.NewRouter(analyze.RouterConfig{
+		Profiles: []analyze.Profile{
+			{ID: "prof-default", Name: "Default Model", BaseURL: "http://unused.local", Model: "gpt-default", IsDefault: true},
+			{ID: "prof-digest", Name: "Digest Model", BaseURL: mockServer.URL, Model: "model-digest-pro", APIKey: "test-key"},
+		},
+		Roles: map[string]string{
+			analyze.RoleDigestSynthesis: "prof-digest",
+		},
+		HTTPClient: mockServer.Client(),
+	})
+
+	svc := &core.Service{
+		Store:  st,
+		Router: router,
+		Logf:   t.Logf,
+	}
+	h := webHandler(st, svc)
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/digest/synthesize?days=7", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var body struct {
+		OK            bool   `json:"ok"`
+		Briefing      string `json:"briefing"`
+		WinsNarrative string `json:"wins_narrative"`
+		Model         string `json:"model"`
+		GeneratedAt   string `json:"generated_at"`
+		NextFocus     []struct {
+			CardID   int64  `json:"card_id"`
+			Title    string `json:"title"`
+			Reason   string `json:"reason"`
+			Priority string `json:"priority"`
+		} `json:"next_focus"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json parse error: %v", err)
+	}
+
+	if body.Model != "model-digest-pro" {
+		t.Fatalf("expected routed model model-digest-pro, got %s", body.Model)
+	}
+	if body.Briefing != "Executive summary from LLM." {
+		t.Fatalf("expected briefing from LLM, got %s", body.Briefing)
+	}
+	if body.WinsNarrative != "Completed project alpha." {
+		t.Fatalf("expected wins_narrative from LLM, got %s", body.WinsNarrative)
+	}
+	if len(body.NextFocus) != 1 || body.NextFocus[0].CardID != 2 {
+		t.Fatalf("unexpected next_focus: %+v", body.NextFocus)
+	}
+
+	if !strings.Contains(receivedPrompt, "French") {
+		t.Fatalf("expected prompt to ground in French language, got: %s", receivedPrompt)
+	}
+	if !strings.Contains(receivedPrompt, "Build local AI suite") {
+		t.Fatalf("expected prompt to ground in user goals, got: %s", receivedPrompt)
 	}
 }
 
@@ -4018,9 +4187,12 @@ func TestBatchAndScheduledResearchAPI(t *testing.T) {
 	}
 }
 
-type stubChannel struct{}
+type stubChannel struct {
+	lastNotif port.Notification
+}
 
-func (s *stubChannel) Notify(_ context.Context, _ port.Notification) error {
+func (s *stubChannel) Notify(_ context.Context, n port.Notification) error {
+	s.lastNotif = n
 	return nil
 }
 
@@ -4067,10 +4239,17 @@ func TestChannelEndpoints(t *testing.T) {
 		t.Fatalf("POST /api/v1/channels/telegram/test: expected 200, got %d: %s", rrTest.Code, rrTest.Body.String())
 	}
 
-	// 5. Digest push
+	// 5. Digest push with persisted executive retrospective
+	_ = st.SetSetting(context.Background(), "digest_synthesis_7", `{"briefing":"Key executive highlight.","wins_narrative":"Delivered major milestone."}`)
 	rrDigest := doJSON(t, h, http.MethodPost, "/api/v1/digest/push?channel=telegram", "")
 	if rrDigest.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/digest/push: expected 200, got %d: %s", rrDigest.Code, rrDigest.Body.String())
+	}
+	if !strings.Contains(hub.lastNotif.Text, "Executive Briefing:") || !strings.Contains(hub.lastNotif.Text, "Key executive highlight.") {
+		t.Fatalf("expected Executive Briefing in push message, got: %s", hub.lastNotif.Text)
+	}
+	if !strings.Contains(hub.lastNotif.Text, "Wins Narrative:") || !strings.Contains(hub.lastNotif.Text, "Delivered major milestone.") {
+		t.Fatalf("expected Wins Narrative in push message, got: %s", hub.lastNotif.Text)
 	}
 }
 

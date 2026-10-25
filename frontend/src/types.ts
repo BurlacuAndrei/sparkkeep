@@ -188,10 +188,22 @@ export interface DigestSynthesisTheme {
   card_ids?: number[];
 }
 
+export interface DigestFocusRecommendation {
+  card_id: number;
+  title?: string;
+  reason?: string;
+  rationale?: string;
+  priority?: string;
+}
+
 export interface DigestSynthesisResult {
   ok: boolean;
   briefing: string;
+  wins_narrative?: string;
   themes?: DigestSynthesisTheme[];
+  next_focus?: DigestFocusRecommendation[];
+  model?: string;
+  generated_at?: string;
 }
 
 export interface ResearchStep {
@@ -342,7 +354,7 @@ export interface LLMProfileInput {
   is_default?: boolean;
 }
 
-export type LLMRole = 'triage' | 'vision' | 'research_plan' | 'research_synthesis';
+export type LLMRole = 'triage' | 'vision' | 'research_plan' | 'research_synthesis' | 'digest_synthesis';
 export type LLMRolesMapping = Record<string, string>;
 
 export interface CustomStepConfig {

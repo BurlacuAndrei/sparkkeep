@@ -51,6 +51,9 @@ describe('AIProfileTab Component', () => {
     expect(screen.getAllByText('Local Ollama').length).toBeGreaterThan(0);
     expect(screen.getAllByText('OpenAI GPT-4o').length).toBeGreaterThan(0);
     expect(screen.getByText(/Use for \(Role Routing\)/i)).toBeDefined();
+    expect(screen.getAllByText('Digest & Retrospective Synthesis').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/Synthesizes period accomplishments, emergent themes, and next-focus execution cards\./i)).toBeDefined();
+    expect(screen.getAllByText(/Default: 4,096 tokens/i).length).toBeGreaterThan(0);
   });
 
   it('opens new profile creation form when clicking Add Model button', () => {

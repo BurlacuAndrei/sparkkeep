@@ -13,6 +13,7 @@ const (
 	RoleVision            = "vision"
 	RoleResearchPlan      = "research_plan"
 	RoleResearchSynthesis = "research_synthesis"
+	RoleDigestSynthesis   = "digest_synthesis"
 )
 
 // AllRoles lists the standard pipeline roles supported by SparkKeep.
@@ -21,10 +22,11 @@ var AllRoles = []string{
 	RoleVision,
 	RoleResearchPlan,
 	RoleResearchSynthesis,
+	RoleDigestSynthesis,
 }
 
 // DefaultTokenCaps defines default per-call token limits for each role.
-// Triage: 4096, Vision: 1024, Plan: 4096, Synthesis: 8192.
+// Triage: 4096, Vision: 1024, Plan: 4096, Synthesis: 8192, DigestSynthesis: 4096.
 // These caps provide adequate headroom for reasoning models whose thinking tokens
 // count towards total max_tokens before producing JSON output.
 var DefaultTokenCaps = map[string]int{
@@ -32,6 +34,7 @@ var DefaultTokenCaps = map[string]int{
 	RoleVision:            1024,
 	RoleResearchPlan:      4096,
 	RoleResearchSynthesis: 8192,
+	RoleDigestSynthesis:   4096,
 }
 
 // Profile represents a configured LLM endpoint and model.

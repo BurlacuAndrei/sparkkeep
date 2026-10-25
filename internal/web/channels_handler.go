@@ -409,12 +409,49 @@ func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func heuristicSynthesis(cards []port.Card) (string, []map[string]any) {
+type digestFocusRecommendation struct {
+	CardID    int64  `json:"card_id"`
+	Title     string `json:"title,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	Rationale string `json:"rationale,omitempty"`
+	Priority  string `json:"priority,omitempty"`
+}
+
+type digestSynthesisTheme struct {
+	Title   string  `json:"title"`
+	Summary string  `json:"summary"`
+	CardIDs []int64 `json:"card_ids"`
+}
+
+type digestSynthesisResult struct {
+	OK            bool                        `json:"ok"`
+	Briefing      string                      `json:"briefing"`
+	WinsNarrative string                      `json:"wins_narrative,omitempty"`
+	Themes        []digestSynthesisTheme      `json:"themes,omitempty"`
+	NextFocus     []digestFocusRecommendation `json:"next_focus,omitempty"`
+	Model         string                      `json:"model,omitempty"`
+	GeneratedAt   string                      `json:"generated_at,omitempty"`
+}
+
+func heuristicRetrospective(cards []port.Card, days int) digestSynthesisResult {
+	now := time.Now().UTC()
+	since := now.AddDate(0, 0, -days)
+
 	tagCounts := make(map[string][]int64)
-	var doneCount int
+	var weeklyWins []port.Card
+	var activeCards []port.Card
+	var capturedCards []port.Card
+
 	for _, c := range cards {
-		if c.Status == port.StatusDone {
-			doneCount++
+		inWindow := c.UpdatedAt.After(since) || c.CreatedAt.After(since)
+		if !c.CreatedAt.Before(since) && !c.CreatedAt.After(now) {
+			capturedCards = append(capturedCards, c)
+		}
+		if c.Status == port.StatusDone && inWindow {
+			weeklyWins = append(weeklyWins, c)
+		}
+		if (c.Status == port.StatusInProgress || c.Status == port.StatusToDo || c.Status == port.StatusInbox) && inWindow {
+			activeCards = append(activeCards, c)
 		}
 		for _, t := range c.Tags {
 			t = strings.ToLower(strings.TrimSpace(t))
@@ -423,6 +460,7 @@ func heuristicSynthesis(cards []port.Card) (string, []map[string]any) {
 			}
 		}
 	}
+
 	type tagPair struct {
 		tag string
 		ids []int64
@@ -433,22 +471,98 @@ func heuristicSynthesis(cards []port.Card) (string, []map[string]any) {
 	}
 	sort.Slice(pairs, func(i, j int) bool { return len(pairs[i].ids) > len(pairs[j].ids) })
 
-	var themes []map[string]any
+	var themes []digestSynthesisTheme
 	for i, p := range pairs {
 		if i >= 4 {
 			break
 		}
-		themes = append(themes, map[string]any{
-			"title":    strings.ToUpper(p.tag[:1]) + p.tag[1:],
-			"summary":  fmt.Sprintf("%d spark(s) under #%s", len(p.ids), p.tag),
-			"card_ids": p.ids,
+		themes = append(themes, digestSynthesisTheme{
+			Title:   strings.ToUpper(p.tag[:1]) + p.tag[1:],
+			Summary: fmt.Sprintf("%d spark(s) under #%s", len(p.ids), p.tag),
+			CardIDs: p.ids,
 		})
 	}
 
 	briefing := fmt.Sprintf("• Ingested %d sparks during this window across %d active topics.\n• %d card(s) marked as completed Done.\n• %d items categorized and ready for review.",
-		len(cards), len(pairs), doneCount, len(cards)-doneCount)
+		len(capturedCards), len(pairs), len(weeklyWins), len(cards)-len(weeklyWins))
 
-	return briefing, themes
+	var winsNarrative string
+	if len(weeklyWins) == 0 {
+		winsNarrative = "No cards marked done in this period yet."
+	} else {
+		var winTitles []string
+		for i, w := range weeklyWins {
+			if i >= 5 {
+				break
+			}
+			winTitles = append(winTitles, fmt.Sprintf("%q", strings.TrimSpace(w.Title)))
+		}
+		winsNarrative = fmt.Sprintf("Completed %d key initiative(s) this period: %s.", len(weeklyWins), strings.Join(winTitles, ", "))
+	}
+
+	sort.Slice(activeCards, func(i, j int) bool {
+		statusScore := func(s string) int {
+			switch s {
+			case port.StatusInProgress:
+				return 3
+			case port.StatusToDo:
+				return 2
+			default:
+				return 1
+			}
+		}
+		horizonScore := func(h string) int {
+			switch h {
+			case "short-term":
+				return 3
+			case "medium-term":
+				return 2
+			default:
+				return 1
+			}
+		}
+		si, sj := statusScore(activeCards[i].Status), statusScore(activeCards[j].Status)
+		if si != sj {
+			return si > sj
+		}
+		hi, hj := horizonScore(activeCards[i].Horizon), horizonScore(activeCards[j].Horizon)
+		if hi != hj {
+			return hi > hj
+		}
+		return activeCards[i].CreatedAt.After(activeCards[j].CreatedAt)
+	})
+
+	var nextFocus []digestFocusRecommendation
+	for i, c := range activeCards {
+		if i >= 3 {
+			break
+		}
+		reason := fmt.Sprintf("Active %s initiative in %s status", c.Horizon, c.Status)
+		if c.TLDR != "" {
+			reason = c.TLDR
+		}
+		prio := "high"
+		if c.Horizon == "long-term" {
+			prio = "medium"
+		}
+		nextFocus = append(nextFocus, digestFocusRecommendation{
+			CardID:    c.ID,
+			Title:     c.Title,
+			Reason:    reason,
+			Rationale: reason,
+			Priority:  prio,
+		})
+	}
+
+	return digestSynthesisResult{
+		OK:            true,
+		Briefing:      briefing,
+		WinsNarrative: winsNarrative,
+		Themes:        themes,
+		NextFocus:     nextFocus,
+		Model:         "heuristic",
+		GeneratedAt:   now.Format(time.RFC3339),
+	}
 }
 
 func (a *api) synthesizeDigest(w http.ResponseWriter, r *http.Request) {
@@ -459,42 +573,111 @@ func (a *api) synthesizeDigest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	now := time.Now().UTC()
-	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Since: now.AddDate(0, 0, -days), Limit: 500})
+	since := now.AddDate(0, 0, -days)
+	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Limit: 5000})
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
-	if len(cards) == 0 {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"ok":       true,
-			"briefing": "No cards captured in this period yet.",
-			"themes":   []any{},
-		})
-		return
+
+	var capturedCards []port.Card
+	var weeklyWins []port.Card
+	var activeCandidates []port.Card
+	for _, c := range cards {
+		inWindow := c.UpdatedAt.After(since) || c.CreatedAt.After(since)
+		if !c.CreatedAt.Before(since) && !c.CreatedAt.After(now) {
+			capturedCards = append(capturedCards, c)
+		}
+		if c.Status == port.StatusDone && inWindow {
+			weeklyWins = append(weeklyWins, c)
+		}
+		if (c.Status == port.StatusInProgress || c.Status == port.StatusToDo || c.Status == port.StatusInbox) && inWindow {
+			activeCandidates = append(activeCandidates, c)
+		}
 	}
 
 	var llm *analyze.Client
 	if a.svc != nil {
-		llm = a.svc.Analyze
+		llm = a.svc.ClientFor(analyze.RoleDigestSynthesis)
 	}
 
+	synthKey := fmt.Sprintf("digest_synthesis_%d", days)
+
 	if llm == nil || llm.Model == "" {
-		briefing, themes := heuristicSynthesis(cards)
-		writeJSON(w, http.StatusOK, map[string]any{
-			"ok":       true,
-			"briefing": briefing,
-			"themes":   themes,
-		})
+		res := heuristicRetrospective(cards, days)
+		if data, err := json.Marshal(res); err == nil {
+			_ = a.store.SetSetting(r.Context(), synthKey, string(data))
+		}
+		writeJSON(w, http.StatusOK, res)
 		return
 	}
 
+	var prof *port.UserProfile
+	if a.store != nil {
+		if val, err := a.store.GetSetting(r.Context(), "user_profile"); err == nil && strings.TrimSpace(val) != "" {
+			var p port.UserProfile
+			if json.Unmarshal([]byte(val), &p) == nil && !p.IsEmpty() {
+				prof = &p
+			}
+		}
+		if prof == nil || prof.Language == "" {
+			if loc, err := a.store.GetSetting(r.Context(), "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+				if prof == nil {
+					prof = &port.UserProfile{}
+				}
+				prof.Language = port.LocaleToLanguageName(strings.TrimSpace(loc))
+			}
+		}
+	}
+
 	var sb strings.Builder
-	sb.WriteString("Analyze this period's captured sparks for a personal intelligence digest.\n")
-	sb.WriteString("Return ONLY a valid JSON object with:\n")
-	sb.WriteString("1. \"briefing\": a 2-3 bullet string summarizing the main ideas, focus areas, and progress.\n")
-	sb.WriteString("2. \"themes\": an array of 2-4 themes, each with \"title\" (short theme name), \"summary\" (1 sentence explanation), and \"card_ids\" (array of matching card IDs).\n\nSparks:\n")
-	for i, c := range cards {
-		if i >= 35 {
+	sb.WriteString("You are an executive intelligence assistant analyzing the user's knowledge base sparks, accomplishments, and active work for a periodic retrospective.\n")
+	if prof != nil {
+		if prof.Language != "" {
+			fmt.Fprintf(&sb, "Output Language: Respond entirely in %s.\n", prof.Language)
+		}
+		if prof.Goals != "" {
+			fmt.Fprintf(&sb, "User Strategic Goals: %s\n", prof.Goals)
+		}
+		if len(prof.Stack) > 0 {
+			fmt.Fprintf(&sb, "User Stack & Tools: %s\n", strings.Join(prof.Stack, ", "))
+		}
+		if len(prof.Interests) > 0 {
+			fmt.Fprintf(&sb, "User Interests: %s\n", strings.Join(prof.Interests, ", "))
+		}
+		if prof.Constraints != "" {
+			fmt.Fprintf(&sb, "User Constraints: %s\n", prof.Constraints)
+		}
+	}
+
+	sb.WriteString(`
+Return ONLY a valid JSON object matching this schema:
+{
+  "briefing": "A concise executive briefing (2-3 bullet lines) summarizing captured sparks, focus areas, and momentum across the window.",
+  "wins_narrative": "A structured narrative highlighting key accomplishments, completed cards, and impact achieved during this period.",
+  "themes": [
+    {
+      "title": "Short theme name",
+      "summary": "1 sentence explanation of the theme",
+      "card_ids": [123, 456]
+    }
+  ],
+  "next_focus": [
+    {
+      "card_id": 123,
+      "title": "Card title",
+      "reason": "Why this card should be prioritized in the next period",
+      "priority": "high"
+    }
+  ]
+}
+
+Ensure "next_focus" contains at most 3 high-impact cards selected from active/in-progress/to-do items.
+`)
+
+	sb.WriteString("\nSparks Captured in Window:\n")
+	for i, c := range capturedCards {
+		if i >= 30 {
 			break
 		}
 		tags := strings.Join(c.Tags, ", ")
@@ -502,14 +685,35 @@ func (a *api) synthesizeDigest(w http.ResponseWriter, r *http.Request) {
 			c.ID, c.Title, tags, c.Horizon, c.Status, c.TLDR)
 	}
 
+	if len(weeklyWins) > 0 {
+		sb.WriteString("\nCompleted Period Wins:\n")
+		for i, c := range weeklyWins {
+			if i >= 20 {
+				break
+			}
+			fmt.Fprintf(&sb, "- ID:%d | Title: %s | Horizon: %s | TLDR: %s\n",
+				c.ID, c.Title, c.Horizon, c.TLDR)
+		}
+	}
+
+	if len(activeCandidates) > 0 {
+		sb.WriteString("\nActive Cards Eligible For Next-Period Focus:\n")
+		for i, c := range activeCandidates {
+			if i >= 20 {
+				break
+			}
+			fmt.Fprintf(&sb, "- ID:%d | Title: %s | Horizon: %s | Status: %s | TLDR: %s\n",
+				c.ID, c.Title, c.Horizon, c.Status, c.TLDR)
+		}
+	}
+
 	ans, err := llm.Ask(r.Context(), sb.String())
 	if err != nil {
-		briefing, themes := heuristicSynthesis(cards)
-		writeJSON(w, http.StatusOK, map[string]any{
-			"ok":       true,
-			"briefing": briefing,
-			"themes":   themes,
-		})
+		res := heuristicRetrospective(cards, days)
+		if data, err := json.Marshal(res); err == nil {
+			_ = a.store.SetSetting(r.Context(), synthKey, string(data))
+		}
+		writeJSON(w, http.StatusOK, res)
 		return
 	}
 
@@ -521,28 +725,91 @@ func (a *api) synthesizeDigest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var parsed struct {
-		Briefing string `json:"briefing"`
-		Themes   []struct {
+		Briefing      string `json:"briefing"`
+		WinsNarrative string `json:"wins_narrative"`
+		Themes        []struct {
 			Title   string  `json:"title"`
 			Summary string  `json:"summary"`
 			CardIDs []int64 `json:"card_ids"`
 		} `json:"themes"`
+		NextFocus []struct {
+			CardID    int64  `json:"card_id"`
+			Title     string `json:"title"`
+			Reason    string `json:"reason"`
+			Rationale string `json:"rationale"`
+			Priority  string `json:"priority"`
+		} `json:"next_focus"`
 	}
-	if err := json.Unmarshal([]byte(clean), &parsed); err != nil || parsed.Briefing == "" {
-		briefing, themes := heuristicSynthesis(cards)
-		writeJSON(w, http.StatusOK, map[string]any{
-			"ok":       true,
-			"briefing": briefing,
-			"themes":   themes,
-		})
+
+	if err := json.Unmarshal([]byte(clean), &parsed); err != nil || strings.TrimSpace(parsed.Briefing) == "" {
+		res := heuristicRetrospective(cards, days)
+		if data, err := json.Marshal(res); err == nil {
+			_ = a.store.SetSetting(r.Context(), synthKey, string(data))
+		}
+		writeJSON(w, http.StatusOK, res)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":       true,
-		"briefing": parsed.Briefing,
-		"themes":   parsed.Themes,
-	})
+	var themes []digestSynthesisTheme
+	for _, t := range parsed.Themes {
+		themes = append(themes, digestSynthesisTheme{
+			Title:   t.Title,
+			Summary: t.Summary,
+			CardIDs: t.CardIDs,
+		})
+	}
+	if len(themes) == 0 {
+		heuristicRes := heuristicRetrospective(cards, days)
+		themes = heuristicRes.Themes
+	}
+
+	var nextFocus []digestFocusRecommendation
+	for i, f := range parsed.NextFocus {
+		if i >= 3 {
+			break
+		}
+		reason := f.Reason
+		if reason == "" {
+			reason = f.Rationale
+		}
+		prio := f.Priority
+		if prio == "" {
+			prio = "high"
+		}
+		nextFocus = append(nextFocus, digestFocusRecommendation{
+			CardID:    f.CardID,
+			Title:     f.Title,
+			Reason:    reason,
+			Rationale: reason,
+			Priority:  prio,
+		})
+	}
+	if len(nextFocus) == 0 {
+		heuristicRes := heuristicRetrospective(cards, days)
+		nextFocus = heuristicRes.NextFocus
+	}
+
+	winsNarrative := parsed.WinsNarrative
+	if strings.TrimSpace(winsNarrative) == "" {
+		heuristicRes := heuristicRetrospective(cards, days)
+		winsNarrative = heuristicRes.WinsNarrative
+	}
+
+	res := digestSynthesisResult{
+		OK:            true,
+		Briefing:      parsed.Briefing,
+		WinsNarrative: winsNarrative,
+		Themes:        themes,
+		NextFocus:     nextFocus,
+		Model:         llm.Model,
+		GeneratedAt:   now.Format(time.RFC3339),
+	}
+
+	if data, err := json.Marshal(res); err == nil {
+		_ = a.store.SetSetting(r.Context(), synthKey, string(data))
+	}
+
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (a *api) pushDigest(w http.ResponseWriter, r *http.Request) {
@@ -608,6 +875,22 @@ func (a *api) pushDigest(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&sb, m.IntelligenceDigestWindow+"\n\n", days, len(capturedCards))
 	fmt.Fprintf(&sb, m.StatusInbox+"\n"+m.StatusInProgress+"\n"+m.StatusDone+"\n"+m.StatusShelved+"\n\n",
 		inbox, doing, done, shelved)
+
+	synthKey := fmt.Sprintf("digest_synthesis_%d", days)
+	if raw, err := a.store.GetSetting(r.Context(), synthKey); err == nil && strings.TrimSpace(raw) != "" {
+		var synth struct {
+			Briefing      string `json:"briefing"`
+			WinsNarrative string `json:"wins_narrative"`
+		}
+		if err := json.Unmarshal([]byte(raw), &synth); err == nil {
+			if strings.TrimSpace(synth.Briefing) != "" {
+				sb.WriteString("📋 Executive Briefing:\n" + strings.TrimSpace(synth.Briefing) + "\n\n")
+			}
+			if strings.TrimSpace(synth.WinsNarrative) != "" {
+				sb.WriteString("🏆 Wins Narrative:\n" + strings.TrimSpace(synth.WinsNarrative) + "\n\n")
+			}
+		}
+	}
 
 	if len(capturedCards) > 0 {
 		sb.WriteString(m.TopSparks + "\n")

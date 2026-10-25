@@ -68,6 +68,16 @@ func TestRouterFallbackAndMapping(t *testing.T) {
 	if synthClient.MaxTokens != 8192 {
 		t.Fatalf("synth max tokens = %d, want 8192", synthClient.MaxTokens)
 	}
+
+	// Digest synthesis should fall back to default profile A with 4096 cap
+	digestClient := router.For(RoleDigestSynthesis)
+	if digestClient.BaseURL != profA.BaseURL || digestClient.Model != profA.Model {
+		t.Fatalf("digest client mismatch: got base=%s model=%s, want %s / %s",
+			digestClient.BaseURL, digestClient.Model, profA.BaseURL, profA.Model)
+	}
+	if digestClient.MaxTokens != 4096 {
+		t.Fatalf("digest max tokens = %d, want 4096", digestClient.MaxTokens)
+	}
 }
 
 func TestRouterProfileDeletionFallback(t *testing.T) {

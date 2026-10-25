@@ -39,7 +39,7 @@ interface DigestViewProps {
   onStatusChange: (id: number, status: string) => void;
   onResearch: (id: number) => void;
   onRetry: (id: number) => void;
-  showToast?: (msg: string) => void;
+  showToast?: (msg: string, onUndo?: any) => void;
   onRefresh?: () => void;
 }
 
@@ -90,6 +90,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
   const channelMenuRef = useRef<HTMLDivElement>(null);
   const [userToggledDays, setUserToggledDays] = useState<Record<string, boolean>>({});
   const [isTimelineDeckOpen, setIsTimelineDeckOpen] = useState(true);
+  const handleSynthesizeRef = useRef<() => void>(() => {});
 
   // Derive digest based on selected window
   const digest = windowDays === 7 ? (initialDigest ?? customDigest) : customDigest;
@@ -97,7 +98,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
   // Hydrate synthesis from cached digest response if present, with local override
   const activeSynthesis = synthesis ?? digest?.synthesis ?? null;
 
-  // Keyboard shortcuts: '1', '2', '3' switch window when no modal/input focused
+  // Keyboard shortcuts: '1', '2', '3' switch window, 's' triggers synthesis when no modal/input focused
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -126,6 +127,9 @@ export const DigestView: React.FC<DigestViewProps> = ({
         e.preventDefault();
         setWindowDays(30);
         setUserToggledDays({});
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        handleSynthesizeRef.current();
       }
     };
 
@@ -332,6 +336,34 @@ export const DigestView: React.FC<DigestViewProps> = ({
       showToast?.(api.getErrorMessage(err));
     } finally {
       setIsSynthesizing(false);
+    }
+  };
+
+  useEffect(() => {
+    handleSynthesizeRef.current = handleSynthesize;
+  });
+
+  // 1-Click Start Now for Next-Period Focus recommendation
+  const handleStartFocus = async (cardId: number) => {
+    const prevCard = cardById.get(cardId);
+    const prevStatus = prevCard?.status || 'inbox';
+    try {
+      await api.patchCard(cardId, { status: 'in-progress' });
+      onStatusChange?.(cardId, 'in-progress');
+      showToast?.(
+        t('research.digest.focusStartedToast', { id: cardId }),
+        async () => {
+          try {
+            await api.patchCard(cardId, { status: prevStatus });
+            onStatusChange?.(cardId, prevStatus);
+            showToast?.(t('research.digest.focusRevertedToast', { id: cardId }));
+          } catch (err: unknown) {
+            showToast?.(api.getErrorMessage(err));
+          }
+        }
+      );
+    } catch (err: unknown) {
+      showToast?.(api.getErrorMessage(err));
     }
   };
 
@@ -548,6 +580,23 @@ export const DigestView: React.FC<DigestViewProps> = ({
       }
     }
     mdLines.push('');
+
+    if (activeSynthesis?.wins_narrative) {
+      mdLines.push(`### 🏆 ${t('research.digest.md.winsNarrative')}`);
+      mdLines.push(activeSynthesis.wins_narrative);
+      mdLines.push('');
+    }
+
+    if (activeSynthesis?.next_focus && activeSynthesis.next_focus.length > 0) {
+      mdLines.push(`### 🎯 ${t('research.digest.md.nextFocus')}`);
+      for (const rec of activeSynthesis.next_focus.slice(0, 3)) {
+        const matchedCard = cardById.get(rec.card_id);
+        const title = rec.title || matchedCard?.title || `#${rec.card_id}`;
+        const reason = rec.rationale || rec.reason || '';
+        mdLines.push(`- **${title}**${reason ? `: ${reason}` : ''}`);
+      }
+      mdLines.push('');
+    }
 
     // Emergent themes
     if (themes.length > 0) {
@@ -1155,6 +1204,21 @@ export const DigestView: React.FC<DigestViewProps> = ({
               <div className="digest-hero-title">
                 <Sparkles size={16} color="#818cf8" />
                 <span>{t('research.digest.executiveBriefing')}</span>
+                {activeSynthesis?.model && (
+                  <span className="digest-model-badge" data-testid="digest-model-badge" title={activeSynthesis.model}>
+                    {activeSynthesis.model}
+                  </span>
+                )}
+                {activeSynthesis?.generated_at && (
+                  <span className="digest-synth-timestamp" data-testid="digest-synth-timestamp">
+                    {new Date(activeSynthesis.generated_at).toLocaleDateString(locale, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                )}
               </div>
 
               <button
@@ -1222,6 +1286,78 @@ export const DigestView: React.FC<DigestViewProps> = ({
                   </span>
                 </li>
               </ul>
+            )}
+
+            {/* Wins Narrative */}
+            {activeSynthesis?.wins_narrative && (
+              <div className="digest-wins-narrative" data-testid="digest-wins-narrative">
+                <div className="digest-retrospective-subheading">
+                  <TrendingUp size={13} color="#34d399" />
+                  <span>{t('research.digest.winsNarrativeTitle')}</span>
+                </div>
+                <p className="digest-wins-narrative-text">
+                  {activeSynthesis.wins_narrative}
+                </p>
+              </div>
+            )}
+
+            {/* Next-Period Focus Recommendations (up to 3) */}
+            {activeSynthesis?.next_focus && activeSynthesis.next_focus.length > 0 && (
+              <div className="digest-next-focus-section" data-testid="digest-next-focus-section">
+                <div className="digest-retrospective-subheading">
+                  <Zap size={13} color="#eab308" />
+                  <span>{t('research.digest.nextFocusTitle')}</span>
+                </div>
+                <div className="digest-next-focus-list">
+                  {activeSynthesis.next_focus.slice(0, 3).map((rec) => {
+                    const matchedCard = cardById.get(rec.card_id);
+                    const title = rec.title || matchedCard?.title || `#${rec.card_id}`;
+                    const rationale = rec.rationale || rec.reason || '';
+                    return (
+                      <div key={rec.card_id} className="digest-next-focus-card" data-testid={`focus-card-${rec.card_id}`}>
+                        <div className="digest-next-focus-content">
+                          <div className="digest-next-focus-header">
+                            <span
+                              className="digest-next-focus-title"
+                              onClick={() => matchedCard && onSelectCard(matchedCard)}
+                              style={{ cursor: matchedCard ? 'pointer' : 'default' }}
+                              role={matchedCard ? 'button' : undefined}
+                              tabIndex={matchedCard ? 0 : undefined}
+                              onKeyDown={(e) => {
+                                if (matchedCard && (e.key === 'Enter' || e.key === ' ')) {
+                                  e.preventDefault();
+                                  onSelectCard(matchedCard);
+                                }
+                              }}
+                            >
+                              {title}
+                            </span>
+                            {rec.priority && (
+                              <span className={`digest-focus-prio-badge prio-${rec.priority.toLowerCase()}`}>
+                                {rec.priority}
+                              </span>
+                            )}
+                          </div>
+                          {rationale && (
+                            <p className="digest-next-focus-reason">
+                              {rationale}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="digest-btn-start-focus"
+                          onClick={() => handleStartFocus(rec.card_id)}
+                          aria-label={t('research.digest.startNowAria', { title })}
+                        >
+                          <Zap size={12} />
+                          <span>{t('research.digest.startNow')}</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
 

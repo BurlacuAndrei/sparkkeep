@@ -109,6 +109,10 @@ func (s *Service) now() time.Time {
 	return time.Now().UTC()
 }
 
+func (s *Service) ClientFor(role string) *analyze.Client {
+	return s.clientFor(role)
+}
+
 func (s *Service) clientFor(role string) *analyze.Client {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

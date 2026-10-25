@@ -32,6 +32,19 @@ vi.mock('../api', async () => {
     ...actual,
     pushDigestToChannel: vi.fn().mockResolvedValue({ ok: true, message: 'Digest successfully sent to configured channels!' }),
     fetchDigest: vi.fn().mockResolvedValue({ ok: true, week_total: 0, prev_total: 0, by_status: {}, by_horizon: {}, weekly_wins: [], research_harvest: [], days: [] }),
+    synthesizeDigest: vi.fn().mockResolvedValue({
+      ok: true,
+      briefing: 'Generated AI Briefing',
+      wins_narrative: 'Generated AI Wins Narrative',
+      themes: [],
+      next_focus: [
+        { card_id: 101, title: 'AI Spark Focus', reason: 'Critical initiative', priority: 'high' },
+      ],
+      model: 'gpt-4o',
+      generated_at: '2026-10-25T12:00:00Z',
+    }),
+    patchCard: vi.fn().mockResolvedValue({ ok: true }),
+    updateCard: vi.fn().mockResolvedValue({ ok: true }),
     listChannels: vi.fn().mockResolvedValue({
       ok: true,
       channels: [
@@ -1076,6 +1089,263 @@ describe('DigestView', () => {
     fireEvent.click(toggleBtn);
     expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('2026-10-14')).toBeDefined();
+  });
+
+  it('renders Executive Retrospective with model badge, briefing, wins narrative, and next-focus recommendations', async () => {
+    const retroDigest: DigestData = {
+      ...mockPopulatedDigest,
+      synthesis: {
+        ok: true,
+        briefing: 'Active executive retrospective summary bullets.',
+        wins_narrative: 'Key breakthroughs across core infrastructure.',
+        model: 'gpt-4o-byok',
+        generated_at: '2026-10-25T14:30:00Z',
+        next_focus: [
+          {
+            card_id: 101,
+            title: 'Refactor Core Memory Pipeline',
+            reason: 'High impact on system latency',
+            priority: 'high',
+          },
+        ],
+      },
+      days: [
+        {
+          date: '2026-10-25',
+          cards: [
+            {
+              id: 101,
+              title: 'Refactor Core Memory Pipeline',
+              status: 'inbox',
+              horizon: 'short-term',
+            } as Card,
+          ],
+        },
+      ],
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={retroDigest} {...dummyProps} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    expect(screen.getByText('Active executive retrospective summary bullets.')).toBeDefined();
+    expect(screen.getByText('Key breakthroughs across core infrastructure.')).toBeDefined();
+    expect(screen.getByText('gpt-4o-byok')).toBeDefined();
+    expect(screen.getAllByText('Refactor Core Memory Pipeline').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('High impact on system latency')).toBeDefined();
+    expect(screen.getByText('high')).toBeDefined();
+    expect(screen.getByRole('button', { name: /Start working on Refactor Core Memory Pipeline/i })).toBeDefined();
+  });
+
+  it('triggers patchCard to in-progress and shows undo toast when Start Now is clicked', async () => {
+    const showToast = vi.fn();
+    const onStatusChange = vi.fn();
+    (api.patchCard as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 101, status: 'in-progress' });
+
+    const retroDigest: DigestData = {
+      ...mockPopulatedDigest,
+      synthesis: {
+        ok: true,
+        briefing: 'Briefing text',
+        next_focus: [
+          {
+            card_id: 101,
+            title: 'Refactor Core Memory Pipeline',
+            reason: 'High impact',
+            priority: 'high',
+          },
+        ],
+      },
+      days: [
+        {
+          date: '2026-10-25',
+          cards: [
+            {
+              id: 101,
+              title: 'Refactor Core Memory Pipeline',
+              status: 'to-do',
+              horizon: 'short-term',
+            } as Card,
+          ],
+        },
+      ],
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView
+            digest={retroDigest}
+            {...dummyProps}
+            showToast={showToast}
+            onStatusChange={onStatusChange}
+          />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    const startBtn = screen.getByRole('button', { name: /Start working on Refactor Core Memory Pipeline/i });
+    fireEvent.click(startBtn);
+
+    await waitFor(() => {
+      expect(api.patchCard).toHaveBeenCalledWith(101, { status: 'in-progress' });
+      expect(onStatusChange).toHaveBeenCalledWith(101, 'in-progress');
+      expect(showToast).toHaveBeenCalled();
+    });
+
+    const undoCallback = showToast.mock.calls[0][1];
+    expect(typeof undoCallback).toBe('function');
+    await undoCallback();
+
+    expect(api.patchCard).toHaveBeenCalledWith(101, { status: 'to-do' });
+    expect(onStatusChange).toHaveBeenCalledWith(101, 'to-do');
+  });
+
+  it('triggers synthesis via button click and s keyboard shortcut', async () => {
+    const showToast = vi.fn();
+    (api.synthesizeDigest as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      briefing: 'Newly synthesized retrospective briefing',
+      wins_narrative: 'Fresh wins report',
+      model: 'claude-3-5-sonnet',
+      generated_at: '2026-10-25T15:00:00Z',
+    });
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={mockPopulatedDigest} {...dummyProps} showToast={showToast} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    fireEvent.keyDown(document, { key: 's' });
+
+    await waitFor(() => {
+      expect(api.synthesizeDigest).toHaveBeenCalled();
+      expect(screen.getByText('Newly synthesized retrospective briefing')).toBeDefined();
+      expect(screen.getByText('Fresh wins report')).toBeDefined();
+      expect(screen.getByText('claude-3-5-sonnet')).toBeDefined();
+    });
+  });
+
+  it('does not trigger synthesis on "s" key when focus is inside an input or textarea', async () => {
+    const showToast = vi.fn();
+    (api.synthesizeDigest as ReturnType<typeof vi.fn>).mockClear();
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <div>
+            <input data-testid="test-input" />
+            <textarea data-testid="test-textarea" />
+            <DigestView digest={mockPopulatedDigest} {...dummyProps} showToast={showToast} />
+          </div>
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    const input = screen.getByTestId('test-input');
+    fireEvent.keyDown(input, { key: 's' });
+    expect(api.synthesizeDigest).not.toHaveBeenCalled();
+
+    const textarea = screen.getByTestId('test-textarea');
+    fireEvent.keyDown(textarea, { key: 's' });
+    expect(api.synthesizeDigest).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document.body, { key: 's' });
+    expect(api.synthesizeDigest).toHaveBeenCalledTimes(1);
+  });
+
+  it('synthesizes for active window days parameter (7, 14, 30)', async () => {
+    (api.synthesizeDigest as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      briefing: 'Retrospective briefing',
+    });
+    (api.fetchDigest as ReturnType<typeof vi.fn>).mockResolvedValue(mockPopulatedDigest);
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={mockPopulatedDigest} {...dummyProps} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    // Initial window is 7d
+    fireEvent.click(screen.getByRole('button', { name: /Synthesize/i }));
+    await waitFor(() => {
+      expect(api.synthesizeDigest).toHaveBeenCalledWith(7);
+    });
+
+    // Switch to 14d
+    const pill14 = screen.getByRole('radio', { name: '14d' });
+    fireEvent.click(pill14);
+    await waitFor(() => {
+      expect(api.fetchDigest).toHaveBeenCalledWith(14);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Synthesize/i }));
+    await waitFor(() => {
+      expect(api.synthesizeDigest).toHaveBeenCalledWith(14);
+    });
+
+    // Switch to 30d
+    const pill30 = screen.getByRole('radio', { name: '30d' });
+    fireEvent.click(pill30);
+    await waitFor(() => {
+      expect(api.fetchDigest).toHaveBeenCalledWith(30);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Synthesize/i }));
+    await waitFor(() => {
+      expect(api.synthesizeDigest).toHaveBeenCalledWith(30);
+    });
+  });
+
+  it('includes briefing, wins_narrative, and next_focus in Markdown export', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText, true);
+
+    const retroDigest: DigestData = {
+      ...mockPopulatedDigest,
+      synthesis: {
+        ok: true,
+        briefing: 'Executive markdown briefing bullets.',
+        wins_narrative: 'Executive wins markdown section.',
+        next_focus: [
+          {
+            card_id: 101,
+            title: 'Next Week Priority Card',
+            reason: 'Finish critical spec',
+            priority: 'high',
+          },
+        ],
+      },
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={retroDigest} {...dummyProps} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Export Markdown/i }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+
+    const markdown = writeText.mock.calls[0][0] as string;
+    expect(markdown).toContain('Executive markdown briefing bullets.');
+    expect(markdown).toContain('Executive wins markdown section.');
+    expect(markdown).toContain('**Next Week Priority Card**: Finish critical spec');
   });
 });
 

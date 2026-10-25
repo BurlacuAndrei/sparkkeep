@@ -74,6 +74,8 @@ export async function updateCard(id: number, patch: Partial<Card>): Promise<Card
   return res.data;
 }
 
+export const patchCard = updateCard;
+
 export async function deleteCard(id: number): Promise<void> {
   await request<{ ok: boolean }>(`/api/v1/cards/${id}`, {
     method: 'DELETE',

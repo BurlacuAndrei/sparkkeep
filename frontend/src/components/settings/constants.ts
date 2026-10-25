@@ -35,6 +35,13 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     hintKey: 'settings.ai.roles.researchSynthesis.hint',
     isStrong: true,
   },
+  {
+    key: 'digest_synthesis',
+    labelKey: 'settings.ai.roles.digestSynthesis.label',
+    descriptionKey: 'settings.ai.roles.digestSynthesis.description',
+    hintKey: 'settings.ai.roles.digestSynthesis.hint',
+    isStrong: true,
+  },
 ];
 
 export const DEFAULT_TOKEN_CAPS: Record<string, number> = {
@@ -42,6 +49,7 @@ export const DEFAULT_TOKEN_CAPS: Record<string, number> = {
   vision: 1024,
   research_plan: 4096,
   research_synthesis: 8192,
+  digest_synthesis: 4096,
 };
 
 export interface PresetTemplate {
