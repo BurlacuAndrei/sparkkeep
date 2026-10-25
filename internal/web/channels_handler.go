@@ -566,23 +566,37 @@ func (a *api) pushDigest(w http.ResponseWriter, r *http.Request) {
 		targetChannel = "all"
 	}
 
-	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Since: time.Now().UTC().AddDate(0, 0, -days), Limit: 500})
+	now := time.Now().UTC()
+	since := now.AddDate(0, 0, -days)
+
+	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Limit: 5000})
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
 
 	var inbox, doing, done, shelved int
+	var capturedCards []port.Card
+	var weeklyWins []port.Card
+
 	for _, c := range cards {
-		switch c.Status {
-		case port.StatusInbox:
-			inbox++
-		case port.StatusToDo, port.StatusInProgress:
-			doing++
-		case port.StatusDone:
-			done++
-		case port.StatusShelved:
-			shelved++
+		if !c.CreatedAt.Before(since) && !c.CreatedAt.After(now) {
+			capturedCards = append(capturedCards, c)
+			switch c.Status {
+			case port.StatusInbox:
+				inbox++
+			case port.StatusToDo, port.StatusInProgress:
+				doing++
+			case port.StatusDone:
+				done++
+			case port.StatusShelved:
+				shelved++
+			}
+		}
+
+		inWindow := c.UpdatedAt.After(since) || c.CreatedAt.After(since)
+		if c.Status == port.StatusDone && inWindow {
+			weeklyWins = append(weeklyWins, c)
 		}
 	}
 
@@ -591,19 +605,31 @@ func (a *api) pushDigest(w http.ResponseWriter, r *http.Request) {
 
 	var sb strings.Builder
 	sb.WriteString(m.IntelligenceDigestTitle + "\n")
-	fmt.Fprintf(&sb, m.IntelligenceDigestWindow+"\n\n", days, len(cards))
+	fmt.Fprintf(&sb, m.IntelligenceDigestWindow+"\n\n", days, len(capturedCards))
 	fmt.Fprintf(&sb, m.StatusInbox+"\n"+m.StatusInProgress+"\n"+m.StatusDone+"\n"+m.StatusShelved+"\n\n",
 		inbox, doing, done, shelved)
 
-	if len(cards) > 0 {
+	if len(capturedCards) > 0 {
 		sb.WriteString(m.TopSparks + "\n")
 		limit := 5
-		if len(cards) < limit {
-			limit = len(cards)
+		if len(capturedCards) < limit {
+			limit = len(capturedCards)
 		}
 		for i := 0; i < limit; i++ {
-			c := cards[i]
+			c := capturedCards[i]
 			fmt.Fprintf(&sb, "%d. %s [%s]\n", i+1, strings.TrimSpace(c.Title), c.Horizon)
+		}
+	}
+
+	if len(weeklyWins) > 0 {
+		sb.WriteString("\n🏆 Period Wins:\n")
+		limit := 10
+		if len(weeklyWins) < limit {
+			limit = len(weeklyWins)
+		}
+		for i := 0; i < limit; i++ {
+			wCard := weeklyWins[i]
+			fmt.Fprintf(&sb, "• %s [%s]\n", strings.TrimSpace(wCard.Title), wCard.Horizon)
 		}
 	}
 

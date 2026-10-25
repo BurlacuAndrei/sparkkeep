@@ -1703,6 +1703,38 @@ export const de = {
       actionsExecuted_one: 'Aktionsschritt ausgeführt',
       actionsExecuted_few: 'Aktionsschritte ausgeführt',
       actionsExecuted_other: 'Aktionsschritte ausgeführt',
+      exportWins: 'Erfolge exportieren',
+      exportWinsTooltip: 'Abgeschlossene Karten und Aktionsschritte des Zeitraums als Markdown exportieren',
+      winsExportTitle: 'Erfolge des Zeitraums ({{range}})',
+      winsExportCompletedCards: 'Abgeschlossene Karten',
+      winsExportActionSteps: 'Ausgeführte Aktionsschritte',
+      winsExportTotalActions_one: 'Gesamt: {{count}} Aktionsschritt ausgeführt',
+      winsExportTotalActions_few: 'Gesamt: {{count}} Aktionsschritte ausgeführt',
+      winsExportTotalActions_other: 'Gesamt: {{count}} Aktionsschritte ausgeführt',
+      newWinsBadge: 'neu',
+      momentumTitle: 'Momentum-Puls des Zeitraums',
+      momentum: {
+        executionSurge: {
+          title: 'Ausführungsschub',
+          desc: 'Hohe Erledigungsgeschwindigkeit mit starkem Abschluss von Aktionsschritten und Ergebnissen.',
+        },
+        researchDeepDive: {
+          title: 'Recherche-Vertiefung',
+          desc: 'Erhebliche Untersuchungstiefe mit abgeschlossenen Playbooks und fundierten Urteilen.',
+        },
+        balancedFlow: {
+          title: 'Ausgeglichener Fluss',
+          desc: 'Stetige Harmonie zwischen dem Erfassen neuer Ideen und dem Voranbringen aktiver Aufgaben.',
+        },
+        discoveryCapture: {
+          title: 'Entdeckung & Erfassung',
+          desc: 'Aktive Erkundungsphase mit hoher Erfassung vor der Triage-Bereinigung.',
+        },
+        quietHorizon: {
+          title: 'Ruhiger Horizont',
+          desc: 'Zeitfenster mit geringer Aktivität. Raum für Planung, Reflexion oder Erholung.',
+        },
+      },
       emptyTitle: 'Keine Erfassungen in diesem Zeitraum',
       emptyBody_one:
         'Sparks, die während des gewählten {{count}}-Tages erfasst wurden, werden hier analysiert und geordnet.',
@@ -1838,6 +1870,9 @@ export const de = {
           'Kopieren in die Zwischenablage nicht möglich. Nutze stattdessen „.md-Datei herunterladen“.',
         copied: '📋 Markdown-Zusammenfassung in die Zwischenablage kopiert!',
         downloaded: '📥 {{filename}} heruntergeladen',
+        winsCopied: '📋 Erfolge des Zeitraums in die Zwischenablage kopiert!',
+        winsDownloaded: '📥 {{filename}} heruntergeladen',
+        winsCopyFailed: 'Erfolge konnten nicht kopiert werden. Bitte Herunterladen verwenden.',
       },
       md: {
         title: 'Sparkkeep Intelligence-Zusammenfassung',
@@ -1845,6 +1880,13 @@ export const de = {
         stats:
           '**Sparks insgesamt:** {{total}} | **Triage-Erledigung:** {{clearance}} % | **Wochenerfolge:** {{done}}',
         briefing: 'Management-Briefing',
+        wins: 'Erfolge des Zeitraums',
+        winsCount_one: '- {{count}} Karte als Zeitraum-Erfolg abgeschlossen.',
+        winsCount_few: '- {{count}} Karten als Zeitraum-Erfolge abgeschlossen.',
+        winsCount_other: '- {{count}} Karten als Zeitraum-Erfolge abgeschlossen.',
+        actionsCount_one: '- {{count}} Aktionsschritt ausgeführt.',
+        actionsCount_few: '- {{count}} Aktionsschritte ausgeführt.',
+        actionsCount_other: '- {{count}} Aktionsschritte ausgeführt.',
         captured_one: '- {{count}} Spark erfasst',
         captured_few: '- {{count}} Sparks erfasst',
         captured_other: '- {{count}} Sparks erfasst',

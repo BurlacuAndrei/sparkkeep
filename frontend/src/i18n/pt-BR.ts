@@ -1698,6 +1698,38 @@ export const ptBR = {
       actionsExecuted_one: 'etapa de ação executada',
       actionsExecuted_few: 'etapas de ação executadas',
       actionsExecuted_other: 'etapas de ação executadas',
+      exportWins: 'Exportar conquistas',
+      exportWinsTooltip: 'Exportar cartões concluídos e etapas de ação do período como Markdown',
+      winsExportTitle: 'Conquistas do período ({{range}})',
+      winsExportCompletedCards: 'Cartões concluídos',
+      winsExportActionSteps: 'Etapas de ação executadas',
+      winsExportTotalActions_one: 'Total: {{count}} etapa de ação executada',
+      winsExportTotalActions_few: 'Total: {{count}} etapas de ação executadas',
+      winsExportTotalActions_other: 'Total: {{count}} etapas de ação executadas',
+      newWinsBadge: 'novo',
+      momentumTitle: 'Pulso de impulso do período',
+      momentum: {
+        executionSurge: {
+          title: 'Surto de execução',
+          desc: 'Alta velocidade de conclusão com forte entrega de itens de ação e metas finalizadas.',
+        },
+        researchDeepDive: {
+          title: 'Aprofundamento de pesquisa',
+          desc: 'Profundidade investigativa expressiva, concluindo playbooks e gerando pareceres ricos.',
+        },
+        balancedFlow: {
+          title: 'Fluxo equilibrado',
+          desc: 'Harmonia estável entre capturar novas ideias e avançar no trabalho ativo.',
+        },
+        discoveryCapture: {
+          title: 'Descoberta e captura',
+          desc: 'Fase de exploração ativa com alta entrada de faíscas antes da limpeza da triagem.',
+        },
+        quietHorizon: {
+          title: 'Horizonte calmo',
+          desc: 'Janela de baixa atividade. Um espaço limpo para planejar, refletir ou descansar.',
+        },
+      },
       emptyTitle: 'Nenhuma captura nesta janela',
       emptyBody_one:
         'Os sparks capturados no {{count}} dia selecionado serão analisados e organizados aqui.',
@@ -1832,6 +1864,9 @@ export const ptBR = {
           'Não foi possível copiar para a área de transferência. Use Baixar arquivo .md.',
         copied: '📋 Resumo Markdown copiado para a área de transferência!',
         downloaded: '📥 {{filename}} baixado',
+        winsCopied: '📋 Conquistas do período copiadas para a área de transferência!',
+        winsDownloaded: '📥 Baixado {{filename}}',
+        winsCopyFailed: 'Não foi possível copiar as conquistas. Use a opção de download.',
       },
       md: {
         title: 'Resumo de inteligência do Sparkkeep',
@@ -1839,6 +1874,13 @@ export const ptBR = {
         stats:
           '**Total de sparks:** {{total}} | **Triagem concluída:** {{clearance}}% | **Vitórias concluídas:** {{done}}',
         briefing: 'Briefing executivo',
+        wins: 'Conquistas do período',
+        winsCount_one: '- {{count}} cartão concluído como conquista do período.',
+        winsCount_few: '- {{count}} cartões concluídos como conquistas do período.',
+        winsCount_other: '- {{count}} cartões concluídos como conquistas do período.',
+        actionsCount_one: '- {{count}} etapa de ação executada.',
+        actionsCount_few: '- {{count}} etapas de ação executadas.',
+        actionsCount_other: '- {{count}} etapas de ação executadas.',
         captured_one: '- {{count}} spark capturado',
         captured_few: '- {{count}} sparks capturados',
         captured_other: '- {{count}} sparks capturados',

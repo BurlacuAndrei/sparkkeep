@@ -1715,6 +1715,38 @@ export const es = {
       actionsExecuted_one: 'paso de acción ejecutado',
       actionsExecuted_few: 'pasos de acción ejecutados',
       actionsExecuted_other: 'pasos de acción ejecutados',
+      exportWins: 'Exportar logros',
+      exportWinsTooltip: 'Exportar tarjetas completadas y pasos de acción del período como Markdown',
+      winsExportTitle: 'Logros del período ({{range}})',
+      winsExportCompletedCards: 'Tarjetas completadas',
+      winsExportActionSteps: 'Pasos de acción ejecutados',
+      winsExportTotalActions_one: 'Total: {{count}} paso de acción ejecutado',
+      winsExportTotalActions_few: 'Total: {{count}} pasos de acción ejecutados',
+      winsExportTotalActions_other: 'Total: {{count}} pasos de acción ejecutados',
+      newWinsBadge: 'nuevo',
+      momentumTitle: 'Pulso de impulso del período',
+      momentum: {
+        executionSurge: {
+          title: 'Oleada de ejecución',
+          desc: 'Alta velocidad de resolución con fuerte cierre de acciones y resultados completados.',
+        },
+        researchDeepDive: {
+          title: 'Investigación profunda',
+          desc: 'Profundidad sustancial de análisis, concluyendo manuales y arrojando veredictos sólidos.',
+        },
+        balancedFlow: {
+          title: 'Flujo equilibrado',
+          desc: 'Armonía constante entre la captura de ideas entrantes y el avance del trabajo activo.',
+        },
+        discoveryCapture: {
+          title: 'Descubrimiento y captura',
+          desc: 'Fase de exploración activa con alta ingesta de chispas previa a la limpieza del triaje.',
+        },
+        quietHorizon: {
+          title: 'Horizonte tranquilo',
+          desc: 'Ventana de baja actividad. Un espacio claro para planificar, reflexionar o descansar.',
+        },
+      },
       emptyTitle: 'No hay capturas en esta ventana',
       emptyBody_one:
         'Las chispas capturadas durante el día seleccionado ({{count}} día) se analizarán y organizarán aquí.',
@@ -1848,6 +1880,9 @@ export const es = {
         copyFailed: 'No se pudo copiar en el portapapeles. Usa Descargar archivo .md en su lugar.',
         copied: '📋 ¡Resumen Markdown copiado en el portapapeles!',
         downloaded: '📥 Se descargó {{filename}}',
+        winsCopied: '📋 ¡Logros del período copiados al portapapeles!',
+        winsDownloaded: '📥 Descargado {{filename}}',
+        winsCopyFailed: 'No se pudieron copiar los logros al portapapeles. Usa la descarga en su lugar.',
       },
       md: {
         title: 'Resumen de inteligencia de Sparkkeep',
@@ -1855,6 +1890,13 @@ export const es = {
         stats:
           '**Chispas totales:** {{total}} | **Resolución del triaje:** {{clearance}} % | **Victorias completadas:** {{done}}',
         briefing: 'Resumen ejecutivo',
+        wins: 'Logros del período',
+        winsCount_one: '- {{count}} tarjeta completada como logro del período.',
+        winsCount_few: '- {{count}} tarjetas completadas como logros del período.',
+        winsCount_other: '- {{count}} tarjetas completadas como logros del período.',
+        actionsCount_one: '- {{count}} paso de acción ejecutado.',
+        actionsCount_few: '- {{count}} pasos de acción ejecutados.',
+        actionsCount_other: '- {{count}} pasos de acción ejecutados.',
         captured_one: '- Se capturó {{count}} chispa',
         captured_few: '- Se capturaron {{count}} chispas',
         captured_other: '- Se capturaron {{count}} chispas',

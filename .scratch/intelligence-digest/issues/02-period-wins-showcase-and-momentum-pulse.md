@@ -4,9 +4,9 @@
 
 **Blocked by:** 01: Dynamic Window Identity, Widescreen 3-Column Canvas & Accomplishment Telemetry
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Column 2 of the widescreen **Intelligence Digest** renders the **Period Wins Showcase** highlighting every card completed (`done`) in the active window with its Horizon, Card Type, and Research Verdict badges, a period-over-period win delta badge (comparing `weekly_wins.length` vs `prev_wins`), and a counter for total **Action Steps Executed** (`completed_actions_count`).
-- [ ] The **Period Momentum Pulse** banner deterministically computes and renders one of five localized, non-punitive states (*Execution Surge*, *Research Deep-Dive*, *Balanced Flow*, *Discovery & Capture*, or *Quiet Horizon*) from the window's clearance rate, completed cards, executed action steps, and research harvest.
-- [ ] A 1-click **Export Wins** button in the **Period Wins Showcase** copies (or downloads when clipboard is unavailable) a formatted Markdown summary of the period's completed cards and executed action steps, and full Digest Markdown exports and omnichannel pushes include the Period Wins section.
-- [ ] All strings and states are localized across all 8 Interface Locales (`en`, `ro`, `ru`, `de`, `es`, `fr`, `it`, `zh`) and verified via top-level component and unit tests.
+- [x] Column 2 of the widescreen **Intelligence Digest** renders the **Period Wins Showcase** highlighting every card completed (`done`) in the active window with its Horizon, Card Type, and Research Verdict badges, a period-over-period win delta badge (comparing `weekly_wins.length` vs `prev_wins`), and a counter for total **Action Steps Executed** (`completed_actions_count`).
+- [x] The **Period Momentum Pulse** banner deterministically computes and renders one of five localized, non-punitive states (*Execution Surge*, *Research Deep-Dive*, *Balanced Flow*, *Discovery & Capture*, or *Quiet Horizon*) from the window's clearance rate, completed cards, executed action steps, and research harvest.
+- [x] A 1-click **Export Wins** button in the **Period Wins Showcase** copies (or downloads when clipboard is unavailable) a formatted Markdown summary of the period's completed cards and executed action steps, and full Digest Markdown exports and omnichannel pushes include the Period Wins section.
+- [x] All strings and states are localized across all 6 Interface Locales (`en`, `de`, `es`, `fr`, `pt-BR`, `ro`) and verified via top-level component and unit tests.

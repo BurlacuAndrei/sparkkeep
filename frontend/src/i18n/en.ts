@@ -1680,6 +1680,38 @@ export const en = {
       actionsExecuted_one: 'action step executed',
       actionsExecuted_few: 'action steps executed',
       actionsExecuted_other: 'action steps executed',
+      exportWins: 'Export Wins',
+      exportWinsTooltip: 'Export period completed cards and action steps as Markdown',
+      winsExportTitle: 'Period Wins ({{range}})',
+      winsExportCompletedCards: 'Completed Cards',
+      winsExportActionSteps: 'Executed Action Steps',
+      winsExportTotalActions_one: 'Total: {{count}} action step executed',
+      winsExportTotalActions_few: 'Total: {{count}} action steps executed',
+      winsExportTotalActions_other: 'Total: {{count}} action steps executed',
+      newWinsBadge: 'new',
+      momentumTitle: 'Period Momentum Pulse',
+      momentum: {
+        executionSurge: {
+          title: 'Execution Surge',
+          desc: 'High clearance velocity with strong closure of action items and completed outcomes.',
+        },
+        researchDeepDive: {
+          title: 'Research Deep-Dive',
+          desc: 'Substantial investigative depth, concluding playbooks and surfacing rich verdicts.',
+        },
+        balancedFlow: {
+          title: 'Balanced Flow',
+          desc: 'Steady harmony between capturing incoming ideas and progressing active work.',
+        },
+        discoveryCapture: {
+          title: 'Discovery & Capture',
+          desc: 'Active exploration phase with high spark ingestion ahead of triage clearance.',
+        },
+        quietHorizon: {
+          title: 'Quiet Horizon',
+          desc: 'Low activity window. A clear space for planning, reflection, or rest.',
+        },
+      },
       emptyTitle: 'No captures in this window',
       emptyBody_one:
         'Sparks captured during the selected {{count}} day will be analyzed and organized here.',
@@ -1813,6 +1845,9 @@ export const en = {
         copyFailed: 'Could not copy to clipboard. Use Download .md file instead.',
         copied: '📋 Markdown digest copied to clipboard!',
         downloaded: '📥 Downloaded {{filename}}',
+        winsCopied: '📋 Period wins copied to clipboard!',
+        winsDownloaded: '📥 Downloaded {{filename}}',
+        winsCopyFailed: 'Could not copy wins to clipboard. Use Download instead.',
       },
       md: {
         title: 'Sparkkeep Intelligence Digest',
@@ -1820,6 +1855,13 @@ export const en = {
         stats:
           '**Total Sparks:** {{total}} | **Triage Clearance:** {{clearance}}% | **Completed Wins:** {{done}}',
         briefing: 'Executive Briefing',
+        wins: 'Period Wins',
+        winsCount_one: '- {{count}} card completed as period win.',
+        winsCount_few: '- {{count}} cards completed as period wins.',
+        winsCount_other: '- {{count}} cards completed as period wins.',
+        actionsCount_one: '- {{count}} action step executed.',
+        actionsCount_few: '- {{count}} action steps executed.',
+        actionsCount_other: '- {{count}} action steps executed.',
         captured_one: '- Captured {{count}} spark',
         captured_few: '- Captured {{count}} sparks',
         captured_other: '- Captured {{count}} sparks',

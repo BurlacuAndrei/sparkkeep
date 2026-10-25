@@ -26,6 +26,8 @@ import { useLocale } from '../i18n';
 import type { Locale } from '../i18n';
 import { enumLabel, horizonLabel, cardTypeLabel } from '../utils/cardEnumLabels';
 import { isClipboardAvailable, downloadMarkdown } from '../utils/exportUtils';
+import { computeMomentumPulse } from '../utils/momentumPulse';
+import type { MomentumPulseState } from '../utils/momentumPulse';
 import '../styles/digest-brief.css';
 
 const COUNT_MARKER = '\u0000count\u0000';
@@ -244,6 +246,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
   const totalSparks = digest?.week_total || 0;
   const decidedCount = Math.max(0, totalSparks - inboxCount);
   const clearanceRate = totalSparks > 0 ? Math.round((decidedCount / totalSparks) * 100) : 100;
+  const winsCount = digest?.weekly_wins ? digest.weekly_wins.length : doneCount;
 
   // Horizon breakdown
   const byHorizon = digest?.by_horizon || {};
@@ -262,6 +265,57 @@ export const DigestView: React.FC<DigestViewProps> = ({
     }
     return allCards.filter((c) => Boolean(c.research_verdict) || c.research_state === 'done');
   }, [digest, allCards]);
+
+  const momentumState = useMemo(() => {
+    return computeMomentumPulse({
+      totalSparks,
+      clearanceRate,
+      doneCount: winsCount,
+      completedActionsCount: digest?.completed_actions_count || 0,
+      researchHarvestCount: researchHarvest.length,
+    });
+  }, [totalSparks, clearanceRate, winsCount, digest?.completed_actions_count, researchHarvest.length]);
+
+  const getMomentumPulseConfig = (state: MomentumPulseState) => {
+    switch (state) {
+      case 'execution_surge':
+        return {
+          icon: <Zap size={14} className="momentum-pulse-icon" />,
+          title: t('research.digest.momentum.executionSurge.title'),
+          desc: t('research.digest.momentum.executionSurge.desc'),
+          className: 'momentum-execution-surge',
+        };
+      case 'research_deep_dive':
+        return {
+          icon: <Sparkles size={14} className="momentum-pulse-icon" />,
+          title: t('research.digest.momentum.researchDeepDive.title'),
+          desc: t('research.digest.momentum.researchDeepDive.desc'),
+          className: 'momentum-research-deep-dive',
+        };
+      case 'balanced_flow':
+        return {
+          icon: <TrendingUp size={14} className="momentum-pulse-icon" />,
+          title: t('research.digest.momentum.balancedFlow.title'),
+          desc: t('research.digest.momentum.balancedFlow.desc'),
+          className: 'momentum-balanced-flow',
+        };
+      case 'discovery_capture':
+        return {
+          icon: <Compass size={14} className="momentum-pulse-icon" />,
+          title: t('research.digest.momentum.discoveryCapture.title'),
+          desc: t('research.digest.momentum.discoveryCapture.desc'),
+          className: 'momentum-discovery-capture',
+        };
+      case 'quiet_horizon':
+      default:
+        return {
+          icon: <Calendar size={14} className="momentum-pulse-icon" />,
+          title: t('research.digest.momentum.quietHorizon.title'),
+          desc: t('research.digest.momentum.quietHorizon.desc'),
+          className: 'momentum-quiet-horizon',
+        };
+    }
+  };
 
   // Handle LLM Synthesis
   const handleSynthesize = async () => {
@@ -532,7 +586,112 @@ export const DigestView: React.FC<DigestViewProps> = ({
       mdLines.push('');
     }
 
+    // Period Wins
+    const wins = digest?.weekly_wins || [];
+    if (wins.length > 0) {
+      mdLines.push(`## 🏆 ${t('research.digest.md.wins')}`);
+      mdLines.push(tp('research.digest.md.winsCount', wins.length));
+      if (digest?.completed_actions_count) {
+        mdLines.push(tp('research.digest.md.actionsCount', digest.completed_actions_count));
+      }
+      mdLines.push('');
+      for (const card of wins) {
+        const horizon = horizonLabel(card.horizon, t);
+        const type = card.type ? ` [${cardTypeLabel(t, card.type)}]` : '';
+        const verdict = card.research_verdict ? ` • ${enumLabel(t, 'verdict', card.research_verdict)}` : '';
+        mdLines.push(`- **${card.title}** (${horizon}${type}${verdict})`);
+        if (card.completed_actions && card.completed_actions.length > 0) {
+          for (const action of card.completed_actions) {
+            mdLines.push(`  - [x] ${action}`);
+          }
+        }
+      }
+      mdLines.push('');
+    }
+
     return mdLines.join('\n');
+  };
+
+  const buildWinsMarkdown = (): string => {
+    const mdLines: string[] = [];
+    const wins = digest?.weekly_wins || [];
+    const actionsCount = digest?.completed_actions_count || 0;
+
+    mdLines.push(`# 🏆 ${t('research.digest.winsExportTitle', { range: formatDateRange(windowDays, locale) })}`);
+    mdLines.push('');
+    mdLines.push(tp('research.digest.md.winsCount', wins.length));
+    if (actionsCount > 0) {
+      mdLines.push(tp('research.digest.md.actionsCount', actionsCount));
+    }
+    mdLines.push('');
+
+    mdLines.push(`## ${t('research.digest.winsExportCompletedCards')}`);
+    if (wins.length === 0) {
+      mdLines.push(t('research.digest.winsEmpty'));
+    } else {
+      for (const card of wins) {
+        const horizon = horizonLabel(card.horizon, t);
+        const type = card.type ? ` [${cardTypeLabel(t, card.type)}]` : '';
+        const verdict = card.research_verdict ? ` • ${enumLabel(t, 'verdict', card.research_verdict)}` : '';
+        mdLines.push(`- **${card.title}** (${horizon}${type}${verdict})`);
+        if (card.completed_actions && card.completed_actions.length > 0) {
+          for (const action of card.completed_actions) {
+            mdLines.push(`  - [x] ${action}`);
+          }
+        }
+      }
+    }
+    mdLines.push('');
+
+    if (actionsCount > 0) {
+      mdLines.push(`## ${t('research.digest.winsExportActionSteps')}`);
+      mdLines.push(tp('research.digest.winsExportTotalActions', actionsCount));
+      mdLines.push('');
+    }
+
+    return mdLines.join('\n');
+  };
+
+  const handleExportWins = () => {
+    const markdown = buildWinsMarkdown();
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - windowDays);
+    const filename = `sparkkeep-wins-${toIsoDate(start)}_to_${toIsoDate(end)}.md`;
+
+    const onCopySuccess = () => {
+      showToast?.(t('research.digest.toasts.winsCopied'));
+    };
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function' && window.isSecureContext) {
+      try {
+        navigator.clipboard
+          .writeText(markdown)
+          .then(onCopySuccess)
+          .catch(() => {
+            if (copyViaHiddenTextarea(markdown)) {
+              onCopySuccess();
+            } else {
+              downloadMarkdown(markdown, filename);
+              showToast?.(t('research.digest.toasts.winsDownloaded', { filename }));
+            }
+          });
+      } catch {
+        if (copyViaHiddenTextarea(markdown)) {
+          onCopySuccess();
+        } else {
+          downloadMarkdown(markdown, filename);
+          showToast?.(t('research.digest.toasts.winsDownloaded', { filename }));
+        }
+      }
+    } else {
+      if (copyViaHiddenTextarea(markdown)) {
+        onCopySuccess();
+      } else {
+        downloadMarkdown(markdown, filename);
+        showToast?.(t('research.digest.toasts.winsDownloaded', { filename }));
+      }
+    }
   };
 
   const COPY_FAILED_TOAST = t('research.digest.toasts.copyFailed');
@@ -1122,26 +1281,62 @@ export const DigestView: React.FC<DigestViewProps> = ({
         {/* Column 2: Period Wins Showcase */}
         <div className="digest-grid-col">
           <div className="digest-side-card digest-wins-showcase">
-            <div className="digest-section-title" style={{ marginBottom: 12 }}>
-              <CheckCircle2 size={16} color="#34d399" />
-              <span>{t('research.digest.winsTitle')}</span>
+            <div className="digest-wins-header-row">
+              <div className="digest-section-title">
+                <CheckCircle2 size={16} color="#34d399" />
+                <span>{t('research.digest.winsTitle')}</span>
+              </div>
+
+              <button
+                type="button"
+                className="digest-btn-export-wins"
+                onClick={handleExportWins}
+                title={t('research.digest.exportWinsTooltip')}
+              >
+                <Copy size={12} />
+                <span>{t('research.digest.exportWins')}</span>
+              </button>
             </div>
+
+            {/* Period Momentum Pulse Banner */}
+            {(() => {
+              const pulse = getMomentumPulseConfig(momentumState);
+              return (
+                <div
+                  className={`digest-momentum-banner ${pulse.className}`}
+                  role="status"
+                  aria-label={pulse.title}
+                >
+                  <div className="digest-momentum-header">
+                    <span className="digest-momentum-indicator">
+                      {pulse.icon}
+                    </span>
+                    <span className="digest-momentum-title">{pulse.title}</span>
+                  </div>
+                  <p className="digest-momentum-desc">{pulse.desc}</p>
+                </div>
+              );
+            })()}
 
             <div className="digest-wins-summary-row">
               <div className="digest-wins-stat">
-                <span className="digest-wins-count">{doneCount}</span>
+                <span className="digest-wins-count">{winsCount}</span>
                 <span className="digest-wins-label">{t('research.digest.winsClosed')}</span>
               </div>
-              {digest.prev_wins !== undefined && (
+              {digest.prev_wins !== undefined ? (
                 <span
                   className={`digest-kpi-badge ${
-                    doneCount - digest.prev_wins >= 0 ? 'digest-kpi-badge-green' : 'digest-kpi-badge-cyan'
+                    winsCount - digest.prev_wins >= 0 ? 'digest-kpi-badge-green' : 'digest-kpi-badge-cyan'
                   }`}
                 >
-                  {doneCount - digest.prev_wins >= 0
-                    ? `+${doneCount - digest.prev_wins}`
-                    : `${doneCount - digest.prev_wins}`}{' '}
+                  {winsCount - digest.prev_wins >= 0
+                    ? `+${winsCount - digest.prev_wins}`
+                    : `${winsCount - digest.prev_wins}`}{' '}
                   {t('research.digest.vsPrior', { window: `${windowDays}d` })}
+                </span>
+              ) : (
+                <span className="digest-kpi-badge digest-kpi-badge-green">
+                  {t('research.digest.newWinsBadge')}
                 </span>
               )}
             </div>

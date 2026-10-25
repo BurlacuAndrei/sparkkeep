@@ -1697,6 +1697,38 @@ export const ro = {
       actionsExecuted_one: 'pas de acțiune executat',
       actionsExecuted_few: 'pași de acțiune executați',
       actionsExecuted_other: 'de pași de acțiune executați',
+      exportWins: 'Exportă reușite',
+      exportWinsTooltip: 'Exportă cardurile finalizate și pașii de acțiune ai perioadei ca Markdown',
+      winsExportTitle: 'Reușite din perioadă ({{range}})',
+      winsExportCompletedCards: 'Carduri finalizate',
+      winsExportActionSteps: 'Pași de acțiune executați',
+      winsExportTotalActions_one: 'Total: {{count}} pas de acțiune executat',
+      winsExportTotalActions_few: 'Total: {{count}} pași de acțiune executați',
+      winsExportTotalActions_other: 'Total: {{count}} de pași de acțiune executați',
+      newWinsBadge: 'nou',
+      momentumTitle: 'Pulsul de ritm al perioadei',
+      momentum: {
+        executionSurge: {
+          title: 'Val de execuție',
+          desc: 'Viteză ridicată de finalizare cu încheiere puternică a pașilor de acțiune și livrabilelor.',
+        },
+        researchDeepDive: {
+          title: 'Cercetare aprofundată',
+          desc: 'Profunzime investigativă substanțială, finalizând playbook-uri și aducând verdicte clare.',
+        },
+        balancedFlow: {
+          title: 'Flux echilibrat',
+          desc: 'Armonie constantă între captarea ideilor noi și avansarea sarcinilor active.',
+        },
+        discoveryCapture: {
+          title: 'Descoperire și captare',
+          desc: 'Etapă de explorare activă cu ingestie bogată de scântei înainte de triere.',
+        },
+        quietHorizon: {
+          title: 'Orizont liniștit',
+          desc: 'Interval cu activitate redusă. Spațiu optim pentru planificare, reflecție sau odihnă.',
+        },
+      },
       emptyTitle: 'Nicio captură în această perioadă',
       emptyBody_one:
         'Scânteile capturate în perioada de {{count}} zi vor fi analizate și organizate aici.',
@@ -1830,6 +1862,9 @@ export const ro = {
         copyFailed: 'Copierea în clipboard a eșuat. Folosește descărcarea fișierului .md.',
         copied: '📋 Rezumatul Markdown a fost copiat în clipboard!',
         downloaded: '📥 Descărcat {{filename}}',
+        winsCopied: '📋 Reușitele din perioadă au fost copiate în clipboard!',
+        winsDownloaded: '📥 S-a descărcat {{filename}}',
+        winsCopyFailed: 'Reușitele nu au putut fi copiate în clipboard. Folosește descărcarea.',
       },
       md: {
         title: 'Rezumat de inteligență Sparkkeep',
@@ -1837,6 +1872,13 @@ export const ro = {
         stats:
           '**Total scântei:** {{total}} | **Curățare triaj:** {{clearance}}% | **Câștiguri finalizate:** {{done}}',
         briefing: 'Briefing executiv',
+        wins: 'Reușite din perioadă',
+        winsCount_one: '- {{count}} card finalizat ca reușită din perioadă.',
+        winsCount_few: '- {{count}} carduri finalizate ca reușite din perioadă.',
+        winsCount_other: '- {{count}} de carduri finalizate ca reușite din perioadă.',
+        actionsCount_one: '- {{count}} pas de acțiune executat.',
+        actionsCount_few: '- {{count}} pași de acțiune executați.',
+        actionsCount_other: '- {{count}} de pași de acțiune executați.',
         captured_one: '- Capturată {{count}} scânteie',
         captured_few: '- Capturate {{count}} scântei',
         captured_other: '- Capturate {{count}} de scântei',

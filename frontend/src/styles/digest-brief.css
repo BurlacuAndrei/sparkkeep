@@ -619,6 +619,125 @@
   gap: 14px;
 }
 
+.digest-wins-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.digest-btn-export-wins {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.digest-btn-export-wins:hover {
+  background: var(--bg-item-hover);
+  border-color: var(--border-hover);
+  color: var(--text-main);
+}
+
+.digest-momentum-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-elevated);
+  transition: all var(--transition-fast);
+}
+
+.digest-momentum-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.digest-momentum-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.digest-momentum-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.digest-momentum-desc {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.momentum-execution-surge {
+  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+.momentum-execution-surge .digest-momentum-indicator {
+  color: #34d399;
+}
+.momentum-execution-surge .digest-momentum-title {
+  color: #34d399;
+}
+
+.momentum-research-deep-dive {
+  background: rgba(192, 132, 252, 0.08);
+  border-color: rgba(192, 132, 252, 0.3);
+}
+.momentum-research-deep-dive .digest-momentum-indicator {
+  color: #c084fc;
+}
+.momentum-research-deep-dive .digest-momentum-title {
+  color: #c084fc;
+}
+
+.momentum-balanced-flow {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+.momentum-balanced-flow .digest-momentum-indicator {
+  color: #38bdf8;
+}
+.momentum-balanced-flow .digest-momentum-title {
+  color: #38bdf8;
+}
+
+.momentum-discovery-capture {
+  background: rgba(129, 140, 248, 0.08);
+  border-color: rgba(129, 140, 248, 0.3);
+}
+.momentum-discovery-capture .digest-momentum-indicator {
+  color: #818cf8;
+}
+.momentum-discovery-capture .digest-momentum-title {
+  color: #818cf8;
+}
+
+.momentum-quiet-horizon {
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+.momentum-quiet-horizon .digest-momentum-indicator {
+  color: #94a3b8;
+}
+.momentum-quiet-horizon .digest-momentum-title {
+  color: #94a3b8;
+}
+
 .digest-wins-summary-row {
   display: flex;
   align-items: center;

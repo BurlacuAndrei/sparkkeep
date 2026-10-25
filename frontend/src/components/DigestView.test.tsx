@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DigestView } from './DigestView';
+import { computeMomentumPulse } from '../utils/momentumPulse';
 import { LocaleProvider } from '../i18n';
 import { ThemeProvider } from '../context/ThemeContext';
 import { CardActionsProvider } from '../context/CardActionsContext';
@@ -703,7 +704,7 @@ describe('DigestView', () => {
     });
   });
 
-  it('renders Period Wins Showcase with won cards, executed action steps, and win delta', async () => {
+  it('renders Period Wins Showcase with won cards, rich badges, executed action steps, and win delta', async () => {
     const populatedWithWins: DigestData = {
       ...mockPopulatedDigest,
       weekly_wins: [
@@ -732,6 +733,324 @@ describe('DigestView', () => {
     expect(screen.getByText('Complete Feature Spec')).toBeDefined();
     expect(screen.getByText(/action steps executed/i)).toBeDefined();
     expect(screen.getByText(/\+1 vs prior 7d/i)).toBeDefined();
+    expect(screen.getByText('Short-term')).toBeDefined();
+    expect(screen.getAllByText(/Pursue/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  describe('computeMomentumPulse', () => {
+    it('evaluates Execution Surge when doneCount >= 3 or clearance and actions are high', () => {
+      expect(
+        computeMomentumPulse({
+          totalSparks: 5,
+          clearanceRate: 80,
+          doneCount: 3,
+          completedActionsCount: 1,
+          researchHarvestCount: 1,
+        })
+      ).toBe('execution_surge');
+
+      expect(
+        computeMomentumPulse({
+          totalSparks: 5,
+          clearanceRate: 75,
+          doneCount: 2,
+          completedActionsCount: 3,
+          researchHarvestCount: 1,
+        })
+      ).toBe('execution_surge');
+    });
+
+    it('evaluates Research Deep-Dive when research harvest is high and exceeds done count', () => {
+      expect(
+        computeMomentumPulse({
+          totalSparks: 5,
+          clearanceRate: 50,
+          doneCount: 1,
+          completedActionsCount: 0,
+          researchHarvestCount: 3,
+        })
+      ).toBe('research_deep_dive');
+    });
+
+    it('evaluates Balanced Flow when clearance >= 60 and progress is made', () => {
+      expect(
+        computeMomentumPulse({
+          totalSparks: 5,
+          clearanceRate: 65,
+          doneCount: 1,
+          completedActionsCount: 0,
+          researchHarvestCount: 0,
+        })
+      ).toBe('balanced_flow');
+    });
+
+    it('evaluates Discovery & Capture when incoming sparks are high relative to clearance', () => {
+      expect(
+        computeMomentumPulse({
+          totalSparks: 6,
+          clearanceRate: 40,
+          doneCount: 0,
+          completedActionsCount: 0,
+          researchHarvestCount: 0,
+        })
+      ).toBe('discovery_capture');
+    });
+
+    it('evaluates Quiet Horizon when no activity occurred', () => {
+      expect(
+        computeMomentumPulse({
+          totalSparks: 0,
+          clearanceRate: 100,
+          doneCount: 0,
+          completedActionsCount: 0,
+          researchHarvestCount: 0,
+        })
+      ).toBe('quiet_horizon');
+    });
+  });
+
+  it('renders Period Momentum Pulse banner with role status and localized text', async () => {
+    const surgeDigest: DigestData = {
+      ...mockPopulatedDigest,
+      week_total: 5,
+      by_status: { inbox: 1, done: 4 },
+      weekly_wins: [
+        { id: 1, title: 'Win 1', status: 'done', horizon: 'short-term' } as unknown as Card,
+        { id: 2, title: 'Win 2', status: 'done', horizon: 'short-term' } as unknown as Card,
+        { id: 3, title: 'Win 3', status: 'done', horizon: 'short-term' } as unknown as Card,
+      ],
+      completed_actions_count: 3,
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={surgeDigest} {...dummyProps} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    const banner = screen.getByRole('status', { name: /Execution Surge/i });
+    expect(banner).toBeDefined();
+    expect(banner.className).toContain('momentum-execution-surge');
+    expect(screen.getByText(/High clearance velocity with strong closure/i)).toBeDefined();
+  });
+
+  it('copies Period Wins markdown summary to clipboard via 1-click Export Wins button', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText, true);
+    const showToast = vi.fn();
+
+    const populatedWithWins: DigestData = {
+      ...mockPopulatedDigest,
+      weekly_wins: [
+        {
+          id: 301,
+          title: 'Complete Feature Spec',
+          status: 'done',
+          horizon: 'short-term',
+          type: 'architecture',
+          research_verdict: 'pursue',
+          completed_actions: ['Write spec', 'Define API'],
+        } as unknown as Card,
+      ],
+      completed_actions_count: 2,
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={populatedWithWins} {...dummyProps} showToast={showToast} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    const exportWinsBtn = screen.getByRole('button', { name: /Export Wins/i });
+    expect(exportWinsBtn).toBeDefined();
+
+    fireEvent.click(exportWinsBtn);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+
+    const copiedMd = writeText.mock.calls[0][0] as string;
+    expect(copiedMd).toContain('# 🏆 Period Wins');
+    expect(copiedMd).toContain('Complete Feature Spec');
+    expect(copiedMd).toContain('[x] Write spec');
+    expect(copiedMd).toContain('[x] Define API');
+    expect(copiedMd).toContain('Executed Action Steps');
+    expect(showToast).toHaveBeenCalledWith('📋 Period wins copied to clipboard!');
+  });
+
+  it('falls back to downloading markdown when clipboard is unavailable for Export Wins', async () => {
+    stubClipboard(vi.fn(), false);
+    const showToast = vi.fn();
+
+    const populatedWithWins: DigestData = {
+      ...mockPopulatedDigest,
+      weekly_wins: [
+        {
+          id: 301,
+          title: 'Feature Shipped',
+          status: 'done',
+          horizon: 'short-term',
+        } as unknown as Card,
+      ],
+      completed_actions_count: 1,
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={populatedWithWins} {...dummyProps} showToast={showToast} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    const exportWinsBtn = screen.getByRole('button', { name: /Export Wins/i });
+    fireEvent.click(exportWinsBtn);
+
+    await waitFor(() => {
+      expect(downloads.length).toBe(1);
+    });
+    expect(downloads[0]).toMatch(/^sparkkeep-wins-.*\.md$/);
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Downloaded sparkkeep-wins-'));
+  });
+
+  it('uses hidden textarea fallback when clipboard.writeText rejects', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('Permission denied'));
+    stubClipboard(writeText, true);
+    const execCommand = vi.fn().mockReturnValue(true);
+    (document as unknown as Record<string, unknown>).execCommand = execCommand;
+    const showToast = vi.fn();
+
+    const populatedWithWins: DigestData = {
+      ...mockPopulatedDigest,
+      weekly_wins: [
+        { id: 301, title: 'Fallback Win', status: 'done', horizon: 'short-term' } as unknown as Card,
+      ],
+      completed_actions_count: 0,
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={populatedWithWins} {...dummyProps} showToast={showToast} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    const exportWinsBtn = screen.getByRole('button', { name: /Export Wins/i });
+    fireEvent.click(exportWinsBtn);
+
+    await waitFor(() => {
+      expect(execCommand).toHaveBeenCalledWith('copy');
+      expect(showToast).toHaveBeenCalledWith('📋 Period wins copied to clipboard!');
+    });
+    delete (document as unknown as Record<string, unknown>).execCommand;
+  });
+
+  it('downloads wins markdown when both clipboard.writeText and execCommand fail', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('Permission denied'));
+    stubClipboard(writeText, true);
+    const execCommand = vi.fn().mockReturnValue(false);
+    (document as unknown as Record<string, unknown>).execCommand = execCommand;
+    const showToast = vi.fn();
+
+    const populatedWithWins: DigestData = {
+      ...mockPopulatedDigest,
+      weekly_wins: [
+        { id: 301, title: 'Download Win', status: 'done', horizon: 'short-term' } as unknown as Card,
+      ],
+      completed_actions_count: 0,
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={populatedWithWins} {...dummyProps} showToast={showToast} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    const exportWinsBtn = screen.getByRole('button', { name: /Export Wins/i });
+    fireEvent.click(exportWinsBtn);
+
+    await waitFor(() => {
+      expect(downloads.length).toBe(1);
+      expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Downloaded sparkkeep-wins-'));
+    });
+    delete (document as unknown as Record<string, unknown>).execCommand;
+  });
+
+  it('exports empty wins section gracefully when 0 wins are present', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText, true);
+    const showToast = vi.fn();
+
+    const emptyWinsDigest: DigestData = {
+      ...mockPopulatedDigest,
+      weekly_wins: [],
+      completed_actions_count: 0,
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={emptyWinsDigest} {...dummyProps} showToast={showToast} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    const exportWinsBtn = screen.getByRole('button', { name: /Export Wins/i });
+    fireEvent.click(exportWinsBtn);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+    const copiedMd = writeText.mock.calls[0][0] as string;
+    expect(copiedMd).toContain('# 🏆 Period Wins');
+    expect(copiedMd).toContain('No cards completed in this period yet.');
+    expect(showToast).toHaveBeenCalledWith('📋 Period wins copied to clipboard!');
+  });
+
+  it('includes Period Wins section in full digest markdown export', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText, true);
+
+    const populatedWithWins: DigestData = {
+      ...mockPopulatedDigest,
+      weekly_wins: [
+        {
+          id: 301,
+          title: 'Period Accomplishment Card',
+          status: 'done',
+          horizon: 'short-term',
+          type: 'architecture',
+          completed_actions: ['First step completed'],
+        } as unknown as Card,
+      ],
+      completed_actions_count: 1,
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={populatedWithWins} {...dummyProps} showToast={vi.fn()} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Export Markdown/i }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+    const markdown = writeText.mock.calls[0][0] as string;
+    expect(markdown).toContain('## 🏆 Period Wins');
+    expect(markdown).toContain('Period Accomplishment Card');
+    expect(markdown).toContain('[x] First step completed');
   });
 
   it('toggles Day-by-Day Activity Timeline inside collapsible lower deck', async () => {
