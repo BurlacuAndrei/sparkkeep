@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"sparkkeep/internal/capture"
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -210,5 +211,71 @@ func TestDiscordHandleCaptureNoiseGateDiscard(t *testing.T) {
 	expectedFilterMsg := "🚫 Filtered: Discarded engagement bait / promotional hype with zero technical substance."
 	if sentText != expectedFilterMsg {
 		t.Errorf("sentText = %q, want %q", sentText, expectedFilterMsg)
+	}
+}
+
+func TestDiscordLocalizedButtonsAndFields(t *testing.T) {
+	locales := []string{"en", "ro", "es", "pt-BR", "fr", "de"}
+
+	for _, loc := range locales {
+		b := i18n.GetButtons(loc)
+		m := i18n.GetMessages(loc)
+
+		adapter := New(Config{
+			BotToken:  "test-token",
+			ChannelID: "123",
+			Locale:    loc,
+		}, nil, "http://localhost:8080", nil)
+
+		btns := ActionButtons(42, loc)
+		if len(btns) != 2 {
+			t.Fatalf("[%s] expected 2 action rows, got %d", loc, len(btns))
+		}
+		// First row: Research, Playbook
+		row1 := btns[0].Components
+		if len(row1) != 2 || row1[0].Label != b.Research || row1[1].Label != b.Playbook {
+			t.Errorf("[%s] row 1 button labels mismatch: %+v", loc, row1)
+		}
+		if row1[0].CustomID != "research:42" || row1[1].CustomID != "pb:42" {
+			t.Errorf("[%s] row 1 canonical prefixes mismatch: %+v", loc, row1)
+		}
+
+		// Second row: Do, Keep, Shelve, Dismiss
+		row2 := btns[1].Components
+		if len(row2) != 4 || row2[0].Label != b.Do || row2[1].Label != b.Keep || row2[2].Label != b.Shelve || row2[3].Label != b.Dismiss {
+			t.Errorf("[%s] row 2 button labels mismatch: %+v", loc, row2)
+		}
+		if row2[0].CustomID != "do:42" || row2[1].CustomID != "keep:42" || row2[2].CustomID != "shelve:42" || row2[3].CustomID != "dismiss:42" {
+			t.Errorf("[%s] row 2 canonical prefixes mismatch: %+v", loc, row2)
+		}
+
+		// Message embed field labels
+		card := port.Card{
+			ID:      42,
+			Title:   "Card Title",
+			Summary: "Summary text",
+			Horizon: port.HorizonShortTerm,
+			Tags:    []string{"tag1"},
+		}
+		msg := adapter.buildMessagePayload(context.Background(), port.Notification{Kind: "created", Card: card})
+		if len(msg.Embeds) == 0 {
+			t.Fatalf("[%s] expected embed in message", loc)
+		}
+		embed := msg.Embeds[0]
+		var foundHorizon, foundTags bool
+		for _, f := range embed.Fields {
+			if f.Name == m.Horizon {
+				foundHorizon = true
+			}
+			if f.Name == m.Tags {
+				foundTags = true
+			}
+		}
+		if !foundHorizon {
+			t.Errorf("[%s] expected Horizon field name %q", loc, m.Horizon)
+		}
+		if !foundTags {
+			t.Errorf("[%s] expected Tags field name %q", loc, m.Tags)
+		}
 	}
 }

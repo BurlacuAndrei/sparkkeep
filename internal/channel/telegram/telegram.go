@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"sparkkeep/internal/capture"
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -61,6 +62,7 @@ type Adapter struct {
 	Token     string
 	OwnerID   int64 // configured TG_CHAT_ID; everyone else is ignored
 	PublicURL string
+	Locale    string
 	Service   Service
 	Logf      func(format string, args ...any)
 
@@ -94,6 +96,22 @@ type mediaGroupBuffer struct {
 	messages []*message
 	timer    *time.Timer
 	firstMsg *message
+}
+
+func (a *Adapter) locale(ctx context.Context) string {
+	if a.Locale != "" {
+		return a.Locale
+	}
+	if a.Service != nil {
+		if loc, err := a.Service.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+			return strings.TrimSpace(loc)
+		}
+	}
+	return "en"
+}
+
+func (a *Adapter) helpText(ctx context.Context) string {
+	return i18n.GetMessages(a.locale(ctx)).HelpText
 }
 
 // ID implements port.ChannelAdapter.
@@ -237,18 +255,20 @@ func (p *placeholderState) claim() (int64, int64, bool) {
 // Notify implements port.Channel: kind → message shape.
 func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
 	state, _ := ctx.Value(placeholderContextKey{}).(*placeholderState)
+	loc := a.locale(ctx)
 	switch n.Kind {
 	case "created":
 		if state != nil {
 			if chatID, msgID, ok := state.claim(); ok {
-				return a.editMessageText(ctx, chatID, msgID, cardCaption(n.Card), n.Card.ID, cardButtons(n.Card.ID, false))
+				return a.editMessageText(ctx, chatID, msgID, cardCaption(n.Card, loc), n.Card.ID, cardButtons(n.Card.ID, false, loc))
 			}
 		}
 		return a.sendCard(ctx, n.Card)
 	case "analysis_failed":
+		m := i18n.GetMessages(loc)
 		if state != nil {
 			if chatID, msgID, ok := state.claim(); ok {
-				return a.editMessageText(ctx, chatID, msgID, "Analysis failed", n.Card.ID, cardButtons(n.Card.ID, true))
+				return a.editMessageText(ctx, chatID, msgID, m.AnalysisFailed, n.Card.ID, cardButtons(n.Card.ID, true, loc))
 			}
 		}
 		return a.sendFailed(ctx, n.Card)
@@ -451,7 +471,8 @@ func (a *Adapter) sendMessageReply(ctx context.Context, text string, replyTo int
 
 // sendCard renders a created card as caption text + the four action buttons.
 func (a *Adapter) sendCard(ctx context.Context, c port.Card) error {
-	_, err := a.sendMessage(ctx, cardCaption(c), c.ID, cardButtons(c.ID, false))
+	loc := a.locale(ctx)
+	_, err := a.sendMessage(ctx, cardCaption(c, loc), c.ID, cardButtons(c.ID, false, loc))
 	return err
 }
 
@@ -468,7 +489,13 @@ func (a *Adapter) sendCard(ctx context.Context, c port.Card) error {
 //
 // [<Horizon>]
 // #tag1 #tag2
-func cardCaption(c port.Card) string {
+func cardCaption(c port.Card, loc ...string) string {
+	locale := "en"
+	if len(loc) > 0 && loc[0] != "" {
+		locale = loc[0]
+	}
+	m := i18n.GetMessages(locale)
+
 	var b strings.Builder
 	title := strings.TrimSpace(c.Title)
 	if c.Type != "" {
@@ -507,7 +534,7 @@ func cardCaption(c port.Card) string {
 			}
 		}
 		if len(bullets) > 0 {
-			b.WriteString("\n\n*Next Steps:*\n" + strings.Join(bullets, "\n"))
+			b.WriteString("\n\n*" + m.NextActions + ":*\n" + strings.Join(bullets, "\n"))
 		}
 	}
 
@@ -523,9 +550,9 @@ func cardCaption(c port.Card) string {
 		}
 		reason := strings.TrimSpace(c.Worthiness.Reason)
 		if reason != "" {
-			fmt.Fprintf(&b, "\n\n*Worth researching:* %s — %s", lvl, reason)
+			fmt.Fprintf(&b, "\n\n*%s:* %s — %s", m.WorthResearching, lvl, reason)
 		} else {
-			fmt.Fprintf(&b, "\n\n*Worth researching:* %s", lvl)
+			fmt.Fprintf(&b, "\n\n*%s:* %s", m.WorthResearching, lvl)
 		}
 	}
 
@@ -567,29 +594,60 @@ func safeTruncate(text string, maxRunes int) string {
 
 // sendFailed renders the analysis-failure card: same buttons plus Retry.
 func (a *Adapter) sendFailed(ctx context.Context, c port.Card) error {
-	_, err := a.sendMessage(ctx, "Analysis failed", c.ID, cardButtons(c.ID, true))
+	loc := a.locale(ctx)
+	m := i18n.GetMessages(loc)
+	_, err := a.sendMessage(ctx, m.AnalysisFailed, c.ID, cardButtons(c.ID, true, loc))
 	return err
 }
 
-func cardButtons(id int64, retry bool) [][]button {
+func cardButtons(id int64, retry bool, loc ...string) [][]button {
+	locale := "en"
+	if len(loc) > 0 && loc[0] != "" {
+		locale = loc[0]
+	}
+	b := i18n.GetButtons(locale)
+
 	btns := [][]button{
 		{
-			{Text: "🔬 Deep Research", CallbackData: fmt.Sprintf("%d:research", id)},
+			{Text: b.DeepResearch, CallbackData: fmt.Sprintf("%d:research", id)},
 			{Text: "▾", CallbackData: fmt.Sprintf("%d:pb_menu", id)},
 		},
 		{
-			{Text: "Short", CallbackData: fmt.Sprintf("%d:commit:short-term", id)},
-			{Text: "Medium", CallbackData: fmt.Sprintf("%d:commit:medium-term", id)},
-			{Text: "Long", CallbackData: fmt.Sprintf("%d:commit:long-term", id)},
+			{Text: b.Short, CallbackData: fmt.Sprintf("%d:commit:short-term", id)},
+			{Text: b.Medium, CallbackData: fmt.Sprintf("%d:commit:medium-term", id)},
+			{Text: b.Long, CallbackData: fmt.Sprintf("%d:commit:long-term", id)},
 		},
 		{
-			{Text: "✕ Discard", CallbackData: fmt.Sprintf("%d:dismiss", id)},
+			{Text: b.Discard, CallbackData: fmt.Sprintf("%d:dismiss", id)},
 		},
 	}
 	if retry {
-		btns[2] = append(btns[2], button{Text: "Retry", CallbackData: fmt.Sprintf("%d:retry", id)})
+		btns[2] = append(btns[2], button{Text: b.Retry, CallbackData: fmt.Sprintf("%d:retry", id)})
 	}
 	return btns
+}
+
+// ActionButtons renders standard action buttons with canonical callback prefixes.
+func ActionButtons(id int64, loc ...string) [][]button {
+	locale := "en"
+	if len(loc) > 0 && loc[0] != "" {
+		locale = loc[0]
+	}
+	b := i18n.GetButtons(locale)
+	return [][]button{
+		{
+			{Text: b.Research, CallbackData: fmt.Sprintf("research:%d", id)},
+			{Text: b.Playbook, CallbackData: fmt.Sprintf("pb:%d", id)},
+		},
+		{
+			{Text: b.Do, CallbackData: fmt.Sprintf("do:%d", id)},
+			{Text: b.Keep, CallbackData: fmt.Sprintf("keep:%d", id)},
+			{Text: b.Shelve, CallbackData: fmt.Sprintf("shelve:%d", id)},
+		},
+		{
+			{Text: b.Dismiss, CallbackData: fmt.Sprintf("dismiss:%d", id)},
+		},
+	}
 }
 
 // sendResearch renders a research outcome as summary text + a public link to
@@ -601,6 +659,9 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 		base = "http://localhost:8080"
 	}
 	link := strings.TrimRight(base, "/") + "/api/v1/research/"
+	loc := a.locale(ctx)
+	m := i18n.GetMessages(loc)
+
 	var (
 		buttons [][]button
 		cardID  int64
@@ -611,7 +672,7 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 			link += "?t=" + url.QueryEscape(n.Res.ShareToken)
 		}
 		cardID = n.Res.CardID
-		buttons = cardButtons(cardID, false)
+		buttons = cardButtons(cardID, false, loc)
 	}
 
 	card := n.Card
@@ -626,14 +687,14 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 		if n.Res != nil && n.Res.Result != nil && n.Res.Result.Verdict != nil && n.Res.Result.Verdict.Recommendation != "" {
 			verd := n.Res.Result.Verdict
 			rec := strings.ToUpper(verd.Recommendation[:1]) + strings.ToLower(verd.Recommendation[1:])
-			fmt.Fprintf(&b, "🔬 *Research Complete*\n*Verdict:* %s · *Confidence:* %s", rec, verd.Confidence)
+			fmt.Fprintf(&b, "%s\n*%s:* %s · *%s:* %s", m.ResearchCompleteHeader, m.Verdict, rec, m.Confidence, verd.Confidence)
 			if card.ExecutiveSummary != "" {
 				b.WriteString("\n\n" + card.ExecutiveSummary)
 			} else if card.TLDR != "" {
 				b.WriteString("\n\n" + card.TLDR)
 			}
 			if len(verd.NextActions) > 0 {
-				b.WriteString("\n\n*Next actions:*")
+				fmt.Fprintf(&b, "\n\n*%s:*", m.NextActions)
 				limit := 3
 				if len(verd.NextActions) < limit {
 					limit = len(verd.NextActions)
@@ -648,7 +709,7 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 		} else {
 			text := n.Text
 			if text == "" {
-				text = "Research complete"
+				text = m.ResearchComplete
 			}
 			b.WriteString(text)
 		}
@@ -663,9 +724,9 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 			}
 		}
 		if failedStep != "" {
-			fmt.Fprintf(&b, "❌ *Research Failed*\n*Failed step:* %s", failedStep)
+			fmt.Fprintf(&b, "%s\n"+m.ResearchFailedStep, m.ResearchFailedHeader, failedStep)
 		} else {
-			b.WriteString("❌ *Research Failed*")
+			b.WriteString(m.ResearchFailedHeader)
 		}
 		if n.Text != "" && n.Text != failedStep {
 			b.WriteString("\n" + n.Text)
@@ -673,7 +734,7 @@ func (a *Adapter) sendResearch(ctx context.Context, n port.Notification) error {
 	} else {
 		text := n.Text
 		if text == "" {
-			text = "Research update"
+			text = m.ResearchUpdate
 		}
 		b.WriteString(text)
 	}
@@ -830,8 +891,11 @@ func (a *Adapter) handleMessage(m *message) {
 	case "morning", "research":
 		a.sendMorningDigest(ctx)
 		return
+	case "inbox":
+		a.sendInbox(ctx)
+		return
 	case "help", "start":
-		if _, err := a.sendMessage(ctx, helpText, 0, nil); err != nil {
+		if _, err := a.sendMessage(ctx, a.helpText(ctx), 0, nil); err != nil {
 			a.logf("telegram: help: sendMessage: %v", err)
 		}
 		return
@@ -1100,7 +1164,9 @@ const helpText = "👋 *Sparkkeep* — send me anything and it becomes a card.\n
 	"*What you can do:*\n" +
 	"• Tap Doing / Done / Shelve on a card\n" +
 	"• Reply to a card with text or #tags to update it in place\n" +
-	"• /digest — the last 7 days: counts by status and your 5 most recent sparks"
+	"• /digest — the last 7 days: counts by status and your 5 most recent sparks\n" +
+	"• /morning — instant morning research digest\n" +
+	"• /inbox — review inbox cards"
 
 // digestDays is the window the /digest command reports on.
 const digestDays = 7
@@ -1139,22 +1205,72 @@ func (a *Adapter) sendDigest(ctx context.Context) {
 			inbox++
 		}
 	}
+	loc := a.locale(ctx)
+	m := i18n.GetMessages(loc)
+
 	var b strings.Builder
-	fmt.Fprintf(&b, "📊 *Sparkkeep Weekly Digest*\nLast %d days: %d cards captured\n\n"+
-		"• 📥 Inbox: %d\n• ⚡ Doing: %d\n• ✅ Done: %d\n• 📦 Shelved: %d",
-		digestDays, len(recent), inbox, doing, done, shelved)
+	fmt.Fprintf(&b, "%s\n%s\n\n%s\n%s\n%s\n%s",
+		m.WeeklyDigestTitle,
+		fmt.Sprintf(m.WeeklyDigestSummary, digestDays, len(recent)),
+		fmt.Sprintf(m.StatusInbox, inbox),
+		fmt.Sprintf(m.StatusDoing, doing),
+		fmt.Sprintf(m.StatusDone, done),
+		fmt.Sprintf(m.StatusShelved, shelved),
+	)
 	if len(recent) > 0 {
 		slices.SortFunc(recent, func(x, y port.Card) int { return y.CreatedAt.Compare(x.CreatedAt) })
-		b.WriteString("\n\n*Recent Sparks:*")
+		b.WriteString("\n\n" + m.RecentSparks)
 		for i, c := range recent[:min(digestRecentLimit, len(recent))] {
 			fmt.Fprintf(&b, "\n%d. %s [%s]", i+1, strings.TrimSpace(c.Title), c.Horizon)
 		}
 	}
 	if a.PublicURL != "" {
-		fmt.Fprintf(&b, "\n\nOpen dashboard: %s", strings.TrimRight(a.PublicURL, "/"))
+		fmt.Fprintf(&b, "\n\n"+m.OpenDashboard, strings.TrimRight(a.PublicURL, "/"))
 	}
 	if _, err := a.sendMessage(ctx, b.String(), 0, nil); err != nil {
 		a.logf("telegram: digest: sendMessage: %v", err)
+	}
+}
+
+// sendInbox answers /inbox with pending cards in port.StatusInbox.
+func (a *Adapter) sendInbox(ctx context.Context) {
+	if a.Service == nil {
+		return
+	}
+	cards, err := a.Service.ListCards(ctx, port.CardFilter{Status: port.StatusInbox})
+	if err != nil {
+		a.logf("telegram: inbox: ListCards: %v", err)
+		return
+	}
+	loc := a.locale(ctx)
+	m := i18n.GetMessages(loc)
+	if len(cards) == 0 {
+		if _, err := a.sendMessage(ctx, m.NoInboxCards, 0, nil); err != nil {
+			a.logf("telegram: inbox: sendMessage: %v", err)
+		}
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, m.InboxHeader, len(cards))
+	limit := 10
+	if len(cards) < limit {
+		limit = len(cards)
+	}
+	for i, c := range cards[:limit] {
+		title := strings.TrimSpace(c.Title)
+		if title == "" {
+			title = "(untitled)"
+		}
+		fmt.Fprintf(&b, "\n%d. %s", i+1, title)
+		if c.Horizon != "" {
+			fmt.Fprintf(&b, " [%s]", c.Horizon)
+		}
+	}
+	if a.PublicURL != "" {
+		fmt.Fprintf(&b, "\n\n"+m.OpenDashboard, strings.TrimRight(a.PublicURL, "/"))
+	}
+	if _, err := a.sendMessage(ctx, b.String(), 0, nil); err != nil {
+		a.logf("telegram: inbox: sendMessage: %v", err)
 	}
 }
 
@@ -1399,9 +1515,29 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 	if !ok {
 		return
 	}
+	loc := a.locale(ctx)
+	b := i18n.GetButtons(loc)
+	m := i18n.GetMessages(loc)
+
 	switch {
 	case action == "dismiss":
 		a.setStatus(ctx, id, port.StatusDismissed, cb)
+	case action == "shelve":
+		a.setStatus(ctx, id, port.StatusShelved, cb)
+	case action == "keep":
+		a.setStatus(ctx, id, port.StatusInbox, cb)
+	case action == "do":
+		status := port.StatusInProgress
+		horizon := port.HorizonShortTerm
+		if a.Service != nil {
+			if _, err := a.Service.UpdateCard(ctx, id, port.CardPatch{Horizon: &horizon, Status: &status}); err != nil {
+				a.logf("telegram: UpdateCard do (%d): %v", id, err)
+			}
+		}
+		a.ackCallback(cb.ID, b.Do)
+		if cb.Message != nil && cb.Message.Chat != nil {
+			a.editReplyMarkup(ctx, cb.Message.Chat.ID, cb.Message.MessageID)
+		}
 	case strings.HasPrefix(action, "status:"):
 		status := strings.TrimPrefix(action, "status:")
 		a.setStatus(ctx, id, status, cb)
@@ -1413,7 +1549,7 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 				a.logf("telegram: UpdateCard commit (%d, %s): %v", id, horizon, err)
 			}
 		}
-		a.ackCallback(cb.ID, "Committed to "+horizon)
+		a.ackCallback(cb.ID, fmt.Sprintf(m.CommittedTo, horizon))
 		// Optionally edit the message to remove buttons or show updated status
 		if cb.Message != nil {
 			_ = a.editMessageText(ctx, cb.Message.Chat.ID, cb.Message.MessageID, cb.Message.Text, id, nil)
@@ -1423,7 +1559,7 @@ func (a *Adapter) handleCallback(cb *callbackQuery) {
 		if _, err := a.Service.Retry(ctx, id); err != nil {
 			a.logf("telegram: retry %d: %v", id, err)
 		}
-	case action == "pb_menu":
+	case action == "pb_menu" || action == "pb":
 		a.handlePlaybookMenu(ctx, id, cb)
 	case action == "pb_back":
 		a.handlePlaybookBack(ctx, id, cb)
@@ -1437,9 +1573,13 @@ func (a *Adapter) handlePlaybookMenu(ctx context.Context, cardID int64, cb *call
 		a.ackCallback(cb.ID, "")
 		return
 	}
+	loc := a.locale(ctx)
+	b := i18n.GetButtons(loc)
+	m := i18n.GetMessages(loc)
+
 	pbs, err := a.Service.ListPlaybooks(ctx)
 	if err != nil {
-		a.ackCallback(cb.ID, "Failed to load playbooks")
+		a.ackCallback(cb.ID, m.FailedToLoadPlaybooks)
 		return
 	}
 	var rows [][]button
@@ -1461,7 +1601,7 @@ func (a *Adapter) handlePlaybookMenu(ctx context.Context, cardID int64, cb *call
 		})
 	}
 	rows = append(rows, []button{
-		{Text: "« Back", CallbackData: fmt.Sprintf("%d:pb_back", cardID)},
+		{Text: b.Back, CallbackData: fmt.Sprintf("%d:pb_back", cardID)},
 	})
 	a.ackCallback(cb.ID, "")
 	a.editReplyMarkupWithButtons(ctx, cb.Message.Chat.ID, cb.Message.MessageID, rows)
@@ -1470,11 +1610,15 @@ func (a *Adapter) handlePlaybookMenu(ctx context.Context, cardID int64, cb *call
 func (a *Adapter) handlePlaybookBack(ctx context.Context, cardID int64, cb *callbackQuery) {
 	a.ackCallback(cb.ID, "")
 	if cb.Message != nil && cb.Message.Chat != nil {
-		a.editReplyMarkupWithButtons(ctx, cb.Message.Chat.ID, cb.Message.MessageID, cardButtons(cardID, false))
+		loc := a.locale(ctx)
+		a.editReplyMarkupWithButtons(ctx, cb.Message.Chat.ID, cb.Message.MessageID, cardButtons(cardID, false, loc))
 	}
 }
 
 func (a *Adapter) handleResearchCallback(ctx context.Context, cardID int64, action string, cb *callbackQuery) {
+	loc := a.locale(ctx)
+	m := i18n.GetMessages(loc)
+
 	parts := strings.Split(action, ":")
 	var explicitPID *int64
 	if len(parts) == 2 {
@@ -1494,14 +1638,14 @@ func (a *Adapter) handleResearchCallback(ctx context.Context, cardID int64, acti
 		if active, err := a.Service.HasActiveResearch(ctx, cardID); err != nil {
 			a.logf("telegram: HasActiveResearch(%d): %v", cardID, err)
 		} else if active {
-			a.ackCallback(cb.ID, "Research already running")
+			a.ackCallback(cb.ID, m.ResearchAlreadyRunning)
 			return
 		}
 	}
 
 	a.ackCallback(cb.ID, "")
 	if cb.Message != nil && cb.Message.Chat != nil {
-		a.editReplyMarkupWithButtons(ctx, cb.Message.Chat.ID, cb.Message.MessageID, [][]button{{{Text: "⏳ Researching...", CallbackData: "ignore"}}})
+		a.editReplyMarkupWithButtons(ctx, cb.Message.Chat.ID, cb.Message.MessageID, [][]button{{{Text: m.Researching, CallbackData: "ignore"}}})
 		a.trackResearchMessage(cardID, cb.Message.Chat.ID, cb.Message.MessageID)
 	}
 	a.Service.GoResearch(context.WithoutCancel(ctx), cardID, explicitPID)
@@ -1512,28 +1656,39 @@ func (a *Adapter) handleForceCapture(ctx context.Context, captureID int64, cb *c
 		a.ackCallback(cb.ID, "")
 		return
 	}
+	loc := a.locale(ctx)
+	m := i18n.GetMessages(loc)
+
 	card, err := a.Service.ForceCapture(ctx, captureID)
 	if err != nil {
 		a.logf("telegram: ForceCapture(%d): %v", captureID, err)
-		a.ackCallback(cb.ID, "Failed to create card")
+		a.ackCallback(cb.ID, m.FailedToCreateCard)
 		return
 	}
-	a.ackCallback(cb.ID, "Card saved!")
+	a.ackCallback(cb.ID, m.CardSaved)
 	if cb.Message != nil && cb.Message.Chat != nil && card != nil {
-		_ = a.editMessageText(ctx, cb.Message.Chat.ID, cb.Message.MessageID, cardCaption(*card), card.ID, cardButtons(card.ID, false))
+		_ = a.editMessageText(ctx, cb.Message.Chat.ID, cb.Message.MessageID, cardCaption(*card, loc), card.ID, cardButtons(card.ID, false, loc))
 	}
 }
 
 func parseCallback(data string) (id int64, action string, ok bool) {
 	parts := strings.SplitN(data, ":", 2)
-	if len(parts) != 2 {
-		return 0, "", false
+	if len(parts) == 2 {
+		if pid, err := strconv.ParseInt(parts[0], 10, 64); err == nil && pid > 0 {
+			return pid, parts[1], true
+		}
 	}
-	id, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil || id <= 0 {
-		return 0, "", false
+
+	all := strings.Split(data, ":")
+	if len(all) >= 2 {
+		if cid, err := strconv.ParseInt(all[1], 10, 64); err == nil && cid > 0 {
+			if len(all) == 2 {
+				return cid, all[0], true
+			}
+			return cid, all[0] + ":" + strings.Join(all[2:], ":"), true
+		}
 	}
-	return id, parts[1], true
+	return 0, "", false
 }
 
 // setStatus persists a status change, answers the callback, clears the

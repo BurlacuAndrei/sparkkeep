@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -31,6 +32,7 @@ type Config struct {
 	Token    string // Server: session token (after login); Clipper: clipper token
 	Email    string // Server mode only
 	Password string // Server mode only
+	Locale   string
 }
 
 // Client is the Joplin API client supporting both Server and Clipper modes.
@@ -39,6 +41,7 @@ type Client struct {
 	httpClient *http.Client
 	notebookID string // cached notebook ID
 	token      string // session token for server mode
+	locale     string
 }
 
 const (
@@ -59,7 +62,8 @@ func NewClient(config Config) *Client {
 		httpClient: &http.Client{
 			Timeout: defaultTimeout,
 		},
-		token: config.Token,
+		token:  config.Token,
+		locale: config.Locale,
 	}
 }
 
@@ -497,30 +501,36 @@ func (c *Client) buildMarkdownBody(exp port.CardExport) string {
 	card := exp.Card
 	var sb strings.Builder
 
+	locale := c.locale
+	if exp.Locale != "" {
+		locale = exp.Locale
+	}
+	h := i18n.GetHeadings(locale)
+
 	// Title
 	sb.WriteString(fmt.Sprintf("# %s\n\n", card.Title))
 
 	// Executive Summary
 	if card.ExecutiveSummary != "" {
-		sb.WriteString("## Executive Summary\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.ExecutiveSummary))
 		sb.WriteString(card.ExecutiveSummary)
 		sb.WriteString("\n\n")
 	} else if card.Summary != "" {
-		sb.WriteString("## Summary\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.Summary))
 		sb.WriteString(card.Summary)
 		sb.WriteString("\n\n")
 	}
 
 	// Value Proposition
 	if card.ValueProposition != "" {
-		sb.WriteString("## Value Proposition\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.ValueProposition))
 		sb.WriteString(card.ValueProposition)
 		sb.WriteString("\n\n")
 	}
 
 	// Proposed Actions
 	if len(card.ProposedActions) > 0 {
-		sb.WriteString("## Proposed Actions\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.ProposedActions))
 		for _, a := range card.ProposedActions {
 			sb.WriteString(fmt.Sprintf("- [ ] %s\n", a))
 		}
@@ -529,14 +539,14 @@ func (c *Client) buildMarkdownBody(exp port.CardExport) string {
 
 	// Source Note
 	if card.SourceNote != "" && card.SourceNote != card.SourceURL {
-		sb.WriteString("## Source Notes\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.SourceNotes))
 		sb.WriteString(card.SourceNote)
 		sb.WriteString("\n\n")
 	}
 
 	// References
 	if len(card.References) > 0 {
-		sb.WriteString("## References\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.References))
 		for _, r := range card.References {
 			if r.URL != "" {
 				sb.WriteString(fmt.Sprintf("- [%s](%s) (%s)\n", r.Label, r.URL, r.Kind))
@@ -564,9 +574,9 @@ func (c *Client) buildMarkdownBody(exp port.CardExport) string {
 			}
 		}
 
-		sb.WriteString("## Research Dossier\n\n")
-		sb.WriteString(fmt.Sprintf("**Playbook:** %s\n", playbookName))
-		sb.WriteString(fmt.Sprintf("**Completed:** %s\n\n", completedAt.Format(time.RFC3339)))
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.ResearchDossier))
+		sb.WriteString(fmt.Sprintf("**%s:** %s\n", h.Playbook, playbookName))
+		sb.WriteString(fmt.Sprintf("**%s:** %s\n\n", h.Completed, completedAt.Format(time.RFC3339)))
 		if strings.TrimSpace(exp.Research.Findings) != "" {
 			sb.WriteString(strings.TrimSpace(exp.Research.Findings))
 			sb.WriteString("\n\n")

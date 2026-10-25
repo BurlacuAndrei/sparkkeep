@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -244,5 +245,75 @@ func TestTestVaultDirectory(t *testing.T) {
 	// Empty path should fail
 	if err := TestVaultDirectory(""); err == nil {
 		t.Fatalf("expected error for empty vault path")
+	}
+}
+
+func TestCardExportToMarkdown_LocalizedHeadings(t *testing.T) {
+	locales := []string{"en", "ro", "es", "pt-BR", "fr", "de"}
+	for _, loc := range locales {
+		h := i18n.GetHeadings(loc)
+		exp := port.CardExport{
+			Locale: loc,
+			Card: port.Card{
+				ID:               77,
+				Title:            "Localized Card Title",
+				Summary:          "A localized summary.",
+				ExecutiveSummary: "Exec summary text.",
+				ValueProposition: "Value prop text.",
+				ProposedActions:  []string{"Action 1", "Action 2"},
+				CompletedActions: []string{"Done Action 1"},
+				SourceNote:       "Source note text.",
+				Horizon:          "short-term",
+				Status:           "doing",
+				SourceURL:        "https://example.com/test",
+				Tags:             []string{"tag1", "tag2"},
+				CreatedAt:        time.Date(2026, 10, 6, 8, 0, 0, 0, time.UTC),
+				UpdatedAt:        time.Date(2026, 10, 6, 8, 30, 0, 0, time.UTC),
+			},
+			Research: &port.Research{
+				ID:     12,
+				CardID: 77,
+				PlaybookSnapshot: &port.Playbook{
+					Name: "Deep Dive",
+				},
+				Findings: "Key research findings.",
+			},
+		}
+
+		md := CardExportToMarkdown(exp)
+
+		// Frontmatter keys and values must remain in canonical English
+		canonicalFrontmatter := []string{
+			"id: 77",
+			`title: "Localized Card Title"`,
+			"horizon: short-term",
+			"status: doing",
+			`source_url: "https://example.com/test"`,
+			"tags:",
+			"created_at:",
+			"updated_at:",
+			"researched: true",
+		}
+		for _, key := range canonicalFrontmatter {
+			if !strings.Contains(md, key) {
+				t.Errorf("[%s] missing canonical frontmatter key/value: %q in\n%s", loc, key, md)
+			}
+		}
+
+		// Section headings and labels must match workspace interface locale
+		expectedHeadings := []string{
+			"## " + h.ExecutiveSummary,
+			"## " + h.ValueProposition,
+			"## " + h.ProposedActions,
+			"## " + h.SourceNotes,
+			"## " + h.ResearchDossier,
+			"**" + h.Playbook + ":** Deep Dive",
+			"**" + h.Completed + ":**",
+		}
+		for _, head := range expectedHeadings {
+			if !strings.Contains(md, head) {
+				t.Errorf("[%s] expected localized heading/label %q in\n%s", loc, head, md)
+			}
+		}
 	}
 }

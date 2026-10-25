@@ -422,7 +422,11 @@ func (a *api) exportMarkdown(w http.ResponseWriter, r *http.Request) {
 		exp = port.CardExport{Card: card, Research: latestDone}
 	}
 
-	md := obsidian.CardExportToMarkdown(exp)
+	loc, _ := a.store.GetSetting(r.Context(), "interface_locale")
+	if exp.Locale == "" {
+		exp.Locale = loc
+	}
+	md := obsidian.CardExportToMarkdown(exp, loc)
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	fmt.Fprint(w, md)
 }

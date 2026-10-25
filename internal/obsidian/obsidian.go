@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -32,9 +33,15 @@ func SanitizeFilename(id int64, title string) string {
 }
 
 // CardExportToMarkdown converts a CardExport bundle (Card + Research) into an Obsidian note.
-func CardExportToMarkdown(exp port.CardExport) string {
+func CardExportToMarkdown(exp port.CardExport, loc ...string) string {
 	c := exp.Card
 	var sb strings.Builder
+
+	locale := exp.Locale
+	if len(loc) > 0 && loc[0] != "" {
+		locale = loc[0]
+	}
+	h := i18n.GetHeadings(locale)
 
 	// YAML Frontmatter
 	sb.WriteString("---\n")
@@ -61,25 +68,25 @@ func CardExportToMarkdown(exp port.CardExport) string {
 
 	// Executive Summary / Summary
 	if c.ExecutiveSummary != "" {
-		sb.WriteString("## Executive Summary\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.ExecutiveSummary))
 		sb.WriteString(c.ExecutiveSummary)
 		sb.WriteString("\n\n")
 	} else if c.Summary != "" {
-		sb.WriteString("## Summary\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.Summary))
 		sb.WriteString(c.Summary)
 		sb.WriteString("\n\n")
 	}
 
 	// Value Proposition
 	if c.ValueProposition != "" {
-		sb.WriteString("## Value Proposition\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.ValueProposition))
 		sb.WriteString(c.ValueProposition)
 		sb.WriteString("\n\n")
 	}
 
 	// Proposed Actions
 	if len(c.ProposedActions) > 0 {
-		sb.WriteString("## Proposed Actions\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.ProposedActions))
 		for _, a := range c.ProposedActions {
 			sb.WriteString(fmt.Sprintf("- [ ] %s\n", a))
 		}
@@ -88,14 +95,14 @@ func CardExportToMarkdown(exp port.CardExport) string {
 
 	// Source Note
 	if c.SourceNote != "" {
-		sb.WriteString("## Source Notes\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.SourceNotes))
 		sb.WriteString(c.SourceNote)
 		sb.WriteString("\n\n")
 	}
 
 	// References
 	if len(c.References) > 0 {
-		sb.WriteString("## References\n\n")
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.References))
 		for _, r := range c.References {
 			if r.URL != "" {
 				sb.WriteString(fmt.Sprintf("- [%s](%s) (%s)\n", r.Label, r.URL, r.Kind))
@@ -123,9 +130,9 @@ func CardExportToMarkdown(exp port.CardExport) string {
 			}
 		}
 
-		sb.WriteString("## Research Dossier\n\n")
-		sb.WriteString(fmt.Sprintf("**Playbook:** %s\n", playbookName))
-		sb.WriteString(fmt.Sprintf("**Completed:** %s\n\n", completedAt.Format(time.RFC3339)))
+		sb.WriteString(fmt.Sprintf("## %s\n\n", h.ResearchDossier))
+		sb.WriteString(fmt.Sprintf("**%s:** %s\n", h.Playbook, playbookName))
+		sb.WriteString(fmt.Sprintf("**%s:** %s\n\n", h.Completed, completedAt.Format(time.RFC3339)))
 		if strings.TrimSpace(exp.Research.Findings) != "" {
 			sb.WriteString(strings.TrimSpace(exp.Research.Findings))
 			sb.WriteString("\n\n")
@@ -136,12 +143,16 @@ func CardExportToMarkdown(exp port.CardExport) string {
 }
 
 // CardToMarkdown converts a Card into an Obsidian-compatible Markdown note with YAML frontmatter.
-func CardToMarkdown(c port.Card) string {
-	return CardExportToMarkdown(port.CardExport{Card: c})
+func CardToMarkdown(c port.Card, loc ...string) string {
+	locale := ""
+	if len(loc) > 0 {
+		locale = loc[0]
+	}
+	return CardExportToMarkdown(port.CardExport{Card: c, Locale: locale}, loc...)
 }
 
 // SyncCardExport writes a single CardExport bundle atomically into vaultDir and cleans up any old title files for this card.
-func SyncCardExport(vaultDir string, exp port.CardExport) (string, error) {
+func SyncCardExport(vaultDir string, exp port.CardExport, loc ...string) (string, error) {
 	if err := os.MkdirAll(vaultDir, 0755); err != nil {
 		return "", fmt.Errorf("obsidian: mkdir %s: %w", vaultDir, err)
 	}
@@ -150,7 +161,7 @@ func SyncCardExport(vaultDir string, exp port.CardExport) (string, error) {
 	filename := fmt.Sprintf("%d-%s", exp.Card.ID, clean)
 	targetPath := filepath.Join(vaultDir, filename)
 
-	content := CardExportToMarkdown(exp)
+	content := CardExportToMarkdown(exp, loc...)
 
 	// Write to a temporary file in vaultDir first for atomic replacement.
 	tmpFile, err := os.CreateTemp(vaultDir, fmt.Sprintf(".%d-*.tmp", exp.Card.ID))
@@ -186,15 +197,19 @@ func SyncCardExport(vaultDir string, exp port.CardExport) (string, error) {
 }
 
 // SyncCard writes a single note into the target vault directory.
-func SyncCard(vaultDir string, c port.Card) (string, error) {
-	return SyncCardExport(vaultDir, port.CardExport{Card: c})
+func SyncCard(vaultDir string, c port.Card, loc ...string) (string, error) {
+	locale := ""
+	if len(loc) > 0 {
+		locale = loc[0]
+	}
+	return SyncCardExport(vaultDir, port.CardExport{Card: c, Locale: locale}, loc...)
 }
 
 // SyncCardExports batches multiple CardExport bundles into the vault directory.
-func SyncCardExports(vaultDir string, exports []port.CardExport) ([]string, error) {
+func SyncCardExports(vaultDir string, exports []port.CardExport, loc ...string) ([]string, error) {
 	var paths []string
 	for _, exp := range exports {
-		path, err := SyncCardExport(vaultDir, exp)
+		path, err := SyncCardExport(vaultDir, exp, loc...)
 		if err != nil {
 			return paths, err
 		}
@@ -204,12 +219,12 @@ func SyncCardExports(vaultDir string, exports []port.CardExport) ([]string, erro
 }
 
 // SyncCards batches cards into the vault directory.
-func SyncCards(vaultDir string, cards []port.Card) (int, error) {
+func SyncCards(vaultDir string, cards []port.Card, loc ...string) (int, error) {
 	exports := make([]port.CardExport, len(cards))
 	for i, c := range cards {
 		exports[i] = port.CardExport{Card: c}
 	}
-	paths, err := SyncCardExports(vaultDir, exports)
+	paths, err := SyncCardExports(vaultDir, exports, loc...)
 	return len(paths), err
 }
 

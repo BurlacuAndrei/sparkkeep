@@ -89,6 +89,8 @@ func (a *api) exportLibraryZip(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"sparkkeep-archive-%s.zip\"", time.Now().UTC().Format("20060102-150405")))
 
+	loc, _ := a.store.GetSetting(ctx, "interface_locale")
+
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 
@@ -112,7 +114,10 @@ func (a *api) exportLibraryZip(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		md := obsidian.CardExportToMarkdown(exp)
+		if exp.Locale == "" {
+			exp.Locale = loc
+		}
+		md := obsidian.CardExportToMarkdown(exp, loc)
 		_, _ = f.Write([]byte(md))
 	}
 }

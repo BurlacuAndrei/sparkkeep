@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"sparkkeep/internal/capture"
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -37,6 +38,7 @@ type Adapter struct {
 	DefaultChannel string // e.g. "whatsapp", "signal", "discord"
 	DefaultTarget  string // e.g. "+15550199" or user ID
 	PublicURL      string
+	Locale         string
 	Service        Service
 	Logf           func(format string, args ...any)
 
@@ -51,6 +53,23 @@ type Config struct {
 	DefaultChannel string `json:"default_channel"`
 	DefaultTarget  string `json:"default_target"`
 	Enabled        bool   `json:"enabled"`
+	Locale         string `json:"locale,omitempty"`
+}
+
+func (a *Adapter) locale(ctx context.Context) string {
+	if a.Locale != "" {
+		return a.Locale
+	}
+	if a.Service != nil {
+		if getter, ok := a.Service.(interface {
+			GetSetting(context.Context, string) (string, error)
+		}); ok {
+			if loc, err := getter.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+				return strings.TrimSpace(loc)
+			}
+		}
+	}
+	return "en"
 }
 
 // New constructs an OpenClaw bridge adapter.
@@ -72,6 +91,7 @@ func New(cfg Config, svc Service, publicURL string, logf func(format string, arg
 		DefaultChannel: ch,
 		DefaultTarget:  strings.TrimSpace(cfg.DefaultTarget),
 		PublicURL:      publicURL,
+		Locale:         strings.TrimSpace(cfg.Locale),
 		Service:        svc,
 		Logf:           logf,
 		client:         &http.Client{Timeout: 10 * time.Second},
@@ -127,11 +147,14 @@ func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
 		targetRecipient = n.Card.SourceChannelChatID
 	}
 
-	text := a.formatNotification(n)
+	text := a.formatNotification(ctx, n)
 	return a.sendToGateway(ctx, targetChannel, targetRecipient, text)
 }
 
-func (a *Adapter) formatNotification(n port.Notification) string {
+func (a *Adapter) formatNotification(ctx context.Context, n port.Notification) string {
+	loc := a.locale(ctx)
+	m := i18n.GetMessages(loc)
+
 	var b strings.Builder
 	switch n.Kind {
 	case "created":
@@ -151,7 +174,7 @@ func (a *Adapter) formatNotification(n port.Notification) string {
 		}
 
 		if len(c.Claims) > 0 {
-			b.WriteString("Key claims:\n")
+			b.WriteString(m.KeyClaims + "\n")
 			for i, cl := range c.Claims {
 				if i >= 3 {
 					break
@@ -162,10 +185,10 @@ func (a *Adapter) formatNotification(n port.Notification) string {
 		}
 
 		if c.Worthiness.Level != "" {
-			fmt.Fprintf(&b, "Worth researching: %s\n", c.Worthiness.Level)
+			fmt.Fprintf(&b, "%s: %s\n", m.WorthResearching, c.Worthiness.Level)
 		}
 		if c.Horizon != "" {
-			fmt.Fprintf(&b, "Horizon: %s\n", c.Horizon)
+			fmt.Fprintf(&b, "%s: %s\n", m.Horizon, c.Horizon)
 		}
 		if len(c.Tags) > 0 {
 			var tags []string
@@ -176,26 +199,26 @@ func (a *Adapter) formatNotification(n port.Notification) string {
 		}
 
 		// Text action shortcuts for channels without inline buttons
-		fmt.Fprintf(&b, "\nActions (reply with):\n")
-		fmt.Fprintf(&b, "• /research %d — Trigger Deep Research\n", c.ID)
-		fmt.Fprintf(&b, "• /short %d    — Set Short-term (Now)\n", c.ID)
-		fmt.Fprintf(&b, "• /med %d      — Set Medium-term (Next)\n", c.ID)
-		fmt.Fprintf(&b, "• /long %d     — Set Long-term (Later)\n", c.ID)
-		fmt.Fprintf(&b, "• /discard %d  — Discard card\n", c.ID)
+		fmt.Fprintf(&b, "\n%s\n", m.ActionsReplyWith)
+		fmt.Fprintf(&b, "• /research %d — %s\n", c.ID, m.TriggerDeepResearch)
+		fmt.Fprintf(&b, "• /short %d    — %s\n", c.ID, m.SetShortTerm)
+		fmt.Fprintf(&b, "• /med %d      — %s\n", c.ID, m.SetMediumTerm)
+		fmt.Fprintf(&b, "• /long %d     — %s\n", c.ID, m.SetLongTerm)
+		fmt.Fprintf(&b, "• /discard %d  — %s\n", c.ID, m.DiscardCard)
 
 	case "research_done":
-		fmt.Fprintf(&b, "🔬 *Research Complete: %s*\n\n", n.Card.Title)
+		fmt.Fprintf(&b, "🔬 *%s: %s*\n\n", m.ResearchComplete, n.Card.Title)
 		if n.Res != nil && n.Res.Findings != "" {
 			lines := strings.Split(n.Res.Findings, "\n")
 			snippet := strings.Join(lines[:min(8, len(lines))], "\n")
 			b.WriteString(snippet + "\n\n")
 		}
 		if a.PublicURL != "" {
-			fmt.Fprintf(&b, "Read full report: %s/research/%d\n", strings.TrimRight(a.PublicURL, "/"), n.Card.ID)
+			fmt.Fprintf(&b, m.ReadFullReport+"\n", strings.TrimRight(a.PublicURL, "/"), n.Card.ID)
 		}
 
 	case "research_failed":
-		fmt.Fprintf(&b, "⚠️ Research interrupted for: %s\n", n.Card.Title)
+		fmt.Fprintf(&b, m.ResearchInterrupted+"\n", n.Card.Title)
 
 	case "duplicate":
 		fmt.Fprintf(&b, "ℹ️ %s\n", n.Text)
@@ -389,40 +412,49 @@ func (a *Adapter) handleActionCommand(ctx context.Context, text string) (bool, s
 		return false, "", nil
 	}
 
+	loc := a.locale(ctx)
+	m := i18n.GetMessages(loc)
+
 	switch cmd {
 	case "research", "deep", "1":
 		if _, err := a.Service.GetCard(ctx, cardID); err != nil {
 			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
 		a.Service.GoResearch(context.Background(), cardID)
-		return true, fmt.Sprintf("Started Deep Research for card %d", cardID), nil
-	case "short", "2":
+		return true, fmt.Sprintf(m.StartedResearch, cardID), nil
+	case "short", "do", "2":
 		h := port.HorizonShortTerm
 		st := port.StatusInProgress
 		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st}); err != nil {
 			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
-		return true, fmt.Sprintf("Card %d moved to Short-term (Doing)", cardID), nil
+		return true, fmt.Sprintf(m.MovedShortTerm, cardID), nil
 	case "med", "medium", "3":
 		h := port.HorizonMediumTerm
 		st := port.StatusToDo
 		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st}); err != nil {
 			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
-		return true, fmt.Sprintf("Card %d moved to Medium-term (To Do)", cardID), nil
+		return true, fmt.Sprintf(m.MovedMediumTerm, cardID), nil
 	case "long", "4":
 		h := port.HorizonLongTerm
 		st := port.StatusToDo
 		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &h, Status: &st}); err != nil {
 			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
-		return true, fmt.Sprintf("Card %d moved to Long-term", cardID), nil
-	case "discard", "x", "shelve":
+		return true, fmt.Sprintf(m.MovedLongTerm, cardID), nil
+	case "discard", "x", "shelve", "dismiss":
 		st := port.StatusShelved
 		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &st}); err != nil {
 			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
 		}
-		return true, fmt.Sprintf("Card %d shelved", cardID), nil
+		return true, fmt.Sprintf(m.CardShelved, cardID), nil
+	case "keep":
+		st := port.StatusInbox
+		if _, err := a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &st}); err != nil {
+			return true, "", fmt.Errorf("card %d not found: %w", cardID, err)
+		}
+		return true, fmt.Sprintf(m.MovedInbox, cardID), nil
 	}
 	return false, "", nil
 }

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -318,6 +319,93 @@ func TestCreatePage_BatchesExceeding100Blocks(t *testing.T) {
 	for i, count := range expectedBatches {
 		if appendBatches[i] != count {
 			t.Errorf("appendBatches[%d] = %d, want %d", i, appendBatches[i], count)
+		}
+	}
+}
+
+func TestNotionLocalizedBlocksAndCanonicalProperties(t *testing.T) {
+	locales := []string{"en", "ro", "es", "pt-BR", "fr", "de"}
+	client := NewClient(Config{Token: "test", DatabaseID: "db"})
+
+	for _, loc := range locales {
+		h := i18n.GetHeadings(loc)
+		exp := port.CardExport{
+			Locale: loc,
+			Card: port.Card{
+				ID:               88,
+				Title:            "Notion Test Card",
+				Type:             port.CardTypeArticle,
+				Horizon:          port.HorizonShortTerm,
+				Status:           port.StatusInProgress,
+				SourceURL:        "https://example.com/notion",
+				Tags:             []string{"infra", "go"},
+				ExecutiveSummary: "Exec summary",
+				ValueProposition: "Value prop",
+				ProposedActions:  []string{"Setup Notion"},
+				SourceNote:       "Note content",
+				CreatedAt:        time.Now().UTC(),
+				UpdatedAt:        time.Now().UTC(),
+			},
+			Research: &port.Research{
+				ID: 10,
+				PlaybookSnapshot: &port.Playbook{
+					Name: "Technical Due Diligence",
+				},
+				Findings: "Dossier findings",
+			},
+		}
+
+		// 1. Verify Notion database properties are in canonical English
+		props := client.buildProperties(exp.Card, exp.Research != nil)
+		canonicalKeys := []string{
+			"Sparkkeep ID", "Card Type", "Horizon", "Status",
+			"Source URL", "Created At", "Updated At", "Researched", "Tags",
+		}
+		for _, key := range canonicalKeys {
+			if _, ok := props[key]; !ok {
+				t.Errorf("[%s] missing canonical database property: %s", loc, key)
+			}
+		}
+
+		// 2. Verify blocks render localized headings
+		blocks, err := client.buildBlocks(exp)
+		if err != nil {
+			t.Fatalf("[%s] buildBlocks error: %v", loc, err)
+		}
+
+		var headingTexts []string
+		for _, b := range blocks {
+			if b["type"] == "heading_2" {
+				if h2, ok := b["heading_2"].(map[string]any); ok {
+					if rt, ok := h2["rich_text"].([]map[string]any); ok && len(rt) > 0 {
+						if textObj, ok := rt[0]["text"].(map[string]any); ok {
+							if content, ok := textObj["content"].(string); ok {
+								headingTexts = append(headingTexts, content)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		expectedHeadings := []string{
+			h.ExecutiveSummary,
+			h.ValueProposition,
+			h.ProposedActions,
+			h.SourceNotes,
+			h.ResearchDossier,
+		}
+		for _, expected := range expectedHeadings {
+			found := false
+			for _, actual := range headingTexts {
+				if actual == expected {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("[%s] expected heading_2 %q, got headings: %v", loc, expected, headingTexts)
+			}
 		}
 	}
 }

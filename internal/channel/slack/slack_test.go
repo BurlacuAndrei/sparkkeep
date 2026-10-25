@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -100,5 +101,61 @@ func TestSlackNotifyWebhook_EmptyNotesAndSummary(t *testing.T) {
 	}
 	if textVal != "_No notes provided_" {
 		t.Fatalf("expected fallback text '_No notes provided_', got %q", textVal)
+	}
+}
+
+func TestSlackLocalizedButtonsAndMessages(t *testing.T) {
+	locales := []string{"en", "ro", "es", "pt-BR", "fr", "de"}
+
+	for _, loc := range locales {
+		b := i18n.GetButtons(loc)
+
+		// 1. ActionButtons helper
+		btns := ActionButtons(42, loc)
+		if len(btns) != 6 {
+			t.Fatalf("[%s] expected 6 buttons, got %d", loc, len(btns))
+		}
+		expectedLabels := []string{b.Research, b.Playbook, b.Do, b.Keep, b.Shelve, b.Dismiss}
+		expectedPrefixes := []string{"research:42", "pb:42", "do:42", "keep:42", "shelve:42", "dismiss:42"}
+		for i, btn := range btns {
+			txtMap := btn["text"].(map[string]any)
+			if txtMap["text"] != expectedLabels[i] {
+				t.Errorf("[%s] btn %d text mismatch: %q != %q", loc, i, txtMap["text"], expectedLabels[i])
+			}
+			if btn["value"] != expectedPrefixes[i] {
+				t.Errorf("[%s] btn %d value prefix mismatch: %q != %q", loc, i, btn["value"], expectedPrefixes[i])
+			}
+		}
+
+		// 2. Outbound notification message
+		var receivedPayload map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewDecoder(r.Body).Decode(&receivedPayload)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`ok`))
+		}))
+		defer server.Close()
+
+		adapter := New(Config{
+			WebhookURL: server.URL,
+			Locale:     loc,
+		}, nil, "http://localhost:8080", nil)
+
+		card := port.Card{
+			ID:      42,
+			Title:   "Slack Title",
+			Summary: "Slack Summary",
+		}
+		if err := adapter.Notify(context.Background(), port.Notification{Kind: "created", Card: card}); err != nil {
+			t.Fatalf("[%s] Notify error: %v", loc, err)
+		}
+		blocks := receivedPayload["blocks"].([]any)
+		actionBlock := blocks[2].(map[string]any)
+		elements := actionBlock["elements"].([]any)
+		deepBtn := elements[0].(map[string]any)
+		deepTxt := deepBtn["text"].(map[string]any)["text"]
+		if deepTxt != b.DeepResearch {
+			t.Errorf("[%s] expected deep research text %q, got %q", loc, b.DeepResearch, deepTxt)
+		}
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -23,6 +24,7 @@ type Config struct {
 	BotToken   string `json:"bot_token,omitempty"`
 	ChannelID  string `json:"channel_id,omitempty"`
 	Enabled    bool   `json:"enabled"`
+	Locale     string `json:"locale,omitempty"`
 }
 
 // Service abstracts the orchestration methods consumed by the Slack adapter.
@@ -33,10 +35,27 @@ type Adapter struct {
 	BotToken   string
 	ChannelID  string
 	PublicURL  string
+	Locale     string
 	Service    Service
 	Logf       func(format string, args ...any)
 
 	client *http.Client
+}
+
+func (a *Adapter) locale(ctx context.Context) string {
+	if a.Locale != "" {
+		return a.Locale
+	}
+	if a.Service != nil {
+		if getter, ok := a.Service.(interface {
+			GetSetting(context.Context, string) (string, error)
+		}); ok {
+			if loc, err := getter.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+				return strings.TrimSpace(loc)
+			}
+		}
+	}
+	return "en"
 }
 
 func New(cfg Config, svc Service, publicURL string, logf func(format string, args ...any)) *Adapter {
@@ -48,6 +67,7 @@ func New(cfg Config, svc Service, publicURL string, logf func(format string, arg
 		BotToken:   strings.TrimSpace(cfg.BotToken),
 		ChannelID:  strings.TrimSpace(cfg.ChannelID),
 		PublicURL:  publicURL,
+		Locale:     strings.TrimSpace(cfg.Locale),
 		Service:    svc,
 		Logf:       logf,
 		client:     &http.Client{Timeout: 10 * time.Second},
@@ -89,7 +109,7 @@ func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
 		return nil
 	}
 
-	payload := a.buildBlockPayload(n)
+	payload := a.buildBlockPayload(ctx, n)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -125,7 +145,11 @@ func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
 	return nil
 }
 
-func (a *Adapter) buildBlockPayload(n port.Notification) map[string]any {
+func (a *Adapter) buildBlockPayload(ctx context.Context, n port.Notification) map[string]any {
+	loc := a.locale(ctx)
+	b := i18n.GetButtons(loc)
+	m := i18n.GetMessages(loc)
+
 	switch n.Kind {
 	case "created":
 		c := n.Card
@@ -157,32 +181,32 @@ func (a *Adapter) buildBlockPayload(n port.Notification) map[string]any {
 				"elements": []map[string]any{
 					{
 						"type":      "button",
-						"text":      map[string]any{"type": "plain_text", "text": "🔬 Deep Research"},
+						"text":      map[string]any{"type": "plain_text", "text": b.DeepResearch},
 						"style":     "primary",
 						"action_id": "research",
 						"value":     fmt.Sprintf("%d", c.ID),
 					},
 					{
 						"type":      "button",
-						"text":      map[string]any{"type": "plain_text", "text": "Short"},
+						"text":      map[string]any{"type": "plain_text", "text": b.Short},
 						"action_id": "commit_short",
 						"value":     fmt.Sprintf("%d", c.ID),
 					},
 					{
 						"type":      "button",
-						"text":      map[string]any{"type": "plain_text", "text": "Medium"},
+						"text":      map[string]any{"type": "plain_text", "text": b.Medium},
 						"action_id": "commit_med",
 						"value":     fmt.Sprintf("%d", c.ID),
 					},
 					{
 						"type":      "button",
-						"text":      map[string]any{"type": "plain_text", "text": "Long"},
+						"text":      map[string]any{"type": "plain_text", "text": b.Long},
 						"action_id": "commit_long",
 						"value":     fmt.Sprintf("%d", c.ID),
 					},
 					{
 						"type":      "button",
-						"text":      map[string]any{"type": "plain_text", "text": "✕ Discard"},
+						"text":      map[string]any{"type": "plain_text", "text": b.Discard},
 						"style":     "danger",
 						"action_id": "discard",
 						"value":     fmt.Sprintf("%d", c.ID),
@@ -202,11 +226,11 @@ func (a *Adapter) buildBlockPayload(n port.Notification) map[string]any {
 
 	case "research_done":
 		res := map[string]any{
-			"text": "🔬 Research Complete: " + n.Card.Title,
+			"text": fmt.Sprintf(m.ResearchComplete+": %s", n.Card.Title),
 			"blocks": []map[string]any{
 				{
 					"type": "header",
-					"text": map[string]any{"type": "plain_text", "text": "🔬 Research Complete: " + n.Card.Title},
+					"text": map[string]any{"type": "plain_text", "text": fmt.Sprintf(m.ResearchComplete+": %s", n.Card.Title)},
 				},
 			},
 		}
@@ -232,5 +256,55 @@ func (a *Adapter) buildBlockPayload(n port.Notification) map[string]any {
 			res["channel"] = a.ChannelID
 		}
 		return res
+	}
+}
+
+// ActionButtons renders standard action buttons with canonical callback prefixes.
+func ActionButtons(id int64, loc ...string) []map[string]any {
+	locale := "en"
+	if len(loc) > 0 && loc[0] != "" {
+		locale = loc[0]
+	}
+	b := i18n.GetButtons(locale)
+	return []map[string]any{
+		{
+			"type":      "button",
+			"text":      map[string]any{"type": "plain_text", "text": b.Research},
+			"style":     "primary",
+			"action_id": "research",
+			"value":     fmt.Sprintf("research:%d", id),
+		},
+		{
+			"type":      "button",
+			"text":      map[string]any{"type": "plain_text", "text": b.Playbook},
+			"action_id": "pb",
+			"value":     fmt.Sprintf("pb:%d", id),
+		},
+		{
+			"type":      "button",
+			"text":      map[string]any{"type": "plain_text", "text": b.Do},
+			"style":     "primary",
+			"action_id": "do",
+			"value":     fmt.Sprintf("do:%d", id),
+		},
+		{
+			"type":      "button",
+			"text":      map[string]any{"type": "plain_text", "text": b.Keep},
+			"action_id": "keep",
+			"value":     fmt.Sprintf("keep:%d", id),
+		},
+		{
+			"type":      "button",
+			"text":      map[string]any{"type": "plain_text", "text": b.Shelve},
+			"action_id": "shelve",
+			"value":     fmt.Sprintf("shelve:%d", id),
+		},
+		{
+			"type":      "button",
+			"text":      map[string]any{"type": "plain_text", "text": b.Dismiss},
+			"style":     "danger",
+			"action_id": "dismiss",
+			"value":     fmt.Sprintf("dismiss:%d", id),
+		},
 	}
 }

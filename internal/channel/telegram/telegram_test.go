@@ -18,6 +18,7 @@ import (
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/capture"
 	"sparkkeep/internal/config"
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/store"
 )
@@ -498,7 +499,7 @@ func TestSendCardIncludesProposedActions(t *testing.T) {
 			t.Errorf("sendCard: %v", err)
 		}
 	})
-	want := "*Watch the talk*\n\nThree takeaways.\n\n*Next Steps:*\n" +
+	want := "*Watch the talk*\n\nThree takeaways.\n\n*Next actions:*\n" +
 		"• Read the paper\n• Share with the team\n\n[short-term]\n#talks #ml"
 	if sent != want {
 		t.Errorf("caption =\n%q\nwant\n%q", sent, want)
@@ -702,6 +703,13 @@ func TestParseCallback(t *testing.T) {
 	}{
 		{"42:doing", 42, "doing", true},
 		{"1:retry", 1, "retry", true},
+		{"do:42", 42, "do", true},
+		{"keep:42", 42, "keep", true},
+		{"shelve:42", 42, "shelve", true},
+		{"dismiss:42", 42, "dismiss", true},
+		{"research:42", 42, "research", true},
+		{"pb:42", 42, "pb", true},
+		{"research:42:15", 42, "research:15", true},
 		{"invalid", 0, "", false},
 		{"abc:doing", 0, "", false},
 		{"-5:doing", 0, "", false},
@@ -952,7 +960,7 @@ func TestCardCaption_LegacyFallback(t *testing.T) {
 	if !strings.Contains(caption, "Plain legacy summary text") {
 		t.Errorf("missing legacy summary: %q", caption)
 	}
-	if !strings.Contains(caption, "*Next Steps:*\n• Action 1\n• Action 2") {
+	if !strings.Contains(caption, "*Next actions:*\n• Action 1\n• Action 2") {
 		t.Errorf("missing next steps: %q", caption)
 	}
 	if !strings.Contains(caption, "[short-term]") {
@@ -1974,5 +1982,178 @@ func TestNoiseGateDiscardWithKeepAnywayButton(t *testing.T) {
 	btn := editButtons[0][0][0]
 	if btn.Text != "📥 Keep Anyway" || btn.CallbackData != "force_capture:123" {
 		t.Errorf("unexpected button: %+v", btn)
+	}
+}
+
+func TestLocalizedCardButtons(t *testing.T) {
+	locales := []string{"en", "ro", "es", "pt-BR", "fr", "de"}
+	for _, loc := range locales {
+		btns := cardButtons(42, true, loc)
+		b := i18n.GetButtons(loc)
+		if len(btns) != 3 {
+			t.Fatalf("[%s] expected 3 rows, got %d", loc, len(btns))
+		}
+		if btns[0][0].Text != b.DeepResearch {
+			t.Errorf("[%s] expected DeepResearch %q, got %q", loc, b.DeepResearch, btns[0][0].Text)
+		}
+		if btns[1][0].Text != b.Short || btns[1][1].Text != b.Medium || btns[1][2].Text != b.Long {
+			t.Errorf("[%s] horizon buttons mismatch", loc)
+		}
+		if btns[2][0].Text != b.Discard || btns[2][1].Text != b.Retry {
+			t.Errorf("[%s] discard/retry buttons mismatch", loc)
+		}
+
+		// ActionButtons canonical callbacks
+		actBtns := ActionButtons(42, loc)
+		if actBtns[0][0].CallbackData != "research:42" || actBtns[0][1].CallbackData != "pb:42" {
+			t.Errorf("[%s] row 0 callback data mismatch: %+v", loc, actBtns[0])
+		}
+		if actBtns[1][0].CallbackData != "do:42" || actBtns[1][1].CallbackData != "keep:42" || actBtns[1][2].CallbackData != "shelve:42" {
+			t.Errorf("[%s] row 1 callback data mismatch: %+v", loc, actBtns[1])
+		}
+		if actBtns[2][0].CallbackData != "dismiss:42" {
+			t.Errorf("[%s] row 2 callback data mismatch: %+v", loc, actBtns[2])
+		}
+	}
+}
+
+func TestLocalizedTelegramSendDigest(t *testing.T) {
+	for _, loc := range []string{"ro", "de", "es", "fr", "pt-BR"} {
+		st := newStubStore()
+		st.cards[1] = port.Card{ID: 1, Title: "Card 1", Status: port.StatusInProgress, Horizon: "short-term", CreatedAt: time.Now().UTC()}
+		st.cards[2] = port.Card{ID: 2, Title: "Card 2", Status: port.StatusDone, Horizon: "medium-term", CreatedAt: time.Now().UTC()}
+		st.cards[3] = port.Card{ID: 3, Title: "Card 3", Status: port.StatusInbox, CreatedAt: time.Now().UTC()}
+
+		svc := stubService(t, st, llmStub(t, `[]`))
+		a := &Adapter{Token: "tok", OwnerID: 1, Service: svc, Locale: loc}
+
+		var sent []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var payload struct {
+				Text string `json:"text"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			sent = append(sent, payload.Text)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":100}}`))
+		}))
+		defer srv.Close()
+		a.baseURL = srv.URL
+
+		a.sendDigest(context.Background())
+		if len(sent) != 1 {
+			t.Fatalf("[%s] expected 1 sent message, got %d", loc, len(sent))
+		}
+
+		m := i18n.GetMessages(loc)
+		if !strings.Contains(sent[0], m.WeeklyDigestTitle) {
+			t.Errorf("[%s] expected title %q, got: %s", loc, m.WeeklyDigestTitle, sent[0])
+		}
+		if !strings.Contains(sent[0], m.RecentSparks) {
+			t.Errorf("[%s] expected recent sparks %q, got: %s", loc, m.RecentSparks, sent[0])
+		}
+	}
+}
+
+func TestLocalizedTelegramSendInbox(t *testing.T) {
+	st := newStubStore()
+	st.cards[10] = port.Card{ID: 10, Title: "Inbox Item", Status: port.StatusInbox, Horizon: "short-term", CreatedAt: time.Now().UTC()}
+	svc := stubService(t, st, llmStub(t, `[]`))
+	a := &Adapter{Token: "tok", OwnerID: 1, Service: svc, Locale: "ro"}
+
+	var sent []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Text string `json:"text"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		sent = append(sent, payload.Text)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":101}}`))
+	}))
+	defer srv.Close()
+	a.baseURL = srv.URL
+
+	// Send /inbox command
+	a.handleMessage(&message{MessageID: 55, Chat: &chat{ID: 1}, Text: "/inbox"})
+	if len(sent) != 1 {
+		t.Fatalf("expected 1 sent message, got %d", len(sent))
+	}
+	m := i18n.GetMessages("ro")
+	expectedPrefix := fmt.Sprintf(m.InboxHeader, 1)
+	if !strings.Contains(sent[0], expectedPrefix) {
+		t.Errorf("expected inbox header %q, got %q", expectedPrefix, sent[0])
+	}
+	if !strings.Contains(sent[0], "Inbox Item") {
+		t.Errorf("expected card title in inbox listing, got %q", sent[0])
+	}
+}
+
+func TestLocalizedTelegramResearchNotifications(t *testing.T) {
+	for _, loc := range []string{"ro", "de", "es", "fr", "pt-BR"} {
+		m := i18n.GetMessages(loc)
+		var sent []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var payload struct {
+				Text string `json:"text"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			sent = append(sent, payload.Text)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":200}}`))
+		}))
+		defer srv.Close()
+
+		a := &Adapter{Token: "tok", OwnerID: 1, baseURL: srv.URL, Locale: loc}
+
+		// Done notification
+		notifDone := port.Notification{
+			Kind: "research_done",
+			Card: port.Card{ID: 42, Title: "Researched Card"},
+			Res: &port.Research{
+				ID:     1,
+				CardID: 42,
+				Result: &port.ResearchResult{
+					Verdict: &port.ResearchVerdict{
+						Recommendation: "pursue",
+						Confidence:     "high",
+						NextActions:    []string{"Build MVP"},
+					},
+				},
+			},
+		}
+		if err := a.Notify(context.Background(), notifDone); err != nil {
+			t.Fatalf("[%s] Notify done error: %v", loc, err)
+		}
+		if len(sent) == 0 {
+			t.Fatalf("[%s] expected message sent", loc)
+		}
+		msg := sent[len(sent)-1]
+		if !strings.Contains(msg, m.ResearchCompleteHeader) {
+			t.Errorf("[%s] expected header %q, got %q", loc, m.ResearchCompleteHeader, msg)
+		}
+		if !strings.Contains(msg, m.Verdict) || !strings.Contains(msg, m.Confidence) {
+			t.Errorf("[%s] expected verdict and confidence labels, got %q", loc, msg)
+		}
+
+		// Failed notification
+		notifFail := port.Notification{
+			Kind: "research_failed",
+			Card: port.Card{ID: 42, Title: "Failed Card"},
+			Res: &port.Research{
+				ID:     2,
+				CardID: 42,
+				Steps: []port.ResearchStep{
+					{ID: "extract_facts", Status: "failed"},
+				},
+			},
+		}
+		if err := a.Notify(context.Background(), notifFail); err != nil {
+			t.Fatalf("[%s] Notify fail error: %v", loc, err)
+		}
+		failMsg := sent[len(sent)-1]
+		if !strings.Contains(failMsg, m.ResearchFailedHeader) {
+			t.Errorf("[%s] expected fail header %q, got %q", loc, m.ResearchFailedHeader, failMsg)
+		}
 	}
 }

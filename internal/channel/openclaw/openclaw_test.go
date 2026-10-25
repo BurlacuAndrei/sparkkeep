@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"sparkkeep/internal/capture"
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -234,5 +237,62 @@ func TestOpenClawWebhookAcceptsConfiguredToken(t *testing.T) {
 	}
 	if !svc.captured {
 		t.Errorf("expected capture with configured token")
+	}
+}
+
+func TestOpenClawLocalizedFormattingAndActionCommands(t *testing.T) {
+	locales := []string{"en", "ro", "es", "pt-BR", "fr", "de"}
+
+	for _, loc := range locales {
+		m := i18n.GetMessages(loc)
+		svc := &mockService{}
+		adapter := New(Config{HookToken: "tok", Locale: loc}, svc, "http://localhost:8080", nil)
+
+		// 1. Check message formatting
+		card := port.Card{
+			ID:         42,
+			Title:      "Local Card",
+			Summary:    "Local Summary",
+			Horizon:    port.HorizonShortTerm,
+			Worthiness: port.Worthiness{Level: "High"},
+			Claims:     []string{"Local Claim 1"},
+		}
+		notif := port.Notification{Kind: "created", Card: card}
+		msg := adapter.formatNotification(context.Background(), notif)
+		if !strings.Contains(msg, m.Horizon) {
+			t.Errorf("[%s] expected message to contain horizon label %q, got: %s", loc, m.Horizon, msg)
+		}
+		if !strings.Contains(msg, m.ActionsReplyWith) {
+			t.Errorf("[%s] expected message to contain actions label %q, got: %s", loc, m.ActionsReplyWith, msg)
+		}
+		if !strings.Contains(msg, m.KeyClaims) {
+			t.Errorf("[%s] expected message to contain key claims label %q, got: %s", loc, m.KeyClaims, msg)
+		}
+
+		// 2. Action command responses
+		handled, reply, err := adapter.handleActionCommand(context.Background(), "/do 42")
+		if !handled || err != nil {
+			t.Fatalf("[%s] /do command failed: %v", loc, err)
+		}
+		if reply != m.MovedShortTerm && reply != "Card 42 moved to Short-term (Doing)" && !strings.Contains(reply, "42") {
+			t.Errorf("[%s] unexpected reply: %s", loc, reply)
+		}
+
+		handled, reply, err = adapter.handleActionCommand(context.Background(), "/shelve 42")
+		if !handled || err != nil {
+			t.Fatalf("[%s] /shelve command failed: %v", loc, err)
+		}
+		if !strings.Contains(reply, "42") {
+			t.Errorf("[%s] unexpected shelve reply: %s", loc, reply)
+		}
+
+		handled, reply, err = adapter.handleActionCommand(context.Background(), "/keep 42")
+		if !handled || err != nil {
+			t.Fatalf("[%s] /keep command failed: %v", loc, err)
+		}
+		wantKeep := strings.TrimSpace(reply)
+		if wantKeep != strings.TrimSpace(fmt.Sprintf(m.MovedInbox, 42)) {
+			t.Errorf("[%s] unexpected keep reply: %s, want: %s", loc, reply, fmt.Sprintf(m.MovedInbox, 42))
+		}
 	}
 }

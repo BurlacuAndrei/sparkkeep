@@ -11,6 +11,7 @@ const (
 type CardExport struct {
 	Card     Card      `json:"card"`
 	Research *Research `json:"research,omitempty"`
+	Locale   string    `json:"locale,omitempty"`
 }
 
 // SinkTestResult captures the status of testing an outbound sink connection.

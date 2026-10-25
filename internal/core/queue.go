@@ -96,8 +96,8 @@ func MatchSchedule(schedule string, t time.Time) bool {
 }
 
 // FormatMorningResearchDigest formats completed research runs for morning Telegram summary.
-func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]string, baseURL string) string {
-	return telegram.FormatMorningResearchDigest(runs, cardTitles, baseURL)
+func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]string, baseURL string, loc ...string) string {
+	return telegram.FormatMorningResearchDigest(runs, cardTitles, baseURL, loc...)
 }
 
 // SendMorningDigest queries completed research runs within the digest window,
@@ -128,7 +128,11 @@ func (s *Service) SendMorningDigest(ctx context.Context) error {
 	}
 
 	publicURL := s.Config.PublicURL
-	msg := FormatMorningResearchDigest(runs, cardTitles, publicURL)
+	locale := "en"
+	if loc, err := s.Store.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+		locale = strings.TrimSpace(loc)
+	}
+	msg := FormatMorningResearchDigest(runs, cardTitles, publicURL, locale)
 
 	n := port.Notification{
 		Kind: "morning_digest",

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -381,5 +382,47 @@ func TestClient_UpsertCardExport_Idempotent(t *testing.T) {
 	// Second round: notes GET (200), notes PUT, tags GET
 	if callCount < 8 {
 		t.Errorf("Expected multiple API calls, got %d", callCount)
+	}
+}
+
+func TestJoplinLocalizedHeadings(t *testing.T) {
+	locales := []string{"en", "ro", "es", "pt-BR", "fr", "de"}
+	client := NewClient(Config{Mode: ModeClipper, Token: "tok"})
+
+	for _, loc := range locales {
+		h := i18n.GetHeadings(loc)
+		exp := port.CardExport{
+			Locale: loc,
+			Card: port.Card{
+				ID:               99,
+				Title:            "Joplin Note Title",
+				ExecutiveSummary: "Exec text",
+				ValueProposition: "Value prop text",
+				ProposedActions:  []string{"Task A"},
+				SourceNote:       "Note text",
+			},
+			Research: &port.Research{
+				ID: 5,
+				PlaybookSnapshot: &port.Playbook{
+					Name: "Audit",
+				},
+				Findings: "Findings text",
+			},
+		}
+
+		body := client.buildMarkdownBody(exp)
+		expected := []string{
+			"## " + h.ExecutiveSummary,
+			"## " + h.ValueProposition,
+			"## " + h.ProposedActions,
+			"## " + h.SourceNotes,
+			"## " + h.ResearchDossier,
+			"**" + h.Playbook + ":** Audit",
+		}
+		for _, ex := range expected {
+			if !strings.Contains(body, ex) {
+				t.Errorf("[%s] expected body to contain %q, got:\n%s", loc, ex, body)
+			}
+		}
 	}
 }

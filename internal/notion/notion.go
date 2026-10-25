@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -26,6 +27,7 @@ type Config struct {
 	Token      string // Internal Integration Token (secret_...)
 	DatabaseID string // Target database ID
 	BaseURL    string // Optional API base URL override
+	Locale     string
 }
 
 // Client is a Notion API client for Sparkkeep exports.
@@ -456,27 +458,33 @@ func (c *Client) buildBlocks(exp port.CardExport) ([]map[string]any, error) {
 	var blocks []map[string]any
 	card := exp.Card
 
+	locale := c.config.Locale
+	if exp.Locale != "" {
+		locale = exp.Locale
+	}
+	h := i18n.GetHeadings(locale)
+
 	// Title as heading_1
 	blocks = append(blocks, headingBlock(1, card.Title))
 
 	// Executive Summary / Summary
 	if card.ExecutiveSummary != "" {
-		blocks = append(blocks, headingBlock(2, "Executive Summary"))
+		blocks = append(blocks, headingBlock(2, h.ExecutiveSummary))
 		blocks = append(blocks, paragraphBlocks(card.ExecutiveSummary)...)
 	} else if card.Summary != "" {
-		blocks = append(blocks, headingBlock(2, "Summary"))
+		blocks = append(blocks, headingBlock(2, h.Summary))
 		blocks = append(blocks, paragraphBlocks(card.Summary)...)
 	}
 
 	// Value Proposition
 	if card.ValueProposition != "" {
-		blocks = append(blocks, headingBlock(2, "Value Proposition"))
+		blocks = append(blocks, headingBlock(2, h.ValueProposition))
 		blocks = append(blocks, paragraphBlocks(card.ValueProposition)...)
 	}
 
 	// Proposed Actions
 	if len(card.ProposedActions) > 0 {
-		blocks = append(blocks, headingBlock(2, "Proposed Actions"))
+		blocks = append(blocks, headingBlock(2, h.ProposedActions))
 		for _, action := range card.ProposedActions {
 			blocks = append(blocks, toDoBlock(action, false))
 		}
@@ -484,13 +492,13 @@ func (c *Client) buildBlocks(exp port.CardExport) ([]map[string]any, error) {
 
 	// Source Note
 	if card.SourceNote != "" {
-		blocks = append(blocks, headingBlock(2, "Source Notes"))
+		blocks = append(blocks, headingBlock(2, h.SourceNotes))
 		blocks = append(blocks, paragraphBlocks(card.SourceNote)...)
 	}
 
 	// References
 	if len(card.References) > 0 {
-		blocks = append(blocks, headingBlock(2, "References"))
+		blocks = append(blocks, headingBlock(2, h.References))
 		for _, ref := range card.References {
 			if ref.URL != "" {
 				blocks = append(blocks, bulletedListItemBlock(fmt.Sprintf("[%s](%s) (%s)", ref.Label, ref.URL, ref.Kind)))
@@ -502,15 +510,23 @@ func (c *Client) buildBlocks(exp port.CardExport) ([]map[string]any, error) {
 
 	// Research Dossier
 	if exp.Research != nil {
-		blocks = append(blocks, c.buildResearchDossierBlocks(exp.Research)...)
+		blocks = append(blocks, headingBlock(2, h.ResearchDossier))
+		blocks = append(blocks, c.buildResearchDossierBlocks(exp.Research, h)...)
 	}
 
 	return blocks, nil
 }
 
 // buildResearchDossierBlocks creates callout block for research dossier.
-func (c *Client) buildResearchDossierBlocks(res *port.Research) []map[string]any {
+func (c *Client) buildResearchDossierBlocks(res *port.Research, h ...i18n.Headings) []map[string]any {
 	var blocks []map[string]any
+
+	playbookLabel := "Playbook"
+	completedLabel := "Completed"
+	if len(h) > 0 {
+		playbookLabel = h[0].Playbook
+		completedLabel = h[0].Completed
+	}
 
 	playbookName := "Deep Research"
 	if res.PlaybookSnapshot != nil && res.PlaybookSnapshot.Name != "" {
@@ -526,8 +542,8 @@ func (c *Client) buildResearchDossierBlocks(res *port.Research) []map[string]any
 
 	// Build callout content
 	calloutChildren := []map[string]any{
-		paragraphBlock(fmt.Sprintf("**Playbook:** %s", playbookName)),
-		paragraphBlock(fmt.Sprintf("**Completed:** %s", completedAt.Format(time.RFC3339))),
+		paragraphBlock(fmt.Sprintf("**%s:** %s", playbookLabel, playbookName)),
+		paragraphBlock(fmt.Sprintf("**%s:** %s", completedLabel, completedAt.Format(time.RFC3339))),
 	}
 
 	if strings.TrimSpace(res.Findings) != "" {

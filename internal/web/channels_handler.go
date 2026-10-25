@@ -14,6 +14,7 @@ import (
 	"sparkkeep/internal/analyze"
 	"sparkkeep/internal/channel/discord"
 	"sparkkeep/internal/channel/openclaw"
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/obsidian"
 	"sparkkeep/internal/port"
 	"sparkkeep/internal/webhook"
@@ -535,14 +536,17 @@ func (a *api) pushDigest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	loc, _ := a.store.GetSetting(r.Context(), "interface_locale")
+	m := i18n.GetMessages(loc)
+
 	var sb strings.Builder
-	sb.WriteString("📊 *Sparkkeep Intelligence Digest*\n")
-	fmt.Fprintf(&sb, "Window: Last %d days • Total: %d sparks\n\n", days, len(cards))
-	fmt.Fprintf(&sb, "• 📥 Inbox: %d\n• ⚡ In Progress: %d\n• ✅ Done: %d\n• 📦 Shelved: %d\n\n",
+	sb.WriteString(m.IntelligenceDigestTitle + "\n")
+	fmt.Fprintf(&sb, m.IntelligenceDigestWindow+"\n\n", days, len(cards))
+	fmt.Fprintf(&sb, m.StatusInbox+"\n"+m.StatusInProgress+"\n"+m.StatusDone+"\n"+m.StatusShelved+"\n\n",
 		inbox, doing, done, shelved)
 
 	if len(cards) > 0 {
-		sb.WriteString("*Top Sparks:*\n")
+		sb.WriteString(m.TopSparks + "\n")
 		limit := 5
 		if len(cards) < limit {
 			limit = len(cards)

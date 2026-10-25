@@ -1810,9 +1810,15 @@ func (s *Service) BuildCardExport(ctx context.Context, cardID int64) (port.CardE
 		}
 	}
 
+	locale := "en"
+	if loc, err := s.Store.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+		locale = strings.TrimSpace(loc)
+	}
+
 	return port.CardExport{
 		Card:     card,
 		Research: latestDone,
+		Locale:   locale,
 	}, nil
 }
 
@@ -1824,6 +1830,11 @@ func (s *Service) BuildLibraryExports(ctx context.Context) ([]port.CardExport, e
 	cards, err := s.Store.ListCards(ctx, port.CardFilter{Limit: 100000})
 	if err != nil {
 		return nil, err
+	}
+
+	locale := "en"
+	if loc, err := s.Store.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+		locale = strings.TrimSpace(loc)
 	}
 
 	var exports []port.CardExport
@@ -1842,6 +1853,7 @@ func (s *Service) BuildLibraryExports(ctx context.Context) ([]port.CardExport, e
 		exports = append(exports, port.CardExport{
 			Card:     c,
 			Research: latestDone,
+			Locale:   locale,
 		})
 	}
 	return exports, nil
@@ -1887,6 +1899,7 @@ func (s *Service) ExportCardToSink(ctx context.Context, sink string, cardID int6
 		token, _ := s.Store.GetSetting(ctx, "joplin_token")
 		email, _ := s.Store.GetSetting(ctx, "joplin_email")
 		password, _ := s.Store.GetSetting(ctx, "joplin_password")
+		loc, _ := s.Store.GetSetting(ctx, "interface_locale")
 
 		mode := joplin.ModeServer
 		if modeStr == "clipper" {
@@ -1906,6 +1919,7 @@ func (s *Service) ExportCardToSink(ctx context.Context, sink string, cardID int6
 			Token:    token,
 			Email:    email,
 			Password: password,
+			Locale:   loc,
 		})
 
 		if _, err := client.EnsureNotebook(ctx); err != nil {
@@ -1921,10 +1935,11 @@ func (s *Service) ExportCardToSink(ctx context.Context, sink string, cardID int6
 	case port.SinkNotion:
 		token, _ := s.Store.GetSetting(ctx, "notion_token")
 		dbID, _ := s.Store.GetSetting(ctx, "notion_database_id")
+		loc, _ := s.Store.GetSetting(ctx, "interface_locale")
 		if token == "" || dbID == "" {
 			return fmt.Errorf("notion: token and database_id required")
 		}
-		client := notion.NewClient(notion.Config{Token: token, DatabaseID: dbID})
+		client := notion.NewClient(notion.Config{Token: token, DatabaseID: dbID, Locale: loc})
 		if err := client.EnsureDatabaseSchema(ctx); err != nil {
 			return err
 		}
@@ -1959,6 +1974,7 @@ func (s *Service) ExportLibraryToSink(ctx context.Context, sink string, override
 		token, _ := s.Store.GetSetting(ctx, "joplin_token")
 		email, _ := s.Store.GetSetting(ctx, "joplin_email")
 		password, _ := s.Store.GetSetting(ctx, "joplin_password")
+		loc, _ := s.Store.GetSetting(ctx, "interface_locale")
 
 		mode := joplin.ModeServer
 		if modeStr == "clipper" {
@@ -1978,6 +1994,7 @@ func (s *Service) ExportLibraryToSink(ctx context.Context, sink string, override
 			Token:    token,
 			Email:    email,
 			Password: password,
+			Locale:   loc,
 		})
 
 		if _, err := client.EnsureNotebook(ctx); err != nil {
@@ -2000,10 +2017,11 @@ func (s *Service) ExportLibraryToSink(ctx context.Context, sink string, override
 	case port.SinkNotion:
 		token, _ := s.Store.GetSetting(ctx, "notion_token")
 		dbID, _ := s.Store.GetSetting(ctx, "notion_database_id")
+		loc, _ := s.Store.GetSetting(ctx, "interface_locale")
 		if token == "" || dbID == "" {
 			return 0, fmt.Errorf("notion: token and database_id required")
 		}
-		client := notion.NewClient(notion.Config{Token: token, DatabaseID: dbID})
+		client := notion.NewClient(notion.Config{Token: token, DatabaseID: dbID, Locale: loc})
 		if err := client.EnsureDatabaseSchema(ctx); err != nil {
 			return 0, err
 		}

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"sparkkeep/internal/capture"
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
@@ -34,6 +35,7 @@ type Config struct {
 	GuildID   string `json:"guild_id,omitempty"`
 	PublicKey string `json:"public_key,omitempty"` // For ED25519 interaction signature verification
 	Enabled   bool   `json:"enabled"`
+	Locale    string `json:"locale,omitempty"`
 }
 
 // Service abstracts the orchestration methods consumed by the Discord adapter.
@@ -48,6 +50,7 @@ type Adapter struct {
 	ChannelID string
 	PublicKey string
 	PublicURL string
+	Locale    string
 	Service   Service
 	Logf      func(format string, args ...any)
 
@@ -57,6 +60,22 @@ type Adapter struct {
 	// pubKey is the decoded Ed25519 key used to verify interaction signatures.
 	// nil when PublicKey is empty or malformed, in which case requests are rejected.
 	pubKey ed25519.PublicKey
+}
+
+func (a *Adapter) locale(ctx context.Context) string {
+	if a.Locale != "" {
+		return a.Locale
+	}
+	if a.Service != nil {
+		if getter, ok := a.Service.(interface {
+			GetSetting(context.Context, string) (string, error)
+		}); ok {
+			if loc, err := getter.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+				return strings.TrimSpace(loc)
+			}
+		}
+	}
+	return "en"
 }
 
 func New(cfg Config, svc Service, publicURL string, logf func(format string, args ...any)) *Adapter {
@@ -73,6 +92,7 @@ func New(cfg Config, svc Service, publicURL string, logf func(format string, arg
 		ChannelID: strings.TrimSpace(cfg.ChannelID),
 		PublicKey: strings.TrimSpace(cfg.PublicKey),
 		PublicURL: publicURL,
+		Locale:    strings.TrimSpace(cfg.Locale),
 		Service:   svc,
 		Logf:      logf,
 		apiBase:   discordAPIBase,
@@ -116,7 +136,7 @@ func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
 		return nil
 	}
 
-	payload := a.buildMessagePayload(n)
+	payload := a.buildMessagePayload(ctx, n)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -183,7 +203,38 @@ type discordButton struct {
 	CustomID string `json:"custom_id"`
 }
 
-func (a *Adapter) buildMessagePayload(n port.Notification) discordMessage {
+// ActionButtons renders standard action buttons with canonical callback prefixes.
+func ActionButtons(id int64, loc ...string) []discordActionRow {
+	locale := "en"
+	if len(loc) > 0 && loc[0] != "" {
+		locale = loc[0]
+	}
+	b := i18n.GetButtons(locale)
+	return []discordActionRow{
+		{
+			Type: 1,
+			Components: []discordButton{
+				{Type: 2, Style: 1, Label: b.Research, CustomID: fmt.Sprintf("research:%d", id)},
+				{Type: 2, Style: 2, Label: b.Playbook, CustomID: fmt.Sprintf("pb:%d", id)},
+			},
+		},
+		{
+			Type: 1,
+			Components: []discordButton{
+				{Type: 2, Style: 3, Label: b.Do, CustomID: fmt.Sprintf("do:%d", id)},
+				{Type: 2, Style: 2, Label: b.Keep, CustomID: fmt.Sprintf("keep:%d", id)},
+				{Type: 2, Style: 2, Label: b.Shelve, CustomID: fmt.Sprintf("shelve:%d", id)},
+				{Type: 2, Style: 4, Label: b.Dismiss, CustomID: fmt.Sprintf("dismiss:%d", id)},
+			},
+		},
+	}
+}
+
+func (a *Adapter) buildMessagePayload(ctx context.Context, n port.Notification) discordMessage {
+	loc := a.locale(ctx)
+	b := i18n.GetButtons(loc)
+	m := i18n.GetMessages(loc)
+
 	switch n.Kind {
 	case "created":
 		c := n.Card
@@ -198,13 +249,13 @@ func (a *Adapter) buildMessagePayload(n port.Notification) discordMessage {
 			if c.Worthiness.Reason != "" {
 				val += " — " + c.Worthiness.Reason
 			}
-			fields = append(fields, discordField{Name: "Worth Researching", Value: val, Inline: true})
+			fields = append(fields, discordField{Name: m.WorthResearching, Value: val, Inline: true})
 		}
 		if c.Horizon != "" {
-			fields = append(fields, discordField{Name: "Horizon", Value: c.Horizon, Inline: true})
+			fields = append(fields, discordField{Name: m.Horizon, Value: c.Horizon, Inline: true})
 		}
 		if len(c.Tags) > 0 {
-			fields = append(fields, discordField{Name: "Tags", Value: "#" + strings.Join(c.Tags, " #"), Inline: false})
+			fields = append(fields, discordField{Name: m.Tags, Value: "#" + strings.Join(c.Tags, " #"), Inline: false})
 		}
 
 		embed := discordEmbed{
@@ -220,16 +271,16 @@ func (a *Adapter) buildMessagePayload(n port.Notification) discordMessage {
 		row1 := discordActionRow{
 			Type: 1,
 			Components: []discordButton{
-				{Type: 2, Style: 1, Label: "🔬 Deep Research", CustomID: fmt.Sprintf("card:%d:research", c.ID)},
+				{Type: 2, Style: 1, Label: b.DeepResearch, CustomID: fmt.Sprintf("card:%d:research", c.ID)},
 			},
 		}
 		row2 := discordActionRow{
 			Type: 1,
 			Components: []discordButton{
-				{Type: 2, Style: 2, Label: "Short", CustomID: fmt.Sprintf("card:%d:commit:short-term", c.ID)},
-				{Type: 2, Style: 2, Label: "Medium", CustomID: fmt.Sprintf("card:%d:commit:medium-term", c.ID)},
-				{Type: 2, Style: 2, Label: "Long", CustomID: fmt.Sprintf("card:%d:commit:long-term", c.ID)},
-				{Type: 2, Style: 4, Label: "✕ Discard", CustomID: fmt.Sprintf("card:%d:dismiss", c.ID)},
+				{Type: 2, Style: 2, Label: b.Short, CustomID: fmt.Sprintf("card:%d:commit:short-term", c.ID)},
+				{Type: 2, Style: 2, Label: b.Medium, CustomID: fmt.Sprintf("card:%d:commit:medium-term", c.ID)},
+				{Type: 2, Style: 2, Label: b.Long, CustomID: fmt.Sprintf("card:%d:commit:long-term", c.ID)},
+				{Type: 2, Style: 4, Label: b.Discard, CustomID: fmt.Sprintf("card:%d:dismiss", c.ID)},
 			},
 		}
 
@@ -245,7 +296,7 @@ func (a *Adapter) buildMessagePayload(n port.Notification) discordMessage {
 			findingsSnippet = strings.Join(lines[:min(6, len(lines))], "\n")
 		}
 		embed := discordEmbed{
-			Title:       "🔬 Research Completed: " + n.Card.Title,
+			Title:       fmt.Sprintf(m.ResearchComplete+": %s", n.Card.Title),
 			Description: findingsSnippet,
 			Color:       0x10b981, // emerald green
 			Footer:      &discordFooter{Text: "Sparkkeep Deep Research"},
@@ -340,6 +391,75 @@ func (a *Adapter) HandleInteraction(w http.ResponseWriter, r *http.Request) {
 				if a.Service != nil {
 					status := port.StatusShelved
 					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &status})
+				}
+			case "do":
+				if a.Service != nil {
+					status := port.StatusInProgress
+					horizon := port.HorizonShortTerm
+					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &horizon, Status: &status})
+				}
+			case "keep":
+				if a.Service != nil {
+					status := port.StatusInbox
+					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &status})
+				}
+			case "shelve":
+				if a.Service != nil {
+					status := port.StatusShelved
+					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &status})
+				}
+			case "pb":
+				if len(parts) >= 4 && a.Service != nil {
+					pbID, _ := strconv.ParseInt(parts[3], 10, 64)
+					if pbID > 0 {
+						a.Service.GoResearch(context.Background(), cardID, &pbID)
+					}
+				}
+			}
+		} else if len(parts) >= 2 {
+			prefix := parts[0]
+			cardID, _ := strconv.ParseInt(parts[1], 10, 64)
+
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+
+			switch prefix {
+			case "research":
+				if a.Service != nil {
+					var pb *int64
+					if len(parts) >= 3 {
+						if id, err := strconv.ParseInt(parts[2], 10, 64); err == nil {
+							pb = &id
+						}
+					}
+					a.Service.GoResearch(context.Background(), cardID, pb)
+				}
+			case "do":
+				if a.Service != nil {
+					status := port.StatusInProgress
+					horizon := port.HorizonShortTerm
+					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Horizon: &horizon, Status: &status})
+				}
+			case "keep":
+				if a.Service != nil {
+					status := port.StatusInbox
+					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &status})
+				}
+			case "shelve":
+				if a.Service != nil {
+					status := port.StatusShelved
+					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &status})
+				}
+			case "dismiss":
+				if a.Service != nil {
+					status := port.StatusShelved
+					_, _ = a.Service.UpdateCard(ctx, cardID, port.CardPatch{Status: &status})
+				}
+			case "pb":
+				if len(parts) >= 3 && a.Service != nil {
+					if pbID, err := strconv.ParseInt(parts[2], 10, 64); err == nil && pbID > 0 {
+						a.Service.GoResearch(context.Background(), cardID, &pbID)
+					}
 				}
 			}
 		}

@@ -4,13 +4,20 @@ import (
 	"fmt"
 	"strings"
 
+	"sparkkeep/internal/i18n"
 	"sparkkeep/internal/port"
 )
 
 // FormatMorningResearchDigest formats completed research runs for morning Telegram summary.
-func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]string, baseURL string) string {
+func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]string, baseURL string, loc ...string) string {
+	locale := "en"
+	if len(loc) > 0 && loc[0] != "" {
+		locale = loc[0]
+	}
+	m := i18n.GetMessages(locale)
+
 	if len(runs) == 0 {
-		return "☀️ <b>Morning Research Digest</b>\n\nNo research reports completed overnight."
+		return m.MorningDigestTitle + "\n\n" + m.NoResearchOvernight
 	}
 
 	var doneRuns []port.Research
@@ -24,9 +31,9 @@ func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]stri
 	}
 
 	var sb strings.Builder
-	sb.WriteString("☀️ <b>Morning Research Digest</b>\n")
+	sb.WriteString(m.MorningDigestTitle + "\n")
 	if len(doneRuns) > 0 {
-		sb.WriteString(fmt.Sprintf("%d report(s) ready:\n\n", len(doneRuns)))
+		sb.WriteString(fmt.Sprintf(m.ReportsReady, len(doneRuns)))
 		for i, r := range doneRuns {
 			title := ""
 			if cardTitles != nil {
@@ -44,9 +51,9 @@ func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]stri
 				}
 				if r.Result.Verdict.Confidence != "" {
 					if verdict != "" {
-						verdict += fmt.Sprintf(" (%s confidence)", r.Result.Verdict.Confidence)
+						verdict += fmt.Sprintf(m.ConfidenceSuffix, r.Result.Verdict.Confidence)
 					} else {
-						verdict = fmt.Sprintf("Confidence: %s", r.Result.Verdict.Confidence)
+						verdict = fmt.Sprintf("%s: %s", m.Confidence, r.Result.Verdict.Confidence)
 					}
 				}
 				if r.Result.Verdict.ForWhom != "" {
@@ -57,7 +64,7 @@ func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]stri
 				verdict = strings.TrimSpace(lines[0])
 			}
 			if verdict != "" {
-				sb.WriteString(fmt.Sprintf("Verdict: %s\n", verdict))
+				sb.WriteString(fmt.Sprintf("%s: %s\n", m.Verdict, verdict))
 			}
 			if baseURL != "" {
 				sb.WriteString(fmt.Sprintf("🔗 %s/#card-%d\n", strings.TrimRight(baseURL, "/"), r.CardID))
@@ -67,14 +74,14 @@ func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]stri
 			}
 		}
 	} else {
-		sb.WriteString("0 completed reports ready.\n")
+		sb.WriteString(m.NoReportsReady)
 	}
 
 	if len(failedRuns) > 0 {
 		if len(doneRuns) > 0 {
 			sb.WriteString("\n")
 		}
-		sb.WriteString(fmt.Sprintf("⚠️ <b>Failures (%d):</b>\n", len(failedRuns)))
+		sb.WriteString(fmt.Sprintf(m.MorningFailures, len(failedRuns)))
 		for _, r := range failedRuns {
 			title := ""
 			if cardTitles != nil {
@@ -85,7 +92,7 @@ func FormatMorningResearchDigest(runs []port.Research, cardTitles map[int64]stri
 			}
 			errStr := r.Error
 			if errStr == "" {
-				errStr = "unknown error"
+				errStr = m.UnknownError
 			}
 			sb.WriteString(fmt.Sprintf("• <b>%s</b>: %s\n", title, errStr))
 		}
