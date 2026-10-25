@@ -1167,6 +1167,7 @@ export const ro = {
       spotlightUnpin: 'Anulează fixarea',
       spotlightCollapse: 'Restrânge',
       spotlightExpand: 'Extinde',
+      spotlightInspect: 'Inspectează',
       layoutColumns: 'Coloane',
       layoutSwimlanes: 'Culoare',
       groupBy: 'Grupare: {{group}}',

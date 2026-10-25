@@ -19,6 +19,136 @@ export type BoardSortOrder = 'updated' | 'worthiness' | 'progress' | 'newest';
 export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 export const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
 
+export function getCardTime(card: Card): number {
+  const d = card.updated_at || card.created_at;
+  return d ? new Date(d).getTime() : 0;
+}
+
+export function getWorthinessWeight(card: Card): number {
+  const lvl = card.worthiness?.level?.toLowerCase();
+  if (lvl === 'high') return 3;
+  if (lvl === 'medium') return 2;
+  if (lvl === 'low') return 1;
+  return 0;
+}
+
+/**
+ * Returns all unchecked actions from proposed_actions for a card.
+ */
+export function getUncheckedActions(card: Card): string[] {
+  const proposed = card.proposed_actions || [];
+  const completed = new Set(card.completed_actions || []);
+  return proposed.filter((s) => !completed.has(s));
+}
+
+/**
+ * Returns the first unchecked action step for a card, or null if none exist.
+ */
+export function getFirstUncheckedStep(card: Card): string | null {
+  const unchecked = getUncheckedActions(card);
+  return unchecked.length > 0 ? unchecked[0] : null;
+}
+
+/**
+ * Finds and ranks Focus Spotlight candidate cards:
+ * 1. Pinned card (`c.id === pinnedId` and status in 'to-do' or 'in-progress').
+ * 2. `in-progress` cards with unchecked proposed_actions, sorted by fewest remaining steps,
+ *    then worthiness (high > medium > low), then updated_at.
+ * 3. `to-do` cards in `short-term` (Now) with unchecked proposed_actions (or any short-term to-do
+ *    if none have actions), sorted by research_verdict === 'pursue', then worthiness, then recency.
+ * 4. Other active cards as fallback.
+ */
+export function findFocusCandidates(cards: Card[], pinnedId?: number | null): Card[] {
+  const activeCards = cards.filter(
+    (c) => c.status === 'to-do' || c.status === 'in-progress'
+  );
+  if (activeCards.length === 0) return [];
+
+  const candidates: Card[] = [];
+  const seenIds = new Set<number>();
+
+  const addCandidate = (c: Card) => {
+    if (!seenIds.has(c.id)) {
+      seenIds.add(c.id);
+      candidates.push(c);
+    }
+  };
+
+  // 1. Pinned card (must be active)
+  if (pinnedId != null) {
+    const pinned = activeCards.find((c) => c.id === pinnedId);
+    if (pinned) {
+      addCandidate(pinned);
+    }
+  }
+
+  // 2. In-progress cards with unchecked items in proposed_actions
+  const inProgressWithSteps = activeCards
+    .filter(
+      (c) =>
+        c.status === 'in-progress' &&
+        getUncheckedActions(c).length > 0 &&
+        !seenIds.has(c.id)
+    )
+    .sort((a, b) => {
+      const aRemaining = getUncheckedActions(a).length;
+      const bRemaining = getUncheckedActions(b).length;
+      if (aRemaining !== bRemaining) return aRemaining - bRemaining;
+
+      const worthDiff = getWorthinessWeight(b) - getWorthinessWeight(a);
+      if (worthDiff !== 0) return worthDiff;
+
+      return getCardTime(b) - getCardTime(a);
+    });
+
+  for (const c of inProgressWithSteps) {
+    addCandidate(c);
+  }
+
+  // 3. To-do cards in short-term (Now)
+  const shortTermTodos = activeCards.filter(
+    (c) =>
+      c.status === 'to-do' &&
+      (c.horizon || 'short-term') === 'short-term' &&
+      !seenIds.has(c.id)
+  );
+
+  const todosWithActions = shortTermTodos.filter(
+    (c) => getUncheckedActions(c).length > 0
+  );
+  const todoPool = todosWithActions.length > 0 ? todosWithActions : shortTermTodos;
+
+  const sortedTodos = [...todoPool].sort((a, b) => {
+    const aPursue = (a.research_verdict || '').toLowerCase() === 'pursue' ? 1 : 0;
+    const bPursue = (b.research_verdict || '').toLowerCase() === 'pursue' ? 1 : 0;
+    if (aPursue !== bPursue) return bPursue - aPursue;
+
+    const worthDiff = getWorthinessWeight(b) - getWorthinessWeight(a);
+    if (worthDiff !== 0) return worthDiff;
+
+    return getCardTime(b) - getCardTime(a);
+  });
+
+  for (const c of sortedTodos) {
+    addCandidate(c);
+  }
+
+  // 4. Other active cards as fallback
+  const remainingActive = activeCards
+    .filter((c) => !seenIds.has(c.id))
+    .sort((a, b) => {
+      const worthDiff = getWorthinessWeight(b) - getWorthinessWeight(a);
+      if (worthDiff !== 0) return worthDiff;
+      return getCardTime(b) - getCardTime(a);
+    });
+
+  for (const c of remainingActive) {
+    addCandidate(c);
+  }
+
+  return candidates;
+}
+
 /**
  * Returns true if the card has completed autonomous research findings.
  */
@@ -162,23 +292,6 @@ export function filterBoardCards(
 export function sortBoardCards(cards: Card[], sortOrder: BoardSortOrder): Card[] {
   const list = [...cards];
 
-  const getTime = (c: Card) => {
-    const d = c.updated_at || c.created_at;
-    return d ? new Date(d).getTime() : 0;
-  };
-
-  const getCreatedTime = (c: Card) => {
-    return c.created_at ? new Date(c.created_at).getTime() : 0;
-  };
-
-  const worthWeight = (c: Card) => {
-    const lvl = c.worthiness?.level?.toLowerCase();
-    if (lvl === 'high') return 3;
-    if (lvl === 'medium') return 2;
-    if (lvl === 'low') return 1;
-    return 0;
-  };
-
   const getProgress = (c: Card) => {
     const total = c.proposed_actions?.length || 0;
     const completed = c.completed_actions?.length || 0;
@@ -189,18 +302,21 @@ export function sortBoardCards(cards: Card[], sortOrder: BoardSortOrder): Card[]
   return list.sort((a, b) => {
     switch (sortOrder) {
       case 'updated':
-        return getTime(b) - getTime(a);
-      case 'newest':
-        return getCreatedTime(b) - getCreatedTime(a);
+        return getCardTime(b) - getCardTime(a);
+      case 'newest': {
+        const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bCreated - aCreated;
+      }
       case 'worthiness': {
-        const diff = worthWeight(b) - worthWeight(a);
+        const diff = getWorthinessWeight(b) - getWorthinessWeight(a);
         if (diff !== 0) return diff;
-        return getTime(b) - getTime(a);
+        return getCardTime(b) - getCardTime(a);
       }
       case 'progress': {
         const diff = getProgress(b) - getProgress(a);
         if (diff !== 0) return diff;
-        return getTime(b) - getTime(a);
+        return getCardTime(b) - getCardTime(a);
       }
       default:
         return 0;

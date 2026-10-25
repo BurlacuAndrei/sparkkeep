@@ -10,6 +10,9 @@ import {
   computeBoardPulseMetrics,
   filterBoardCards,
   sortBoardCards,
+  getUncheckedActions,
+  getFirstUncheckedStep,
+  findFocusCandidates,
 } from './boardUtils';
 import { Card } from '../types';
 
@@ -247,6 +250,200 @@ describe('boardUtils', () => {
       // Newest sort: 1d ago (3), 2d ago (2), 10d ago (1)
       const byNewest = sortBoardCards(cards, 'newest');
       expect(byNewest.map((c) => c.id)).toEqual([3, 2, 1]);
+    });
+  });
+
+  describe('getUncheckedActions & getFirstUncheckedStep', () => {
+    it('returns unchecked actions and the first step', () => {
+      const card: Card = {
+        ...baseCard,
+        proposed_actions: ['Step 1', 'Step 2', 'Step 3'],
+        completed_actions: ['Step 1'],
+      };
+      expect(getUncheckedActions(card)).toEqual(['Step 2', 'Step 3']);
+      expect(getFirstUncheckedStep(card)).toBe('Step 2');
+    });
+
+    it('returns empty array and null when all actions are completed', () => {
+      const card: Card = {
+        ...baseCard,
+        proposed_actions: ['Step 1'],
+        completed_actions: ['Step 1'],
+      };
+      expect(getUncheckedActions(card)).toEqual([]);
+      expect(getFirstUncheckedStep(card)).toBeNull();
+    });
+
+    it('returns null when proposed_actions is undefined', () => {
+      expect(getUncheckedActions(baseCard)).toEqual([]);
+      expect(getFirstUncheckedStep(baseCard)).toBeNull();
+    });
+  });
+
+  describe('findFocusCandidates', () => {
+    it('returns empty list when no active cards exist', () => {
+      const doneCards: Card[] = [
+        { ...baseCard, id: 1, status: 'done' },
+        { ...baseCard, id: 2, status: 'shelved' as any },
+      ];
+      expect(findFocusCandidates(doneCards)).toEqual([]);
+    });
+
+    it('prioritizes pinned active card first', () => {
+      const cards: Card[] = [
+        {
+          ...baseCard,
+          id: 1,
+          status: 'in-progress',
+          proposed_actions: ['A'],
+          completed_actions: [],
+        },
+        {
+          ...baseCard,
+          id: 2,
+          status: 'to-do',
+          horizon: 'short-term',
+          proposed_actions: ['B'],
+        },
+      ];
+
+      // Pin card 2
+      const candidates = findFocusCandidates(cards, 2);
+      expect(candidates.map((c) => c.id)).toEqual([2, 1]);
+    });
+
+    it('ignores pinned card if it is in done status', () => {
+      const cards: Card[] = [
+        {
+          ...baseCard,
+          id: 1,
+          status: 'in-progress',
+          proposed_actions: ['Step A'],
+        },
+        {
+          ...baseCard,
+          id: 2,
+          status: 'done',
+        },
+      ];
+      const candidates = findFocusCandidates(cards, 2);
+      expect(candidates.map((c) => c.id)).toEqual([1]);
+    });
+
+    it('ranks in-progress cards with fewest remaining steps first, then worthiness, then updated_at', () => {
+      const cards: Card[] = [
+        {
+          ...baseCard,
+          id: 1,
+          status: 'in-progress',
+          worthiness: { level: 'high' },
+          proposed_actions: ['1', '2', '3'],
+          completed_actions: [], // 3 remaining
+          updated_at: new Date(now - 1 * dayMs).toISOString(),
+        },
+        {
+          ...baseCard,
+          id: 2,
+          status: 'in-progress',
+          worthiness: { level: 'low' },
+          proposed_actions: ['1', '2'],
+          completed_actions: ['1'], // 1 remaining (fewest steps wins)
+          updated_at: new Date(now - 5 * dayMs).toISOString(),
+        },
+        {
+          ...baseCard,
+          id: 3,
+          status: 'in-progress',
+          worthiness: { level: 'high' },
+          proposed_actions: ['1', '2'],
+          completed_actions: [], // 2 remaining, high worthiness
+          updated_at: new Date(now - 3 * dayMs).toISOString(),
+        },
+        {
+          ...baseCard,
+          id: 4,
+          status: 'in-progress',
+          worthiness: { level: 'medium' },
+          proposed_actions: ['1', '2'],
+          completed_actions: [], // 2 remaining, medium worthiness
+          updated_at: new Date(now - 2 * dayMs).toISOString(),
+        },
+      ];
+
+      const candidates = findFocusCandidates(cards);
+      // Card 2: 1 step remaining
+      // Card 3: 2 steps remaining, high worthiness
+      // Card 4: 2 steps remaining, medium worthiness
+      // Card 1: 3 steps remaining
+      expect(candidates.map((c) => c.id)).toEqual([2, 3, 4, 1]);
+    });
+
+    it('ranks short-term to-do cards with pursue verdict, then worthiness, then recency', () => {
+      const cards: Card[] = [
+        {
+          ...baseCard,
+          id: 10,
+          status: 'to-do',
+          horizon: 'short-term',
+          worthiness: { level: 'high' },
+          research_verdict: 'watch',
+          proposed_actions: ['Step X'],
+          updated_at: new Date(now - 1 * dayMs).toISOString(),
+        },
+        {
+          ...baseCard,
+          id: 11,
+          status: 'to-do',
+          horizon: 'short-term',
+          worthiness: { level: 'medium' },
+          research_verdict: 'pursue', // Pursue verdict takes priority
+          proposed_actions: ['Step Y'],
+          updated_at: new Date(now - 4 * dayMs).toISOString(),
+        },
+        {
+          ...baseCard,
+          id: 12,
+          status: 'to-do',
+          horizon: 'short-term',
+          worthiness: { level: 'high' },
+          research_verdict: 'pursue', // High worthiness + pursue wins over medium + pursue
+          proposed_actions: ['Step Z'],
+          updated_at: new Date(now - 5 * dayMs).toISOString(),
+        },
+      ];
+
+      const candidates = findFocusCandidates(cards);
+      expect(candidates.map((c) => c.id)).toEqual([12, 11, 10]);
+    });
+
+    it('falls back to other active cards without duplicating pinned card', () => {
+      const cards: Card[] = [
+        {
+          ...baseCard,
+          id: 1,
+          status: 'in-progress',
+          proposed_actions: ['Act 1'],
+        },
+        {
+          ...baseCard,
+          id: 2,
+          status: 'to-do',
+          horizon: 'medium-term',
+          worthiness: { level: 'high' },
+        },
+        {
+          ...baseCard,
+          id: 3,
+          status: 'to-do',
+          horizon: 'long-term',
+          worthiness: { level: 'medium' },
+        },
+      ];
+
+      const candidates = findFocusCandidates(cards, 1);
+      // Card 1 is pinned and in-progress (1st)
+      // Fallbacks: Card 2 (high worthiness), Card 3 (medium worthiness)
+      expect(candidates.map((c) => c.id)).toEqual([1, 2, 3]);
     });
   });
 });

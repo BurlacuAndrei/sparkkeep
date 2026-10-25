@@ -5,6 +5,7 @@ import { Zap, CheckCircle2, ListTodo, Archive, XCircle, LayoutGrid, Rows3 } from
 import * as api from '../api';
 import { useLocale } from '../i18n';
 import { ExecutionPulse } from './board/ExecutionPulse';
+import { FocusSpotlight } from './board/FocusSpotlight';
 import {
   computeBoardPulseMetrics,
   filterBoardCards,
@@ -479,6 +480,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       {/* 1. ACTIVE EXECUTION KANBAN BOARD */}
       {boardMode === 'active' && (
         <>
+          <FocusSpotlight
+            cards={filteredCards}
+            onSelectCard={onSelectCard}
+            onUpdateCard={onUpdateCard}
+            showToast={showToast}
+          />
           <ExecutionPulse
             metrics={pulseMetrics}
             activeSignalFilter={signalFilter}

@@ -1147,6 +1147,7 @@ export const fr = {
       spotlightUnpin: 'Désépingler',
       spotlightCollapse: 'Réduire les feux',
       spotlightExpand: 'Développer les feux',
+      spotlightInspect: 'Inspecter',
       layoutColumns: 'Colonnes',
       layoutSwimlanes: 'Couloirs',
       groupBy: 'Grouper: {{group}}',

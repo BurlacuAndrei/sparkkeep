@@ -1150,6 +1150,7 @@ export const en = {
       spotlightUnpin: 'Unpin Focus',
       spotlightCollapse: 'Collapse Spotlight',
       spotlightExpand: 'Expand Spotlight',
+      spotlightInspect: 'Inspect',
       layoutColumns: 'Columns',
       layoutSwimlanes: 'Swimlanes',
       groupBy: 'Group: {{group}}',

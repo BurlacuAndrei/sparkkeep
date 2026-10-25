@@ -1173,6 +1173,7 @@ export const de = {
       spotlightUnpin: 'Fokus lösen',
       spotlightCollapse: 'Spotlight einklappen',
       spotlightExpand: 'Spotlight ausklappen',
+      spotlightInspect: 'Inspizieren',
       layoutColumns: 'Spalten',
       layoutSwimlanes: 'Bahnen',
       groupBy: 'Gruppieren: {{group}}',

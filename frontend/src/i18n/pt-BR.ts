@@ -1167,6 +1167,7 @@ export const ptBR = {
       spotlightUnpin: 'Desafixar foco',
       spotlightCollapse: 'Recolher destaque',
       spotlightExpand: 'Expandir destaque',
+      spotlightInspect: 'Inspecionar',
       layoutColumns: 'Colunas',
       layoutSwimlanes: 'Raias',
       groupBy: 'Agrupar: {{group}}',

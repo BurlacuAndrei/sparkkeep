@@ -379,8 +379,8 @@ describe('KanbanBoard Density & Usability', () => {
       );
 
       // Initially all cards are shown
-      expect(screen.getByText('Tool Spark Alpha')).toBeDefined();
-      expect(screen.getByText('Repo Spark Beta')).toBeDefined();
+      expect(screen.getAllByText('Tool Spark Alpha').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Repo Spark Beta').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Article Spark Gamma')).toBeDefined();
 
       // Click the Research Ready pill
@@ -388,8 +388,8 @@ describe('KanbanBoard Density & Usability', () => {
       fireEvent.click(researchReadyBtn);
 
       // Card 101 and 102 match; Card 103 (article without research) is filtered out
-      expect(screen.getByText('Tool Spark Alpha')).toBeDefined();
-      expect(screen.getByText('Repo Spark Beta')).toBeDefined();
+      expect(screen.getAllByText('Tool Spark Alpha').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Repo Spark Beta').length).toBeGreaterThanOrEqual(1);
       expect(screen.queryByText('Article Spark Gamma')).toBeNull();
 
       // Click again to toggle filter off
@@ -428,7 +428,7 @@ describe('KanbanBoard Density & Usability', () => {
       fireEvent.click(idlePill);
 
       // Only Card 102 (idle) is rendered
-      expect(screen.getByText('Repo Spark Beta')).toBeDefined();
+      expect(screen.getAllByText('Repo Spark Beta').length).toBeGreaterThanOrEqual(1);
       expect(screen.queryByText('Tool Spark Alpha')).toBeNull();
       expect(screen.queryByText('Article Spark Gamma')).toBeNull();
 
@@ -465,21 +465,21 @@ describe('KanbanBoard Density & Usability', () => {
       fireEvent.change(typeSelect, { target: { value: 'tool' } });
 
       // Only Card 101 (tool) is rendered
-      expect(screen.getByText('Tool Spark Alpha')).toBeDefined();
+      expect(screen.getAllByText('Tool Spark Alpha').length).toBeGreaterThanOrEqual(1);
       expect(screen.queryByText('Repo Spark Beta')).toBeNull();
       expect(screen.queryByText('Article Spark Gamma')).toBeNull();
 
       // Reset Card Type filter to 'all'
       fireEvent.change(typeSelect, { target: { value: 'all' } });
-      expect(screen.getByText('Repo Spark Beta')).toBeDefined();
+      expect(screen.getAllByText('Repo Spark Beta').length).toBeGreaterThanOrEqual(1);
 
       // Sort Order: change to 'worthiness'
       const sortSelect = screen.getByRole('combobox', { name: /sort:/i });
       fireEvent.change(sortSelect, { target: { value: 'worthiness' } });
 
       // All cards remain visible
-      expect(screen.getByText('Tool Spark Alpha')).toBeDefined();
-      expect(screen.getByText('Repo Spark Beta')).toBeDefined();
+      expect(screen.getAllByText('Tool Spark Alpha').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Repo Spark Beta').length).toBeGreaterThanOrEqual(1);
     });
 
     it('interacts with inline action checklist directly on board cards', () => {
@@ -560,6 +560,289 @@ describe('KanbanBoard Density & Usability', () => {
         'All steps completed! Moved #502 → Done',
         expect.any(Function)
       );
+    });
+  });
+
+  describe('Focus Spotlight Recommendation Banner', () => {
+    const spotlightCards: Card[] = [
+      {
+        id: 201,
+        title: 'To Do Card With Steps',
+        summary: 'To Do Card Summary',
+        status: 'to-do',
+        horizon: 'short-term',
+        type: 'idea',
+        worthiness: { level: 'high' },
+        research_verdict: 'pursue',
+        proposed_actions: ['Setup repository', 'Write spec'],
+        completed_actions: [],
+        source_url: '',
+        source_note: '',
+        tags: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: 202,
+        title: 'In Progress Card Closest To Done',
+        summary: 'In Progress Card Summary',
+        status: 'in-progress',
+        horizon: 'short-term',
+        type: 'tool',
+        worthiness: { level: 'medium' },
+        proposed_actions: ['Step A', 'Step B', 'Step C'],
+        completed_actions: ['Step A', 'Step B'], // 1 remaining!
+        source_url: '',
+        source_note: '',
+        tags: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: 203,
+        title: 'In Progress Card Further From Done',
+        summary: 'In Progress Further Summary',
+        status: 'in-progress',
+        horizon: 'short-term',
+        type: 'repo',
+        worthiness: { level: 'high' },
+        proposed_actions: ['Action 1', 'Action 2'],
+        completed_actions: [], // 2 remaining
+        source_url: '',
+        source_note: '',
+        tags: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+
+    it('renders candidate with fewest remaining steps (in-progress closest to done > to-do)', () => {
+      const onSelectCard = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={spotlightCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={onSelectCard}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const spotlight = screen.getByRole('region', { name: /focus spotlight/i });
+      expect(spotlight).toBeDefined();
+
+      // Card 202 has 1 remaining step vs Card 203 (2 steps) and Card 201 (to-do)
+      expect(spotlight.textContent).toContain('In Progress Card Closest To Done');
+      expect(spotlight.textContent).toContain('Next Step: Step C');
+      expect(spotlight.textContent).toContain('2/3 done');
+
+      // Clicking card title calls onSelectCard
+      const cardTitle = screen.getByTitle('In Progress Card Closest To Done');
+      fireEvent.click(cardTitle);
+      expect(onSelectCard).toHaveBeenCalledWith(spotlightCards[1]);
+    });
+
+    it('cycles suggestions on clicking Next Suggestion (↻)', () => {
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={spotlightCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const spotlight = screen.getByRole('region', { name: /focus spotlight/i });
+      expect(spotlight.textContent).toContain('In Progress Card Closest To Done');
+
+      const cycleBtn = screen.getByRole('button', { name: /next suggestion/i });
+
+      // 1st cycle: Card 203 (2 remaining steps)
+      fireEvent.click(cycleBtn);
+      expect(spotlight.textContent).toContain('In Progress Card Further From Done');
+      expect(spotlight.textContent).toContain('Next Step: Action 1');
+
+      // 2nd cycle: Card 201 (to-do)
+      fireEvent.click(cycleBtn);
+      expect(spotlight.textContent).toContain('To Do Card With Steps');
+      expect(spotlight.textContent).toContain('Next Step: Setup repository');
+
+      // 3rd cycle: loops back to Card 202
+      fireEvent.click(cycleBtn);
+      expect(spotlight.textContent).toContain('In Progress Card Closest To Done');
+    });
+
+    it('pins and unpins active cards with localStorage persistence', () => {
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={spotlightCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const spotlight = screen.getByRole('region', { name: /focus spotlight/i });
+      expect(spotlight.textContent).toContain('In Progress Card Closest To Done');
+
+      // Pin Card 202
+      const pinBtn = screen.getByRole('button', { name: /pin as focus/i });
+      fireEvent.click(pinBtn);
+
+      expect(localStorage.getItem('sparkkeep_board_focus_id')).toBe('202');
+      expect(screen.getByRole('button', { name: /unpin focus/i })).toBeDefined();
+
+      // Unpin Card 202
+      const unpinBtn = screen.getByRole('button', { name: /unpin focus/i });
+      fireEvent.click(unpinBtn);
+      expect(localStorage.getItem('sparkkeep_board_focus_id')).toBeNull();
+      expect(screen.getByRole('button', { name: /pin as focus/i })).toBeDefined();
+    });
+
+    it('honors pre-pinned focus card from localStorage', () => {
+      localStorage.setItem('sparkkeep_board_focus_id', '201');
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={spotlightCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const spotlight = screen.getByRole('region', { name: /focus spotlight/i });
+      // Card 201 is pinned, so it overrides normal ranking
+      expect(spotlight.textContent).toContain('To Do Card With Steps');
+      expect(screen.getByRole('button', { name: /unpin focus/i })).toBeDefined();
+    });
+
+    it('completes step for to-do card and moves to in-progress with Undo', () => {
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+      localStorage.setItem('sparkkeep_board_focus_id', '201');
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={{ ...mockActions, onUpdateCard, showToast }}>
+            <KanbanBoard
+              cards={spotlightCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const completeBtn = screen.getByRole('button', { name: /complete step/i });
+      fireEvent.click(completeBtn);
+
+      expect(onUpdateCard).toHaveBeenCalledWith(201, {
+        status: 'in-progress',
+        completed_actions: ['Setup repository'],
+      });
+      expect(showToast).toHaveBeenCalledWith(
+        'Moved card #201 → In Progress',
+        expect.any(Function)
+      );
+    });
+
+    it('completes final step for in-progress card, marks done, and shows autoMovedDone toast', () => {
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={{ ...mockActions, onUpdateCard, showToast }}>
+            <KanbanBoard
+              cards={spotlightCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const completeBtn = screen.getByRole('button', { name: /complete step/i });
+      fireEvent.click(completeBtn);
+
+      expect(onUpdateCard).toHaveBeenCalledWith(202, {
+        status: 'done',
+        completed_actions: ['Step A', 'Step B', 'Step C'],
+      });
+      expect(showToast).toHaveBeenCalledWith(
+        'All steps completed! Moved #202 → Done',
+        expect.any(Function)
+      );
+    });
+
+    it('collapses and expands spotlight banner with localStorage persistence', () => {
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={spotlightCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const collapseBtn = screen.getByRole('button', { name: /collapse spotlight/i });
+      fireEvent.click(collapseBtn);
+
+      expect(localStorage.getItem('sparkkeep_board_spotlight_collapsed')).toBe('true');
+      const spotlight = screen.getByRole('region', { name: /focus spotlight/i });
+      expect(spotlight.className).toContain('is-collapsed');
+
+      // Expand it again
+      const expandBtn = screen.getByRole('button', { name: /expand spotlight/i });
+      fireEvent.click(expandBtn);
+      expect(localStorage.getItem('sparkkeep_board_spotlight_collapsed')).toBe('false');
+      expect(spotlight.className).not.toContain('is-collapsed');
     });
   });
 });

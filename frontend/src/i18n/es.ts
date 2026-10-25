@@ -1183,6 +1183,7 @@ export const es = {
       spotlightUnpin: 'Desfijar enfoque',
       spotlightCollapse: 'Plegar enfoque',
       spotlightExpand: 'Desplegar enfoque',
+      spotlightInspect: 'Inspeccionar',
       layoutColumns: 'Columnas',
       layoutSwimlanes: 'Calles',
       groupBy: 'Agrupar: {{group}}',
