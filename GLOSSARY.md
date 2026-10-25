@@ -95,3 +95,27 @@ _Avoid_: Translated category key, localized type slug
 **Custom Card Type**:
 A user-defined Card Type stored and displayed verbatim in the language entered by the user.
 _Avoid_: Custom category, freeform tag
+
+**Execution Board**:
+The primary web workspace where committed cards progress from planned (`to-do`) to active work (`in-progress`) to finished outcomes (`done`).
+_Avoid_: Kanban page, bookmark board, status list
+
+**Board Inspector**:
+The non-blocking side-by-side workspace pane on the Execution Board that displays a selected card's research dossier, metadata, and action checklist without obscuring the board canvas.
+_Avoid_: Blocking popup, preview modal
+
+**Execution Swimlanes**:
+The two-dimensional matrix lens on the Execution Board that crosses execution stages (columns) against strategic Horizons or Card Types (rows).
+_Avoid_: Table view, grouped list
+
+**Execution Pulse**:
+The top-level telemetry and momentum strip on the Execution Board that surfaces active work-in-progress, action step completion, and recent wins.
+_Avoid_: Stats banner, header counter
+
+**Focus Spotlight**:
+The contextual recommendation card at the top of the Execution Board that highlights the single most actionable next step from active work-in-progress or short-term priorities.
+_Avoid_: Daily quest, hero banner, pinned alert
+
+**Inline Action Checklist**:
+The interactive step list rendered directly on active Execution Board cards that allows checking off proposed actions without opening the full card modal.
+_Avoid_: Subtask popup, modal-only checklist
