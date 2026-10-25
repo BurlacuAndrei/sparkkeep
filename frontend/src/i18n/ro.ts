@@ -1251,6 +1251,9 @@ export const ro = {
       subjectBody:
         'Acest card nu are încă un rezumat de triaj AI. Generează un rezumat complet din titlu și notițe.',
       synthesize: 'Generează rezumatul',
+      regenerateBrief: 'Regenerează rezumatul',
+      regenerating: 'Se regenerează...',
+      regenerated: 'Rezumatul de triaj a fost regenerat',
       tldrTitle: 'Concluzia TL;DR',
       tldrPlaceholder: 'Concluzia principală și rezumatul...',
       whyTitle: 'De ce te-ar putea interesa',

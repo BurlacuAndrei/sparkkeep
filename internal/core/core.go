@@ -1114,6 +1114,124 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 	return createdCards, nil
 }
 
+// ReanalyzeCard performs a non-destructive reanalysis of a card's briefing
+// using the triage model, updating AI-synthesized fields in place while strictly
+// preserving user-owned state (Status, Horizon, user Tags, CompletedActions,
+// Comments, and existing Research state).
+func (s *Service) ReanalyzeCard(ctx context.Context, id int64) (*port.Card, error) {
+	if s.Store == nil {
+		return nil, errors.New("core: no store configured")
+	}
+	card, err := s.Store.GetCard(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var fetched capture.Fetched
+	var hasCap bool
+	if card.CaptureID != nil && *card.CaptureID > 0 {
+		if c, err := s.Store.GetCapture(ctx, *card.CaptureID); err == nil {
+			fetched = fetchedFromCapture(c, card)
+			hasCap = true
+		}
+	}
+	if !hasCap {
+		text := card.Summary
+		if strings.TrimSpace(text) == "" {
+			text = card.SourceNote
+		}
+		fetched = capture.Fetched{
+			Kind:    capture.KindText,
+			Title:   card.Title,
+			Caption: card.SourceNote,
+			URL:     card.SourceURL,
+			Text:    text,
+		}
+	}
+
+	var prof *port.UserProfile
+	if val, err := s.Store.GetSetting(ctx, "user_profile"); err == nil && strings.TrimSpace(val) != "" {
+		var p port.UserProfile
+		if json.Unmarshal([]byte(val), &p) == nil && !p.IsEmpty() {
+			prof = &p
+		}
+	}
+	if prof == nil || prof.Language == "" {
+		if loc, err := s.Store.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+			if prof == nil {
+				prof = &port.UserProfile{}
+			}
+			prof.Language = port.LocaleToLanguageName(strings.TrimSpace(loc))
+		}
+	}
+	if types, err := s.Store.GetCardTypes(ctx); err == nil && len(types) > 0 {
+		ctx = analyze.WithCardTypes(ctx, types)
+	}
+
+	llmClient := s.clientFor(analyze.RoleTriage)
+	if llmClient == nil {
+		return nil, errors.New("core: no LLM client configured for triage")
+	}
+	res, err := llmClient.Analyze(ctx, fetched, prof)
+	if err != nil {
+		s.Logf("core: reanalyze card %d: %v", id, err)
+		return nil, err
+	}
+	if res.Discarded || (len(res.Cards) == 0 && res.DiscardReason != "") {
+		return nil, ErrNoiseGateDiscarded
+	}
+	if len(res.Cards) == 0 {
+		return nil, errors.New("core: reanalyze yielded no cards")
+	}
+
+	idea := res.Cards[0]
+	firstCard := cardFromIdea(idea, res, card.SourceURL, card.SourceNote)
+
+	title := firstCard.Title
+	if strings.TrimSpace(title) == "" {
+		title = card.Title
+	}
+	summary := firstCard.Summary
+	if strings.TrimSpace(summary) == "" {
+		summary = firstCard.TLDR
+	}
+	suggestedHorizon := idea.Horizon
+	suggestedTags := idea.Tags
+	if suggestedTags == nil {
+		suggestedTags = []string{}
+	}
+	actionsSource := "triage"
+	falseVal := false
+
+	patch := port.CardPatch{
+		Title:            &title,
+		Summary:          &summary,
+		ExecutiveSummary: &firstCard.ExecutiveSummary,
+		ValueProposition: &firstCard.ValueProposition,
+		TLDR:             &firstCard.TLDR,
+		WhyCare:          &firstCard.WhyCare,
+		Claims:           &firstCard.Claims,
+		OpenQuestions:    &firstCard.OpenQuestions,
+		Worthiness:       &firstCard.Worthiness,
+		Signals:          &firstCard.Signals,
+		References:       &firstCard.References,
+		SuggestedHorizon: &suggestedHorizon,
+		SuggestedTags:    &suggestedTags,
+		ProposedActions:  &firstCard.ProposedActions,
+		ActionsSource:    &actionsSource,
+		AnalysisFailed:   &falseVal,
+	}
+
+	updated, err := s.Store.UpdateCard(ctx, id, patch)
+	if err != nil {
+		return nil, err
+	}
+	if s.Webhook != nil {
+		s.Webhook.Dispatch(ctx, webhook.EventCardUpdated, updated)
+	}
+	return &updated, nil
+}
+
 // ForceCapture loads a capture by ID, generates a fallback card in StatusInbox
 // (bypassing the noise gate), persists the card, and returns it.
 func (s *Service) ForceCapture(ctx context.Context, captureID int64) (*port.Card, error) {

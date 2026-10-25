@@ -334,6 +334,24 @@ func (a *api) retryCard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": first, "cards": cards})
 }
 
+func (a *api) reanalyzeCard(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	if a.svc == nil {
+		writeErr(w, http.StatusInternalServerError, "service unavailable")
+		return
+	}
+	card, err := a.svc.ReanalyzeCard(r.Context(), id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "card": card})
+}
+
 // batchShelveStale shelves every inbox/doing card untouched for more than
 // ?days (default 30) and reports how many were archived.
 func (a *api) batchShelveStale(w http.ResponseWriter, r *http.Request) {

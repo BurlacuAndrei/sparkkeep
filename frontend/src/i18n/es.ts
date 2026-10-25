@@ -1267,6 +1267,9 @@ export const es = {
       subjectBody:
         'Esta tarjeta todavía no tiene un resumen de triaje de IA. Sintetiza un resumen completo a partir de tu título y tus notas.',
       synthesize: 'Sintetizar resumen',
+      regenerateBrief: 'Regenerar resumen',
+      regenerating: 'Regenerando...',
+      regenerated: 'Resumen de triaje regenerado',
       tldrTitle: 'Conclusión TL;DR',
       tldrPlaceholder: 'Conclusión y resumen principales...',
       whyTitle: 'Por qué podría importarte',

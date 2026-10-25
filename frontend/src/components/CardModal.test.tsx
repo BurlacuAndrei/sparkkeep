@@ -30,6 +30,7 @@ vi.mock('../api', async () => {
     fetchCardResearch: vi.fn().mockResolvedValue(null),
     fetchCapture: vi.fn().mockResolvedValue(null),
     createCard: vi.fn().mockResolvedValue({ id: 99 }),
+    reanalyzeCard: vi.fn(),
   };
 });
 
@@ -234,5 +235,53 @@ describe('CardModal Subject Card & Synthesize Brief', () => {
 
       expect(showToast).toHaveBeenCalledWith('Split completed: Card #105 and new card created!');
     });
+  });
+
+  it('calls api.reanalyzeCard, updates card state, and shows toast on clicking "Regenerate Brief"', async () => {
+    const updatedCardFromAPI: Card = {
+      ...briefedCard,
+      id: 102,
+      title: 'Regenerated Title',
+      tldr: 'Freshly Regenerated TLDR',
+      why_care: 'Freshly Regenerated WhyCare',
+      claims: ['Regenerated Claim A', 'Regenerated Claim B'],
+      open_questions: ['Regenerated Question A'],
+      proposed_actions: ['Regenerated Action 1'],
+    };
+    vi.mocked(api.reanalyzeCard).mockResolvedValue({
+      ok: true,
+      card: updatedCardFromAPI,
+    });
+
+    const onUpdate = vi.fn();
+    const showToast = vi.fn();
+
+    renderCardModal(
+      <CardModal
+        card={briefedCard}
+        onClose={vi.fn()}
+        onUpdate={onUpdate}
+        onResearch={vi.fn()}
+        onRetry={vi.fn()}
+        showToast={showToast}
+      />
+    );
+
+    const regenBtn = screen.getByRole('button', { name: /regenerate brief/i });
+    expect(regenBtn).toBeDefined();
+
+    fireEvent.click(regenBtn);
+
+    await waitFor(() => {
+      expect(api.reanalyzeCard).toHaveBeenCalledWith(102);
+      expect(onUpdate).toHaveBeenCalledWith(102, updatedCardFromAPI);
+      expect(showToast).toHaveBeenCalledWith('Triage brief regenerated');
+    });
+
+    // Check that local inputs reflect updated brief
+    expect(screen.getByDisplayValue('Regenerated Title')).toBeDefined();
+    expect(screen.getByDisplayValue('Freshly Regenerated TLDR')).toBeDefined();
+    expect(screen.getByDisplayValue('Freshly Regenerated WhyCare')).toBeDefined();
+    expect(screen.getByDisplayValue('Regenerated Claim A')).toBeDefined();
   });
 });

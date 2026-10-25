@@ -726,6 +726,7 @@ type CardFilter struct {
 
 type CardPatch struct {
 	Title               *string
+	Summary             *string
 	Status              *string
 	Horizon             *string
 	Note                *string

@@ -1251,6 +1251,9 @@ export const ptBR = {
       subjectBody:
         'Este card ainda não tem um briefing de triagem por IA. Sintetize um briefing completo a partir do título e das notas.',
       synthesize: 'Sintetizar briefing',
+      regenerateBrief: 'Regenerar briefing',
+      regenerating: 'Regenerando...',
+      regenerated: 'Briefing de triagem regenerado',
       tldrTitle: 'Resumo TL;DR',
       tldrPlaceholder: 'Conclusão principal e resumo…',
       whyTitle: 'Por que você pode se interessar',

@@ -649,6 +649,9 @@ func (s *Store) UpdateCard(ctx context.Context, id int64, p port.CardPatch) (por
 	if p.Title != nil {
 		b.set("title", *p.Title)
 	}
+	if p.Summary != nil {
+		b.set("summary", *p.Summary)
+	}
 	if p.Status != nil {
 		b.set("status", *p.Status)
 	}

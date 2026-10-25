@@ -227,6 +227,12 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if !ok {
 		return port.Card{}, port.ErrNotFound
 	}
+	if p.Title != nil {
+		c.Title = *p.Title
+	}
+	if p.Summary != nil {
+		c.Summary = *p.Summary
+	}
 	if p.Status != nil {
 		c.Status = *p.Status
 	}
@@ -1428,6 +1434,126 @@ func TestRetryCardSubjectCardInPlace(t *testing.T) {
 	}
 	if len(out.Data.Claims) != 2 {
 		t.Errorf("Claims count = %d, want 2", len(out.Data.Claims))
+	}
+}
+
+func TestReanalyzeCardEndpointNonDestructive(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{
+		"title": "Regenerated Title",
+		"summary": "Regenerated Summary",
+		"tldr": "Regenerated TLDR",
+		"why_care": "Why Regenerated Matters",
+		"claims": ["Claim A", "Claim B"],
+		"open_questions": ["Question A"],
+		"horizon": "long-term",
+		"tags": ["suggested-tag-1"],
+		"proposed_actions": ["New Action 1", "New Action 2"],
+		"signals": {
+			"extraction": "full",
+			"source_quality": "primary"
+		},
+		"worthiness": {
+			"level": "high",
+			"reason": "Very important"
+		},
+		"references": [
+			{"kind": "repo", "label": "sparkkeep", "url": "https://github.com/example/sparkkeep"}
+		]
+	}]`)
+	defer llm.Close()
+	st := newStubStore()
+	capID := int64(10)
+	st.captures[capID] = port.Capture{ID: capID, Title: "Capture Title", Text: "Source Capture Body"}
+
+	st.cards[99] = port.Card{
+		ID:                 99,
+		CaptureID:          &capID,
+		Title:              "Old Title",
+		Summary:            "Old Summary",
+		TLDR:               "Old TLDR",
+		WhyCare:            "Old WhyCare",
+		Horizon:            "short-term",
+		Status:             "in-progress",
+		Tags:               []string{"user-tag"},
+		CompletedActions:   []string{"Action 1"},
+		ProposedActions:    []string{"Action 1", "Old Action"},
+		ActionsSource:      "user",
+		ResearchVerdict:    "worth_it",
+		ResearchConfidence: "high",
+		ResearchState:      "done",
+		Comments:           []port.CardComment{{ID: 1, CardID: 99, Content: "Keep this comment"}},
+	}
+	svc := &core.Service{Store: st, Analyze: analyzeClient(llm), Logf: t.Logf}
+	h := webHandler(st, svc)
+
+	rr := doJSON(t, h, http.MethodPost, "/api/v1/cards/99/reanalyze", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var out struct {
+		OK   bool      `json:"ok"`
+		Card port.Card `json:"card"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !out.OK {
+		t.Fatalf("out = %+v, want OK:true", out)
+	}
+
+	// AI-synthesized fields updated
+	if out.Card.Title != "Regenerated Title" {
+		t.Errorf("Title = %q, want 'Regenerated Title'", out.Card.Title)
+	}
+	if out.Card.Summary != "Regenerated Summary" {
+		t.Errorf("Summary = %q, want 'Regenerated Summary'", out.Card.Summary)
+	}
+	if out.Card.TLDR != "Regenerated TLDR" {
+		t.Errorf("TLDR = %q, want 'Regenerated TLDR'", out.Card.TLDR)
+	}
+	if out.Card.WhyCare != "Why Regenerated Matters" {
+		t.Errorf("WhyCare = %q, want 'Why Regenerated Matters'", out.Card.WhyCare)
+	}
+	if len(out.Card.Claims) != 2 || out.Card.Claims[0] != "Claim A" {
+		t.Errorf("Claims = %v, want ['Claim A', 'Claim B']", out.Card.Claims)
+	}
+	if len(out.Card.OpenQuestions) != 1 || out.Card.OpenQuestions[0] != "Question A" {
+		t.Errorf("OpenQuestions = %v", out.Card.OpenQuestions)
+	}
+	if out.Card.SuggestedHorizon != "long-term" {
+		t.Errorf("SuggestedHorizon = %q, want 'long-term'", out.Card.SuggestedHorizon)
+	}
+	if len(out.Card.SuggestedTags) != 1 || out.Card.SuggestedTags[0] != "suggested-tag-1" {
+		t.Errorf("SuggestedTags = %v", out.Card.SuggestedTags)
+	}
+	if len(out.Card.ProposedActions) != 2 {
+		t.Errorf("ProposedActions = %v", out.Card.ProposedActions)
+	}
+	if out.Card.Worthiness.Level != "high" {
+		t.Errorf("Worthiness.Level = %q, want 'high'", out.Card.Worthiness.Level)
+	}
+	if len(out.Card.References) != 1 || out.Card.References[0].Label != "sparkkeep" {
+		t.Errorf("References = %v", out.Card.References)
+	}
+
+	// Strictly preserved user-owned fields
+	if out.Card.Status != "in-progress" {
+		t.Errorf("Status = %q, want preserved 'in-progress'", out.Card.Status)
+	}
+	if out.Card.Horizon != "short-term" {
+		t.Errorf("Horizon = %q, want preserved 'short-term'", out.Card.Horizon)
+	}
+	if len(out.Card.Tags) != 1 || out.Card.Tags[0] != "user-tag" {
+		t.Errorf("Tags = %v, want preserved ['user-tag']", out.Card.Tags)
+	}
+	if len(out.Card.CompletedActions) != 1 || out.Card.CompletedActions[0] != "Action 1" {
+		t.Errorf("CompletedActions = %v, want preserved ['Action 1']", out.Card.CompletedActions)
+	}
+	if out.Card.ResearchVerdict != "worth_it" || out.Card.ResearchConfidence != "high" || out.Card.ResearchState != "done" {
+		t.Errorf("Research fields altered: verdict=%q conf=%q state=%q", out.Card.ResearchVerdict, out.Card.ResearchConfidence, out.Card.ResearchState)
+	}
+	if len(out.Card.Comments) != 1 || out.Card.Comments[0].Content != "Keep this comment" {
+		t.Errorf("Comments altered: %v", out.Card.Comments)
 	}
 }
 

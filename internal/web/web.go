@@ -103,6 +103,7 @@ func New(store port.Store, svc *core.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/cards/{id}", a.deleteCard)
 	mux.HandleFunc("POST /api/v1/cards/{id}/comments", a.createCardComment)
 	mux.HandleFunc("POST /api/v1/cards/{id}/retry", a.retryCard)
+	mux.HandleFunc("POST /api/v1/cards/{id}/reanalyze", a.reanalyzeCard)
 	mux.HandleFunc("POST /api/v1/cards/batch-shelve-stale", a.batchShelveStale)
 	mux.HandleFunc("GET /api/v1/cards/{id}/export.md", a.exportMarkdown)
 	mux.HandleFunc("POST /api/v1/cards/{id}/export/obsidian", a.exportCardObsidian)

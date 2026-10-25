@@ -95,6 +95,12 @@ func (s *stubStore) UpdateCard(_ context.Context, id int64, p port.CardPatch) (p
 	if !ok {
 		return port.Card{}, port.ErrNotFound
 	}
+	if p.Title != nil {
+		c.Title = *p.Title
+	}
+	if p.Summary != nil {
+		c.Summary = *p.Summary
+	}
 	if p.Status != nil {
 		c.Status = *p.Status
 	}
@@ -3022,4 +3028,226 @@ func TestPanicRecovery(t *testing.T) {
 			t.Errorf("card research_state = %q, want %q", updatedCard.ResearchState, port.ResearchStateFailed)
 		}
 	})
+}
+
+func TestReanalyzeCardNonDestructive(t *testing.T) {
+	llm := llmStub(http.StatusOK, `[{
+		"title": "Fresh AI Title",
+		"summary": "Fresh AI Summary",
+		"tldr": "Fresh AI TLDR",
+		"why_care": "Fresh AI WhyCare",
+		"claims": ["Fresh Claim 1"],
+		"open_questions": ["Fresh Question 1"],
+		"horizon": "medium-term",
+		"tags": ["ai-tag"],
+		"proposed_actions": ["Fresh Action 1"],
+		"signals": {
+			"extraction": "full",
+			"source_quality": "primary"
+		},
+		"worthiness": {
+			"level": "high",
+			"reason": "Top tier"
+		},
+		"references": [
+			{"kind": "tool", "label": "Go", "url": "https://golang.org"}
+		]
+	}]`)
+	defer llm.Close()
+
+	ctx := context.Background()
+	st := newStubStore()
+	capID := int64(45)
+	st.captures[capID] = port.Capture{ID: capID, Title: "Cap Title", Text: "Cap text body"}
+
+	card := port.Card{
+		ID:                 100,
+		CaptureID:          &capID,
+		Title:              "Old Title",
+		Summary:            "Old Summary",
+		TLDR:               "Old TLDR",
+		WhyCare:            "Old WhyCare",
+		Horizon:            "short-term",
+		Status:             "doing",
+		Tags:               []string{"user-manual-tag"},
+		CompletedActions:   []string{"Completed Action 1"},
+		ProposedActions:    []string{"Old Action 1"},
+		ActionsSource:      "user",
+		ResearchVerdict:    "pursue",
+		ResearchConfidence: "high",
+		ResearchState:      "done",
+		Comments:           []port.CardComment{{ID: 1, CardID: 100, Content: "Existing user comment"}},
+	}
+	st.cards[100] = card
+
+	ch := &stubChannel{}
+	svc := baseSvc(t, st, ch, llm)
+
+	updated, err := svc.ReanalyzeCard(ctx, 100)
+	if err != nil {
+		t.Fatalf("ReanalyzeCard: %v", err)
+	}
+
+	// Synthesized fields
+	if updated.Title != "Fresh AI Title" {
+		t.Errorf("Title = %q, want 'Fresh AI Title'", updated.Title)
+	}
+	if updated.Summary != "Fresh AI Summary" {
+		t.Errorf("Summary = %q, want 'Fresh AI Summary'", updated.Summary)
+	}
+	if updated.TLDR != "Fresh AI TLDR" {
+		t.Errorf("TLDR = %q, want 'Fresh AI TLDR'", updated.TLDR)
+	}
+	if updated.WhyCare != "Fresh AI WhyCare" {
+		t.Errorf("WhyCare = %q, want 'Fresh AI WhyCare'", updated.WhyCare)
+	}
+	if len(updated.Claims) != 1 || updated.Claims[0] != "Fresh Claim 1" {
+		t.Errorf("Claims = %v", updated.Claims)
+	}
+	if updated.SuggestedHorizon != "medium-term" {
+		t.Errorf("SuggestedHorizon = %q, want 'medium-term'", updated.SuggestedHorizon)
+	}
+	if len(updated.SuggestedTags) != 1 || updated.SuggestedTags[0] != "ai-tag" {
+		t.Errorf("SuggestedTags = %v", updated.SuggestedTags)
+	}
+	if len(updated.ProposedActions) != 1 || updated.ProposedActions[0] != "Fresh Action 1" {
+		t.Errorf("ProposedActions = %v", updated.ProposedActions)
+	}
+	if updated.ActionsSource != "triage" {
+		t.Errorf("ActionsSource = %q, want 'triage'", updated.ActionsSource)
+	}
+
+	// Preserved user state
+	if updated.Status != "doing" {
+		t.Errorf("Status = %q, want preserved 'doing'", updated.Status)
+	}
+	if updated.Horizon != "short-term" {
+		t.Errorf("Horizon = %q, want preserved 'short-term'", updated.Horizon)
+	}
+	if len(updated.Tags) != 1 || updated.Tags[0] != "user-manual-tag" {
+		t.Errorf("Tags = %v, want preserved ['user-manual-tag']", updated.Tags)
+	}
+	if len(updated.CompletedActions) != 1 || updated.CompletedActions[0] != "Completed Action 1" {
+		t.Errorf("CompletedActions = %v, want preserved ['Completed Action 1']", updated.CompletedActions)
+	}
+	if updated.ResearchVerdict != "pursue" || updated.ResearchConfidence != "high" || updated.ResearchState != "done" {
+		t.Errorf("Research fields changed: verdict=%q conf=%q state=%q", updated.ResearchVerdict, updated.ResearchConfidence, updated.ResearchState)
+	}
+	if len(updated.Comments) != 1 || updated.Comments[0].Content != "Existing user comment" {
+		t.Errorf("Comments changed: %v", updated.Comments)
+	}
+}
+
+func TestReanalyzeCardSubjectCardFallback(t *testing.T) {
+	var capturedBody string
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		capturedBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(`[{
+			"title": "Synthesized Subject Title",
+			"summary": "Synthesized Subject Summary",
+			"tldr": "Synthesized Subject TLDR",
+			"why_care": "Synthesized Subject WhyCare",
+			"claims": ["Claim from note"],
+			"open_questions": ["Question from note"],
+			"horizon": "short-term",
+			"tags": ["ai-subject-tag"],
+			"proposed_actions": ["Action 1"],
+			"signals": {
+				"extraction": "full",
+				"source_quality": "primary"
+			},
+			"worthiness": {
+				"level": "medium",
+				"reason": "Note based"
+			}
+		}]`))
+	}))
+	defer llm.Close()
+
+	ctx := context.Background()
+	st := newStubStore()
+
+	// Subject card: CaptureID is nil, Summary is empty, context reconstructed from Title and SourceNote
+	card := port.Card{
+		ID:                 200,
+		CaptureID:          nil,
+		Title:              "User Subject Title",
+		Summary:            "",
+		SourceNote:         "Detailed manual note describing the subject context.",
+		SourceURL:          "",
+		TLDR:               "Old TLDR",
+		WhyCare:            "Old WhyCare",
+		Horizon:            "long-term",
+		Status:             "inbox",
+		Tags:               []string{"user-tag"},
+		CompletedActions:   []string{"Done Action"},
+		ProposedActions:    []string{"Old Proposed Action"},
+		ActionsSource:      "user",
+		ResearchVerdict:    "defer",
+		ResearchConfidence: "medium",
+		ResearchState:      "queued",
+		Comments:           []port.CardComment{{ID: 2, CardID: 200, Content: "Keep this comment"}},
+	}
+	st.cards[200] = card
+
+	ch := &stubChannel{}
+	svc := baseSvc(t, st, ch, llm)
+
+	updated, err := svc.ReanalyzeCard(ctx, 200)
+	if err != nil {
+		t.Fatalf("ReanalyzeCard: %v", err)
+	}
+
+	// Verify fallback context was sent to LLM from Title and SourceNote (as fallback Text)
+	if !strings.Contains(capturedBody, "User Subject Title") {
+		t.Errorf("expected LLM prompt to contain card Title, got: %s", capturedBody)
+	}
+	if !strings.Contains(capturedBody, "Detailed manual note describing the subject context.") {
+		t.Errorf("expected LLM prompt to contain card SourceNote, got: %s", capturedBody)
+	}
+
+	// Verify synthesized fields updated
+	if updated.Title != "Synthesized Subject Title" {
+		t.Errorf("Title = %q, want 'Synthesized Subject Title'", updated.Title)
+	}
+	if updated.Summary != "Synthesized Subject Summary" {
+		t.Errorf("Summary = %q, want 'Synthesized Subject Summary'", updated.Summary)
+	}
+	if updated.TLDR != "Synthesized Subject TLDR" {
+		t.Errorf("TLDR = %q, want 'Synthesized Subject TLDR'", updated.TLDR)
+	}
+	if updated.WhyCare != "Synthesized Subject WhyCare" {
+		t.Errorf("WhyCare = %q, want 'Synthesized Subject WhyCare'", updated.WhyCare)
+	}
+	if len(updated.Claims) != 1 || updated.Claims[0] != "Claim from note" {
+		t.Errorf("Claims = %v", updated.Claims)
+	}
+
+	// Verify user-owned fields preserved
+	if updated.CaptureID != nil {
+		t.Errorf("CaptureID = %v, want nil", updated.CaptureID)
+	}
+	if updated.SourceNote != "Detailed manual note describing the subject context." {
+		t.Errorf("SourceNote = %q, want preserved", updated.SourceNote)
+	}
+	if updated.Status != "inbox" {
+		t.Errorf("Status = %q, want 'inbox'", updated.Status)
+	}
+	if updated.Horizon != "long-term" {
+		t.Errorf("Horizon = %q, want 'long-term'", updated.Horizon)
+	}
+	if len(updated.Tags) != 1 || updated.Tags[0] != "user-tag" {
+		t.Errorf("Tags = %v, want ['user-tag']", updated.Tags)
+	}
+	if len(updated.CompletedActions) != 1 || updated.CompletedActions[0] != "Done Action" {
+		t.Errorf("CompletedActions = %v, want ['Done Action']", updated.CompletedActions)
+	}
+	if updated.ResearchVerdict != "defer" || updated.ResearchConfidence != "medium" || updated.ResearchState != "queued" {
+		t.Errorf("Research fields changed: verdict=%q conf=%q state=%q", updated.ResearchVerdict, updated.ResearchConfidence, updated.ResearchState)
+	}
+	if len(updated.Comments) != 1 || updated.Comments[0].Content != "Keep this comment" {
+		t.Errorf("Comments changed: %v", updated.Comments)
+	}
 }

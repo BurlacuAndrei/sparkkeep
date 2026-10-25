@@ -1234,6 +1234,9 @@ export const en = {
       subjectBody:
         'This card does not have an AI triage briefing yet. Synthesize a full brief from your title and notes.',
       synthesize: 'Synthesize Brief',
+      regenerateBrief: 'Regenerate Brief',
+      regenerating: 'Regenerating...',
+      regenerated: 'Triage brief regenerated',
       tldrTitle: 'TL;DR Takeaway',
       tldrPlaceholder: 'Core takeaway and summary...',
       whyTitle: 'Why You Might Care',

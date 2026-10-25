@@ -85,6 +85,12 @@ export async function retryCard(id: number): Promise<Card> {
   return res.data;
 }
 
+export async function reanalyzeCard(id: number): Promise<{ ok: boolean; card: Card }> {
+  return request<{ ok: boolean; card: Card }>(`/api/v1/cards/${id}/reanalyze`, {
+    method: 'POST',
+  });
+}
+
 export async function fetchCapture(id: number): Promise<Capture> {
   const res = await request<{ ok: boolean; data: Capture }>(`/api/v1/captures/${id}`);
   return res.data;

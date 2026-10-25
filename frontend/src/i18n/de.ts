@@ -1256,6 +1256,9 @@ export const de = {
       subjectBody:
         'Diese Karte hat noch kein KI-Triage-Briefing. Erzeuge aus Titel und Notizen ein vollständiges Briefing.',
       synthesize: 'Briefing erzeugen',
+      regenerateBrief: 'Briefing neu generieren',
+      regenerating: 'Wird neu generiert...',
+      regenerated: 'Triage-Briefing neu generiert',
       tldrTitle: 'TL;DR – Kernaussage',
       tldrPlaceholder: 'Kernaussage und Zusammenfassung…',
       whyTitle: 'Warum es dich betreffen könnte',

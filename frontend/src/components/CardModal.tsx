@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Card, ResearchItem, Reference, CardComment, Capture, Settings } from '../types';
-import { fetchCard, fetchCardResearch, addCardComment, getErrorMessage, fetchCapture, createCard, getSettings } from '../api';
+import { fetchCard, fetchCardResearch, addCardComment, getErrorMessage, fetchCapture, createCard, getSettings, reanalyzeCard } from '../api';
 import {
   X,
   Sparkles,
@@ -119,6 +119,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [splitSecondTitle, setSplitSecondTitle] = useState('');
 
   // UI state
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(status === 'review');
   const [isReportExpanded, setIsReportExpanded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -556,6 +557,34 @@ export const CardModal: React.FC<CardModalProps> = ({
       showToast?.(t('cards.modal.mergedToast', { id: sibling.id, target: card.id }));
     } catch (err: unknown) {
       showToast?.(getErrorMessage(err));
+    }
+  };
+
+  const handleRegenerateBrief = async () => {
+    if (isRegenerating) return;
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+    setIsRegenerating(true);
+    try {
+      const res = await reanalyzeCard(card.id);
+      if (res?.ok && res.card) {
+        const updated = res.card;
+        setTitle(updated.title || '');
+        setTldr(updated.tldr || updated.executive_summary || updated.summary || '');
+        setWhyCare(updated.why_care || updated.value_proposition || '');
+        setClaims(updated.claims || []);
+        setOpenQuestions(updated.open_questions || []);
+        setReferences(updated.references || []);
+        setActions(updated.proposed_actions || []);
+        if (updated.type) setCardType(updated.type);
+        onUpdate(card.id, updated);
+        showToast?.(t('cards.modal.regenerated'));
+      }
+    } catch (err: unknown) {
+      showToast?.(getErrorMessage(err));
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -1089,26 +1118,39 @@ export const CardModal: React.FC<CardModalProps> = ({
             )}
 
             {/* Header Action Buttons on the Right */}
-            <CardHeaderActions
-              card={card}
-              research={research}
-              status={status}
-              isFailed={isFailed}
-              onStatusTransition={handleStatusTransition}
-              onRetry={onRetry}
-              onResearch={onResearch}
-              onScrollToResearch={handleScrollToResearch}
-              onOpenCapture={() => setIsCaptureModalOpen(true)}
-              onOpenSplit={() => setIsSplitModalOpen(true)}
-              onCopyMarkdown={handleCopyMarkdown}
-              onDownloadMarkdown={handleDownloadMarkdown}
-              onAddToTodoist={handleAddToTodoist}
-              onSpinOff={handleSpinOff}
-              onDelete={onDelete}
-              onClose={onClose}
-              showToast={showToast}
-              settings={activeSettings}
-            />
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleRegenerateBrief}
+                disabled={isRegenerating}
+                title={t('cards.modal.regenerateBrief')}
+                style={{ padding: '4px 10px', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                <RefreshCw size={12} className={isRegenerating ? 'spin-slow' : ''} />
+                <span>{isRegenerating ? t('cards.modal.regenerating') : t('cards.modal.regenerateBrief')}</span>
+              </button>
+              <CardHeaderActions
+                card={card}
+                research={research}
+                status={status}
+                isFailed={isFailed}
+                onStatusTransition={handleStatusTransition}
+                onRetry={onRetry}
+                onResearch={onResearch}
+                onScrollToResearch={handleScrollToResearch}
+                onOpenCapture={() => setIsCaptureModalOpen(true)}
+                onOpenSplit={() => setIsSplitModalOpen(true)}
+                onCopyMarkdown={handleCopyMarkdown}
+                onDownloadMarkdown={handleDownloadMarkdown}
+                onAddToTodoist={handleAddToTodoist}
+                onSpinOff={handleSpinOff}
+                onDelete={onDelete}
+                onClose={onClose}
+                showToast={showToast}
+                settings={activeSettings}
+              />
+            </div>
           </div>
         </div>
 
