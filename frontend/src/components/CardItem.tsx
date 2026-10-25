@@ -31,6 +31,7 @@ export interface CardItemProps {
   onStatusChange?: (id: number, status: string) => void;
   onResearch?: (id: number) => void;
   onRetry?: (id: number) => void;
+  onUpdateCard?: (id: number, patch: Partial<Card>) => void;
   selectable?: boolean;
   selected?: boolean;
   onToggleSelect?: (id: number) => void;
@@ -45,6 +46,7 @@ export const CardItem: React.FC<CardItemProps> = ({
   onStatusChange: propOnStatusChange,
   onResearch: propOnResearch,
   onRetry: propOnRetry,
+  onUpdateCard: propOnUpdateCard,
   selectable = false,
   selected = false,
   onToggleSelect,
@@ -55,11 +57,22 @@ export const CardItem: React.FC<CardItemProps> = ({
   const onStatusChange = propOnStatusChange || actions.onStatusChange;
   const onResearch = propOnResearch || actions.onResearch;
   const onRetry = propOnRetry || actions.onRetry;
+  const onUpdateCard = propOnUpdateCard || actions.onUpdateCard;
+  const showToast = actions.showToast;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [openDownwards, setOpenDownwards] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const celebrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -103,6 +116,79 @@ export const CardItem: React.FC<CardItemProps> = ({
   const completedCount = card.completed_actions?.length || 0;
   const totalActions = card.proposed_actions?.length || 0;
   const progressPercent = totalActions > 0 ? Math.round((completedCount / totalActions) * 100) : 0;
+
+  const proposedActions = card.proposed_actions || [];
+  const completedActions = card.completed_actions || [];
+  const completedSet = new Set(completedActions);
+  const uncheckedActions = proposedActions.filter((s) => !completedSet.has(s));
+  const nextUncheckedStep = uncheckedActions[0];
+
+  const visibleSteps = isExpanded
+    ? proposedActions
+    : uncheckedActions.slice(0, 2);
+
+  const remainingCount = proposedActions.length - Math.min(2, uncheckedActions.length);
+
+  const handleNextStepCheck = (step: string) => {
+    const prevStatus = card.status;
+    const prevCompleted = card.completed_actions || [];
+    const nextCompleted = [...prevCompleted, step];
+
+    onUpdateCard?.(card.id, {
+      status: 'in-progress',
+      completed_actions: nextCompleted,
+    });
+
+    showToast?.(t('cards.item.startedInProgress', { id: card.id }), async () => {
+      await onUpdateCard?.(card.id, {
+        status: prevStatus,
+        completed_actions: prevCompleted,
+      });
+    });
+  };
+
+  const handleToggleStep = (step: string) => {
+    const isChecked = completedSet.has(step);
+    const prevStatus = card.status;
+    const prevCompleted = card.completed_actions || [];
+    const nextCompleted = isChecked
+      ? prevCompleted.filter((s) => s !== step)
+      : [...prevCompleted, step];
+
+    const nextCompletedSet = new Set(nextCompleted);
+    const willAllBeCompleted =
+      !isChecked &&
+      proposedActions.length > 0 &&
+      proposedActions.every((s) => nextCompletedSet.has(s));
+
+    if (willAllBeCompleted) {
+      setIsCompleting(true);
+      if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current);
+      celebrationTimerRef.current = setTimeout(() => setIsCompleting(false), 1200);
+
+      onUpdateCard?.(card.id, {
+        status: 'done',
+        completed_actions: nextCompleted,
+      });
+
+      showToast?.(t('cards.item.autoMovedDone', { id: card.id }), async () => {
+        await onUpdateCard?.(card.id, {
+          status: prevStatus,
+          completed_actions: prevCompleted,
+        });
+      });
+    } else {
+      onUpdateCard?.(card.id, {
+        completed_actions: nextCompleted,
+      });
+
+      showToast?.(t('shell.toasts.saved', { id: card.id }), async () => {
+        await onUpdateCard?.(card.id, {
+          completed_actions: prevCompleted,
+        });
+      });
+    }
+  };
 
   const verdict = (card.research_verdict || '').toLowerCase();
   const confidence = card.research_confidence || '';
@@ -168,9 +254,14 @@ export const CardItem: React.FC<CardItemProps> = ({
   const visibleTags = (card.tags || []).slice(0, 2);
   const hiddenTagsCount = Math.max(0, (card.tags || []).length - 2);
 
+  const summaryText =
+    density === 'comfortable' && (card.status === 'to-do' || card.status === 'in-progress') && card.why_care
+      ? card.why_care
+      : card.tldr || card.summary;
+
   return (
     <article
-      className={`card action-card ${density === 'compact' ? 'is-compact' : ''} ${selected ? 'is-selected' : ''} ${menuOpen ? 'menu-active' : ''} ${isDragging ? 'is-dragging' : ''}`}
+      className={`card action-card ${density === 'compact' ? 'is-compact' : ''} ${selected ? 'is-selected' : ''} ${menuOpen ? 'menu-active' : ''} ${isDragging ? 'is-dragging' : ''} ${isCompleting ? 'is-completing-celebration' : ''}`}
       data-id={card.id}
       onClick={handleClick}
       draggable={!menuOpen}
@@ -285,7 +376,7 @@ export const CardItem: React.FC<CardItemProps> = ({
       <h3 className="card-title line-clamp-2">{card.title}</h3>
 
       {/* ③ TL;DR (clamped to 2 lines) */}
-      <p className="card-summary line-clamp-2">{card.tldr || card.summary}</p>
+      <p className="card-summary line-clamp-2">{summaryText}</p>
 
       {/* ④ Stage Slot */}
       <div className="card-stage-slot">
@@ -337,26 +428,51 @@ export const CardItem: React.FC<CardItemProps> = ({
           </div>
         ) : card.status === 'to-do' ? (
           <div className="card-stage-todo">
-            <span className={`horizon-pill ${card.horizon || 'short-term'}`}>
-              {card.horizon === 'medium-term'
-                ? t('cards.horizonMedium')
-                : card.horizon === 'long-term'
-                ? t('cards.horizonLong')
-                : t('cards.horizonShort')}
-            </span>
-            <span className="card-todo-actions-count">
-              <CheckCircle2 size={11.5} color={completedCount > 0 ? '#34d399' : '#94a3b8'} />
-              <span>
-                {totalActions > 0
-                  ? t('cards.item.actionsCount', { completed: completedCount, total: totalActions })
-                  : t('cards.item.readyToPlan')}
+            <div className="card-todo-meta">
+              <span className={`horizon-pill ${card.horizon || 'short-term'}`}>
+                {card.horizon === 'medium-term'
+                  ? t('cards.horizonMedium')
+                  : card.horizon === 'long-term'
+                  ? t('cards.horizonLong')
+                  : t('cards.horizonShort')}
               </span>
-            </span>
-            {card.research_state === 'done' && (
-              <span className="card-research-ready-badge" title={t('cards.item.researchReadyTitle')}>
-                <Sparkles size={10} color="#c084fc" />
-                <span>{t('cards.item.researchReady')}</span>
+              <span className="card-todo-actions-count">
+                <CheckCircle2 size={11.5} color={completedCount > 0 ? '#34d399' : '#94a3b8'} />
+                <span>
+                  {totalActions > 0
+                    ? t('cards.item.actionsCount', { completed: completedCount, total: totalActions })
+                    : t('cards.item.readyToPlan')}
+                </span>
               </span>
+              {verdict && (
+                <span className={`card-verdict-pill ${verdict}`} style={{ fontSize: 9.5, padding: '1px 6px' }}>
+                  <span className="verdict-dot" />
+                  <strong>{enumLabel(t, 'verdict', verdict).toUpperCase()}</strong>
+                </span>
+              )}
+              {card.research_state === 'done' && (
+                <span className="card-research-ready-badge" title={t('cards.item.researchReadyTitle')}>
+                  <Sparkles size={10} color="#c084fc" />
+                  <span>{t('cards.item.researchReady')}</span>
+                </span>
+              )}
+            </div>
+            {density === 'comfortable' && nextUncheckedStep && (
+              <div className="card-next-step" onClick={(e) => e.stopPropagation()}>
+                <label className="card-step-item">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      handleNextStepCheck(nextUncheckedStep);
+                    }}
+                  />
+                  <span className="card-step-text">
+                    {t('cards.item.nextStep', { step: nextUncheckedStep })}
+                  </span>
+                </label>
+              </div>
             )}
           </div>
         ) : card.status === 'in-progress' ? (
@@ -386,11 +502,62 @@ export const CardItem: React.FC<CardItemProps> = ({
                 />
               </div>
             )}
+            {density === 'comfortable' && totalActions > 0 && (
+              <div className="card-inline-checklist" onClick={(e) => e.stopPropagation()}>
+                {visibleSteps.map((step, idx) => {
+                  const isChecked = completedSet.has(step);
+                  return (
+                    <label
+                      key={`${step}-${idx}`}
+                      className={`card-step-item ${isChecked ? 'is-completed' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleToggleStep(step);
+                        }}
+                      />
+                      <span className="card-step-text">{step}</span>
+                    </label>
+                  );
+                })}
+                {isExpanded ? (
+                  <button
+                    type="button"
+                    className="card-step-expand-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsExpanded(false);
+                    }}
+                  >
+                    {t('cards.item.showLessSteps')}
+                  </button>
+                ) : remainingCount > 0 ? (
+                  <button
+                    type="button"
+                    className="card-step-expand-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsExpanded(true);
+                    }}
+                  >
+                    {tp('cards.item.moreSteps', remainingCount)}
+                  </button>
+                ) : null}
+              </div>
+            )}
           </div>
         ) : card.status === 'done' ? (
           <div className="card-stage-done">
             <CheckCircle2 size={12} color="#34d399" />
             <span>{t('cards.item.completed')}</span>
+            {totalActions > 0 && (
+              <span className="card-done-actions-count">
+                {completedCount}/{totalActions}
+              </span>
+            )}
           </div>
         ) : (
           <div className="card-stage-archived">

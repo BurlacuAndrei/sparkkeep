@@ -201,6 +201,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       density={density}
       onSelect={onSelectCard}
       onStatusChange={handleStatusChange}
+      onUpdateCard={onUpdateCard}
       onResearch={onResearch}
       onRetry={onRetry}
     />

@@ -481,5 +481,85 @@ describe('KanbanBoard Density & Usability', () => {
       expect(screen.getByText('Tool Spark Alpha')).toBeDefined();
       expect(screen.getByText('Repo Spark Beta')).toBeDefined();
     });
+
+    it('interacts with inline action checklist directly on board cards', () => {
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+      const boardCardsWithActions: Card[] = [
+        {
+          id: 501,
+          title: 'To Do Card With Steps',
+          summary: 'Testing next step on board',
+          status: 'to-do',
+          horizon: 'short-term',
+          type: 'idea',
+          proposed_actions: ['Step Alpha', 'Step Beta'],
+          completed_actions: [],
+          source_url: '',
+          source_note: '',
+          tags: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        {
+          id: 502,
+          title: 'In Progress Card With Final Step',
+          summary: 'Testing final step completion on board',
+          status: 'in-progress',
+          horizon: 'short-term',
+          type: 'idea',
+          proposed_actions: ['Step One', 'Step Two'],
+          completed_actions: ['Step One'],
+          source_url: '',
+          source_note: '',
+          tags: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ];
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={{ ...mockActions, onUpdateCard, showToast }}>
+            <KanbanBoard
+              cards={boardCardsWithActions}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Check Next Step on 501
+      const nextStepCheckbox = screen.getByRole('checkbox', { name: /next: step alpha/i });
+      fireEvent.click(nextStepCheckbox);
+
+      expect(onUpdateCard).toHaveBeenCalledWith(501, {
+        status: 'in-progress',
+        completed_actions: ['Step Alpha'],
+      });
+      expect(showToast).toHaveBeenCalledWith(
+        'Started #501 → In Progress',
+        expect.any(Function)
+      );
+
+      // Check final step on 502
+      const finalStepCheckbox = screen.getByLabelText('Step Two');
+      fireEvent.click(finalStepCheckbox);
+
+      expect(onUpdateCard).toHaveBeenCalledWith(502, {
+        status: 'done',
+        completed_actions: ['Step One', 'Step Two'],
+      });
+      expect(showToast).toHaveBeenCalledWith(
+        'All steps completed! Moved #502 → Done',
+        expect.any(Function)
+      );
+    });
   });
 });
