@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from '../types';
 import { CardItem } from './CardItem';
 import { Zap, CheckCircle2, ListTodo, Archive, XCircle, LayoutGrid, Rows3, Layers } from 'lucide-react';
@@ -7,6 +7,8 @@ import { useLocale } from '../i18n';
 import { ExecutionPulse } from './board/ExecutionPulse';
 import { FocusSpotlight } from './board/FocusSpotlight';
 import { ExecutionSwimlanes } from './board/ExecutionSwimlanes';
+import { BoardInspector } from './board/BoardInspector';
+import { BoardShortcutsModal } from './board/BoardShortcutsModal';
 import {
   computeBoardPulseMetrics,
   filterBoardCards,
@@ -15,7 +17,7 @@ import {
   BoardSortOrder,
   SEVEN_DAYS_MS,
 } from '../utils/boardUtils';
-import { cardTypeLabel } from '../utils/cardEnumLabels';
+import { cardTypeLabel, statusLabel } from '../utils/cardEnumLabels';
 
 interface KanbanBoardProps {
   cards: Card[];
@@ -50,6 +52,35 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [cardTypeFilter, setCardTypeFilter] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<BoardSortOrder>('updated');
   const [isShelving, setIsShelving] = useState(false);
+
+  const [inspectedCard, setInspectedCard] = useState<Card | null>(null);
+  const [focusedCardId, setFocusedCardId] = useState<number | null>(null);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+
+  const [pinnedFocusId, setPinnedFocusId] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sparkkeep_board_focus_id');
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        return isNaN(parsed) ? null : parsed;
+      }
+    }
+    return null;
+  });
+
+  const handleTogglePinFocus = useCallback((cardId: number) => {
+    if (pinnedFocusId === cardId) {
+      setPinnedFocusId(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('sparkkeep_board_focus_id');
+      }
+    } else {
+      setPinnedFocusId(cardId);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sparkkeep_board_focus_id', String(cardId));
+      }
+    }
+  }, [pinnedFocusId]);
 
   const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
     if (typeof window !== 'undefined') {
@@ -227,12 +258,193 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     }
   };
 
+  const currentInspectedCard = inspectedCard
+    ? cards.find((c) => c.id === inspectedCard.id) || inspectedCard
+    : null;
+
+  const isWideViewport = () => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth >= 1200;
+  };
+
+  const handleCardClick = (card: Card) => {
+    if (isWideViewport()) {
+      setInspectedCard(card);
+      setFocusedCardId(card.id);
+    } else {
+      onSelectCard(card);
+    }
+  };
+
+  const handleCardDoubleClick = (card: Card) => {
+    onSelectCard(card);
+  };
+
+  const visibleCards =
+    boardMode === 'shelved'
+      ? shelvedCards
+      : boardMode === 'dismissed'
+      ? dismissedCards
+      : layout === 'swimlanes'
+      ? sortedCards
+      : [...todoCards, ...inProgressCards, ...displayedDoneCards];
+
+  /* oxlint-disable react-hooks/exhaustive-deps */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isShortcutsOpen) return;
+
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
+
+      const currentIdx =
+        focusedCardId !== null
+          ? visibleCards.findIndex((c) => c.id === focusedCardId)
+          : -1;
+      const focusedCard = currentIdx !== -1 ? visibleCards[currentIdx] : null;
+
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        if (visibleCards.length === 0) return;
+        e.preventDefault();
+        const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % visibleCards.length;
+        const nextCard = visibleCards[nextIdx];
+        setFocusedCardId(nextCard.id);
+        if (inspectedCard !== null) {
+          setInspectedCard(nextCard);
+        }
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        if (visibleCards.length === 0) return;
+        e.preventDefault();
+        const prevIdx =
+          currentIdx === -1
+            ? 0
+            : (currentIdx - 1 + visibleCards.length) % visibleCards.length;
+        const prevCard = visibleCards[prevIdx];
+        setFocusedCardId(prevCard.id);
+        if (inspectedCard !== null) {
+          setInspectedCard(prevCard);
+        }
+      } else if (e.key === ' ') {
+        if (visibleCards.length === 0) return;
+        e.preventDefault();
+        const targetCard = focusedCard || visibleCards[0];
+        if (inspectedCard && inspectedCard.id === targetCard.id) {
+          setInspectedCard(null);
+        } else {
+          setInspectedCard(targetCard);
+          setFocusedCardId(targetCard.id);
+        }
+      } else if (e.key === 'o' || e.key === 'O' || e.key === 'Enter') {
+        const targetCard = focusedCard || inspectedCard;
+        if (targetCard) {
+          e.preventDefault();
+          onSelectCard(targetCard);
+        }
+      } else if (e.key === '[') {
+        if (!focusedCard) return;
+        e.preventDefault();
+        const statusOrder = ['to-do', 'in-progress', 'done'];
+        const sIdx = statusOrder.indexOf(focusedCard.status);
+        if (sIdx > 0) {
+          const nextStatus = statusOrder[sIdx - 1];
+          const prevStatus = focusedCard.status;
+          onUpdateCard(focusedCard.id, { status: nextStatus as any });
+          const label = statusLabel(t, nextStatus);
+          showToast?.(t('cards.board.moved', { id: focusedCard.id, label }), async () => {
+            await onUpdateCard(focusedCard.id, { status: prevStatus as any });
+          });
+        }
+      } else if (e.key === ']') {
+        if (!focusedCard) return;
+        e.preventDefault();
+        const statusOrder = ['to-do', 'in-progress', 'done'];
+        const sIdx = statusOrder.indexOf(focusedCard.status);
+        if (sIdx >= 0 && sIdx < statusOrder.length - 1) {
+          const nextStatus = statusOrder[sIdx + 1];
+          const prevStatus = focusedCard.status;
+          onUpdateCard(focusedCard.id, { status: nextStatus as any });
+          const label = statusLabel(t, nextStatus);
+          showToast?.(t('cards.board.moved', { id: focusedCard.id, label }), async () => {
+            await onUpdateCard(focusedCard.id, { status: prevStatus as any });
+          });
+        }
+      } else if (e.key === '1') {
+        if (!focusedCard || focusedCard.horizon === 'short-term') return;
+        e.preventDefault();
+        const prevHorizon = focusedCard.horizon;
+        onUpdateCard(focusedCard.id, { horizon: 'short-term' });
+        showToast?.(
+          t('cards.modal.horizonSet', { horizon: t('cards.horizon.short') }),
+          async () => {
+            await onUpdateCard(focusedCard.id, { horizon: prevHorizon as any });
+          }
+        );
+      } else if (e.key === '2') {
+        if (!focusedCard || focusedCard.horizon === 'medium-term') return;
+        e.preventDefault();
+        const prevHorizon = focusedCard.horizon;
+        onUpdateCard(focusedCard.id, { horizon: 'medium-term' });
+        showToast?.(
+          t('cards.modal.horizonSet', { horizon: t('cards.horizon.medium') }),
+          async () => {
+            await onUpdateCard(focusedCard.id, { horizon: prevHorizon as any });
+          }
+        );
+      } else if (e.key === '3') {
+        if (!focusedCard || focusedCard.horizon === 'long-term') return;
+        e.preventDefault();
+        const prevHorizon = focusedCard.horizon;
+        onUpdateCard(focusedCard.id, { horizon: 'long-term' });
+        showToast?.(
+          t('cards.modal.horizonSet', { horizon: t('cards.horizon.long') }),
+          async () => {
+            await onUpdateCard(focusedCard.id, { horizon: prevHorizon as any });
+          }
+        );
+      } else if (e.key === 'f' || e.key === 'F') {
+        if (!focusedCard) return;
+        e.preventDefault();
+        handleTogglePinFocus(focusedCard.id);
+      } else if (e.key === '?') {
+        e.preventDefault();
+        setIsShortcutsOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    focusedCardId,
+    handleTogglePinFocus,
+    inspectedCard,
+    isShortcutsOpen,
+    onSelectCard,
+    onUpdateCard,
+    showToast,
+    t,
+    visibleCards,
+  ]);
+
   const renderCardItem = (card: Card) => (
     <CardItem
       key={card.id}
       card={card}
       density={density}
-      onSelect={onSelectCard}
+      onSelect={handleCardClick}
+      onDoubleClick={handleCardDoubleClick}
+      isKeyboardFocused={focusedCardId === card.id}
       onStatusChange={handleStatusChange}
       onUpdateCard={onUpdateCard}
       onResearch={onResearch}
@@ -541,224 +753,271 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         </div>
       </div>
 
-      {/* Info Notice when in Active Mode and Triage has matching items */}
-      {boardMode === 'active' && boardCards.length === 0 && triageMatchingCards.length > 0 && (
-        <div style={{
-          margin: '0 0 16px 0',
-          padding: '12px 16px',
-          background: 'var(--color-info-bg)',
-          border: '1px solid var(--border-highlight)',
-          borderRadius: 8,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-        }}>
-          <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-            {triageMatchingCards.length === 1
-              ? t('cards.board.triageSingular', { count: triageMatchingCards.length })
-              : t('cards.board.triagePlural', { count: triageMatchingCards.length })}{' '}
-            <strong>{t('triage.title')}</strong> {t('cards.board.triageAfter')}
-          </span>
-          {onSwitchToTriage && (
-            <button
-              type="button"
-              className="btn-primary"
-              style={{ fontSize: 12, padding: '4px 12px', height: 'auto', whiteSpace: 'nowrap' }}
-              onClick={onSwitchToTriage}
-            >
-              {t('cards.board.viewInTriage')}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* 1. ACTIVE EXECUTION KANBAN BOARD */}
-      {boardMode === 'active' && (
-        <>
-          <FocusSpotlight
-            cards={filteredCards}
-            onSelectCard={onSelectCard}
-            onUpdateCard={onUpdateCard}
-            showToast={showToast}
-          />
-          <ExecutionPulse
-            metrics={pulseMetrics}
-            activeSignalFilter={signalFilter}
-            onToggleSignalFilter={(f) => setSignalFilter(f)}
-            onBatchShelveIdle={handleBatchShelveIdle}
-            isShelving={isShelving}
-          />
-          {layout === 'swimlanes' ? (
-            <ExecutionSwimlanes
-              cards={sortedCards}
-              density={density}
-              groupBy={swimlaneGroup}
-              onSelectCard={onSelectCard}
-              onUpdateCard={onUpdateCard}
-              onResearch={onResearch}
-              onRetry={onRetry}
-              showToast={showToast}
-              renderCardItem={renderCardItem}
-            />
-          ) : (
-            <div className="kanban-board" data-view="execution">
-              {/* To Do Column */}
-              <div
-                className={`kanban-column ${dragOverCol === 'to-do' ? 'drag-over' : ''}`}
-                onDragOver={(e) => handleDragOver(e, 'to-do')}
-                onDragLeave={(e) => handleDragLeave(e, 'to-do')}
-                onDrop={(e) => handleDrop(e, 'to-do')}
-              >
-                <div className="column-header">
-                  <div className="column-title">
-                    <ListTodo size={15} strokeWidth={1.5} color="var(--accent-indigo)" />
-                    <span>{t('cards.status.toDo')}</span>
-                  </div>
-                  <span className="column-count">{todoCards.length}</span>
-                </div>
-                <div className="cards-container">
-                  {todoCards.length === 0 ? (
-                    <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-                      {t('cards.board.emptyTodo')}
-                    </div>
-                  ) : (
-                    todoCards.map(renderCardItem)
-                  )}
-                </div>
+      {/* Board Content (Active / Shelved / Dismissed) */}
+      {(() => {
+        const boardContent = (
+          <>
+            {/* Info Notice when in Active Mode and Triage has matching items */}
+            {boardMode === 'active' && boardCards.length === 0 && triageMatchingCards.length > 0 && (
+              <div style={{
+                margin: '0 0 16px 0',
+                padding: '12px 16px',
+                background: 'var(--color-info-bg)',
+                border: '1px solid var(--border-highlight)',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}>
+                <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+                  {triageMatchingCards.length === 1
+                    ? t('cards.board.triageSingular', { count: triageMatchingCards.length })
+                    : t('cards.board.triagePlural', { count: triageMatchingCards.length })}{' '}
+                  <strong>{t('triage.title')}</strong> {t('cards.board.triageAfter')}
+                </span>
+                {onSwitchToTriage && (
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    style={{ fontSize: 12, padding: '4px 12px', height: 'auto', whiteSpace: 'nowrap' }}
+                    onClick={onSwitchToTriage}
+                  >
+                    {t('cards.board.viewInTriage')}
+                  </button>
+                )}
               </div>
+            )}
 
-              {/* In Progress Column */}
-              <div
-                className={`kanban-column ${dragOverCol === 'in-progress' ? 'drag-over' : ''}`}
-                onDragOver={(e) => handleDragOver(e, 'in-progress')}
-                onDragLeave={(e) => handleDragLeave(e, 'in-progress')}
-                onDrop={(e) => handleDrop(e, 'in-progress')}
-              >
-                <div className="column-header">
-                  <div className="column-title">
-                    <Zap size={15} strokeWidth={1.5} color="var(--accent-emerald)" />
-                    <span>{t('cards.status.inProgress')}</span>
-                  </div>
-                  <span className="column-count">{inProgressCards.length}</span>
-                </div>
-                <div className="cards-container">
-                  {inProgressCards.length === 0 ? (
-                    <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-                      {t('cards.board.emptyInProgress')}
-                    </div>
-                  ) : (
-                    inProgressCards.map(renderCardItem)
-                  )}
-                </div>
-              </div>
-
-              {/* Done Column */}
-              <div
-                className={`kanban-column ${dragOverCol === 'done' ? 'drag-over' : ''}`}
-                onDragOver={(e) => handleDragOver(e, 'done')}
-                onDragLeave={(e) => handleDragLeave(e, 'done')}
-                onDrop={(e) => handleDrop(e, 'done')}
-              >
-                <div className="column-header">
-                  <div className="column-title">
-                    <CheckCircle2 size={15} strokeWidth={1.5} color="var(--accent-blue)" />
-                    <span>{t('cards.item.completed')}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      style={{ fontSize: 10, padding: '2px 6px', height: 20 }}
-                      onClick={async () => {
-                        try {
-                          const res = await api.syncObsidian();
-                          showToast?.(tp('cards.board.syncedObsidian', res.written));
-                        } catch (err: unknown) {
-                          showToast?.(api.getErrorMessage(err));
-                        }
-                      }}
+            {/* 1. ACTIVE EXECUTION KANBAN BOARD */}
+            {boardMode === 'active' && (
+              <>
+                <FocusSpotlight
+                  cards={filteredCards}
+                  onSelectCard={onSelectCard}
+                  onUpdateCard={onUpdateCard}
+                  showToast={showToast}
+                  pinnedId={pinnedFocusId}
+                  onTogglePin={handleTogglePinFocus}
+                  onInspectCard={(card) => {
+                    setInspectedCard(card);
+                    setFocusedCardId(card.id);
+                  }}
+                />
+                <ExecutionPulse
+                  metrics={pulseMetrics}
+                  activeSignalFilter={signalFilter}
+                  onToggleSignalFilter={(f) => setSignalFilter(f)}
+                  onBatchShelveIdle={handleBatchShelveIdle}
+                  isShelving={isShelving}
+                />
+                {layout === 'swimlanes' ? (
+                  <ExecutionSwimlanes
+                    cards={sortedCards}
+                    density={density}
+                    groupBy={swimlaneGroup}
+                    onSelectCard={onSelectCard}
+                    onUpdateCard={onUpdateCard}
+                    onResearch={onResearch}
+                    onRetry={onRetry}
+                    showToast={showToast}
+                    renderCardItem={renderCardItem}
+                  />
+                ) : (
+                  <div className="kanban-board" data-view="execution">
+                    {/* To Do Column */}
+                    <div
+                      className={`kanban-column ${dragOverCol === 'to-do' ? 'drag-over' : ''}`}
+                      onDragOver={(e) => handleDragOver(e, 'to-do')}
+                      onDragLeave={(e) => handleDragLeave(e, 'to-do')}
+                      onDrop={(e) => handleDrop(e, 'to-do')}
                     >
-                      {t('cards.board.syncObsidian')}
-                    </button>
-                    <span className="column-count">{displayedDoneCards.length}</span>
-                  </div>
-                </div>
-                <div className="cards-container">
-                  {displayedDoneCards.length === 0 ? (
-                    <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-                      {t('cards.board.emptyDone')}
+                      <div className="column-header">
+                        <div className="column-title">
+                          <ListTodo size={15} strokeWidth={1.5} color="var(--accent-indigo)" />
+                          <span>{t('cards.status.toDo')}</span>
+                        </div>
+                        <span className="column-count">{todoCards.length}</span>
+                      </div>
+                      <div className="cards-container">
+                        {todoCards.length === 0 ? (
+                          <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
+                            {t('cards.board.emptyTodo')}
+                          </div>
+                        ) : (
+                          todoCards.map(renderCardItem)
+                        )}
+                      </div>
                     </div>
-                  ) : (
-                    displayedDoneCards.map(renderCardItem)
-                  )}
 
-                  <div style={{ marginTop: 12, paddingBottom: 6, textAlign: 'center' }}>
-                    <button
-                      id="link-view-archived"
-                      type="button"
-                      onClick={() => setShowArchivedDone(!showArchivedDone)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--accent-indigo)',
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        textDecoration: 'underline',
-                        padding: '4px 8px',
-                      }}
+                    {/* In Progress Column */}
+                    <div
+                      className={`kanban-column ${dragOverCol === 'in-progress' ? 'drag-over' : ''}`}
+                      onDragOver={(e) => handleDragOver(e, 'in-progress')}
+                      onDragLeave={(e) => handleDragLeave(e, 'in-progress')}
+                      onDrop={(e) => handleDrop(e, 'in-progress')}
                     >
-                      {showArchivedDone
-                        ? t('cards.board.hideArchived')
-                        : archivedDoneCards.length > 0
-                        ? t('cards.board.viewArchivedCount', { count: archivedDoneCards.length })
-                        : t('cards.board.viewArchived')}
-                    </button>
+                      <div className="column-header">
+                        <div className="column-title">
+                          <Zap size={15} strokeWidth={1.5} color="var(--accent-emerald)" />
+                          <span>{t('cards.status.inProgress')}</span>
+                        </div>
+                        <span className="column-count">{inProgressCards.length}</span>
+                      </div>
+                      <div className="cards-container">
+                        {inProgressCards.length === 0 ? (
+                          <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
+                            {t('cards.board.emptyInProgress')}
+                          </div>
+                        ) : (
+                          inProgressCards.map(renderCardItem)
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Done Column */}
+                    <div
+                      className={`kanban-column ${dragOverCol === 'done' ? 'drag-over' : ''}`}
+                      onDragOver={(e) => handleDragOver(e, 'done')}
+                      onDragLeave={(e) => handleDragLeave(e, 'done')}
+                      onDrop={(e) => handleDrop(e, 'done')}
+                    >
+                      <div className="column-header">
+                        <div className="column-title">
+                          <CheckCircle2 size={15} strokeWidth={1.5} color="var(--accent-blue)" />
+                          <span>{t('cards.item.completed')}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ fontSize: 10, padding: '2px 6px', height: 20 }}
+                            onClick={async () => {
+                              try {
+                                const res = await api.syncObsidian();
+                                showToast?.(tp('cards.board.syncedObsidian', res.written));
+                              } catch (err: unknown) {
+                                showToast?.(api.getErrorMessage(err));
+                              }
+                            }}
+                          >
+                            {t('cards.board.syncObsidian')}
+                          </button>
+                          <span className="column-count">{displayedDoneCards.length}</span>
+                        </div>
+                      </div>
+                      <div className="cards-container">
+                        {displayedDoneCards.length === 0 ? (
+                          <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
+                            {t('cards.board.emptyDone')}
+                          </div>
+                        ) : (
+                          displayedDoneCards.map(renderCardItem)
+                        )}
+
+                        <div style={{ marginTop: 12, paddingBottom: 6, textAlign: 'center' }}>
+                          <button
+                            id="link-view-archived"
+                            type="button"
+                            onClick={() => setShowArchivedDone(!showArchivedDone)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--accent-indigo)',
+                              fontSize: 12,
+                              cursor: 'pointer',
+                              textDecoration: 'underline',
+                              padding: '4px 8px',
+                            }}
+                          >
+                            {showArchivedDone
+                              ? t('cards.board.hideArchived')
+                              : archivedDoneCards.length > 0
+                              ? t('cards.board.viewArchivedCount', { count: archivedDoneCards.length })
+                              : t('cards.board.viewArchived')}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
+              </>
+            )}
+
+            {/* 2. SHELVED ARCHIVE VIEW */}
+            {boardMode === 'shelved' && (
+              <div>
+                {shelvedCards.length === 0 ? (
+                  <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-faint)', fontSize: 14 }}>
+                    {t('cards.board.noneShelved')}
+                  </div>
+                ) : (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                    gap: 12,
+                  }}>
+                    {shelvedCards.map(renderCardItem)}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-      </>
-    )}
+            )}
 
-      {/* 2. SHELVED ARCHIVE VIEW */}
-      {boardMode === 'shelved' && (
-        <div>
-          {shelvedCards.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-faint)', fontSize: 14 }}>
-              {t('cards.board.noneShelved')}
-            </div>
-          ) : (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-              gap: 12,
-            }}>
-              {shelvedCards.map(renderCardItem)}
-            </div>
-          )}
-        </div>
-      )}
+            {/* 3. DISMISSED ARCHIVE VIEW */}
+            {boardMode === 'dismissed' && (
+              <div>
+                {dismissedCards.length === 0 ? (
+                  <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-faint)', fontSize: 14 }}>
+                    {t('cards.board.noneDismissed')}
+                  </div>
+                ) : (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                    gap: 12,
+                  }}>
+                    {dismissedCards.map(renderCardItem)}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        );
 
-      {/* 3. DISMISSED ARCHIVE VIEW */}
-      {boardMode === 'dismissed' && (
-        <div>
-          {dismissedCards.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-faint)', fontSize: 14 }}>
-              {t('cards.board.noneDismissed')}
+        if (inspectedCard) {
+          return (
+            <div className="board-master-detail-layout">
+              <div className="board-main-canvas">{boardContent}</div>
+              <aside
+                className="board-docked-inspector"
+                aria-label={t('cards.board.inspectorTitle')}
+              >
+                <BoardInspector
+                  card={currentInspectedCard || inspectedCard}
+                  onClose={() => setInspectedCard(null)}
+                  onExpandModal={(c) => {
+                    onSelectCard(c);
+                  }}
+                  onUpdateCard={onUpdateCard}
+                  onResearch={onResearch}
+                  onRetry={onRetry}
+                  showToast={showToast}
+                  isPinnedFocus={pinnedFocusId === (currentInspectedCard || inspectedCard).id}
+                  onTogglePinFocus={handleTogglePinFocus}
+                />
+              </aside>
             </div>
-          ) : (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-              gap: 12,
-            }}>
-              {dismissedCards.map(renderCardItem)}
-            </div>
-          )}
-        </div>
-      )}
+          );
+        }
+
+        return boardContent;
+      })()}
+
+      {/* Board Keyboard Shortcuts Cheatsheet Modal */}
+      <BoardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
     </div>
   );
 };

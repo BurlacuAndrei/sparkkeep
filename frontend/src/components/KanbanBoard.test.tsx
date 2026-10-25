@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { KanbanBoard } from './KanbanBoard';
 import { CardActionsProvider, CardActions } from '../context/CardActionsContext';
 import { Card } from '../types';
@@ -1120,6 +1120,473 @@ describe('KanbanBoard Density & Usability', () => {
         status: 'to-do',
         type: 'tool',
       });
+    });
+  });
+
+  describe('Ticket 05: Docked Board Inspector & Keyboard Navigation', () => {
+    const inspectorCards: Card[] = [
+      {
+        id: 501,
+        title: 'Alpha Architecture Spark',
+        summary: 'Evaluate architectural seams for modular execution',
+        tldr: 'TLDR for Alpha Spark',
+        why_care: 'High leverage architectural refactor',
+        horizon: 'short-term',
+        status: 'to-do',
+        source_url: 'https://github.com/sparkkeep/core',
+        source_note: 'Architecture memo',
+        type: 'repo',
+        proposed_actions: ['Design Seams', 'Draft RFC', 'Implement Adapter'],
+        completed_actions: ['Design Seams'],
+        claims: ['Zero CLS layout', '100% test coverage'],
+        open_questions: ['What is the memory footprint?'],
+        research_verdict: 'pursue',
+        research_confidence: 'high',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tags: ['architecture'],
+      },
+      {
+        id: 502,
+        title: 'Beta Telemetry Pipeline',
+        summary: 'Collect workspace metrics in real time',
+        tldr: 'TLDR for Beta Telemetry',
+        why_care: 'Actionable real-time insights',
+        horizon: 'medium-term',
+        status: 'in-progress',
+        source_url: 'https://example.com/telemetry',
+        source_note: 'Telemetry docs',
+        type: 'tool',
+        proposed_actions: ['Install telemetry client', 'Verify payload'],
+        completed_actions: ['Install telemetry client'],
+        research_verdict: 'watch',
+        research_confidence: 'medium',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tags: ['telemetry'],
+      },
+      {
+        id: 503,
+        title: 'Gamma Obsidian Exporter',
+        summary: 'Direct knowledge sync with markdown vaults',
+        horizon: 'long-term',
+        status: 'done',
+        source_url: 'https://example.com/obsidian',
+        source_note: 'Obsidian vault guide',
+        type: 'article',
+        proposed_actions: ['Format vault notes'],
+        completed_actions: ['Format vault notes'],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tags: ['obsidian'],
+      },
+    ];
+
+    it('single-clicking a card on widescreen (>= 1200px) opens docked Board Inspector', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onSelectCard = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={onSelectCard}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Single-click card 501
+      const cardTitle = screen.getByText('Alpha Architecture Spark');
+      fireEvent.click(cardTitle);
+
+      // Board Inspector should be open, onSelectCard should NOT have been called
+      expect(onSelectCard).not.toHaveBeenCalled();
+      const inspector = screen.getByTestId('board-inspector');
+      expect(inspector).toBeDefined();
+      expect(inspector.textContent).toContain('Alpha Architecture Spark');
+      expect(inspector.textContent).toContain('TLDR for Alpha Spark');
+      expect(inspector.textContent).toContain('High leverage architectural refactor');
+      expect(inspector.textContent).toContain('Zero CLS layout');
+      expect(inspector.textContent).toContain('What is the memory footprint?');
+    });
+
+    it('single-clicking a card on narrower viewport (< 1200px) directly invokes onSelectCard', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 900 });
+      const onSelectCard = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={onSelectCard}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const cardTitle = screen.getByText('Alpha Architecture Spark');
+      fireEvent.click(cardTitle);
+
+      expect(onSelectCard).toHaveBeenCalledWith(inspectorCards[0]);
+      expect(screen.queryByTestId('board-inspector')).toBeNull();
+    });
+
+    it('double-clicking a card on widescreen invokes onSelectCard to open full modal', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onSelectCard = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={onSelectCard}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      const cardTitle = screen.getByText('Alpha Architecture Spark');
+      fireEvent.doubleClick(cardTitle);
+
+      expect(onSelectCard).toHaveBeenCalledWith(inspectorCards[0]);
+    });
+
+    it('allows toggling checklist items, adding steps, and removing steps inside Board Inspector with Undo', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Open inspector for card 501
+      fireEvent.click(screen.getByText('Alpha Architecture Spark'));
+      const inspector = screen.getByTestId('board-inspector');
+      expect(inspector).toBeDefined();
+
+      // Check 'Draft RFC'
+      const draftRfcCheckbox = within(inspector).getByLabelText('Draft RFC');
+      fireEvent.click(draftRfcCheckbox);
+
+      expect(onUpdateCard).toHaveBeenCalledWith(501, {
+        completed_actions: ['Design Seams', 'Draft RFC'],
+      });
+      expect(showToast).toHaveBeenCalled();
+
+      // Undo step toggle
+      const undoToggle = showToast.mock.calls[showToast.mock.calls.length - 1][1];
+      undoToggle();
+      expect(onUpdateCard).toHaveBeenCalledWith(501, {
+        completed_actions: ['Design Seams'],
+      });
+
+      // Add a new step
+      const addInput = within(inspector).getByPlaceholderText('Add an action...');
+      fireEvent.change(addInput, { target: { value: 'Deploy Canary' } });
+      fireEvent.click(within(inspector).getByRole('button', { name: /add/i }));
+
+      expect(onUpdateCard).toHaveBeenCalledWith(501, {
+        proposed_actions: ['Design Seams', 'Draft RFC', 'Implement Adapter', 'Deploy Canary'],
+      });
+
+      // Remove step 'Implement Adapter'
+      const removeButtons = within(inspector).getAllByRole('button', { name: 'Remove action' });
+      fireEvent.click(removeButtons[2]); // 3rd item: 'Implement Adapter'
+
+      expect(onUpdateCard).toHaveBeenCalledWith(501, {
+        proposed_actions: ['Design Seams', 'Draft RFC'],
+        completed_actions: ['Design Seams'],
+      });
+    });
+
+    it('checking final step on in-progress card auto-moves to done with Undo', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Open inspector for card 502 (in-progress, 'Verify payload' unchecked)
+      const card502 = document.querySelector('.card[data-id="502"]');
+      expect(card502).toBeDefined();
+      fireEvent.click(card502!);
+
+      const inspector = screen.getByTestId('board-inspector');
+      // Check 'Verify payload' inside inspector
+      const verifyCheckbox = within(inspector).getByLabelText('Verify payload');
+      fireEvent.click(verifyCheckbox);
+
+      expect(onUpdateCard).toHaveBeenCalledWith(502, {
+        status: 'done',
+        completed_actions: ['Install telemetry client', 'Verify payload'],
+      });
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining('#502'),
+        expect.any(Function)
+      );
+
+      // Undo auto-move
+      const undoAutoDone = showToast.mock.calls[showToast.mock.calls.length - 1][1];
+      undoAutoDone();
+      expect(onUpdateCard).toHaveBeenCalledWith(502, {
+        status: 'in-progress',
+        completed_actions: ['Install telemetry client'],
+      });
+    });
+
+    it('updates status and horizon via inspector quick selectors with Undo', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      fireEvent.click(screen.getByText('Alpha Architecture Spark'));
+
+      // Change status to in-progress
+      const inProgressBtn = screen.getByRole('radio', { name: /in progress/i });
+      fireEvent.click(inProgressBtn);
+
+      expect(onUpdateCard).toHaveBeenCalledWith(501, { status: 'in-progress' });
+      expect(showToast).toHaveBeenCalled();
+
+      // Undo status change
+      const undoStatus = showToast.mock.calls[showToast.mock.calls.length - 1][1];
+      undoStatus();
+      expect(onUpdateCard).toHaveBeenCalledWith(501, { status: 'to-do' });
+
+      // Change horizon to long-term
+      const laterBtn = screen.getByRole('radio', { name: /long-term/i });
+      fireEvent.click(laterBtn);
+
+      expect(onUpdateCard).toHaveBeenCalledWith(501, { horizon: 'long-term' });
+      expect(showToast).toHaveBeenCalled();
+
+      // Undo horizon change
+      const undoHorizon = showToast.mock.calls[showToast.mock.calls.length - 1][1];
+      undoHorizon();
+      expect(onUpdateCard).toHaveBeenCalledWith(501, { horizon: 'short-term' });
+    });
+
+    it('inspector expand button promotes to full modal and close button closes inspector', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onSelectCard = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={onSelectCard}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      fireEvent.click(screen.getByText('Alpha Architecture Spark'));
+      expect(screen.getByTestId('board-inspector')).toBeDefined();
+
+      // Click Expand button
+      const expandBtn = screen.getByRole('button', { name: 'Expand to Full Modal' });
+      fireEvent.click(expandBtn);
+      expect(onSelectCard).toHaveBeenCalledWith(inspectorCards[0]);
+
+      // Click Close button
+      const closeBtn = screen.getByRole('button', { name: 'Close Inspector' });
+      fireEvent.click(closeBtn);
+      expect(screen.queryByTestId('board-inspector')).toBeNull();
+    });
+
+    it('keyboard navigation: j/k moves focus ring, Space toggles inspector, o/Enter opens full modal', () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onSelectCard = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={onSelectCard}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Press 'j' -> moves focus to first card (501)
+      fireEvent.keyDown(window, { key: 'j' });
+      const card501 = document.querySelector('.card[data-id="501"]');
+      expect(card501?.classList.contains('is-keyboard-focused')).toBe(true);
+
+      // Press 'j' -> moves focus to second card (502)
+      fireEvent.keyDown(window, { key: 'j' });
+      const card502 = document.querySelector('.card[data-id="502"]');
+      expect(card502?.classList.contains('is-keyboard-focused')).toBe(true);
+      expect(card501?.classList.contains('is-keyboard-focused')).toBe(false);
+
+      // Press 'k' -> moves focus back to first card (501)
+      fireEvent.keyDown(window, { key: 'k' });
+      expect(card501?.classList.contains('is-keyboard-focused')).toBe(true);
+
+      // Press 'Space' -> opens inspector for card 501
+      fireEvent.keyDown(window, { key: ' ' });
+      const inspector = screen.getByTestId('board-inspector');
+      expect(inspector.textContent).toContain('Alpha Architecture Spark');
+
+      // Press 'j' while inspector is open -> inspector updates to card 502
+      fireEvent.keyDown(window, { key: 'j' });
+      expect(screen.getByTestId('board-inspector').textContent).toContain('Beta Telemetry Pipeline');
+
+      // Press 'o' -> opens full modal for focused card 502
+      fireEvent.keyDown(window, { key: 'o' });
+      expect(onSelectCard).toHaveBeenCalledWith(inspectorCards[1]);
+    });
+
+    it('keyboard navigation: [/] changes status, 1/2/3 sets horizon, f toggles pin focus', () => {
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Focus card 501
+      fireEvent.keyDown(window, { key: 'j' });
+
+      // Press ']' -> move status to-do -> in-progress
+      fireEvent.keyDown(window, { key: ']' });
+      expect(onUpdateCard).toHaveBeenCalledWith(501, { status: 'in-progress' });
+
+      // Press '2' -> set horizon to medium-term
+      fireEvent.keyDown(window, { key: '2' });
+      expect(onUpdateCard).toHaveBeenCalledWith(501, { horizon: 'medium-term' });
+
+      // Press '3' -> set horizon to long-term
+      fireEvent.keyDown(window, { key: '3' });
+      expect(onUpdateCard).toHaveBeenCalledWith(501, { horizon: 'long-term' });
+
+      // Press 'f' -> pin card 501 to focus spotlight
+      fireEvent.keyDown(window, { key: 'f' });
+      expect(localStorage.getItem('sparkkeep_board_focus_id')).toBe('501');
+
+      // Press 'f' again -> unpins card 501
+      fireEvent.keyDown(window, { key: 'f' });
+      expect(localStorage.getItem('sparkkeep_board_focus_id')).toBeNull();
+    });
+
+    it('keyboard navigation: ? opens Board Shortcuts modal and Escape closes it', () => {
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={inspectorCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Press '?'
+      fireEvent.keyDown(window, { key: '?' });
+      expect(screen.getByRole('dialog')).toBeDefined();
+      expect(screen.getByText('Board Keyboard Shortcuts')).toBeDefined();
+      expect(screen.getByText('Navigate cards')).toBeDefined();
+      expect(screen.getByText('Toggle Inspector')).toBeDefined();
+      expect(screen.getByText('Open Full Card Modal')).toBeDefined();
+
+      // Press 'Escape'
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByRole('dialog')).toBeNull();
     });
   });
 });

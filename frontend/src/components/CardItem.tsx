@@ -28,6 +28,8 @@ export interface CardItemProps {
   siblingIndex?: number;
   density?: 'comfortable' | 'compact';
   onSelect?: (card: Card) => void;
+  onDoubleClick?: (card: Card) => void;
+  isKeyboardFocused?: boolean;
   onStatusChange?: (id: number, status: string) => void;
   onResearch?: (id: number) => void;
   onRetry?: (id: number) => void;
@@ -43,6 +45,8 @@ export const CardItem: React.FC<CardItemProps> = ({
   siblingIndex,
   density = 'comfortable',
   onSelect: propOnSelect,
+  onDoubleClick,
+  isKeyboardFocused = false,
   onStatusChange: propOnStatusChange,
   onResearch: propOnResearch,
   onRetry: propOnRetry,
@@ -210,6 +214,11 @@ export const CardItem: React.FC<CardItemProps> = ({
     onSelect(card);
   };
 
+  const handleDoubleClick = () => {
+    if (selectable) return;
+    onDoubleClick?.(card);
+  };
+
   const handlePrimaryAction = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isFailed) {
@@ -261,9 +270,10 @@ export const CardItem: React.FC<CardItemProps> = ({
 
   return (
     <article
-      className={`card action-card ${density === 'compact' ? 'is-compact' : ''} ${selected ? 'is-selected' : ''} ${menuOpen ? 'menu-active' : ''} ${isDragging ? 'is-dragging' : ''} ${isCompleting ? 'is-completing-celebration' : ''}`}
+      className={`card action-card ${density === 'compact' ? 'is-compact' : ''} ${selected ? 'is-selected' : ''} ${menuOpen ? 'menu-active' : ''} ${isDragging ? 'is-dragging' : ''} ${isCompleting ? 'is-completing-celebration' : ''} ${isKeyboardFocused ? 'is-keyboard-focused' : ''}`}
       data-id={card.id}
       onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       draggable={!menuOpen}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}

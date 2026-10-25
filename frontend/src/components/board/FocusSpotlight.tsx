@@ -21,6 +21,9 @@ export interface FocusSpotlightProps {
   onSelectCard: (card: Card) => void;
   onUpdateCard: (id: number, patch: Partial<Card>) => void;
   showToast?: (msg: string, onUndo?: () => Promise<void> | void) => void;
+  pinnedId?: number | null;
+  onTogglePin?: (cardId: number) => void;
+  onInspectCard?: (card: Card) => void;
 }
 
 export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
@@ -28,10 +31,13 @@ export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
   onSelectCard,
   onUpdateCard,
   showToast,
+  pinnedId: propPinnedId,
+  onTogglePin: propOnTogglePin,
+  onInspectCard,
 }) => {
   const { t } = useLocale();
 
-  const [pinnedId, setPinnedId] = useState<number | null>(() => {
+  const [internalPinnedId, setInternalPinnedId] = useState<number | null>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sparkkeep_board_focus_id');
       if (saved) {
@@ -41,6 +47,8 @@ export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
     }
     return null;
   });
+
+  const pinnedId = propPinnedId !== undefined ? propPinnedId : internalPinnedId;
 
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -74,13 +82,17 @@ export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
 
   const handleTogglePin = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (propOnTogglePin) {
+      propOnTogglePin(currentCard.id);
+      return;
+    }
     if (isCurrentPinned) {
-      setPinnedId(null);
+      setInternalPinnedId(null);
       if (typeof window !== 'undefined') {
         localStorage.removeItem('sparkkeep_board_focus_id');
       }
     } else {
-      setPinnedId(currentCard.id);
+      setInternalPinnedId(currentCard.id);
       setCycleOffset(0);
       if (typeof window !== 'undefined') {
         localStorage.setItem('sparkkeep_board_focus_id', String(currentCard.id));
@@ -344,7 +356,7 @@ export const FocusSpotlight: React.FC<FocusSpotlightProps> = ({
             <button
               type="button"
               className="spotlight-inspect-link"
-              onClick={() => onSelectCard(currentCard)}
+              onClick={() => (onInspectCard ? onInspectCard(currentCard) : onSelectCard(currentCard))}
               title={t('cards.board.spotlightInspect')}
             >
               <span>{t('cards.board.spotlightInspect')}</span>
