@@ -16,7 +16,6 @@ import (
 	"image/jpeg"
 	_ "image/png" // registers PNG decoding for Telegram screenshots
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -87,12 +86,12 @@ func CardTypesFromContext(ctx context.Context) ([]string, bool) {
 	return val, ok
 }
 
-// CleanCardTypes trims, lowercases, deduplicates, and removes "other".
+// CleanCardTypes trims, resolves aliases, lowercases, deduplicates, and removes "other".
 func CleanCardTypes(types []string) []string {
 	var cleaned []string
 	seen := make(map[string]bool)
 	for _, t := range types {
-		s := strings.ToLower(strings.TrimSpace(t))
+		s := port.ResolveCardType(t)
 		if s == "" || s == "other" {
 			continue
 		}
@@ -175,7 +174,7 @@ func (c *Client) Describe(ctx context.Context, img capture.File, hint string) (s
 		return "", err
 	}
 	if strings.TrimSpace(hint) == "" {
-		hint = "Describe this image. Transcribe any visible text verbatim. State clearly if the image is unreadable or contains no useful information."
+		hint = "Describe this image. Transcribe any visible text verbatim in its original source language without translation. State clearly if the image is unreadable or contains no useful information."
 	}
 	maxTokens := c.MaxTokens
 	if maxTokens <= 0 {
@@ -509,17 +508,18 @@ func normalizeIdeaCards(cards []Idea, activeTypes ...[]string) []Idea {
 		if cards[i].Summary == "" && cards[i].TLDR != "" {
 			cards[i].Summary = cards[i].TLDR
 		}
-		rawType := strings.ToLower(strings.TrimSpace(cards[i].Type))
-		if rawType == "" {
+		rawType := strings.TrimSpace(cards[i].Type)
+		resolved := port.ResolveCardType(rawType)
+		if rawType == "" || resolved == "" {
 			if allowed[port.CardTypeIdea] {
 				cards[i].Type = port.CardTypeIdea
 			} else {
 				cards[i].Type = port.CardTypeOther
 			}
-		} else if !allowed[rawType] {
+		} else if !allowed[resolved] {
 			cards[i].Type = port.CardTypeOther
 		} else {
-			cards[i].Type = rawType
+			cards[i].Type = resolved
 		}
 		if cards[i].Claims == nil {
 			cards[i].Claims = []string{}
@@ -545,6 +545,18 @@ func normalizeIdeaCards(cards []Idea, activeTypes ...[]string) []Idea {
 		}
 		if cards[i].Worthiness.Level == "" {
 			cards[i].Worthiness.Level = "medium"
+		} else {
+			lvl := strings.ToLower(strings.TrimSpace(cards[i].Worthiness.Level))
+			switch lvl {
+			case "high", "hoch", "haute", "alta", "ridicata", "ridicată":
+				cards[i].Worthiness.Level = "high"
+			case "medium", "mittel", "moyenne", "media", "medie":
+				cards[i].Worthiness.Level = "medium"
+			case "low", "niedrig", "faible", "baja", "scazuta", "scăzută":
+				cards[i].Worthiness.Level = "low"
+			default:
+				cards[i].Worthiness.Level = "medium"
+			}
 		}
 
 		var legacyRefs []port.Reference
@@ -570,6 +582,9 @@ func normalizeIdeaCards(cards []Idea, activeTypes ...[]string) []Idea {
 			})
 		}
 		cards[i].References = MergeReferences(cards[i].References, legacyRefs)
+		for j := range cards[i].References {
+			cards[i].References[j].Kind = port.ResolveReferenceKind(cards[i].References[j].Kind)
+		}
 		if cards[i].Tags == nil {
 			cards[i].Tags = []string{}
 		}
@@ -581,24 +596,7 @@ func normalizeIdeaCards(cards []Idea, activeTypes ...[]string) []Idea {
 }
 
 func normalizeHorizon(raw string) string {
-	cleaned := strings.ToLower(strings.TrimSpace(raw))
-	cleaned = strings.ReplaceAll(cleaned, "_", " ")
-	cleaned = strings.ReplaceAll(cleaned, "-", " ")
-	cleaned = strings.Join(strings.Fields(cleaned), " ")
-
-	switch cleaned {
-	case "short term", "shortterm", "short", "now", "soon", "immediate":
-		return port.HorizonShortTerm
-	case "medium term", "mediumterm", "medium":
-		return port.HorizonMediumTerm
-	case "long term", "longterm", "long":
-		return port.HorizonLongTerm
-	case "lifetime", "life time", "bucket", "bucket list", "bucketlist", "someday":
-		return port.HorizonLongTerm
-	default:
-		slog.Debug("analyze: unknown or empty horizon, defaulting to short-term", "horizon", raw)
-		return port.HorizonShortTerm
-	}
+	return port.NormalizeHorizon(raw)
 }
 
 func validateCards(cards []Idea) error {

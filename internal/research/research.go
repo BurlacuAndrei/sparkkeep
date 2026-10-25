@@ -54,6 +54,123 @@ type searchResp struct {
 	} `json:"results"`
 }
 
+type ReportLabels struct {
+	Research               string
+	ExecutiveVerdict       string
+	Recommendation         string
+	Confidence             string
+	ForWhom                string
+	KeyRisks               string
+	RecommendedNextActions string
+	ClaimVerification      string
+	CompetitiveLandscape   string
+	HowItDiffers           string
+	QuestionsFindings      string
+	SearchQuery            string
+	SourcesCitations       string
+}
+
+var reportLabelsMap = map[string]ReportLabels{
+	"en": {
+		Research:               "Research",
+		ExecutiveVerdict:       "Executive Verdict",
+		Recommendation:         "Recommendation",
+		Confidence:             "Confidence",
+		ForWhom:                "For Whom",
+		KeyRisks:               "Key Risks",
+		RecommendedNextActions: "Recommended Next Actions",
+		ClaimVerification:      "Claim Verification",
+		CompetitiveLandscape:   "Competitive Landscape & Alternatives",
+		HowItDiffers:           "How it differs",
+		QuestionsFindings:      "Questions & Findings",
+		SearchQuery:            "Search query",
+		SourcesCitations:       "Sources & Citations",
+	},
+	"ro": {
+		Research:               "Cercetare",
+		ExecutiveVerdict:       "Verdict executiv",
+		Recommendation:         "Recomandare",
+		Confidence:             "Încredere",
+		ForWhom:                "Pentru cine",
+		KeyRisks:               "Riscuri cheie",
+		RecommendedNextActions: "Acțiuni următoare recomandate",
+		ClaimVerification:      "Verificarea afirmațiilor",
+		CompetitiveLandscape:   "Peisaj competitiv și alternative",
+		HowItDiffers:           "Cum se diferențiază",
+		QuestionsFindings:      "Întrebări și constatări",
+		SearchQuery:            "Interogare de căutare",
+		SourcesCitations:       "Surse și citări",
+	},
+	"es": {
+		Research:               "Investigación",
+		ExecutiveVerdict:       "Veredicto ejecutivo",
+		Recommendation:         "Recomendación",
+		Confidence:             "Confianza",
+		ForWhom:                "Para quién",
+		KeyRisks:               "Riesgos clave",
+		RecommendedNextActions: "Próximas acciones recomendadas",
+		ClaimVerification:      "Verificación de afirmaciones",
+		CompetitiveLandscape:   "Panorama competitivo y alternativas",
+		HowItDiffers:           "En qué se diferencia",
+		QuestionsFindings:      "Preguntas y hallazgos",
+		SearchQuery:            "Consulta de búsqueda",
+		SourcesCitations:       "Fuentes y citas",
+	},
+	"pt-BR": {
+		Research:               "Pesquisa",
+		ExecutiveVerdict:       "Veredito executivo",
+		Recommendation:         "Recomendação",
+		Confidence:             "Confiança",
+		ForWhom:                "Para quem",
+		KeyRisks:               "Principais riscos",
+		RecommendedNextActions: "Próximas ações recomendadas",
+		ClaimVerification:      "Verificação de afirmações",
+		CompetitiveLandscape:   "Cenário competitivo e alternativas",
+		HowItDiffers:           "Como se diferencia",
+		QuestionsFindings:      "Perguntas e descobertas",
+		SearchQuery:            "Consulta de busca",
+		SourcesCitations:       "Fontes e citações",
+	},
+	"fr": {
+		Research:               "Recherche",
+		ExecutiveVerdict:       "Verdict exécutif",
+		Recommendation:         "Recommandation",
+		Confidence:             "Confiance",
+		ForWhom:                "Pour qui",
+		KeyRisks:               "Principaux risques",
+		RecommendedNextActions: "Prochaines actions recommandées",
+		ClaimVerification:      "Vérification des affirmations",
+		CompetitiveLandscape:   "Paysage concurrentiel et alternatives",
+		HowItDiffers:           "Ce qui le distingue",
+		QuestionsFindings:      "Questions et conclusions",
+		SearchQuery:            "Requête de recherche",
+		SourcesCitations:       "Sources et citations",
+	},
+	"de": {
+		Research:               "Recherche",
+		ExecutiveVerdict:       "Strategisches Urteil",
+		Recommendation:         "Empfehlung",
+		Confidence:             "Konfidenz",
+		ForWhom:                "Für wen",
+		KeyRisks:               "Wichtigste Risiken",
+		RecommendedNextActions: "Empfohlene nächste Aktionen",
+		ClaimVerification:      "Behauptungsprüfung",
+		CompetitiveLandscape:   "Wettbewerbslandschaft & Alternativen",
+		HowItDiffers:           "Unterschied",
+		QuestionsFindings:      "Fragen & Befunde",
+		SearchQuery:            "Suchanfrage",
+		SourcesCitations:       "Quellen & Zitate",
+	},
+}
+
+func GetReportLabels(localeOrLang string) ReportLabels {
+	loc := port.ResolveLocale(localeOrLang)
+	if lbl, ok := reportLabelsMap[loc]; ok {
+		return lbl
+	}
+	return reportLabelsMap["en"]
+}
+
 type Runner struct {
 	SearchURL       string            // e.g. http://localhost:8080/search or empty in dev
 	Client          *http.Client      // HTTP search client
@@ -205,6 +322,14 @@ func (r *Runner) RunWithPlaybook(ctx context.Context, card port.Card, researchID
 			if json.Unmarshal([]byte(val), &p) == nil && !p.IsEmpty() {
 				state.Profile = &p
 			}
+		}
+	}
+	if (state.Profile == nil || state.Profile.Language == "") && r.Store != nil {
+		if loc, err := r.Store.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+			if state.Profile == nil {
+				state.Profile = &port.UserProfile{}
+			}
+			state.Profile.Language = port.LocaleToLanguageName(strings.TrimSpace(loc))
 		}
 	}
 
@@ -502,10 +627,14 @@ func (r *Runner) stepCustom(ctx context.Context, state *RunState, cfg port.Custo
 	}
 
 	b.WriteString(fmt.Sprintf("\nInstruction:\n%s\n", cfg.Instruction))
-	if (cfg.UseProfile == nil || *cfg.UseProfile) && state.Profile != nil && !state.Profile.IsEmpty() {
-		if block := analyze.FormatProfileBlock(state.Profile); block != "" {
+	if (cfg.UseProfile == nil || *cfg.UseProfile) && state.Profile != nil {
+		if block := analyze.FormatProfileContextBlock(state.Profile); block != "" {
 			b.WriteString("\n" + block + "\n")
 		}
+	}
+	lang := state.OutputLanguage()
+	if lang != "" && !strings.EqualFold(lang, "English") && !strings.EqualFold(lang, "auto") && !strings.EqualFold(lang, "same as source") && !strings.EqualFold(lang, "default") {
+		b.WriteString(fmt.Sprintf("\nOUTPUT LANGUAGE INSTRUCTION: Produce all analysis, descriptions, and written responses in %s.\n", lang))
 	}
 	b.WriteString("\nWrite a clear, structured markdown section under heading '### " + cfg.OutputHeading + "' citing facts using source IDs like [S1], [S2] where applicable.")
 
@@ -763,6 +892,11 @@ Reply with ONLY a strict JSON object with this exact structure:
 		b.WriteString("\n### Custom Planning Directives:\n" + cfg.Instruction + "\n")
 	}
 
+	lang := state.OutputLanguage()
+	if lang != "" && !strings.EqualFold(lang, "English") && !strings.EqualFold(lang, "auto") && !strings.EqualFold(lang, "same as source") && !strings.EqualFold(lang, "default") {
+		b.WriteString(fmt.Sprintf("\nOUTPUT LANGUAGE INSTRUCTION:\n- Write each display \"question\" in %s.\n- Write each web search \"query\" in the optimal source/technical language (typically English or original technical domain terminology) for retrieving primary documentation and authoritative sources.\nCRITICAL SCHEMA INSTRUCTION: Structural JSON keys (`questions`, `id`, `question`, `query`, `prefer_domains`) MUST remain exact canonical English literals.\n", lang))
+	}
+
 	client := r.planClient()
 	if client == nil {
 		return errors.New("research: no LLM client configured for plan")
@@ -973,6 +1107,12 @@ Claims to verify:
 	}
 	b.WriteString("\nAvailable Sources:\n")
 	b.WriteString(state.Sources.FormatForSynthesis())
+
+	lang := state.OutputLanguage()
+	if lang != "" && !strings.EqualFold(lang, "English") && !strings.EqualFold(lang, "auto") && !strings.EqualFold(lang, "same as source") && !strings.EqualFold(lang, "default") {
+		b.WriteString(fmt.Sprintf("\nOUTPUT LANGUAGE INSTRUCTION: Produce all claim rationales in %s.\nCRITICAL SCHEMA INSTRUCTION: Structural JSON keys (`claims`, `claim`, `status`, `sources`, `rationale`) and enum literals for `claims[].status` (`supported`, `disputed`, `unverified`) MUST remain exact canonical English literals. Human prose `rationale` MUST be written in %s.\n", lang, lang))
+	}
+
 	b.WriteString("\nReply with ONLY a strict JSON object with this exact structure:\n" + schemaClaims + "\n")
 
 	var resp struct {
@@ -1036,10 +1176,7 @@ Claims to verify:
 		v.Sources = validSources
 
 		// Normalize status
-		status := strings.ToLower(strings.TrimSpace(v.Status))
-		if status != "supported" && status != "disputed" && status != "unverified" {
-			status = "unverified"
-		}
+		status := port.ResolveClaimStatus(v.Status)
 
 		// Enforce: claims citing no valid S# must be unverified
 		if len(v.Sources) == 0 && (status == "supported" || status == "disputed") {
@@ -1082,6 +1219,12 @@ Topic: ` + state.Card.Title + "\n")
 	if strings.TrimSpace(cfg.Instruction) != "" {
 		b.WriteString("\n### Custom Landscape Guidelines:\n" + cfg.Instruction + "\n")
 	}
+
+	lang := state.OutputLanguage()
+	if lang != "" && !strings.EqualFold(lang, "English") && !strings.EqualFold(lang, "auto") && !strings.EqualFold(lang, "same as source") && !strings.EqualFold(lang, "default") {
+		b.WriteString(fmt.Sprintf("\nOUTPUT LANGUAGE INSTRUCTION: Produce all alternative summaries (`one_liner`) and distinctions (`how_it_differs`) in %s.\nCRITICAL SCHEMA INSTRUCTION: Structural JSON keys (`landscape`, `name`, `url`, `one_liner`, `how_it_differs`, `sources`) MUST remain exact canonical English literals. Human prose fields (`one_liner`, `how_it_differs`) MUST be written in %s.\n", lang, lang))
+	}
+
 	b.WriteString("\nReply with ONLY a strict JSON object with this exact structure:\n" + schemaLandscape + "\n")
 
 	var resp struct {
@@ -1156,10 +1299,14 @@ Title: ` + state.Card.Title + "\n")
 	if strings.TrimSpace(cfg.Instruction) != "" {
 		b.WriteString("\n### Custom Decision Rubric & Focus:\n" + cfg.Instruction + "\n")
 	}
-	if state.Profile != nil && !state.Profile.IsEmpty() {
-		if block := analyze.FormatProfileBlock(state.Profile); block != "" {
+	if state.Profile != nil {
+		if block := analyze.FormatProfileContextBlock(state.Profile); block != "" {
 			b.WriteString("\n\n" + block)
 		}
+	}
+	lang := state.OutputLanguage()
+	if lang != "" && !strings.EqualFold(lang, "English") && !strings.EqualFold(lang, "auto") && !strings.EqualFold(lang, "same as source") && !strings.EqualFold(lang, "default") {
+		b.WriteString(fmt.Sprintf("\n\nOUTPUT LANGUAGE INSTRUCTION: Produce all analysis, descriptions, and written responses in %s.\nCRITICAL SCHEMA INSTRUCTION: Structural JSON keys and enum literals (`verdict.recommendation`, `verdict.confidence`, `verdict.suggested_horizon`) MUST remain exact canonical English literals (\"pursue\", \"watch\", \"skip\", \"high\", \"medium\", \"low\", \"short-term\", \"medium-term\", \"long-term\"). Human prose fields (`for_whom`, `risks`, `next_actions`) and generated `suggested_tags` MUST be written in %s.", lang, lang))
 	}
 	b.WriteString("\nReply with ONLY a strict JSON object with this exact structure:\n" + schemaVerdict + "\n")
 
@@ -1170,20 +1317,10 @@ Title: ` + state.Card.Title + "\n")
 		return fmt.Errorf("verdict parse failed: %w", err)
 	}
 
-	rec := strings.ToLower(strings.TrimSpace(resp.Recommendation))
-	switch rec {
-	case "pursue", "watch", "skip":
-		resp.Recommendation = rec
-	default:
-		resp.Recommendation = "watch"
-	}
-
-	conf := strings.ToLower(strings.TrimSpace(resp.Confidence))
-	switch conf {
-	case "high", "medium", "low":
-		resp.Confidence = conf
-	default:
-		resp.Confidence = "medium"
+	resp.Recommendation = port.ResolveRecommendation(resp.Recommendation)
+	resp.Confidence = port.ResolveConfidence(resp.Confidence)
+	if resp.SuggestedHorizon != "" {
+		resp.SuggestedHorizon = port.NormalizeHorizon(resp.SuggestedHorizon)
 	}
 
 	if len(resp.NextActions) > 5 {
@@ -1217,20 +1354,21 @@ func renderVerdict(b *strings.Builder, state *RunState) {
 	if state.Result == nil || state.Result.Verdict == nil {
 		return
 	}
+	lbl := GetReportLabels(state.TargetLocale())
 	v := state.Result.Verdict
-	b.WriteString("## Executive Verdict\n\n")
-	b.WriteString(fmt.Sprintf("- **Recommendation:** `%s` (Confidence: `%s`)\n", strings.ToUpper(v.Recommendation), strings.ToUpper(v.Confidence)))
+	b.WriteString(fmt.Sprintf("## %s\n\n", lbl.ExecutiveVerdict))
+	b.WriteString(fmt.Sprintf("- **%s:** `%s` (%s: `%s`)\n", lbl.Recommendation, strings.ToUpper(v.Recommendation), lbl.Confidence, strings.ToUpper(v.Confidence)))
 	if v.ForWhom != "" {
-		b.WriteString(fmt.Sprintf("- **For Whom:** %s\n", v.ForWhom))
+		b.WriteString(fmt.Sprintf("- **%s:** %s\n", lbl.ForWhom, v.ForWhom))
 	}
 	if len(v.Risks) > 0 {
-		b.WriteString("\n### Key Risks\n")
+		b.WriteString(fmt.Sprintf("\n### %s\n", lbl.KeyRisks))
 		for _, rk := range v.Risks {
 			b.WriteString(fmt.Sprintf("- %s\n", rk))
 		}
 	}
 	if len(v.NextActions) > 0 {
-		b.WriteString("\n### Recommended Next Actions\n")
+		b.WriteString(fmt.Sprintf("\n### %s\n", lbl.RecommendedNextActions))
 		for i, act := range v.NextActions {
 			b.WriteString(fmt.Sprintf("%d. %s\n", i+1, act))
 		}
@@ -1242,7 +1380,8 @@ func renderClaims(b *strings.Builder, state *RunState) {
 	if state.Result == nil || len(state.Result.Claims) == 0 {
 		return
 	}
-	b.WriteString("## Claim Verification\n\n")
+	lbl := GetReportLabels(state.TargetLocale())
+	b.WriteString(fmt.Sprintf("## %s\n\n", lbl.ClaimVerification))
 	for _, cv := range state.Result.Claims {
 		badge := strings.ToUpper(cv.Status)
 		citations := ""
@@ -1265,7 +1404,8 @@ func renderLandscape(b *strings.Builder, state *RunState) {
 	if state.Result == nil || len(state.Result.Landscape) == 0 {
 		return
 	}
-	b.WriteString("## Competitive Landscape & Alternatives\n\n")
+	lbl := GetReportLabels(state.TargetLocale())
+	b.WriteString(fmt.Sprintf("## %s\n\n", lbl.CompetitiveLandscape))
 	for _, li := range state.Result.Landscape {
 		citations := ""
 		if len(li.Sources) > 0 {
@@ -1284,7 +1424,7 @@ func renderLandscape(b *strings.Builder, state *RunState) {
 			b.WriteString(fmt.Sprintf("%s\n\n", li.OneLiner))
 		}
 		if li.HowItDiffers != "" {
-			b.WriteString(fmt.Sprintf("**How it differs:** %s\n\n", li.HowItDiffers))
+			b.WriteString(fmt.Sprintf("**%s:** %s\n\n", lbl.HowItDiffers, li.HowItDiffers))
 		}
 	}
 }
@@ -1293,10 +1433,11 @@ func renderPlan(b *strings.Builder, state *RunState) {
 	if state.Plan == nil || len(state.Plan.Questions) == 0 {
 		return
 	}
-	b.WriteString("## Questions & Findings\n\n")
+	lbl := GetReportLabels(state.TargetLocale())
+	b.WriteString(fmt.Sprintf("## %s\n\n", lbl.QuestionsFindings))
 	for _, q := range state.Plan.Questions {
 		b.WriteString(fmt.Sprintf("### %s: %s\n", q.ID, q.Question))
-		b.WriteString(fmt.Sprintf("Search query: `%s`\n\n", q.Query))
+		b.WriteString(fmt.Sprintf("%s: `%s`\n\n", lbl.SearchQuery, q.Query))
 	}
 }
 
@@ -1304,7 +1445,8 @@ func renderPlan(b *strings.Builder, state *RunState) {
 func (r *Runner) stepReport(ctx context.Context, state *RunState) error {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("# Research: %s\n\n", state.Card.Title))
+	lbl := GetReportLabels(state.TargetLocale())
+	b.WriteString(fmt.Sprintf("# %s: %s\n\n", lbl.Research, state.Card.Title))
 
 	renderedCustomStepIDs := make(map[string]bool)
 
@@ -1380,7 +1522,7 @@ func (r *Runner) stepReport(ctx context.Context, state *RunState) error {
 	}
 
 	// Sources section always at the end
-	b.WriteString("## Sources & Citations\n\n")
+	b.WriteString(fmt.Sprintf("## %s\n\n", lbl.SourcesCitations))
 	b.WriteString(state.Sources.FormatCitations())
 	b.WriteString("\n")
 
@@ -1407,6 +1549,7 @@ func FallbackReportSynthesizer(state *RunState) string {
 		return ""
 	}
 
+	lbl := GetReportLabels(state.TargetLocale())
 	var sections strings.Builder
 
 	// 1. Render Plan if present
@@ -1522,7 +1665,7 @@ func FallbackReportSynthesizer(state *RunState) string {
 	if state.Sources != nil && len(state.Sources.All()) > 0 {
 		cites := strings.TrimSpace(state.Sources.FormatCitations())
 		if cites != "" {
-			sections.WriteString("## Sources & Citations\n\n")
+			sections.WriteString(fmt.Sprintf("## %s\n\n", lbl.SourcesCitations))
 			sections.WriteString(cites)
 			sections.WriteString("\n\n")
 		}
@@ -1534,7 +1677,7 @@ func FallbackReportSynthesizer(state *RunState) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("# Research: %s\n\n", state.Card.Title))
+	b.WriteString(fmt.Sprintf("# %s: %s\n\n", lbl.Research, state.Card.Title))
 	b.WriteString(sections.String())
 
 	report := strings.TrimSpace(b.String())

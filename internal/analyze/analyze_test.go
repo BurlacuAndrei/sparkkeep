@@ -894,6 +894,31 @@ func TestCardTaxonomy_ExtractJSONNormalizesUnlistedTypes(t *testing.T) {
 	if err != nil || len(resOther.Cards) != 1 || resOther.Cards[0].Type != "other" {
 		t.Errorf("expected explicit 'other' to remain 'other', got %+v", resOther.Cards)
 	}
+
+	// verify localized aliases resolve to canonical active slugs
+	aliasPayload := `{
+		"cards": [
+			{"title": "Card 4", "type": "Herramienta", "tldr": "Spanish tool", "horizon": "corto plazo", "worthiness": {"level": "alta"}},
+			{"title": "Card 5", "type": "Instrument", "tldr": "Romanian/French tool", "horizon": "termen scurt", "worthiness": {"level": "ridicata"}},
+			{"title": "Card 6", "type": "Articol", "tldr": "Romanian article", "horizon": "termen mediu", "worthiness": {"level": "medie"}}
+		]
+	}`
+	resAlias, err := ExtractJSON(aliasPayload, active)
+	if err != nil {
+		t.Fatalf("ExtractJSON with aliases failed: %v", err)
+	}
+	if len(resAlias.Cards) != 3 {
+		t.Fatalf("expected 3 cards, got %d", len(resAlias.Cards))
+	}
+	if resAlias.Cards[0].Type != "tool" || resAlias.Cards[0].Horizon != port.HorizonShortTerm || resAlias.Cards[0].Worthiness.Level != "high" {
+		t.Errorf("card 4 expected tool/short-term/high, got %+v", resAlias.Cards[0])
+	}
+	if resAlias.Cards[1].Type != "tool" || resAlias.Cards[1].Horizon != port.HorizonShortTerm || resAlias.Cards[1].Worthiness.Level != "high" {
+		t.Errorf("card 5 expected tool/short-term/high, got %+v", resAlias.Cards[1])
+	}
+	if resAlias.Cards[2].Type != "article" || resAlias.Cards[2].Horizon != port.HorizonMediumTerm || resAlias.Cards[2].Worthiness.Level != "medium" {
+		t.Errorf("card 6 expected article/medium-term/medium, got %+v", resAlias.Cards[2])
+	}
 }
 
 func TestCardTaxonomy_AnalyzeInjectsSystemPromptAndNormalizes(t *testing.T) {

@@ -1560,6 +1560,49 @@ func TestRunWithPlaybook_NoReportStep_FallbackReportSynthesizer(t *testing.T) {
 	}
 }
 
+func TestRunWithPlaybook_LocalizedReportHeadingsAndFallback(t *testing.T) {
+	customLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		str := string(body)
+		if strings.Contains(str, "research synthesis and executive decision assistant") {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`,
+				strconv.Quote(`{"recommendation":"pursue","for_whom":"equipo","confidence":"high","risks":[],"next_actions":["Prototipo","Revisión","Despliegue"]}`))
+			return
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":"Respuesta estándar"}}]}`)
+	}))
+	defer customLLM.Close()
+
+	runner := stubRunner(customLLM, "")
+	runner.UserProfile = &port.UserProfile{Language: "Spanish"}
+
+	pbVerdict := port.Playbook{
+		Name: "Ground + Verdict No Report",
+		Steps: []port.PlaybookStep{
+			{Position: 1, Kind: port.StepKindGround, Name: "Ground", Enabled: true},
+			{Position: 2, Kind: port.StepKindVerdict, Name: "Verdict", Enabled: true},
+		},
+	}
+
+	card := port.Card{ID: 201, Title: "Estrategia de despliegue"}
+	report, err := runner.RunWithPlaybook(context.Background(), card, 0, pbVerdict)
+	if err != nil {
+		t.Fatalf("expected localized fallback synthesis to succeed, got: %v", err)
+	}
+	if !strings.Contains(report, "# Investigación: Estrategia de despliegue") {
+		t.Errorf("expected localized Spanish title, got:\n%s", report)
+	}
+	if !strings.Contains(report, "## Veredicto ejecutivo") {
+		t.Errorf("expected localized Spanish verdict header, got:\n%s", report)
+	}
+	if !strings.Contains(report, "**Recomendación:**") {
+		t.Errorf("expected localized Spanish recommendation label, got:\n%s", report)
+	}
+	if !strings.Contains(report, "Confianza:") {
+		t.Errorf("expected localized Spanish confidence label, got:\n%s", report)
+	}
+}
+
 func TestRun_SubjectCardDeepResearch(t *testing.T) {
 	var searchQueries []string
 	var searchMu sync.Mutex

@@ -171,6 +171,99 @@ func LocaleToLanguageName(loc string) string {
 	}
 }
 
+func ResolveLocale(langOrLoc string) string {
+	s := strings.ToLower(strings.TrimSpace(langOrLoc))
+	if s == "" {
+		return "en"
+	}
+	for _, loc := range SupportedLocales {
+		if strings.EqualFold(loc, s) {
+			return loc
+		}
+	}
+	switch {
+	case strings.HasPrefix(s, "ro") || strings.Contains(s, "roman") || strings.Contains(s, "român"):
+		return "ro"
+	case strings.HasPrefix(s, "es") || strings.Contains(s, "span") || strings.Contains(s, "españ") || strings.Contains(s, "espan"):
+		return "es"
+	case strings.HasPrefix(s, "pt") || strings.Contains(s, "portug"):
+		return "pt-BR"
+	case strings.HasPrefix(s, "fr") || strings.Contains(s, "french") || strings.Contains(s, "franç") || strings.Contains(s, "franc"):
+		return "fr"
+	case strings.HasPrefix(s, "de") || strings.Contains(s, "german") || strings.Contains(s, "deutsch"):
+		return "de"
+	default:
+		return "en"
+	}
+}
+
+func ResolveRecommendation(raw string) string {
+	cleaned := stripDiacritics(raw)
+	switch cleaned {
+	case "pursue", "poursuivre", "perseguir", "weiterverfolgen", "urmareste", "seguir":
+		return "pursue"
+	case "skip", "passer", "ignorar", "uberspringen", "ueberspringen", "omite", "sari":
+		return "skip"
+	case "watch", "surveiller", "observar", "beobachten", "vormerken", "monitorizeaza", "monitor":
+		return "watch"
+	default:
+		return "watch"
+	}
+}
+
+func ResolveConfidence(raw string) string {
+	cleaned := stripDiacritics(raw)
+	switch cleaned {
+	case "high", "hoch", "haute", "alta", "ridicata":
+		return "high"
+	case "medium", "mittel", "moyenne", "media", "medie":
+		return "medium"
+	case "low", "niedrig", "faible", "baja", "scazuta":
+		return "low"
+	default:
+		return "medium"
+	}
+}
+
+func ResolveClaimStatus(raw string) string {
+	cleaned := stripDiacritics(raw)
+	switch cleaned {
+	case "supported", "unterstutzt", "unterstuetzt", "soutenu", "apoyado", "suportado", "sustinut":
+		return "supported"
+	case "disputed", "umstritten", "conteste", "disputado", "contestat":
+		return "disputed"
+	case "unverified", "unbestatigt", "unbestaetigt", "non verifie", "no verificado", "nao verificado", "neconfirmat", "neverificat":
+		return "unverified"
+	default:
+		return "unverified"
+	}
+}
+
+func ResolveReferenceKind(k string) string {
+	raw := stripDiacritics(k)
+	switch raw {
+	case "url", "link", "legatura", "enlace", "lien":
+		return RefKindURL
+	case "repo", "repository", "depozit", "repositorio", "depot":
+		return RefKindRepo
+	case "tool", "tools", "instrument", "herramienta", "ferramenta", "outil", "werkzeug":
+		return RefKindTool
+	case "product", "produs", "producto", "produto", "produit", "produkt":
+		return RefKindProduct
+	case "person", "persoana", "persona", "personne":
+		return RefKindPerson
+	case "org", "organization", "organisation", "organizatie", "organizacion", "unternehmung":
+		return RefKindOrg
+	case "paper", "lucrare", "articulo cientifico", "publication", "facharbeit":
+		return RefKindPaper
+	default:
+		if ValidReferenceKind(strings.ToLower(strings.TrimSpace(k))) {
+			return strings.ToLower(strings.TrimSpace(k))
+		}
+		return RefKindOther
+	}
+}
+
 var DefaultCardTypes = []string{
 	CardTypeArticle,
 	CardTypeVideo,
@@ -192,6 +285,28 @@ const (
 
 func ValidHorizon(h string) bool {
 	return h == HorizonShortTerm || h == HorizonMediumTerm || h == HorizonLongTerm
+}
+
+func NormalizeHorizon(raw string) string {
+	cleaned := stripDiacritics(raw)
+	cleaned = strings.ReplaceAll(cleaned, "_", " ")
+	cleaned = strings.ReplaceAll(cleaned, "-", " ")
+	cleaned = strings.Join(strings.Fields(cleaned), " ")
+
+	switch cleaned {
+	case "short term", "shortterm", "short", "now", "soon", "immediate",
+		"termen scurt", "corto plazo", "curto prazo", "court terme", "kurzfristig":
+		return HorizonShortTerm
+	case "medium term", "mediumterm", "medium",
+		"termen mediu", "medio plazo", "medio", "moyen terme", "mittelfristig":
+		return HorizonMediumTerm
+	case "long term", "longterm", "long",
+		"termen lung", "largo plazo", "longo prazo", "long terme", "langfristig",
+		"lifetime", "life time", "bucket", "bucket list", "bucketlist", "someday":
+		return HorizonLongTerm
+	default:
+		return HorizonShortTerm
+	}
 }
 
 func ValidStatus(s string) bool {

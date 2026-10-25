@@ -508,6 +508,16 @@ func (s *Service) CaptureShare(ctx context.Context, share capture.Share) ([]int6
 				prof = &p
 			}
 		}
+		if prof == nil || prof.Language == "" {
+			if loc, err := s.Store.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+				if prof == nil {
+					prof = &port.UserProfile{}
+				}
+				prof.Language = port.LocaleToLanguageName(strings.TrimSpace(loc))
+			}
+		}
+	}
+	if s.Store != nil {
 		if types, err := s.Store.GetCardTypes(ctx); err == nil && len(types) > 0 {
 			ctx = analyze.WithCardTypes(ctx, types)
 		}
@@ -987,12 +997,29 @@ func (s *Service) Retry(ctx context.Context, cardID int64) ([]port.Card, error) 
 	if llmClient == nil {
 		return nil, errors.New("core: no LLM client configured for triage")
 	}
+	var prof *port.UserProfile
+	if s.Store != nil {
+		if val, err := s.Store.GetSetting(ctx, "user_profile"); err == nil && strings.TrimSpace(val) != "" {
+			var p port.UserProfile
+			if json.Unmarshal([]byte(val), &p) == nil && !p.IsEmpty() {
+				prof = &p
+			}
+		}
+		if prof == nil || prof.Language == "" {
+			if loc, err := s.Store.GetSetting(ctx, "interface_locale"); err == nil && strings.TrimSpace(loc) != "" {
+				if prof == nil {
+					prof = &port.UserProfile{}
+				}
+				prof.Language = port.LocaleToLanguageName(strings.TrimSpace(loc))
+			}
+		}
+	}
 	if s.Store != nil {
 		if types, err := s.Store.GetCardTypes(ctx); err == nil && len(types) > 0 {
 			ctx = analyze.WithCardTypes(ctx, types)
 		}
 	}
-	res, err := llmClient.Analyze(ctx, fetched)
+	res, err := llmClient.Analyze(ctx, fetched, prof)
 	if err != nil {
 		s.Logf("core: retry analyze card %d: %v", cardID, err)
 		return nil, err

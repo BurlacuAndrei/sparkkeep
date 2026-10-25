@@ -65,8 +65,22 @@ func TestFormatProfileBlock(t *testing.T) {
 	if strings.Contains(gotLangOnly, "--- USER PROFILE") {
 		t.Errorf("expected no profile block for language-only profile, got:\n%s", gotLangOnly)
 	}
-	if gotLangOnly != "OUTPUT LANGUAGE INSTRUCTION: Produce all analysis, descriptions, and written responses in French." {
-		t.Errorf("unexpected output for language-only profile: %q", gotLangOnly)
+	expectedLangOnly := FormatOutputLanguageInstruction("French")
+	if gotLangOnly != expectedLangOnly {
+		t.Errorf("unexpected output for language-only profile: %q, want %q", gotLangOnly, expectedLangOnly)
+	}
+	for _, expectedToken := range []string{
+		"OUTPUT LANGUAGE INSTRUCTION: Produce all analysis, descriptions, and written responses in French.",
+		"CRITICAL SCHEMA INSTRUCTION:",
+		"`type`", "`horizon`", "`worthiness.level`", "`signals.extraction`",
+		"`signals.source_quality`", "`references.kind`", "`claims[].status`",
+		"`verdict.recommendation`", "`verdict.confidence`", "`verdict.suggested_horizon`",
+		"MUST remain exact canonical English literals",
+		"generated `tags` MUST be written in French",
+	} {
+		if !strings.Contains(gotLangOnly, expectedToken) {
+			t.Errorf("expected token %q in gotLangOnly:\n%s", expectedToken, gotLangOnly)
+		}
 	}
 
 	// 5. Ignored default language values
