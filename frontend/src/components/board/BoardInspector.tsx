@@ -76,6 +76,10 @@ export const BoardInspector: React.FC<BoardInspectorProps> = ({
         return;
       }
 
+      if (document.querySelector('.modal-overlay, .card-modal-backdrop, [role="dialog"]')) {
+        return;
+      }
+
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();

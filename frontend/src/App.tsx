@@ -465,6 +465,8 @@ function AppContent() {
               onRetry={handleRetry}
               showToast={showToast}
               onRefresh={loadDigest}
+              onUpdateCard={handleUpdateCard}
+              settings={settings}
             />
           )}
 

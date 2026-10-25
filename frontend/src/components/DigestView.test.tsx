@@ -45,6 +45,8 @@ vi.mock('../api', async () => {
     }),
     patchCard: vi.fn().mockResolvedValue({ ok: true }),
     updateCard: vi.fn().mockResolvedValue({ ok: true }),
+    batchShelveStale: vi.fn().mockResolvedValue({ ok: true, shelved_count: 2 }),
+    fetchCardResearch: vi.fn().mockResolvedValue(null),
     listChannels: vi.fn().mockResolvedValue({
       ok: true,
       channels: [
@@ -85,6 +87,11 @@ describe('DigestView', () => {
     });
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
       downloads.push(this.download);
+    });
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: 1400,
     });
   });
 
@@ -1346,6 +1353,442 @@ describe('DigestView', () => {
     expect(markdown).toContain('Executive markdown briefing bullets.');
     expect(markdown).toContain('Executive wins markdown section.');
     expect(markdown).toContain('**Next Week Priority Card**: Finish critical spec');
+  });
+
+  describe('Ticket 04: Docked Board Inspector & Interactive Stale Bottleneck Cleanup', () => {
+    const testInspectorDigest: DigestData = {
+      ok: true,
+      week_total: 2,
+      prev_total: 1,
+      by_status: { done: 1, inbox: 1 },
+      by_horizon: { 'short-term': 2 },
+      stale_count: 1,
+      stale_cards: [
+        {
+          id: 201,
+          title: 'Stale Bottleneck Card',
+          summary: 'Card stuck in Now',
+          status: 'inbox',
+          horizon: 'short-term',
+          tags: ['backend'],
+          proposed_actions: ['Refactor auth service'],
+          completed_actions: [],
+          created_at: '2026-10-10T00:00:00Z',
+          updated_at: '2026-10-10T00:00:00Z',
+        } as unknown as Card,
+      ],
+      weekly_wins: [
+        {
+          id: 202,
+          title: 'Period Win Card Alpha',
+          status: 'done',
+          horizon: 'short-term',
+          tags: ['infra'],
+          created_at: '2026-10-20T00:00:00Z',
+          updated_at: '2026-10-24T00:00:00Z',
+        } as unknown as Card,
+      ],
+      completed_actions_count: 2,
+      research_harvest: [
+        {
+          id: 203,
+          title: 'Research Harvest Beta',
+          research_verdict: 'pursue',
+          status: 'done',
+          horizon: 'short-term',
+          tags: ['ai'],
+          created_at: '2026-10-21T00:00:00Z',
+        } as unknown as Card,
+      ],
+      synthesis: {
+        ok: true,
+        briefing: 'Retro briefing',
+        wins_narrative: 'Wins narrative',
+        themes: [
+          {
+            title: 'Infrastructure',
+            summary: 'Infra developments',
+            card_ids: [202],
+          },
+        ],
+        next_focus: [
+          {
+            card_id: 201,
+            title: 'Stale Bottleneck Card',
+            reason: 'Needs unblocking',
+            priority: 'high',
+          },
+        ],
+        model: 'claude-3-5-sonnet',
+        generated_at: '2026-10-25T12:00:00Z',
+      },
+      days: [
+        {
+          date: '2026-10-24',
+          cards: [
+            {
+              id: 201,
+              title: 'Stale Bottleneck Card',
+              status: 'inbox',
+              horizon: 'short-term',
+              tags: ['backend'],
+              proposed_actions: ['Refactor auth service'],
+              completed_actions: [],
+              created_at: '2026-10-10T00:00:00Z',
+            } as unknown as Card,
+            {
+              id: 202,
+              title: 'Period Win Card Alpha',
+              status: 'done',
+              horizon: 'short-term',
+              tags: ['infra'],
+              created_at: '2026-10-20T00:00:00Z',
+            } as unknown as Card,
+          ],
+        },
+      ],
+    };
+
+    it('opens docked BoardInspector when clicking cards on widescreen (>= 1200px)', async () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onSelectCard = vi.fn();
+
+      renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={testInspectorDigest} {...dummyProps} onSelectCard={onSelectCard} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      // Initially docked inspector is not mounted
+      expect(screen.queryByTestId('digest-docked-inspector')).toBeNull();
+
+      // 1. Click chip in Emergent Themes
+      const themeChips = screen.getAllByRole('button', { name: /Period Win Card Alpha/i });
+      fireEvent.click(themeChips[0]);
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+
+      // Close via Escape key
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByTestId('digest-docked-inspector')).toBeNull();
+
+      // 2. Click win card in Period Wins Showcase
+      const winCardBtns = screen.getAllByRole('button', { name: /Period Win Card Alpha/i });
+      fireEvent.click(winCardBtns[1] || winCardBtns[0]);
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+
+      // Close via Escape key
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByTestId('digest-docked-inspector')).toBeNull();
+
+      // 3. Click harvest item in Deep Research Harvest
+      const harvestItem = screen.getByText('Research Harvest Beta');
+      fireEvent.click(harvestItem);
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+
+      // Close via Escape key
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByTestId('digest-docked-inspector')).toBeNull();
+
+      // 4. Click Next-Period Focus recommendation
+      const focusCardTitle = screen.getAllByText('Stale Bottleneck Card')[0];
+      fireEvent.click(focusCardTitle);
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+
+      // onSelectCard was not called directly because it opened docked inspector
+      expect(onSelectCard).not.toHaveBeenCalled();
+    });
+
+    it('promotes inspected card to full CardModal on Enter, Space, or Expand button', async () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onSelectCard = vi.fn();
+
+      renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={testInspectorDigest} {...dummyProps} onSelectCard={onSelectCard} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      // Inspect a card
+      const harvestItem = screen.getByText('Research Harvest Beta');
+      fireEvent.click(harvestItem);
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+
+      // Press Enter key to expand to full modal
+      fireEvent.keyDown(window, { key: 'Enter' });
+      expect(onSelectCard).toHaveBeenCalledWith(expect.objectContaining({ id: 203 }));
+      onSelectCard.mockClear();
+
+      // Press Space key to expand to full modal
+      fireEvent.keyDown(window, { key: ' ' });
+      expect(onSelectCard).toHaveBeenCalledWith(expect.objectContaining({ id: 203 }));
+      onSelectCard.mockClear();
+
+      // Click Expand button in inspector
+      const expandBtn = screen.getByRole('button', { name: /Expand to Full Modal/i });
+      fireEvent.click(expandBtn);
+      expect(onSelectCard).toHaveBeenCalledWith(expect.objectContaining({ id: 203 }));
+    });
+
+    it('opens full CardModal directly without docked inspector on narrow viewports (< 1200px)', async () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 900 });
+      const onSelectCard = vi.fn();
+
+      renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={testInspectorDigest} {...dummyProps} onSelectCard={onSelectCard} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      // Click card in Next-Period Focus
+      const focusCardTitle = screen.getAllByText('Stale Bottleneck Card')[0];
+      fireEvent.click(focusCardTitle);
+
+      // Docked inspector should not be open
+      expect(screen.queryByTestId('digest-docked-inspector')).toBeNull();
+      // onSelectCard must be called directly
+      expect(onSelectCard).toHaveBeenCalledWith(expect.objectContaining({ id: 201 }));
+    });
+
+    it('handles interactive Stale Bottleneck cleanup: inspects stale card and highlights stale items', async () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onSelectCard = vi.fn();
+
+      renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={testInspectorDigest} {...dummyProps} onSelectCard={onSelectCard} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      // Strategic Health Stale Alert must be present
+      expect(screen.getByTestId('digest-stale-alert')).toBeDefined();
+      const inspectBtn = screen.getByRole('button', { name: /Inspect Stale/i });
+      expect(inspectBtn).toBeDefined();
+
+      // Click Inspect Stale
+      fireEvent.click(inspectBtn);
+
+      // Opens first stale card in docked inspector
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+      expect(screen.getAllByText('Stale Bottleneck Card').length).toBeGreaterThan(0);
+
+      // Stale cards are highlighted
+      const highlightedCards = document.querySelectorAll('.digest-card-stale-highlight');
+      expect(highlightedCards.length).toBeGreaterThan(0);
+    });
+
+    it('calls batchShelveStale(5), shows toast, and refreshes digest when Batch-Shelve Stale is clicked', async () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const showToast = vi.fn();
+      const onRefresh = vi.fn();
+
+      renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView
+              digest={testInspectorDigest}
+              {...dummyProps}
+              showToast={showToast}
+              onRefresh={onRefresh}
+            />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      const shelveBtn = screen.getByRole('button', { name: /Batch-Shelve Stale/i });
+      expect(shelveBtn).toBeDefined();
+
+      fireEvent.click(shelveBtn);
+
+      await waitFor(() => {
+        expect(api.batchShelveStale).toHaveBeenCalledWith(5);
+      });
+
+      await waitFor(() => {
+        expect(showToast).toHaveBeenCalledWith(expect.stringContaining('2'));
+      });
+
+      expect(onRefresh).toHaveBeenCalled();
+    });
+
+    it('hides Inspect Stale and Batch-Shelve buttons when stale_count is 0', async () => {
+      const emptyStaleDigest: DigestData = {
+        ...testInspectorDigest,
+        stale_count: 0,
+        stale_cards: [],
+      };
+
+      renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={emptyStaleDigest} {...dummyProps} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      expect(screen.queryByTestId('digest-stale-alert')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Inspect Stale/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Batch-Shelve Stale/i })).toBeNull();
+    });
+
+    it('does not close docked inspector on Escape if a dialog or modal overlay is present in document', async () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+
+      renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={testInspectorDigest} {...dummyProps} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      // Inspect a card to open docked inspector
+      const harvestItem = screen.getByText('Research Harvest Beta');
+      fireEvent.click(harvestItem);
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+
+      // Simulate a modal dialog open in document
+      const dialogOverlay = document.createElement('div');
+      dialogOverlay.className = 'modal-overlay';
+      document.body.appendChild(dialogOverlay);
+
+      // Press Escape - inspector should NOT close because dialog is active
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+
+      // Remove modal overlay from document
+      document.body.removeChild(dialogOverlay);
+
+      // Press Escape again - now inspector closes cleanly
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByTestId('digest-docked-inspector')).toBeNull();
+    });
+
+    it('switches between docked inspector (>= 1200px) and modal fallback (< 1200px) on viewport change', async () => {
+      const onSelectCard = vi.fn();
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+
+      const { rerender } = renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={testInspectorDigest} {...dummyProps} onSelectCard={onSelectCard} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      // 1. On >= 1200px, clicking opens docked inspector
+      const harvestItem = screen.getByText('Research Harvest Beta');
+      fireEvent.click(harvestItem);
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+      expect(onSelectCard).not.toHaveBeenCalled();
+
+      // Close inspector
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByTestId('digest-docked-inspector')).toBeNull();
+
+      // 2. Resize to < 1200px
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
+      rerender(
+        <LocaleProvider locale="en">
+          <ThemeProvider defaultTheme="light">
+            <CardActionsProvider value={dummyCardActions}>
+              <DigestView digest={testInspectorDigest} {...dummyProps} onSelectCard={onSelectCard} />
+            </CardActionsProvider>
+          </ThemeProvider>
+        </LocaleProvider>
+      );
+
+      // Clicking card now falls back directly to onSelectCard modal
+      const harvestItemAgain = screen.getByText('Research Harvest Beta');
+      fireEvent.click(harvestItemAgain);
+      expect(screen.queryByTestId('digest-docked-inspector')).toBeNull();
+      expect(onSelectCard).toHaveBeenCalledWith(expect.objectContaining({ id: 203 }));
+    });
+
+    it('shows loading state on Batch-Shelve button during request and displays error toast on failure', async () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const showToast = vi.fn();
+      let rejectShelve!: (err: unknown) => void;
+      vi.mocked(api.batchShelveStale).mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectShelve = reject;
+          })
+      );
+
+      renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView digest={testInspectorDigest} {...dummyProps} showToast={showToast} />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      const shelveBtn = screen.getByRole('button', { name: /Batch-Shelve Stale/i }) as HTMLButtonElement;
+      expect(shelveBtn).toBeDefined();
+      expect(shelveBtn.disabled).toBe(false);
+
+      // Click to start shelving
+      fireEvent.click(shelveBtn);
+
+      // Should be disabled with loading state
+      expect(shelveBtn.disabled).toBe(true);
+
+      // Reject the API call
+      rejectShelve(new Error('Network shelf failure'));
+
+      // Error toast should display error message and button is re-enabled
+      await waitFor(() => {
+        expect(showToast).toHaveBeenCalledWith('Network shelf failure');
+      });
+      expect(shelveBtn.disabled).toBe(false);
+    });
+
+    it('toggles action checklist item inside docked inspector in DigestView and triggers card update', async () => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1400 });
+      const onUpdateCard = vi.fn();
+
+      renderLocalized(
+        <ThemeProvider defaultTheme="light">
+          <CardActionsProvider value={dummyCardActions}>
+            <DigestView
+              digest={testInspectorDigest}
+              {...dummyProps}
+              onUpdateCard={onUpdateCard}
+            />
+          </CardActionsProvider>
+        </ThemeProvider>
+      );
+
+      // Open card 201 into docked inspector via Inspect Stale
+      const inspectBtn = screen.getByRole('button', { name: /Inspect Stale/i });
+      fireEvent.click(inspectBtn);
+      expect(screen.getByTestId('digest-docked-inspector')).toBeDefined();
+
+      // Checklist item should be visible
+      const checkbox = screen.getByRole('checkbox', { name: /Refactor auth service/i }) as HTMLInputElement;
+      expect(checkbox).toBeDefined();
+      expect(checkbox.checked).toBe(false);
+
+      // Toggle the step
+      fireEvent.click(checkbox);
+
+      await waitFor(() => {
+        expect(onUpdateCard).toHaveBeenCalledWith(
+          201,
+          expect.objectContaining({
+            completed_actions: ['Refactor auth service'],
+          })
+        );
+      });
+    });
   });
 });
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { DigestData, Card, DigestSynthesisResult, DigestSynthesisTheme, ChannelInfo } from '../types';
+import { DigestData, Card, DigestSynthesisResult, DigestSynthesisTheme, ChannelInfo, Settings } from '../types';
 import { CardItem } from './CardItem';
+import { BoardInspector } from './board/BoardInspector';
 import {
   Calendar,
   Sparkles,
@@ -20,6 +21,8 @@ import {
   MessageSquare,
   Zap,
   Radio,
+  Search,
+  Archive,
 } from 'lucide-react';
 import * as api from '../api';
 import { useLocale } from '../i18n';
@@ -41,6 +44,8 @@ interface DigestViewProps {
   onRetry: (id: number) => void;
   showToast?: (msg: string, onUndo?: any) => void;
   onRefresh?: () => void;
+  onUpdateCard?: (id: number, patch: Partial<Card>) => void;
+  settings?: Settings | null;
 }
 
 function formatDateRange(daysCount: number, locale: Locale): string {
@@ -71,6 +76,9 @@ export const DigestView: React.FC<DigestViewProps> = ({
   onResearch,
   onRetry,
   showToast,
+  onRefresh,
+  onUpdateCard,
+  settings,
 }) => {
   const { t, tp, locale } = useLocale();
   const [windowDays, setWindowDays] = useState<number>(7);
@@ -92,13 +100,43 @@ export const DigestView: React.FC<DigestViewProps> = ({
   const [isTimelineDeckOpen, setIsTimelineDeckOpen] = useState(true);
   const handleSynthesizeRef = useRef<() => void>(() => {});
 
+  const [inspectedCard, setInspectedCard] = useState<Card | null>(null);
+  const [localCardPatches, setLocalCardPatches] = useState<Record<number, Partial<Card>>>({});
+  const [isStaleHighlighted, setIsStaleHighlighted] = useState(false);
+  const [isShelvingStale, setIsShelvingStale] = useState(false);
+
+  const inspectedCardRef = useRef<Card | null>(null);
+  const currentInspectedCardRef = useRef<Card | null>(null);
+  const onSelectCardRef = useRef(onSelectCard);
+
+  useEffect(() => {
+    inspectedCardRef.current = inspectedCard;
+  }, [inspectedCard]);
+
+  useEffect(() => {
+    onSelectCardRef.current = onSelectCard;
+  }, [onSelectCard]);
+
+  const isWideViewport = () => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth >= 1200;
+  };
+
+  const handleCardClick = (card: Card) => {
+    if (isWideViewport()) {
+      setInspectedCard(card);
+    } else {
+      onSelectCard(card);
+    }
+  };
+
   // Derive digest based on selected window
   const digest = windowDays === 7 ? (initialDigest ?? customDigest) : customDigest;
 
   // Hydrate synthesis from cached digest response if present, with local override
   const activeSynthesis = synthesis ?? digest?.synthesis ?? null;
 
-  // Keyboard shortcuts: '1', '2', '3' switch window, 's' triggers synthesis when no modal/input focused
+  // Keyboard shortcuts: '1', '2', '3' switch window, 's' triggers synthesis, 'Escape' closes inspector, 'Enter'/'Space' expands card
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -112,6 +150,23 @@ export const DigestView: React.FC<DigestViewProps> = ({
 
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (document.querySelector('.modal-overlay, .card-modal-backdrop, [role="dialog"]')) {
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        if (inspectedCardRef.current) {
+          e.preventDefault();
+          setInspectedCard(null);
+          return;
+        }
+      } else if (
+        (e.key === 'Enter' || e.key === ' ') &&
+        inspectedCardRef.current &&
+        !(target instanceof HTMLButtonElement) &&
+        !(target instanceof HTMLElement && Boolean(target.closest('button, a, input, textarea, select, [contenteditable="true"]')))
+      ) {
+        e.preventDefault();
+        onSelectCardRef.current(currentInspectedCardRef.current || inspectedCardRef.current);
         return;
       }
 
@@ -190,6 +245,87 @@ export const DigestView: React.FC<DigestViewProps> = ({
     }
     return map;
   }, [allCards]);
+
+  const currentInspectedCard = useMemo(() => {
+    if (!inspectedCard) return null;
+    const found = cardById.get(inspectedCard.id) || inspectedCard;
+    const patch = localCardPatches[inspectedCard.id];
+    return patch ? { ...found, ...patch } : found;
+  }, [inspectedCard, cardById, localCardPatches]);
+
+  useEffect(() => {
+    currentInspectedCardRef.current = currentInspectedCard;
+  }, [currentInspectedCard]);
+
+  const handleUpdateCard = async (id: number, patch: Partial<Card>) => {
+    setLocalCardPatches((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), ...patch },
+    }));
+    if (onUpdateCard) {
+      onUpdateCard(id, patch);
+    } else {
+      try {
+        await api.patchCard(id, patch);
+        if (patch.status) {
+          onStatusChange?.(id, patch.status);
+        }
+        if (onRefresh) {
+          onRefresh();
+        }
+      } catch (err: unknown) {
+        showToast?.(api.getErrorMessage(err));
+      }
+    }
+  };
+
+  const staleCards = useMemo(() => {
+    if (digest?.stale_cards && digest.stale_cards.length > 0) {
+      return digest.stale_cards;
+    }
+    return allCards.filter(
+      (c) =>
+        c.horizon === 'short-term' &&
+        c.status !== 'done' &&
+        c.status !== 'shelved' &&
+        c.status !== 'dismissed'
+    );
+  }, [digest, allCards]);
+
+  const staleCardIds = useMemo(() => new Set(staleCards.map((c) => c.id)), [staleCards]);
+
+  const handleInspectStale = () => {
+    setIsStaleHighlighted(true);
+    const target = staleCards[0];
+    if (target) {
+      if (isWideViewport()) {
+        setInspectedCard(target);
+      } else {
+        onSelectCard(target);
+      }
+    }
+  };
+
+  const handleBatchShelveStale = async () => {
+    setIsShelvingStale(true);
+    try {
+      const res = await api.batchShelveStale(5);
+      if (res.ok) {
+        showToast?.(t('research.digest.toasts.staleShelved', { count: res.shelved_count }));
+        if (onRefresh) {
+          onRefresh();
+        }
+        const updated = await api.fetchDigest(windowDays);
+        setCustomDigest(updated);
+      } else {
+        showToast?.(t('research.digest.toasts.staleShelveFailed'));
+      }
+    } catch (err: unknown) {
+      showToast?.(api.getErrorMessage(err));
+    } finally {
+      setIsShelvingStale(false);
+    }
+  };
 
   // Compute Emergent Themes (Hybrid approach)
   const themes = useMemo((): DigestSynthesisTheme[] => {
@@ -907,7 +1043,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
   }
 
   return (
-    <div className="digest-container">
+    <div className="digest-workspace-shell">
+      <div className="digest-container">
       {/* 1. Header Bar with Window Controls & Review Ritual */}
       <div className="digest-header-bar">
         <div className="digest-header-title-group">
@@ -1314,19 +1451,23 @@ export const DigestView: React.FC<DigestViewProps> = ({
                     const title = rec.title || matchedCard?.title || `#${rec.card_id}`;
                     const rationale = rec.rationale || rec.reason || '';
                     return (
-                      <div key={rec.card_id} className="digest-next-focus-card" data-testid={`focus-card-${rec.card_id}`}>
+                      <div
+                        key={rec.card_id}
+                        className={`digest-next-focus-card ${isStaleHighlighted && matchedCard && staleCardIds.has(matchedCard.id) ? 'digest-card-stale-highlight' : ''}`}
+                        data-testid={`focus-card-${rec.card_id}`}
+                      >
                         <div className="digest-next-focus-content">
                           <div className="digest-next-focus-header">
                             <span
                               className="digest-next-focus-title"
-                              onClick={() => matchedCard && onSelectCard(matchedCard)}
+                              onClick={() => matchedCard && handleCardClick(matchedCard)}
                               style={{ cursor: matchedCard ? 'pointer' : 'default' }}
                               role={matchedCard ? 'button' : undefined}
                               tabIndex={matchedCard ? 0 : undefined}
                               onKeyDown={(e) => {
                                 if (matchedCard && (e.key === 'Enter' || e.key === ' ')) {
                                   e.preventDefault();
-                                  onSelectCard(matchedCard);
+                                  handleCardClick(matchedCard);
                                 }
                               }}
                             >
@@ -1384,12 +1525,13 @@ export const DigestView: React.FC<DigestViewProps> = ({
                     {(theme.card_ids || []).map((id) => {
                       const card = cardById.get(id);
                       if (!card) return null;
+                      const isStale = isStaleHighlighted && staleCardIds.has(card.id);
                       return (
                         <button
                           key={card.id}
                           type="button"
-                          className="digest-spark-chip"
-                          onClick={() => onSelectCard(card)}
+                          className={`digest-spark-chip ${isStale ? 'digest-card-stale-highlight' : ''}`}
+                          onClick={() => handleCardClick(card)}
                           title={card.title}
                         >
                           <span className="digest-spark-chip-title">{card.title}</span>
@@ -1491,35 +1633,38 @@ export const DigestView: React.FC<DigestViewProps> = ({
                   {t('research.digest.winsEmpty')}
                 </div>
               ) : (
-                digest.weekly_wins.map((card) => (
-                  <button
-                    key={card.id}
-                    type="button"
-                    className="digest-win-item"
-                    onClick={() => onSelectCard(card)}
-                    title={card.title}
-                  >
-                    <div className="digest-win-item-header">
-                      <CheckCircle2 size={14} color="#34d399" style={{ flexShrink: 0 }} />
-                      <span className="digest-win-title">{card.title}</span>
-                    </div>
-                    <div className="digest-win-badges">
-                      <span className={`digest-horizon-badge horizon-${card.horizon}`}>
-                        {horizonLabel(card.horizon, t)}
-                      </span>
-                      {card.type && (
-                        <span className="digest-type-badge">
-                          {cardTypeLabel(t, card.type)}
+                digest.weekly_wins.map((card) => {
+                  const isStale = isStaleHighlighted && staleCardIds.has(card.id);
+                  return (
+                    <button
+                      key={card.id}
+                      type="button"
+                      className={`digest-win-item ${isStale ? 'digest-card-stale-highlight' : ''}`}
+                      onClick={() => handleCardClick(card)}
+                      title={card.title}
+                    >
+                      <div className="digest-win-item-header">
+                        <CheckCircle2 size={14} color="#34d399" style={{ flexShrink: 0 }} />
+                        <span className="digest-win-title">{card.title}</span>
+                      </div>
+                      <div className="digest-win-badges">
+                        <span className={`digest-horizon-badge horizon-${card.horizon}`}>
+                          {horizonLabel(card.horizon, t)}
                         </span>
-                      )}
-                      {card.research_verdict && (
-                        <span className={`digest-verdict-tag digest-verdict-${card.research_verdict}`}>
-                          {enumLabel(t, 'verdict', card.research_verdict)}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))
+                        {card.type && (
+                          <span className="digest-type-badge">
+                            {cardTypeLabel(t, card.type)}
+                          </span>
+                        )}
+                        {card.research_verdict && (
+                          <span className={`digest-verdict-tag digest-verdict-${card.research_verdict}`}>
+                            {enumLabel(t, 'verdict', card.research_verdict)}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
@@ -1540,28 +1685,39 @@ export const DigestView: React.FC<DigestViewProps> = ({
               </div>
             ) : (
               <div>
-                {researchHarvest.slice(0, 5).map((c) => (
-                  <div
-                    key={c.id}
-                    className="digest-harvest-item"
-                    onClick={() => onSelectCard(c)}
-                  >
-                    <span className="digest-harvest-title">{c.title}</span>
-                    <span
-                      className={`digest-verdict-tag ${
-                        c.research_verdict === 'pursue'
-                          ? 'digest-verdict-pursue'
-                          : c.research_verdict === 'skip'
-                          ? 'digest-verdict-skip'
-                          : 'digest-verdict-watch'
-                      }`}
+                {researchHarvest.slice(0, 5).map((c) => {
+                  const isStale = isStaleHighlighted && staleCardIds.has(c.id);
+                  return (
+                    <div
+                      key={c.id}
+                      className={`digest-harvest-item ${isStale ? 'digest-card-stale-highlight' : ''}`}
+                      onClick={() => handleCardClick(c)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleCardClick(c);
+                        }
+                      }}
                     >
-                      {c.research_verdict
-                        ? enumLabel(t, 'verdict', c.research_verdict)
-                        : enumLabel(t, 'researchStatus', 'done').toUpperCase()}
-                    </span>
-                  </div>
-                ))}
+                      <span className="digest-harvest-title">{c.title}</span>
+                      <span
+                        className={`digest-verdict-tag ${
+                          c.research_verdict === 'pursue'
+                            ? 'digest-verdict-pursue'
+                            : c.research_verdict === 'skip'
+                            ? 'digest-verdict-skip'
+                            : 'digest-verdict-watch'
+                        }`}
+                      >
+                        {c.research_verdict
+                          ? enumLabel(t, 'verdict', c.research_verdict)
+                          : enumLabel(t, 'researchStatus', 'done').toUpperCase()}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1599,14 +1755,37 @@ export const DigestView: React.FC<DigestViewProps> = ({
 
             {/* Stale Alert if short-term items haven't moved */}
             {(digest.stale_count || 0) > 0 && (
-              <div className="digest-stale-alert">
-                <AlertTriangle size={15} />
-                <span>
-                  {withStrongCount(
-                    tp('research.digest.stale', digest.stale_count || 0, { count: COUNT_MARKER }),
-                    digest.stale_count || 0
-                  )}
-                </span>
+              <div className="digest-stale-alert" data-testid="digest-stale-alert">
+                <div className="digest-stale-info">
+                  <AlertTriangle size={15} />
+                  <span>
+                    {withStrongCount(
+                      tp('research.digest.stale', digest.stale_count || 0, { count: COUNT_MARKER }),
+                      digest.stale_count || 0
+                    )}
+                  </span>
+                </div>
+                <div className="digest-stale-actions">
+                  <button
+                    type="button"
+                    className="digest-btn-stale-action digest-btn-stale-inspect"
+                    onClick={handleInspectStale}
+                    aria-label={t('research.digest.inspectStale')}
+                  >
+                    <Search size={12} />
+                    <span>{t('research.digest.inspectStale')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="digest-btn-stale-action digest-btn-stale-shelve"
+                    onClick={handleBatchShelveStale}
+                    disabled={isShelvingStale}
+                    aria-label={t('research.digest.batchShelveStale')}
+                  >
+                    <Archive size={12} />
+                    <span>{isShelvingStale ? t('research.digest.shelvingStale') : t('research.digest.batchShelveStale')}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1684,10 +1863,11 @@ export const DigestView: React.FC<DigestViewProps> = ({
                             <CardItem
                               key={c.id}
                               card={c}
-                              onSelect={onSelectCard}
+                              onSelect={handleCardClick}
                               onStatusChange={onStatusChange}
                               onResearch={onResearch}
                               onRetry={onRetry}
+                              selected={isStaleHighlighted && staleCardIds.has(c.id)}
                             />
                           ))}
                         </div>
@@ -1701,5 +1881,26 @@ export const DigestView: React.FC<DigestViewProps> = ({
         )}
       </div>
     </div>
+    {inspectedCard && (
+      <aside
+        className="digest-docked-inspector"
+        aria-label={t('cards.board.inspectorTitle')}
+        data-testid="digest-docked-inspector"
+      >
+        <BoardInspector
+          card={currentInspectedCard || inspectedCard}
+          onClose={() => setInspectedCard(null)}
+          onExpandModal={(c) => {
+            onSelectCard(c);
+          }}
+          onUpdateCard={handleUpdateCard}
+          onResearch={onResearch}
+          onRetry={onRetry}
+          showToast={showToast}
+          settings={settings}
+        />
+      </aside>
+    )}
+  </div>
   );
 };

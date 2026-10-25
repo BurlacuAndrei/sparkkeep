@@ -3905,7 +3905,7 @@ func TestPlaybookCustomManagement(t *testing.T) {
 	st := newStubStore()
 	ctx := context.Background()
 
-	h := webHandler(st, &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, Logf: t.Logf})
+	h := webHandler(st, &core.Service{Store: st, Runner: &research.Runner{ClipChars: 100}, Logf: func(string, ...any) {}})
 
 	validCustomPB := `{
 		"name": "Custom Playbook",

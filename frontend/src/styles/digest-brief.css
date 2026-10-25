@@ -2,6 +2,40 @@
    Weekly Intelligence Digest Styles (Fully Semantic Theme Compliant)
    ========================================================================== */
 
+.digest-workspace-shell {
+  width: 100%;
+  max-width: 2400px;
+  margin: 0 auto;
+  padding: 0 24px 48px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  box-sizing: border-box;
+}
+
+.digest-workspace-shell > .digest-container {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+}
+
+.digest-docked-inspector {
+  width: clamp(380px, 30vw, 480px);
+  flex-shrink: 0;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  z-index: 10;
+}
+
+@media (max-width: 1199px) {
+  .digest-docked-inspector {
+    display: none !important;
+  }
+}
+
 .digest-container {
   width: 100%;
   max-width: 2400px;
@@ -1119,13 +1153,72 @@
   background: rgba(245, 158, 11, 0.1);
   border: 1px solid rgba(245, 158, 11, 0.25);
   border-radius: var(--radius-md);
-  padding: 10px 14px;
+  padding: 12px 14px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
   color: var(--accent-amber);
   font-size: 12px;
   margin-top: 10px;
+}
+
+.digest-stale-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.digest-stale-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 25px;
+  flex-wrap: wrap;
+}
+
+.digest-btn-stale-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.digest-btn-stale-inspect {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: var(--accent-amber, #f59e0b);
+}
+
+.digest-btn-stale-inspect:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.6);
+}
+
+.digest-btn-stale-shelve {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.digest-btn-stale-shelve:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.55);
+}
+
+.digest-btn-stale-shelve:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.digest-card-stale-highlight {
+  outline: 2px solid var(--accent-amber, #f59e0b) !important;
+  outline-offset: 1px;
+  background: rgba(245, 158, 11, 0.15) !important;
 }
 
 /* Accordion day sections */
