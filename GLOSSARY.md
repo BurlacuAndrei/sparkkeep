@@ -119,3 +119,19 @@ _Avoid_: Daily quest, hero banner, pinned alert
 **Inline Action Checklist**:
 The interactive step list rendered directly on active Execution Board cards that allows checking off proposed actions without opening the full card modal.
 _Avoid_: Subtask popup, modal-only checklist
+
+**Intelligence Digest**:
+The periodic reflection and synthesis workspace that aggregates captured sparks, completed outcomes, and research verdicts over a selectable time horizon (`7d`, `14d`, `30d`).
+_Avoid_: Weekly summary page, activity log, newsletter archive
+
+**Executive Retrospective**:
+The AI-synthesized narrative in the Intelligence Digest that connects period accomplishments, emergent themes, cross-card insights, and recommended next-period priorities grounded in the user's profile and BYOK model.
+_Avoid_: Generic AI summary, tag dump, bulleted changelog
+
+**Period Wins Showcase**:
+The dedicated visual section in the Intelligence Digest that celebrates closed loops (`done` cards), executed action steps, and completed research verdicts achieved during the active time window.
+_Avoid_: Done list, streak counter, badge wall
+
+**Period Momentum Pulse**:
+The non-punitive, ratio-based calibration in the Intelligence Digest (such as *Execution Surge*, *Balanced Flow*, *Research Heavy*, or *Capture Heavy*) that reflects how effectively captured sparks were converted into decisions, research, and finished outcomes.
+_Avoid_: Daily streak, XP level, productivity score
