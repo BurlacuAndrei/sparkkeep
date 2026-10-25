@@ -745,3 +745,281 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+/* ==========================================================================
+   Execution Swimlanes (2D Strategic Matrix by Horizon & Card Type)
+   ========================================================================== */
+
+/* Layout Switcher & Group Selector */
+.board-layout-switcher {
+  display: flex;
+  align-items: center;
+  background: var(--bg-input, rgba(255, 255, 255, 0.05));
+  padding: 2px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--border-subtle);
+}
+
+.board-layout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.board-layout-btn:hover {
+  color: var(--text-main);
+}
+
+.board-layout-btn.active {
+  background: var(--color-info-bg, rgba(99, 102, 241, 0.15));
+  color: var(--accent-indigo, #818cf8);
+}
+
+.swimlane-group-selector {
+  display: flex;
+  align-items: center;
+  background: var(--bg-input, rgba(255, 255, 255, 0.05));
+  padding: 2px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--border-subtle);
+}
+
+.swimlane-group-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.swimlane-group-btn:hover {
+  color: var(--text-main);
+}
+
+.swimlane-group-btn.active {
+  background: var(--color-info-bg, rgba(99, 102, 241, 0.15));
+  color: var(--accent-indigo, #818cf8);
+}
+
+/* Swimlanes 2D Matrix Container */
+.swimlanes-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding-bottom: 24px;
+}
+
+.swimlane-columns-header {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  gap: 14px;
+  padding: 0 4px;
+  margin-bottom: -4px;
+}
+
+.swimlane-col-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface-elevated, rgba(15, 23, 42, 0.5));
+  border: 1px solid var(--border-subtle);
+}
+
+.swimlane-row {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface, rgba(15, 23, 42, 0.4));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.swimlane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-surface-elevated, rgba(30, 41, 59, 0.5));
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.swimlane-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.swimlane-row.is-collapsed .swimlane-header {
+  border-bottom: none;
+}
+
+.swimlane-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.swimlane-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.swimlane-collapse-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.swimlane-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.swimlane-count-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+}
+
+.swimlane-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swimlane-progress-summary {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-emerald, #10b981);
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.swimlane-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  gap: 14px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  align-items: start;
+}
+
+.swimlane-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  transition: all 0.15s ease;
+}
+
+.swimlane-cell.swimlane-drop-over {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: var(--accent-indigo, #6366f1);
+  border-style: solid;
+  box-shadow: 0 0 0 1px var(--accent-indigo, #6366f1);
+}
+
+.swimlane-cell-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+/* Light Theme Variables for Execution Swimlanes */
+[data-theme="light"] .board-layout-btn.active,
+[data-theme="light"] .swimlane-group-btn.active {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+[data-theme="light"] .swimlane-columns-header .swimlane-col-header {
+  background: #f8fafc;
+  border-color: var(--border-subtle, #e2e8f0);
+}
+
+[data-theme="light"] .swimlane-row {
+  background: #ffffff;
+  border-color: var(--border-subtle, #e2e8f0);
+}
+
+[data-theme="light"] .swimlane-header {
+  background: #f8fafc;
+  border-bottom-color: var(--border-subtle, #e2e8f0);
+}
+
+[data-theme="light"] .swimlane-header:hover {
+  background: #f1f5f9;
+}
+
+[data-theme="light"] .swimlane-count-badge {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .swimlane-grid {
+  background: #f8fafc;
+}
+
+[data-theme="light"] .swimlane-cell {
+  background: #ffffff;
+  border-color: var(--border-subtle, #e2e8f0);
+}
+
+[data-theme="light"] .swimlane-cell.swimlane-drop-over {
+  background: #eef2ff;
+  border-color: #6366f1;
+}
+
+

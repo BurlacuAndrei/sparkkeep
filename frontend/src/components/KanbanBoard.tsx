@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Card } from '../types';
 import { CardItem } from './CardItem';
-import { Zap, CheckCircle2, ListTodo, Archive, XCircle, LayoutGrid, Rows3 } from 'lucide-react';
+import { Zap, CheckCircle2, ListTodo, Archive, XCircle, LayoutGrid, Rows3, Layers } from 'lucide-react';
 import * as api from '../api';
 import { useLocale } from '../i18n';
 import { ExecutionPulse } from './board/ExecutionPulse';
 import { FocusSpotlight } from './board/FocusSpotlight';
+import { ExecutionSwimlanes } from './board/ExecutionSwimlanes';
 import {
   computeBoardPulseMetrics,
   filterBoardCards,
@@ -58,6 +59,36 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     return 'comfortable';
   });
 
+  const [layout, setLayout] = useState<'columns' | 'swimlanes'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sparkkeep_board_layout');
+      if (saved === 'columns' || saved === 'swimlanes') return saved;
+    }
+    return 'columns';
+  });
+
+  const [swimlaneGroup, setSwimlaneGroup] = useState<'horizon' | 'type'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sparkkeep_board_swimlane_group');
+      if (saved === 'horizon' || saved === 'type') return saved;
+    }
+    return 'horizon';
+  });
+
+  const handleLayoutChange = (next: 'columns' | 'swimlanes') => {
+    setLayout(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sparkkeep_board_layout', next);
+    }
+  };
+
+  const handleSwimlaneGroupChange = (next: 'horizon' | 'type') => {
+    setSwimlaneGroup(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sparkkeep_board_swimlane_group', next);
+    }
+  };
+
   const toggleDensity = () => {
     const next = density === 'comfortable' ? 'compact' : 'comfortable';
     setDensity(next);
@@ -93,15 +124,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   const activeHorizon = horizon || 'all';
 
-  const horizonCards = activeHorizon !== 'all'
-    ? boardCards.filter((c) => (c.horizon || 'short-term') === activeHorizon)
-    : boardCards;
+  const baseCards =
+    layout === 'swimlanes' || activeHorizon === 'all'
+      ? boardCards
+      : boardCards.filter((c) => (c.horizon || 'short-term') === activeHorizon);
 
   const [now] = useState(() => Date.now());
 
-  const pulseMetrics = computeBoardPulseMetrics(horizonCards, now);
+  const pulseMetrics = computeBoardPulseMetrics(baseCards, now);
 
-  const filteredCards = filterBoardCards(horizonCards, {
+  const filteredCards = filterBoardCards(baseCards, {
     cardType: cardTypeFilter,
     signal: signalFilter,
     nowMs: now,
@@ -302,60 +334,124 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
           </div>
 
-          {/* Card Density Live Toggle (Permanently anchored right) */}
-          <button
-            type="button"
-            className="board-density-toggle-btn"
-            onClick={toggleDensity}
-            title={t('cards.board.densityTitle', {
-              density: density === 'compact' ? t('cards.density.compact') : t('cards.density.comfortable'),
-            })}
-            aria-label={t('cards.board.densityAria', {
-              density: density === 'compact' ? t('cards.density.compact') : t('cards.density.comfortable'),
-            })}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '4px 10px',
-              fontSize: 11.5,
-              fontWeight: 600,
-              borderRadius: 6,
-              border: '1px solid var(--border-subtle)',
-              background: density === 'compact' ? 'var(--color-info-bg)' : 'var(--bg-input)',
-              color: density === 'compact' ? 'var(--accent-indigo)' : 'var(--text-dim)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <Rows3 size={13} />
-            <span>{density === 'compact' ? t('cards.density.compact') : t('cards.density.comfortable')}</span>
-          </button>
+          {/* View Controls: Layout Switcher & Density Live Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {boardMode === 'active' && (
+              <div
+                className="board-layout-switcher"
+                role="radiogroup"
+                aria-label="Board layout"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={layout === 'columns'}
+                  className={`board-layout-btn ${layout === 'columns' ? 'active' : ''}`}
+                  onClick={() => handleLayoutChange('columns')}
+                >
+                  <LayoutGrid size={13} />
+                  <span>{t('cards.board.layoutColumns')}</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={layout === 'swimlanes'}
+                  className={`board-layout-btn ${layout === 'swimlanes' ? 'active' : ''}`}
+                  onClick={() => handleLayoutChange('swimlanes')}
+                >
+                  <Layers size={13} />
+                  <span>{t('cards.board.layoutSwimlanes')}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Card Density Live Toggle */}
+            <button
+              type="button"
+              className="board-density-toggle-btn"
+              onClick={toggleDensity}
+              title={t('cards.board.densityTitle', {
+                density: density === 'compact' ? t('cards.density.compact') : t('cards.density.comfortable'),
+              })}
+              aria-label={t('cards.board.densityAria', {
+                density: density === 'compact' ? t('cards.density.compact') : t('cards.density.comfortable'),
+              })}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 10px',
+                fontSize: 11.5,
+                fontWeight: 600,
+                borderRadius: 6,
+                border: '1px solid var(--border-subtle)',
+                background: density === 'compact' ? 'var(--color-info-bg)' : 'var(--bg-input)',
+                color: density === 'compact' ? 'var(--accent-indigo)' : 'var(--text-dim)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Rows3 size={13} />
+              <span>{density === 'compact' ? t('cards.density.compact') : t('cards.density.comfortable')}</span>
+            </button>
+          </div>
         </div>
 
         {/* Tier 2: Dedicated Contextual Sub-row */}
         <div className="board-header-context-row" style={{ minHeight: 36, display: 'flex', alignItems: 'center' }}>
           {boardMode === 'active' && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12, flexWrap: 'wrap' }}>
-              <div className="horizon-segmented-control" role="tablist" aria-label={t('cards.board.filterAria')}>
-                {horizonTabs.map((tab) => {
-                  const isActive = activeHorizon === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="tab"
-                      id={`horizon-tab-${tab.id}`}
-                      aria-selected={isActive}
-                      className={`horizon-segment-btn ${tab.colorClass} ${isActive ? 'active' : ''}`}
-                      onClick={() => onHorizonChange(tab.id === 'all' ? '' : tab.id)}
-                    >
-                      <span className="horizon-segment-label">{tab.label}</span>
-                      <span className="horizon-segment-count">{tab.count}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              {layout === 'swimlanes' ? (
+                <div
+                  className="swimlane-group-selector"
+                  role="radiogroup"
+                  aria-label={t('cards.board.groupBy', {
+                    group:
+                      swimlaneGroup === 'horizon'
+                        ? t('cards.board.groupByHorizon')
+                        : t('cards.board.groupByType'),
+                  })}
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={swimlaneGroup === 'horizon'}
+                    className={`swimlane-group-btn ${swimlaneGroup === 'horizon' ? 'active' : ''}`}
+                    onClick={() => handleSwimlaneGroupChange('horizon')}
+                  >
+                    {t('cards.board.groupByHorizon')}
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={swimlaneGroup === 'type'}
+                    className={`swimlane-group-btn ${swimlaneGroup === 'type' ? 'active' : ''}`}
+                    onClick={() => handleSwimlaneGroupChange('type')}
+                  >
+                    {t('cards.board.groupByType')}
+                  </button>
+                </div>
+              ) : (
+                <div className="horizon-segmented-control" role="tablist" aria-label={t('cards.board.filterAria')}>
+                  {horizonTabs.map((tab) => {
+                    const isActive = activeHorizon === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        id={`horizon-tab-${tab.id}`}
+                        aria-selected={isActive}
+                        className={`horizon-segment-btn ${tab.colorClass} ${isActive ? 'active' : ''}`}
+                        onClick={() => onHorizonChange(tab.id === 'all' ? '' : tab.id)}
+                      >
+                        <span className="horizon-segment-label">{tab.label}</span>
+                        <span className="horizon-segment-count">{tab.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Facet Filters & Sort Toolbar */}
               <div className="board-filters-toolbar">
@@ -493,122 +589,136 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             onBatchShelveIdle={handleBatchShelveIdle}
             isShelving={isShelving}
           />
-          <div className="kanban-board" data-view="execution">
-          {/* To Do Column */}
-          <div
-            className={`kanban-column ${dragOverCol === 'to-do' ? 'drag-over' : ''}`}
-            onDragOver={(e) => handleDragOver(e, 'to-do')}
-            onDragLeave={(e) => handleDragLeave(e, 'to-do')}
-            onDrop={(e) => handleDrop(e, 'to-do')}
-          >
-            <div className="column-header">
-              <div className="column-title">
-                <ListTodo size={15} strokeWidth={1.5} color="var(--accent-indigo)" />
-                <span>{t('cards.status.toDo')}</span>
-              </div>
-              <span className="column-count">{todoCards.length}</span>
-            </div>
-            <div className="cards-container">
-              {todoCards.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-                  {t('cards.board.emptyTodo')}
+          {layout === 'swimlanes' ? (
+            <ExecutionSwimlanes
+              cards={sortedCards}
+              density={density}
+              groupBy={swimlaneGroup}
+              onSelectCard={onSelectCard}
+              onUpdateCard={onUpdateCard}
+              onResearch={onResearch}
+              onRetry={onRetry}
+              showToast={showToast}
+              renderCardItem={renderCardItem}
+            />
+          ) : (
+            <div className="kanban-board" data-view="execution">
+              {/* To Do Column */}
+              <div
+                className={`kanban-column ${dragOverCol === 'to-do' ? 'drag-over' : ''}`}
+                onDragOver={(e) => handleDragOver(e, 'to-do')}
+                onDragLeave={(e) => handleDragLeave(e, 'to-do')}
+                onDrop={(e) => handleDrop(e, 'to-do')}
+              >
+                <div className="column-header">
+                  <div className="column-title">
+                    <ListTodo size={15} strokeWidth={1.5} color="var(--accent-indigo)" />
+                    <span>{t('cards.status.toDo')}</span>
+                  </div>
+                  <span className="column-count">{todoCards.length}</span>
                 </div>
-              ) : (
-                todoCards.map(renderCardItem)
-              )}
-            </div>
-          </div>
-
-          {/* In Progress Column */}
-          <div
-            className={`kanban-column ${dragOverCol === 'in-progress' ? 'drag-over' : ''}`}
-            onDragOver={(e) => handleDragOver(e, 'in-progress')}
-            onDragLeave={(e) => handleDragLeave(e, 'in-progress')}
-            onDrop={(e) => handleDrop(e, 'in-progress')}
-          >
-            <div className="column-header">
-              <div className="column-title">
-                <Zap size={15} strokeWidth={1.5} color="var(--accent-emerald)" />
-                <span>{t('cards.status.inProgress')}</span>
-              </div>
-              <span className="column-count">{inProgressCards.length}</span>
-            </div>
-            <div className="cards-container">
-              {inProgressCards.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-                  {t('cards.board.emptyInProgress')}
+                <div className="cards-container">
+                  {todoCards.length === 0 ? (
+                    <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
+                      {t('cards.board.emptyTodo')}
+                    </div>
+                  ) : (
+                    todoCards.map(renderCardItem)
+                  )}
                 </div>
-              ) : (
-                inProgressCards.map(renderCardItem)
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* Done Column */}
-          <div
-            className={`kanban-column ${dragOverCol === 'done' ? 'drag-over' : ''}`}
-            onDragOver={(e) => handleDragOver(e, 'done')}
-            onDragLeave={(e) => handleDragLeave(e, 'done')}
-            onDrop={(e) => handleDrop(e, 'done')}
-          >
-            <div className="column-header">
-              <div className="column-title">
-                <CheckCircle2 size={15} strokeWidth={1.5} color="var(--accent-blue)" />
-                <span>{t('cards.item.completed')}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  style={{ fontSize: 10, padding: '2px 6px', height: 20 }}
-                  onClick={async () => {
-                    try {
-                      const res = await api.syncObsidian();
-                      showToast?.(tp('cards.board.syncedObsidian', res.written));
-                    } catch (err: unknown) {
-                      showToast?.(api.getErrorMessage(err));
-                    }
-                  }}
-                >
-                  {t('cards.board.syncObsidian')}
-                </button>
-                <span className="column-count">{displayedDoneCards.length}</span>
-              </div>
-            </div>
-            <div className="cards-container">
-              {displayedDoneCards.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-                  {t('cards.board.emptyDone')}
+              {/* In Progress Column */}
+              <div
+                className={`kanban-column ${dragOverCol === 'in-progress' ? 'drag-over' : ''}`}
+                onDragOver={(e) => handleDragOver(e, 'in-progress')}
+                onDragLeave={(e) => handleDragLeave(e, 'in-progress')}
+                onDrop={(e) => handleDrop(e, 'in-progress')}
+              >
+                <div className="column-header">
+                  <div className="column-title">
+                    <Zap size={15} strokeWidth={1.5} color="var(--accent-emerald)" />
+                    <span>{t('cards.status.inProgress')}</span>
+                  </div>
+                  <span className="column-count">{inProgressCards.length}</span>
                 </div>
-              ) : (
-                displayedDoneCards.map(renderCardItem)
-              )}
+                <div className="cards-container">
+                  {inProgressCards.length === 0 ? (
+                    <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
+                      {t('cards.board.emptyInProgress')}
+                    </div>
+                  ) : (
+                    inProgressCards.map(renderCardItem)
+                  )}
+                </div>
+              </div>
 
-              <div style={{ marginTop: 12, paddingBottom: 6, textAlign: 'center' }}>
-                <button
-                  id="link-view-archived"
-                  type="button"
-                  onClick={() => setShowArchivedDone(!showArchivedDone)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--accent-indigo)',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                    padding: '4px 8px',
-                  }}
-                >
-                  {showArchivedDone
-                    ? t('cards.board.hideArchived')
-                    : archivedDoneCards.length > 0
-                    ? t('cards.board.viewArchivedCount', { count: archivedDoneCards.length })
-                    : t('cards.board.viewArchived')}
-                </button>
+              {/* Done Column */}
+              <div
+                className={`kanban-column ${dragOverCol === 'done' ? 'drag-over' : ''}`}
+                onDragOver={(e) => handleDragOver(e, 'done')}
+                onDragLeave={(e) => handleDragLeave(e, 'done')}
+                onDrop={(e) => handleDrop(e, 'done')}
+              >
+                <div className="column-header">
+                  <div className="column-title">
+                    <CheckCircle2 size={15} strokeWidth={1.5} color="var(--accent-blue)" />
+                    <span>{t('cards.item.completed')}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ fontSize: 10, padding: '2px 6px', height: 20 }}
+                      onClick={async () => {
+                        try {
+                          const res = await api.syncObsidian();
+                          showToast?.(tp('cards.board.syncedObsidian', res.written));
+                        } catch (err: unknown) {
+                          showToast?.(api.getErrorMessage(err));
+                        }
+                      }}
+                    >
+                      {t('cards.board.syncObsidian')}
+                    </button>
+                    <span className="column-count">{displayedDoneCards.length}</span>
+                  </div>
+                </div>
+                <div className="cards-container">
+                  {displayedDoneCards.length === 0 ? (
+                    <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
+                      {t('cards.board.emptyDone')}
+                    </div>
+                  ) : (
+                    displayedDoneCards.map(renderCardItem)
+                  )}
+
+                  <div style={{ marginTop: 12, paddingBottom: 6, textAlign: 'center' }}>
+                    <button
+                      id="link-view-archived"
+                      type="button"
+                      onClick={() => setShowArchivedDone(!showArchivedDone)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--accent-indigo)',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        padding: '4px 8px',
+                      }}
+                    >
+                      {showArchivedDone
+                        ? t('cards.board.hideArchived')
+                        : archivedDoneCards.length > 0
+                        ? t('cards.board.viewArchivedCount', { count: archivedDoneCards.length })
+                        : t('cards.board.viewArchived')}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          )}
       </>
     )}
 

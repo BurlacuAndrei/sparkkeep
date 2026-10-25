@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: Widescreen Fluid Execution Board, Execution Pulse & Facet Filtering
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A layout toggle in the Execution Board header switches between **Columns** and **Execution Swimlanes** views (persisted in `localStorage` under `sparkkeep_board_layout`).
-- [ ] When **Execution Swimlanes** is active, a grouping selector switches swimlane rows between **Horizon** (`short-term`, `medium-term`, `long-term`) and **Card Type** (active card types present on the board, localized via `cardTypeLabel`), persisted under `sparkkeep_board_swimlane_group`.
-- [ ] Each swimlane row renders a collapsible lane header showing the lane title, card count, and step progress summary, followed by 3 status drop-zone cells (`To Do`, `In Progress`, `Done`).
-- [ ] Dragging and dropping a card into a `(Horizon, Status)` cell in Horizon Swimlanes dispatches a single `onUpdateCard(id, { status, horizon })` update and shows a toast with a 1-click Undo callback that reverts both `status` and `horizon`.
-- [ ] Dragging and dropping a card into a `(CardType, Status)` cell in Card Type Swimlanes updates `status` (and `type` when moved across rows) with Undo support.
-- [ ] All swimlane controls and headers are localized across all 6 Interface Locales (`en`, `ro`, `es`, `pt-BR`, `fr`, `de`), and automated tests verify layout switching, Horizon and Card Type swimlane grouping, row collapsing, and 2D drag-and-drop with Undo.
+- [x] A layout toggle in the Execution Board header switches between **Columns** and **Execution Swimlanes** views (persisted in `localStorage` under `sparkkeep_board_layout`).
+- [x] When **Execution Swimlanes** is active, a grouping selector switches swimlane rows between **Horizon** (`short-term`, `medium-term`, `long-term`) and **Card Type** (active card types present on the board, localized via `cardTypeLabel`), persisted under `sparkkeep_board_swimlane_group`.
+- [x] Each swimlane row renders a collapsible lane header showing the lane title, card count, and step progress summary, followed by 3 status drop-zone cells (`To Do`, `In Progress`, `Done`).
+- [x] Dragging and dropping a card into a `(Horizon, Status)` cell in Horizon Swimlanes dispatches a single `onUpdateCard(id, { status, horizon })` update and shows a toast with a 1-click Undo callback that reverts both `status` and `horizon`.
+- [x] Dragging and dropping a card into a `(CardType, Status)` cell in Card Type Swimlanes updates `status` (and `type` when moved across rows) with Undo support.
+- [x] All swimlane controls and headers are localized across all 6 Interface Locales (`en`, `ro`, `es`, `pt-BR`, `fr`, `de`), and automated tests verify layout switching, Horizon and Card Type swimlane grouping, row collapsing, and 2D drag-and-drop with Undo.

@@ -845,4 +845,281 @@ describe('KanbanBoard Density & Usability', () => {
       expect(spotlight.className).not.toContain('is-collapsed');
     });
   });
+
+  describe('Execution Swimlanes (2D Strategic Matrix)', () => {
+    const swimlaneCards: Card[] = [
+      {
+        id: 301,
+        title: 'Now Action Tool',
+        summary: 'A short term tool card.',
+        horizon: 'short-term',
+        status: 'to-do',
+        type: 'tool',
+        source_url: 'https://example.com/tool',
+        source_note: 'Tool memo',
+        proposed_actions: ['Step 1', 'Step 2'],
+        completed_actions: ['Step 1'],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tags: ['tool'],
+      },
+      {
+        id: 302,
+        title: 'Next Action Repo',
+        summary: 'A medium term repo card.',
+        horizon: 'medium-term',
+        status: 'in-progress',
+        type: 'repo',
+        source_url: 'https://example.com/repo',
+        source_note: 'Repo memo',
+        proposed_actions: ['Setup CI', 'Write tests'],
+        completed_actions: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tags: ['code'],
+      },
+      {
+        id: 303,
+        title: 'Later Action Paper',
+        summary: 'A long term paper card.',
+        horizon: 'long-term',
+        status: 'done',
+        type: 'paper',
+        source_url: 'https://example.com/paper',
+        source_note: 'Paper memo',
+        proposed_actions: ['Read section 1'],
+        completed_actions: ['Read section 1'],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tags: ['ai'],
+      },
+    ];
+
+    it('switches between Columns and Swimlanes layouts with localStorage persistence', () => {
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={swimlaneCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Default is columns
+      expect(document.querySelector('.kanban-board[data-view="execution"]')).not.toBeNull();
+      expect(document.querySelector('.swimlanes-container')).toBeNull();
+
+      // Click Swimlanes button
+      const swimlanesBtn = screen.getByRole('radio', { name: /swimlanes/i });
+      fireEvent.click(swimlanesBtn);
+
+      expect(localStorage.getItem('sparkkeep_board_layout')).toBe('swimlanes');
+      expect(document.querySelector('.swimlanes-container')).not.toBeNull();
+      expect(document.querySelector('.kanban-board[data-view="execution"]')).toBeNull();
+
+      // Click Columns button
+      const columnsBtn = screen.getByRole('radio', { name: /columns/i });
+      fireEvent.click(columnsBtn);
+
+      expect(localStorage.getItem('sparkkeep_board_layout')).toBe('columns');
+      expect(document.querySelector('.kanban-board[data-view="execution"]')).not.toBeNull();
+      expect(document.querySelector('.swimlanes-container')).toBeNull();
+    });
+
+    it('switches grouping between Horizon and Card Type with localStorage persistence', () => {
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={swimlaneCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      // Switch to swimlanes
+      fireEvent.click(screen.getByRole('radio', { name: /swimlanes/i }));
+
+      // By default in swimlanes, grouping is By Horizon
+      expect(screen.getByRole('heading', { name: 'Short-term' })).toBeDefined();
+      expect(screen.getByRole('heading', { name: 'Medium-term' })).toBeDefined();
+      expect(screen.getByRole('heading', { name: 'Long-term' })).toBeDefined();
+
+      // Grouping selector: Click "By Card Type"
+      const byTypeBtn = screen.getByRole('radio', { name: /by card type/i });
+      fireEvent.click(byTypeBtn);
+
+      expect(localStorage.getItem('sparkkeep_board_swimlane_group')).toBe('type');
+      expect(screen.getByRole('heading', { name: 'Tool' })).toBeDefined();
+      expect(screen.getByRole('heading', { name: 'Repository' })).toBeDefined();
+      expect(screen.getByRole('heading', { name: 'Paper' })).toBeDefined();
+
+      // Switch back to "By Horizon"
+      const byHorizonBtn = screen.getByRole('radio', { name: /by horizon/i });
+      fireEvent.click(byHorizonBtn);
+
+      expect(localStorage.getItem('sparkkeep_board_swimlane_group')).toBe('horizon');
+      expect(screen.getByRole('heading', { name: 'Short-term' })).toBeDefined();
+    });
+
+    it('collapses and expands individual swimlane rows', () => {
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={swimlaneCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={vi.fn()}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      fireEvent.click(screen.getByRole('radio', { name: /swimlanes/i }));
+
+      const shortTermRow = document.querySelector('[data-swimlane-row="short-term"]')!;
+      expect(shortTermRow).toBeDefined();
+      expect(shortTermRow.querySelector('.swimlane-grid')).not.toBeNull();
+
+      // Collapse Short-term row
+      const collapseBtn = shortTermRow.querySelector('.swimlane-collapse-btn')!;
+      fireEvent.click(collapseBtn);
+
+      expect(shortTermRow.className).toContain('is-collapsed');
+      expect(shortTermRow.querySelector('.swimlane-grid')).toBeNull();
+
+      // Expand Short-term row
+      const expandBtn = shortTermRow.querySelector('.swimlane-collapse-btn')!;
+      fireEvent.click(expandBtn);
+
+      expect(shortTermRow.className).not.toContain('is-collapsed');
+      expect(shortTermRow.querySelector('.swimlane-grid')).not.toBeNull();
+    });
+
+    it('handles 2D drag-and-drop into Horizon swimlane cell updating status and horizon with Undo', () => {
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={swimlaneCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      fireEvent.click(screen.getByRole('radio', { name: /swimlanes/i }));
+
+      // Target Medium-term Done cell
+      const targetCell = screen.getByTestId('swimlane-cell-medium-term-done');
+      expect(targetCell).toBeDefined();
+
+      // Drop card 301 (which is currently short-term and to-do)
+      fireEvent.drop(targetCell, {
+        preventDefault: vi.fn(),
+        dataTransfer: {
+          getData: vi.fn().mockReturnValue('301'),
+        },
+      });
+
+      expect(onUpdateCard).toHaveBeenCalledWith(301, {
+        status: 'done',
+        horizon: 'medium-term',
+      });
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining('#301'),
+        expect.any(Function)
+      );
+
+      // Invoke undo
+      const undoCallback = showToast.mock.calls[0][1];
+      expect(undoCallback).toBeDefined();
+      undoCallback();
+      expect(onUpdateCard).toHaveBeenCalledWith(301, {
+        status: 'to-do',
+        horizon: 'short-term',
+      });
+    });
+
+    it('handles 2D drag-and-drop into Card Type swimlane cell updating status and type with Undo', () => {
+      const onUpdateCard = vi.fn();
+      const showToast = vi.fn();
+
+      render(
+        <LocaleProvider locale="en">
+          <CardActionsProvider value={mockActions}>
+            <KanbanBoard
+              cards={swimlaneCards}
+              horizon="all"
+              onHorizonChange={vi.fn()}
+              onSelectCard={vi.fn()}
+              onUpdateCard={onUpdateCard}
+              onResearch={vi.fn()}
+              onRetry={vi.fn()}
+              showToast={showToast}
+            />
+          </CardActionsProvider>
+        </LocaleProvider>
+      );
+
+      fireEvent.click(screen.getByRole('radio', { name: /swimlanes/i }));
+      fireEvent.click(screen.getByRole('radio', { name: /by card type/i }));
+
+      // Target 'repo' row, 'done' cell
+      const targetCell = screen.getByTestId('swimlane-cell-repo-done');
+      expect(targetCell).toBeDefined();
+
+      // Drop card 301 (which is currently type: 'tool', status: 'to-do')
+      fireEvent.drop(targetCell, {
+        preventDefault: vi.fn(),
+        dataTransfer: {
+          getData: vi.fn().mockReturnValue('301'),
+        },
+      });
+
+      expect(onUpdateCard).toHaveBeenCalledWith(301, {
+        status: 'done',
+        type: 'repo',
+      });
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining('#301'),
+        expect.any(Function)
+      );
+
+      // Undo reverts status and type
+      const undoCallback = showToast.mock.calls[0][1];
+      expect(undoCallback).toBeDefined();
+      undoCallback();
+      expect(onUpdateCard).toHaveBeenCalledWith(301, {
+        status: 'to-do',
+        type: 'tool',
+      });
+    });
+  });
 });
