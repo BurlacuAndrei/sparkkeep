@@ -24,7 +24,7 @@ import {
 import * as api from '../api';
 import { useLocale } from '../i18n';
 import type { Locale } from '../i18n';
-import { enumLabel } from '../utils/cardEnumLabels';
+import { enumLabel, horizonLabel, cardTypeLabel } from '../utils/cardEnumLabels';
 import { isClipboardAvailable, downloadMarkdown } from '../utils/exportUtils';
 import '../styles/digest-brief.css';
 
@@ -87,9 +87,49 @@ export const DigestView: React.FC<DigestViewProps> = ({
   const [isChannelMenuOpen, setIsChannelMenuOpen] = useState(false);
   const channelMenuRef = useRef<HTMLDivElement>(null);
   const [userToggledDays, setUserToggledDays] = useState<Record<string, boolean>>({});
+  const [isTimelineDeckOpen, setIsTimelineDeckOpen] = useState(true);
 
   // Derive digest based on selected window
   const digest = windowDays === 7 ? (initialDigest ?? customDigest) : customDigest;
+
+  // Hydrate synthesis from cached digest response if present, with local override
+  const activeSynthesis = synthesis ?? digest?.synthesis ?? null;
+
+  // Keyboard shortcuts: '1', '2', '3' switch window when no modal/input focused
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement &&
+          (target.isContentEditable ||
+            Boolean(target.closest('input, textarea, [contenteditable="true"]'))));
+      if (isEditing) return;
+
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (document.querySelector('.modal-overlay, .card-modal-backdrop, [role="dialog"]')) {
+        return;
+      }
+
+      if (e.key === '1') {
+        e.preventDefault();
+        setWindowDays(7);
+        setUserToggledDays({});
+      } else if (e.key === '2') {
+        e.preventDefault();
+        setWindowDays(14);
+        setUserToggledDays({});
+      } else if (e.key === '3') {
+        e.preventDefault();
+        setWindowDays(30);
+        setUserToggledDays({});
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Load digest whenever windowDays changes (or if initialDigest is not yet available for 7-day window)
   useEffect(() => {
@@ -148,8 +188,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
   // Compute Emergent Themes (Hybrid approach)
   const themes = useMemo((): DigestSynthesisTheme[] => {
     // If LLM synthesis provided themes, use them
-    if (synthesis?.themes && synthesis.themes.length > 0) {
-      return synthesis.themes;
+    if (activeSynthesis?.themes && activeSynthesis.themes.length > 0) {
+      return activeSynthesis.themes;
     }
 
     // Default fast local clustering by tags
@@ -195,7 +235,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
     }
 
     return generated;
-  }, [synthesis, allCards, t, tp]);
+  }, [activeSynthesis, allCards, t, tp]);
 
   // Status counts (including to-do!)
   const byStatus = digest?.by_status || {};
@@ -443,8 +483,8 @@ export const DigestView: React.FC<DigestViewProps> = ({
 
     // Executive briefing
     mdLines.push(`## ⚡ ${t('research.digest.md.briefing')}`);
-    if (synthesis?.briefing) {
-      mdLines.push(synthesis.briefing);
+    if (activeSynthesis?.briefing) {
+      mdLines.push(activeSynthesis.briefing);
     } else {
       mdLines.push(`${tp('research.digest.md.captured', totalSparks)} ${tp('research.digest.md.acrossThemes', themes.length)}`);
       mdLines.push(tp('research.digest.md.cleared', decidedCount, { percent: clearanceRate }));
@@ -593,6 +633,54 @@ export const DigestView: React.FC<DigestViewProps> = ({
     });
   };
 
+  const getDigestTitle = (days: number): string => {
+    if (days === 7) return t('research.digest.titleWeekly');
+    if (days === 14) return t('research.digest.titleBiweekly');
+    if (days === 30) return t('research.digest.titleMonthly');
+    return t('research.digest.titleCustom', { days });
+  };
+
+  const renderWindowPills = () => (
+    <div className="digest-window-pills" role="radiogroup" aria-label={t('research.digest.timeWindowAria')}>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={windowDays === 7}
+        className={`digest-window-pill ${windowDays === 7 ? 'active' : ''}`}
+        onClick={() => {
+          setWindowDays(7);
+          setUserToggledDays({});
+        }}
+      >
+        7d
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={windowDays === 14}
+        className={`digest-window-pill ${windowDays === 14 ? 'active' : ''}`}
+        onClick={() => {
+          setWindowDays(14);
+          setUserToggledDays({});
+        }}
+      >
+        14d
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={windowDays === 30}
+        className={`digest-window-pill ${windowDays === 30 ? 'active' : ''}`}
+        onClick={() => {
+          setWindowDays(30);
+          setUserToggledDays({});
+        }}
+      >
+        30d
+      </button>
+    </div>
+  );
+
   if (!digest || !digest.days || digest.days.length === 0) {
     return (
       <div className="digest-container" style={{ textAlign: 'center', padding: '60px 20px' }}>
@@ -604,18 +692,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
           {tp('research.digest.emptyBody', windowDays)}
         </p>
         <div style={{ marginTop: 20 }}>
-          <select
-            className="digest-window-select"
-            value={windowDays}
-            onChange={(e) => {
-              setWindowDays(Number(e.target.value));
-              setUserToggledDays({});
-            }}
-          >
-            <option value={7}>{tp('research.digest.pastDays', 7)}</option>
-            <option value={14}>{tp('research.digest.pastDays', 14)}</option>
-            <option value={30}>{tp('research.digest.pastDays', 30)}</option>
-          </select>
+          {renderWindowPills()}
         </div>
       </div>
     );
@@ -626,7 +703,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
       {/* 1. Header Bar with Window Controls & Review Ritual */}
       <div className="digest-header-bar">
         <div className="digest-header-title-group">
-          <h1 className="digest-title">{t('research.digest.title')}</h1>
+          <h1 className="digest-title">{getDigestTitle(windowDays)}</h1>
           <div className="digest-date-pill">
             <Calendar size={13} color="#818cf8" />
             <span>{formatDateRange(windowDays, locale)}</span>
@@ -634,18 +711,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
         </div>
 
         <div className="digest-actions-group">
-          <select
-            className="digest-window-select"
-            value={windowDays}
-            onChange={(e) => {
-              setWindowDays(Number(e.target.value));
-              setUserToggledDays({});
-            }}
-          >
-            <option value={7}>{tp('research.digest.pastDays', 7)}</option>
-            <option value={14}>{tp('research.digest.pastDays', 14)}</option>
-            <option value={30}>{tp('research.digest.pastDays', 30)}</option>
-          </select>
+          {renderWindowPills()}
 
           <div className="digest-split-btn-group" ref={channelMenuRef}>
             <button
@@ -851,83 +917,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Executive Briefing Hero Card */}
-      <div className="digest-hero-brief">
-        <div className="digest-hero-header">
-          <div className="digest-hero-title">
-            <Sparkles size={16} color="#818cf8" />
-            <span>{t('research.digest.executiveBriefing')}</span>
-          </div>
-
-          <button
-            type="button"
-            className="digest-btn-synthesize"
-            onClick={handleSynthesize}
-            disabled={isSynthesizing}
-          >
-            {isSynthesizing ? <RotateCw size={12} className="spin" /> : <Sparkles size={12} />}
-            <span>
-              {isSynthesizing
-                ? t('research.digest.synthesizing')
-                : t('research.digest.synthesize')}
-            </span>
-          </button>
-        </div>
-
-        {synthesis?.briefing ? (
-          <div style={{ whiteSpace: 'pre-line', fontSize: 13.5, lineHeight: 1.6, color: 'var(--text-main)' }}>
-            {synthesis.briefing}
-          </div>
-        ) : (
-          <ul className="digest-hero-bullets">
-            <li className="digest-hero-bullet-item">
-              <span className="digest-hero-bullet-dot">•</span>
-              <span>
-                {withStrongCount(
-                  tp('research.digest.heroIngested', totalSparks, { count: COUNT_MARKER }),
-                  totalSparks,
-                  { color: 'var(--text-main)' }
-                )}{' '}
-                {withStrongCount(
-                  tp('research.digest.heroAcrossThemes', themes.length, { count: COUNT_MARKER }),
-                  themes.length,
-                  { color: 'var(--accent-indigo)' }
-                )}{' '}
-                {t('research.digest.heroThisWindow')}
-              </span>
-            </li>
-            <li className="digest-hero-bullet-item">
-              <span className="digest-hero-bullet-dot">•</span>
-              <span>
-                {t('research.digest.funnelCleared')}{' '}
-                <strong style={{ color: '#38bdf8' }}>{clearanceRate}%</strong>{' '}
-                {t('research.digest.funnelOfCaptured')} ({tp('research.digest.funnelDecided', decidedCount)},{' '}
-                {tp('research.digest.funnelPending', inboxCount)}).
-              </span>
-            </li>
-            <li className="digest-hero-bullet-item">
-              <span className="digest-hero-bullet-dot">•</span>
-              <span>
-                <strong style={{ color: '#34d399' }}>
-                  {tp('research.digest.heroAchieved', doneCount)}
-                </strong>
-                .{' '}
-                {researchHarvest.length > 0 && (
-                  <span>
-                    {' '}
-                    <strong style={{ color: '#c084fc' }}>
-                      {tp('research.digest.heroConcluded', researchHarvest.length)}
-                    </strong>
-                    .
-                  </span>
-                )}
-              </span>
-            </li>
-          </ul>
-        )}
-      </div>
-
-      {/* 3. 4-Card Metric Strip */}
+      {/* 2. 4-Card Metric Strip */}
       <div className="digest-kpi-strip">
         <div className="digest-kpi-card">
           <span className="digest-kpi-label">
@@ -943,7 +933,7 @@ export const DigestView: React.FC<DigestViewProps> = ({
                 }`}
               >
                 {digest.wow_delta_percent >= 0 ? `+${digest.wow_delta_percent}%` : `${digest.wow_delta_percent}%`}{' '}
-                {t('research.digest.wow')}
+                {t('research.digest.vsPrior', { window: `${windowDays}d` })}
               </span>
             )}
           </div>
@@ -997,63 +987,215 @@ export const DigestView: React.FC<DigestViewProps> = ({
         </div>
       </div>
 
-      {/* 4. Main 2-Column Grid: Emergent Themes Radar & Intelligence Rail */}
-      <div className="digest-main-grid">
-        {/* Left Column: Emergent Themes Radar */}
-        <div className="digest-themes-section">
-          <div className="digest-section-title">
-            <Compass size={16} color="#818cf8" />
-            <span>{t('research.digest.themesTitle')}</span>
+      {/* 3. Widescreen 3-Column Intelligence Grid */}
+      <div className="digest-widescreen-grid">
+        {/* Column 1: Executive Retrospective & Emergent Themes */}
+        <div className="digest-grid-col">
+          <div className="digest-hero-brief">
+            <div className="digest-hero-header">
+              <div className="digest-hero-title">
+                <Sparkles size={16} color="#818cf8" />
+                <span>{t('research.digest.executiveBriefing')}</span>
+              </div>
+
+              <button
+                type="button"
+                className="digest-btn-synthesize"
+                onClick={handleSynthesize}
+                disabled={isSynthesizing}
+              >
+                {isSynthesizing ? <RotateCw size={12} className="spin" /> : <Sparkles size={12} />}
+                <span>
+                  {isSynthesizing
+                    ? t('research.digest.synthesizing')
+                    : t('research.digest.synthesize')}
+                </span>
+              </button>
+            </div>
+
+            {activeSynthesis?.briefing ? (
+              <div style={{ whiteSpace: 'pre-line', fontSize: 13.5, lineHeight: 1.6, color: 'var(--text-main)' }}>
+                {activeSynthesis.briefing}
+              </div>
+            ) : (
+              <ul className="digest-hero-bullets">
+                <li className="digest-hero-bullet-item">
+                  <span className="digest-hero-bullet-dot">•</span>
+                  <span>
+                    {withStrongCount(
+                      tp('research.digest.heroIngested', totalSparks, { count: COUNT_MARKER }),
+                      totalSparks,
+                      { color: 'var(--text-main)' }
+                    )}{' '}
+                    {withStrongCount(
+                      tp('research.digest.heroAcrossThemes', themes.length, { count: COUNT_MARKER }),
+                      themes.length,
+                      { color: 'var(--accent-indigo)' }
+                    )}{' '}
+                    {t('research.digest.heroThisWindow')}
+                  </span>
+                </li>
+                <li className="digest-hero-bullet-item">
+                  <span className="digest-hero-bullet-dot">•</span>
+                  <span>
+                    {t('research.digest.funnelCleared')}{' '}
+                    <strong style={{ color: '#38bdf8' }}>{clearanceRate}%</strong>{' '}
+                    {t('research.digest.funnelOfCaptured')} ({tp('research.digest.funnelDecided', decidedCount)},{' '}
+                    {tp('research.digest.funnelPending', inboxCount)}).
+                  </span>
+                </li>
+                <li className="digest-hero-bullet-item">
+                  <span className="digest-hero-bullet-dot">•</span>
+                  <span>
+                    <strong style={{ color: '#34d399' }}>
+                      {tp('research.digest.heroAchieved', doneCount)}
+                    </strong>
+                    .{' '}
+                    {researchHarvest.length > 0 && (
+                      <span>
+                        {' '}
+                        <strong style={{ color: '#c084fc' }}>
+                          {tp('research.digest.heroConcluded', researchHarvest.length)}
+                        </strong>
+                        .
+                      </span>
+                    )}
+                  </span>
+                </li>
+              </ul>
+            )}
           </div>
 
-          <div className="digest-themes-list">
-            {themes.map((theme, idx) => (
-              <div key={`${theme.title}-${idx}`} className="digest-theme-box">
-                <div className="digest-theme-header">
-                  <span className="digest-theme-name">
-                    {theme.title}
-                  </span>
-                  <span className="digest-theme-pill-count">
-                    {tp('research.digest.themeSparks', theme.card_ids?.length || 0)}
-                  </span>
-                </div>
-                <div className="digest-theme-desc">{theme.summary}</div>
+          <div className="digest-themes-section">
+            <div className="digest-section-title">
+              <Compass size={16} color="#818cf8" />
+              <span>{t('research.digest.themesTitle')}</span>
+            </div>
 
-                <div className="digest-theme-cards-wrap">
-                  {(theme.card_ids || []).map((id) => {
-                    const card = cardById.get(id);
-                    if (!card) return null;
-                    return (
-                      <button
-                        key={card.id}
-                        type="button"
-                        className="digest-spark-chip"
-                        onClick={() => onSelectCard(card)}
-                        title={card.title}
-                      >
-                        <span className="digest-spark-chip-title">{card.title}</span>
-                        {card.status === 'done' && (
-                          <CheckCircle2 size={12} color="#34d399" />
-                        )}
-                        {card.research_verdict && (
-                          <span
-                            className={`digest-verdict-tag digest-verdict-${card.research_verdict}`}
-                            style={{ fontSize: 9, padding: '1px 4px' }}
-                          >
-                            {enumLabel(t, 'verdict', card.research_verdict)}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+            <div className="digest-themes-list">
+              {themes.map((theme, idx) => (
+                <div key={`${theme.title}-${idx}`} className="digest-theme-box">
+                  <div className="digest-theme-header">
+                    <span className="digest-theme-name">
+                      {theme.title}
+                    </span>
+                    <span className="digest-theme-pill-count">
+                      {tp('research.digest.themeSparks', theme.card_ids?.length || 0)}
+                    </span>
+                  </div>
+                  <div className="digest-theme-desc">{theme.summary}</div>
+
+                  <div className="digest-theme-cards-wrap">
+                    {(theme.card_ids || []).map((id) => {
+                      const card = cardById.get(id);
+                      if (!card) return null;
+                      return (
+                        <button
+                          key={card.id}
+                          type="button"
+                          className="digest-spark-chip"
+                          onClick={() => onSelectCard(card)}
+                          title={card.title}
+                        >
+                          <span className="digest-spark-chip-title">{card.title}</span>
+                          {card.status === 'done' && (
+                            <CheckCircle2 size={12} color="#34d399" />
+                          )}
+                          {card.research_verdict && (
+                            <span
+                              className={`digest-verdict-tag digest-verdict-${card.research_verdict}`}
+                              style={{ fontSize: 9, padding: '1px 4px' }}
+                            >
+                              {enumLabel(t, 'verdict', card.research_verdict)}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Right Rail: Research Harvest & Horizon Balance */}
-        <div className="digest-right-rail">
+        {/* Column 2: Period Wins Showcase */}
+        <div className="digest-grid-col">
+          <div className="digest-side-card digest-wins-showcase">
+            <div className="digest-section-title" style={{ marginBottom: 12 }}>
+              <CheckCircle2 size={16} color="#34d399" />
+              <span>{t('research.digest.winsTitle')}</span>
+            </div>
+
+            <div className="digest-wins-summary-row">
+              <div className="digest-wins-stat">
+                <span className="digest-wins-count">{doneCount}</span>
+                <span className="digest-wins-label">{t('research.digest.winsClosed')}</span>
+              </div>
+              {digest.prev_wins !== undefined && (
+                <span
+                  className={`digest-kpi-badge ${
+                    doneCount - digest.prev_wins >= 0 ? 'digest-kpi-badge-green' : 'digest-kpi-badge-cyan'
+                  }`}
+                >
+                  {doneCount - digest.prev_wins >= 0
+                    ? `+${doneCount - digest.prev_wins}`
+                    : `${doneCount - digest.prev_wins}`}{' '}
+                  {t('research.digest.vsPrior', { window: `${windowDays}d` })}
+                </span>
+              )}
+            </div>
+
+            <div className="digest-actions-executed-pill">
+              <Zap size={13} color="#f59e0b" />
+              <span>
+                <strong>{digest.completed_actions_count || 0}</strong>{' '}
+                {tp('research.digest.actionsExecuted', digest.completed_actions_count || 0)}
+              </span>
+            </div>
+
+            <div className="digest-wins-list">
+              {(!digest.weekly_wins || digest.weekly_wins.length === 0) ? (
+                <div className="digest-wins-empty">
+                  {t('research.digest.winsEmpty')}
+                </div>
+              ) : (
+                digest.weekly_wins.map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    className="digest-win-item"
+                    onClick={() => onSelectCard(card)}
+                    title={card.title}
+                  >
+                    <div className="digest-win-item-header">
+                      <CheckCircle2 size={14} color="#34d399" style={{ flexShrink: 0 }} />
+                      <span className="digest-win-title">{card.title}</span>
+                    </div>
+                    <div className="digest-win-badges">
+                      <span className={`digest-horizon-badge horizon-${card.horizon}`}>
+                        {horizonLabel(card.horizon, t)}
+                      </span>
+                      {card.type && (
+                        <span className="digest-type-badge">
+                          {cardTypeLabel(t, card.type)}
+                        </span>
+                      )}
+                      {card.research_verdict && (
+                        <span className={`digest-verdict-tag digest-verdict-${card.research_verdict}`}>
+                          {enumLabel(t, 'verdict', card.research_verdict)}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Column 3: Deep Research Harvest & Strategic Health */}
+        <div className="digest-grid-col">
           {/* Deep Research Harvest */}
           <div className="digest-side-card">
             <div className="digest-section-title" style={{ marginBottom: 8 }}>
@@ -1140,75 +1282,90 @@ export const DigestView: React.FC<DigestViewProps> = ({
         </div>
       </div>
 
-      {/* 5. Day-by-Day Activity Feed (Collapsible / Clean) */}
-      <div style={{ marginTop: 12 }}>
-        <div className="digest-section-title">
-          <Calendar size={16} color="#06b6d4" />
-          <span>
-            {t('research.digest.activityTitle')}{' '}
-            {query.trim() ? t('research.digest.filteringBy', { query }) : ''}
-          </span>
-        </div>
-
-        {query.trim() && filteredDays.length === 0 ? (
-          <div
-            style={{
-              padding: '24px 16px',
-              textAlign: 'center',
-              color: 'var(--text-dim)',
-              background: 'rgba(255, 255, 255, 0.02)',
-              borderRadius: 8,
-              border: '1px dashed var(--border-subtle)',
-              fontSize: 13,
-              marginTop: 8,
-            }}
-          >
-            {t('research.digest.noMatch', { query })}
+      {/* 4. Day-by-Day Activity Timeline (Collapsible Lower Deck) */}
+      <div className="digest-activity-deck">
+        <button
+          type="button"
+          className="digest-activity-deck-toggle"
+          onClick={() => setIsTimelineDeckOpen((prev) => !prev)}
+          aria-expanded={isTimelineDeckOpen}
+        >
+          <div className="digest-activity-deck-title">
+            <Calendar size={16} color="#06b6d4" />
+            <span>
+              {t('research.digest.activityTitle')}{' '}
+              {query.trim() ? t('research.digest.filteringBy', { query }) : ''}
+            </span>
+            <span className="digest-activity-deck-count">
+              ({tp('research.digest.cards', allCards.length)})
+            </span>
           </div>
-        ) : (
-          <div className="digest-days-accordion">
-            {filteredDays.map((day, index) => {
-              const isDefaultExpanded = Boolean(query.trim()) || index < 2;
-              const isExpanded = userToggledDays[day.date] !== undefined ? userToggledDays[day.date] : isDefaultExpanded;
-              return (
-                <div key={day.date} className="day-section">
-                  <div
-                    className="digest-accordion-header"
-                    onClick={() => toggleDayExpanded(day.date, isDefaultExpanded)}
-                  >
-                  <div className="digest-accordion-title">
-                    <Calendar size={14} color="var(--accent-cyan)" />
-                    <span>{day.date}</span>
-                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>
-                      ({tp('research.digest.cards', day.cards.length)})
-                    </span>
-                  </div>
-                  {isExpanded ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
-                </div>
+          {isTimelineDeckOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
 
-                {isExpanded && (
-                  <div
-                    className="kanban-board"
-                    style={{
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                      padding: '4px 0 12px',
-                    }}
-                  >
-                    {day.cards.map((c) => (
-                      <CardItem
-                        key={c.id}
-                        card={c}
-                        onSelect={onSelectCard}
-                        onStatusChange={onStatusChange}
-                        onResearch={onResearch}
-                        onRetry={onRetry}
-                      />
-                    ))}
-                  </div>
-                )}
+        {isTimelineDeckOpen && (
+          <div className="digest-activity-deck-content">
+            {query.trim() && filteredDays.length === 0 ? (
+              <div
+                style={{
+                  padding: '24px 16px',
+                  textAlign: 'center',
+                  color: 'var(--text-dim)',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: 8,
+                  border: '1px dashed var(--border-subtle)',
+                  fontSize: 13,
+                  marginTop: 8,
+                }}
+              >
+                {t('research.digest.noMatch', { query })}
               </div>
-              );
-            })}
+            ) : (
+              <div className="digest-days-accordion">
+                {filteredDays.map((day, index) => {
+                  const isDefaultExpanded = Boolean(query.trim()) || index < 2;
+                  const isExpanded = userToggledDays[day.date] !== undefined ? userToggledDays[day.date] : isDefaultExpanded;
+                  return (
+                    <div key={day.date} className="day-section">
+                      <div
+                        className="digest-accordion-header"
+                        onClick={() => toggleDayExpanded(day.date, isDefaultExpanded)}
+                      >
+                        <div className="digest-accordion-title">
+                          <Calendar size={14} color="var(--accent-cyan)" />
+                          <span>{day.date}</span>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>
+                            ({tp('research.digest.cards', day.cards.length)})
+                          </span>
+                        </div>
+                        {isExpanded ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
+                      </div>
+
+                      {isExpanded && (
+                        <div
+                          className="kanban-board"
+                          style={{
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                            padding: '4px 0 12px',
+                          }}
+                        >
+                          {day.cards.map((c) => (
+                            <CardItem
+                              key={c.id}
+                              card={c}
+                              onSelect={onSelectCard}
+                              onStatusChange={onStatusChange}
+                              onResearch={onResearch}
+                              onRetry={onRetry}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

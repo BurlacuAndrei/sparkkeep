@@ -1703,6 +1703,18 @@ export const es = {
     },
     digest: {
       title: 'Resumen semanal de inteligencia',
+      titleWeekly: 'Resumen semanal de inteligencia',
+      titleBiweekly: 'Resumen quincenal de inteligencia',
+      titleMonthly: 'Resumen mensual de inteligencia',
+      titleCustom: 'Resumen de inteligencia de {{days}} días',
+      vsPrior: 'vs {{window}} anteriores',
+      timeWindowAria: 'Seleccionar ventana de tiempo',
+      winsTitle: 'Victorias del período',
+      winsClosed: 'bucles cerrados',
+      winsEmpty: 'Aún no se completó ninguna tarjeta en este período.',
+      actionsExecuted_one: 'paso de acción ejecutado',
+      actionsExecuted_few: 'pasos de acción ejecutados',
+      actionsExecuted_other: 'pasos de acción ejecutados',
       emptyTitle: 'No hay capturas en esta ventana',
       emptyBody_one:
         'Las chispas capturadas durante el día seleccionado ({{count}} día) se analizarán y organizarán aquí.',

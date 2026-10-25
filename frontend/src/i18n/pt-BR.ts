@@ -1686,6 +1686,18 @@ export const ptBR = {
     },
     digest: {
       title: 'Resumo semanal de inteligência',
+      titleWeekly: 'Resumo semanal de inteligência',
+      titleBiweekly: 'Resumo quinzenal de inteligência',
+      titleMonthly: 'Resumo mensal de inteligência',
+      titleCustom: 'Resumo de inteligência de {{days}} dias',
+      vsPrior: 'vs {{window}} anteriores',
+      timeWindowAria: 'Selecionar janela de tempo',
+      winsTitle: 'Conquistas do período',
+      winsClosed: 'ciclos concluídos',
+      winsEmpty: 'Nenhum card concluído neste período ainda.',
+      actionsExecuted_one: 'etapa de ação executada',
+      actionsExecuted_few: 'etapas de ação executadas',
+      actionsExecuted_other: 'etapas de ação executadas',
       emptyTitle: 'Nenhuma captura nesta janela',
       emptyBody_one:
         'Os sparks capturados no {{count}} dia selecionado serão analisados e organizados aqui.',

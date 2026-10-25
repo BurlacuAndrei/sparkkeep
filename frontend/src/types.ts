@@ -173,8 +173,12 @@ export interface DigestData {
   by_status: Record<string, number>;
   by_horizon?: Record<string, number>;
   weekly_wins?: Card[];
+  prev_wins?: number;
+  completed_actions_count?: number;
   research_harvest?: Card[];
   stale_count?: number;
+  stale_cards?: Card[];
+  synthesis?: DigestSynthesisResult;
   days: DayGroup[];
 }
 

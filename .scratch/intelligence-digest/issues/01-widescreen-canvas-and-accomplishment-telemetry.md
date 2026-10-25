@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] `GET /api/v1/digest` includes cards with `UpdatedAt` inside the active window in `weekly_wins` (`status == 'done'`), `completed_actions_count` (sum of `completed_actions` across cards active/updated in the window), and `research_harvest` (`research_state == 'done'` or `research_verdict != ''`), even when `CreatedAt` predates the window, and returns `prev_wins` and `stale_cards` alongside existing capture funnel metrics.
-- [ ] The top window selector is a segmented pill toggle (`7d` · `14d` · `30d`, keyboard-accessible via `1`, `2`, `3` when no input/modal is focused) that dynamically updates the page title (**Weekly Intelligence Digest**, **Biweekly Intelligence Digest**, **Monthly Intelligence Digest**) and period-over-period delta badges (`vs prior 7d`, `vs prior 14d`, `vs prior 30d`).
-- [ ] The Digest container expands fluidly up to `2400px` with a responsive 3-column intelligence grid on wide viewports (`>= 1280px`) and places the chronological **Day-by-Day Activity Timeline** inside a clean collapsible lower deck.
-- [ ] All new UI strings are localized across all 8 supported Interface Locales (`en`, `ro`, `ru`, `de`, `es`, `fr`, `it`, `zh`) with backend and frontend integration tests passing.
+- [x] `GET /api/v1/digest` includes cards with `UpdatedAt` inside the active window in `weekly_wins` (`status == 'done'`), `completed_actions_count` (sum of `completed_actions` across cards active/updated in the window), and `research_harvest` (`research_state == 'done'` or `research_verdict != ''`), even when `CreatedAt` predates the window, and returns `prev_wins` and `stale_cards` alongside existing capture funnel metrics.
+- [x] The top window selector is a segmented pill toggle (`7d` · `14d` · `30d`, keyboard-accessible via `1`, `2`, `3` when no input/modal is focused) that dynamically updates the page title (**Weekly Intelligence Digest**, **Biweekly Intelligence Digest**, **Monthly Intelligence Digest**) and period-over-period delta badges (`vs prior 7d`, `vs prior 14d`, `vs prior 30d`).
+- [x] The Digest container expands fluidly up to `2400px` with a responsive 3-column intelligence grid on wide viewports (`>= 1280px`) and places the chronological **Day-by-Day Activity Timeline** inside a clean collapsible lower deck.
+- [x] All new UI strings are localized across all 8 supported Interface Locales (`en`, `ro`, `ru`, `de`, `es`, `fr`, `it`, `zh`) with backend and frontend integration tests passing.

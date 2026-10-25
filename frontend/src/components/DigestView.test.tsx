@@ -296,8 +296,8 @@ describe('DigestView', () => {
       </ThemeProvider>
     );
 
-    const windowSelect = screen.getByRole('combobox');
-    fireEvent.change(windowSelect, { target: { value: '14' } });
+    const pill14 = screen.getByRole('radio', { name: '14d' });
+    fireEvent.click(pill14);
 
     const sendBtn = await waitFor(() => screen.getByRole('button', { name: /Send to Integrations/i }));
     fireEvent.click(sendBtn);
@@ -618,6 +618,145 @@ describe('DigestView', () => {
 
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.activeElement).not.toBe(arrowBtn);
+  });
+
+  it('dynamically adapts page title and delta badges via segmented pill switcher', async () => {
+    (api.fetchDigest as ReturnType<typeof vi.fn>).mockImplementation((_days: number) => {
+      return Promise.resolve({
+        ...mockPopulatedDigest,
+        week_total: 10,
+        prev_total: 5,
+        wow_delta_percent: 100,
+        prev_wins: 2,
+        completed_actions_count: 7,
+        weekly_wins: [
+          {
+            id: 201,
+            title: 'Widescreen Canvas Shipped',
+            status: 'done',
+            horizon: 'short-term',
+          } as unknown as Card,
+        ],
+      });
+    });
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={mockPopulatedDigest} {...dummyProps} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    // Initial 7d title
+    expect(screen.getByRole('heading', { level: 1, name: /Weekly Intelligence Digest/i })).toBeDefined();
+    expect(screen.getByText(/\+50% vs prior 7d/i)).toBeDefined();
+
+    // Switch to 14d via segmented pill
+    const pill14 = screen.getByRole('radio', { name: '14d' });
+    fireEvent.click(pill14);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /Biweekly Intelligence Digest/i })).toBeDefined();
+      expect(screen.getByText(/\+100% vs prior 14d/i)).toBeDefined();
+    });
+
+    // Switch to 30d via segmented pill
+    const pill30 = screen.getByRole('radio', { name: '30d' });
+    fireEvent.click(pill30);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /Monthly Intelligence Digest/i })).toBeDefined();
+      expect(screen.getByText(/\+100% vs prior 30d/i)).toBeDefined();
+    });
+  });
+
+  it('switches time window with keyboard shortcuts 1, 2, and 3', async () => {
+    (api.fetchDigest as ReturnType<typeof vi.fn>).mockResolvedValue(mockPopulatedDigest);
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={mockPopulatedDigest} {...dummyProps} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: /Weekly Intelligence Digest/i })).toBeDefined();
+
+    // Press '2'
+    fireEvent.keyDown(window, { key: '2' });
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /Biweekly Intelligence Digest/i })).toBeDefined();
+    });
+
+    // Press '3'
+    fireEvent.keyDown(window, { key: '3' });
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /Monthly Intelligence Digest/i })).toBeDefined();
+    });
+
+    // Press '1'
+    fireEvent.keyDown(window, { key: '1' });
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /Weekly Intelligence Digest/i })).toBeDefined();
+    });
+  });
+
+  it('renders Period Wins Showcase with won cards, executed action steps, and win delta', async () => {
+    const populatedWithWins: DigestData = {
+      ...mockPopulatedDigest,
+      weekly_wins: [
+        {
+          id: 301,
+          title: 'Complete Feature Spec',
+          status: 'done',
+          horizon: 'short-term',
+          type: 'architecture',
+          research_verdict: 'pursue',
+        } as unknown as Card,
+      ],
+      prev_wins: 0,
+      completed_actions_count: 5,
+    };
+
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={populatedWithWins} {...dummyProps} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    expect(screen.getByText('Period Wins')).toBeDefined();
+    expect(screen.getByText('Complete Feature Spec')).toBeDefined();
+    expect(screen.getByText(/action steps executed/i)).toBeDefined();
+    expect(screen.getByText(/\+1 vs prior 7d/i)).toBeDefined();
+  });
+
+  it('toggles Day-by-Day Activity Timeline inside collapsible lower deck', async () => {
+    renderLocalized(
+      <ThemeProvider defaultTheme="light">
+        <CardActionsProvider value={dummyCardActions}>
+          <DigestView digest={mockPopulatedDigest} {...dummyProps} />
+        </CardActionsProvider>
+      </ThemeProvider>
+    );
+
+    const toggleBtn = screen.getByRole('button', { name: /Day-by-Day Activity Stream/i });
+    expect(toggleBtn).toBeDefined();
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('2026-10-14')).toBeDefined();
+
+    // Collapse deck
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('2026-10-14')).toBeNull();
+
+    // Re-expand deck
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('2026-10-14')).toBeDefined();
   });
 });
 

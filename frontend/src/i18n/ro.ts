@@ -1685,6 +1685,18 @@ export const ro = {
     },
     digest: {
       title: 'Rezumat săptămânal de inteligență',
+      titleWeekly: 'Rezumat săptămânal de inteligență',
+      titleBiweekly: 'Rezumat bilunar de inteligență',
+      titleMonthly: 'Rezumat lunar de inteligență',
+      titleCustom: 'Rezumat de inteligență pe {{days}} zile',
+      vsPrior: 'față de ultimele {{window}}',
+      timeWindowAria: 'Selectează intervalul de timp',
+      winsTitle: 'Realizări din perioadă',
+      winsClosed: 'bucle încheiate',
+      winsEmpty: 'Niciun card finalizat în această perioadă încă.',
+      actionsExecuted_one: 'pas de acțiune executat',
+      actionsExecuted_few: 'pași de acțiune executați',
+      actionsExecuted_other: 'de pași de acțiune executați',
       emptyTitle: 'Nicio captură în această perioadă',
       emptyBody_one:
         'Scânteile capturate în perioada de {{count}} zi vor fi analizate și organizate aici.',

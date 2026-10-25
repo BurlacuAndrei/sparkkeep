@@ -263,7 +263,7 @@ func (a *api) testWebhook(w http.ResponseWriter, r *http.Request) {
 
 // weeklyDigest groups cards created in the window (default 7 days) by day,
 // newest first, with a total and per-status count, WoW delta, research harvest,
-// wins, horizon balance, and stale alerts.
+// wins, horizon balance, stale alerts, and cached executive synthesis.
 func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
 	days := 7
 	if q := r.URL.Query().Get("days"); q != "" {
@@ -274,9 +274,11 @@ func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	since := now.AddDate(0, 0, -days)
 	prevSince := now.AddDate(0, 0, -2*days)
+	staleCutoff := now.AddDate(0, 0, -14)
 
-	// List cards covering both current and previous windows (for WoW calculations)
-	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Since: prevSince, Limit: 2000})
+	// List cards without a created_at filter so cards captured earlier but
+	// completed, actioned, or researched in this window are tracked.
+	cards, err := a.store.ListCards(r.Context(), port.CardFilter{Limit: 5000})
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -296,33 +298,63 @@ func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
 	byStatus := map[string]int{}
 	byHorizon := map[string]int{}
 	var currentTotal, prevTotal int
-	var weeklyWins []port.Card
-	var researchHarvest []port.Card
-	var staleCount int
-	staleCutoff := now.AddDate(0, 0, -5)
+	weeklyWins := make([]port.Card, 0)
+	researchHarvest := make([]port.Card, 0)
+	staleCards := make([]port.Card, 0)
+	var completedActionsCount int
+	var prevWins int
 
 	for _, c := range cards {
-		if c.CreatedAt.Before(since) {
+		// Group cards captured in current window
+		if !c.CreatedAt.Before(since) && !c.CreatedAt.After(now) {
+			dk := key(c.CreatedAt)
+			if window[dk] {
+				byDay[dk] = append(byDay[dk], c)
+				byStatus[c.Status]++
+				byHorizon[c.Horizon]++
+				currentTotal++
+			}
+		} else if !c.CreatedAt.Before(prevSince) && c.CreatedAt.Before(since) {
+			// Captured in previous comparison window
 			prevTotal++
-			continue
 		}
-		dk := key(c.CreatedAt)
-		if !window[dk] {
-			continue
-		}
-		byDay[dk] = append(byDay[dk], c)
-		byStatus[c.Status]++
-		byHorizon[c.Horizon]++
-		currentTotal++
 
-		if c.Status == port.StatusDone {
+		inWindow := c.UpdatedAt.After(since) || c.CreatedAt.After(since)
+
+		// weekly_wins: status == 'done' AND (c.UpdatedAt.After(since) || c.CreatedAt.After(since))
+		if c.Status == port.StatusDone && inWindow {
 			weeklyWins = append(weeklyWins, c)
 		}
-		if c.ResearchVerdict != "" || c.ResearchState == "done" {
+
+		// completed_actions_count: sum of c.CompletedActions for cards with UpdatedAt/CreatedAt in window
+		if inWindow {
+			completedActionsCount += len(c.CompletedActions)
+		}
+
+		// research_harvest: (c.ResearchState == "done" || c.ResearchVerdict != "") AND (c.UpdatedAt.After(since) || c.CreatedAt.After(since))
+		if (c.ResearchState == "done" || c.ResearchVerdict != "") && inWindow {
 			researchHarvest = append(researchHarvest, c)
 		}
-		if c.Horizon == "short-term" && (c.Status == port.StatusInbox || c.Status == port.StatusToDo || c.Status == port.StatusInProgress) && c.UpdatedAt.Before(staleCutoff) {
-			staleCount++
+
+		// prev_wins: done cards where UpdatedAt/CreatedAt fell between (since - days) and since
+		if c.Status == port.StatusDone && !inWindow {
+			inPrev := func(t time.Time) bool {
+				return !t.IsZero() && t.After(prevSince) && !t.After(since)
+			}
+			if inPrev(c.UpdatedAt) || inPrev(c.CreatedAt) {
+				prevWins++
+			}
+		}
+
+		// stale_cards: short-term cards not updated in > 14 days
+		checkTime := c.UpdatedAt
+		if checkTime.IsZero() {
+			checkTime = c.CreatedAt
+		}
+		if c.Horizon == "short-term" &&
+			(c.Status == port.StatusInbox || c.Status == port.StatusToDo || c.Status == port.StatusInProgress) &&
+			checkTime.Before(staleCutoff) {
+			staleCards = append(staleCards, c)
 		}
 	}
 
@@ -345,18 +377,36 @@ func (a *api) weeklyDigest(w http.ResponseWriter, r *http.Request) {
 		wowDelta = int(float64(currentTotal-prevTotal) / float64(prevTotal) * 100.0)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":                true,
-		"week_total":        currentTotal,
-		"prev_total":        prevTotal,
-		"wow_delta_percent": wowDelta,
-		"by_status":         byStatus,
-		"by_horizon":        byHorizon,
-		"weekly_wins":       weeklyWins,
-		"research_harvest":  researchHarvest,
-		"stale_count":       staleCount,
-		"days":              groups,
-	})
+	// Include cached synthesis if present under key digest_synthesis_<days>
+	synthKey := fmt.Sprintf("digest_synthesis_%d", days)
+	var cachedSynth any
+	if raw, err := a.store.GetSetting(r.Context(), synthKey); err == nil && strings.TrimSpace(raw) != "" {
+		var parsed any
+		if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
+			cachedSynth = parsed
+		}
+	}
+
+	resp := map[string]any{
+		"ok":                      true,
+		"week_total":              currentTotal,
+		"prev_total":              prevTotal,
+		"wow_delta_percent":       wowDelta,
+		"by_status":               byStatus,
+		"by_horizon":              byHorizon,
+		"weekly_wins":             weeklyWins,
+		"prev_wins":               prevWins,
+		"completed_actions_count": completedActionsCount,
+		"research_harvest":        researchHarvest,
+		"stale_count":             len(staleCards),
+		"stale_cards":             staleCards,
+		"days":                    groups,
+	}
+	if cachedSynth != nil {
+		resp["synthesis"] = cachedSynth
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func heuristicSynthesis(cards []port.Card) (string, []map[string]any) {

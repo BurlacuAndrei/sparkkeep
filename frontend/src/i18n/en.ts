@@ -1668,6 +1668,18 @@ export const en = {
     },
     digest: {
       title: 'Weekly Intelligence Digest',
+      titleWeekly: 'Weekly Intelligence Digest',
+      titleBiweekly: 'Biweekly Intelligence Digest',
+      titleMonthly: 'Monthly Intelligence Digest',
+      titleCustom: '{{days}}-Day Intelligence Digest',
+      vsPrior: 'vs prior {{window}}',
+      timeWindowAria: 'Select time window',
+      winsTitle: 'Period Wins',
+      winsClosed: 'closed loops',
+      winsEmpty: 'No cards completed in this period yet.',
+      actionsExecuted_one: 'action step executed',
+      actionsExecuted_few: 'action steps executed',
+      actionsExecuted_other: 'action steps executed',
       emptyTitle: 'No captures in this window',
       emptyBody_one:
         'Sparks captured during the selected {{count}} day will be analyzed and organized here.',

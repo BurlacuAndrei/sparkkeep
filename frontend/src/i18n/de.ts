@@ -1691,6 +1691,18 @@ export const de = {
     },
     digest: {
       title: 'Wöchentliche Intelligence-Zusammenfassung',
+      titleWeekly: 'Wöchentliche Intelligence-Zusammenfassung',
+      titleBiweekly: 'Zweiwöchentliche Intelligence-Zusammenfassung',
+      titleMonthly: 'Monatliche Intelligence-Zusammenfassung',
+      titleCustom: '{{days}}-Tage Intelligence-Zusammenfassung',
+      vsPrior: 'vs vorherige {{window}}',
+      timeWindowAria: 'Zeitfenster auswählen',
+      winsTitle: 'Erfolge des Zeitraums',
+      winsClosed: 'geschlossene Zyklen',
+      winsEmpty: 'In diesem Zeitraum wurden noch keine Karten abgeschlossen.',
+      actionsExecuted_one: 'Aktionsschritt ausgeführt',
+      actionsExecuted_few: 'Aktionsschritte ausgeführt',
+      actionsExecuted_other: 'Aktionsschritte ausgeführt',
       emptyTitle: 'Keine Erfassungen in diesem Zeitraum',
       emptyBody_one:
         'Sparks, die während des gewählten {{count}}-Tages erfasst wurden, werden hier analysiert und geordnet.',

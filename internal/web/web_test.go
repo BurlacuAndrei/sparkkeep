@@ -935,7 +935,7 @@ func TestWeeklyDigest_Extended(t *testing.T) {
 	now := time.Now().UTC()
 	st.cards[1] = port.Card{ID: 1, Title: "old prev window", Status: port.StatusDone, CreatedAt: now.AddDate(0, 0, -10)}
 	st.cards[2] = port.Card{ID: 2, Title: "card current done", Status: port.StatusDone, Horizon: "short-term", CreatedAt: now.AddDate(0, 0, -2)}
-	st.cards[3] = port.Card{ID: 3, Title: "card current todo", Status: port.StatusToDo, Horizon: "short-term", CreatedAt: now.AddDate(0, 0, -1), ResearchVerdict: "pursue", UpdatedAt: now.AddDate(0, 0, -6)}
+	st.cards[3] = port.Card{ID: 3, Title: "card current todo", Status: port.StatusToDo, Horizon: "short-term", CreatedAt: now.AddDate(0, 0, -1), ResearchVerdict: "pursue", UpdatedAt: now.AddDate(0, 0, -15)}
 	h := webHandler(st, &core.Service{Logf: t.Logf})
 
 	rr := doJSON(t, h, http.MethodGet, "/api/v1/digest?days=7", "")
@@ -972,6 +972,118 @@ func TestWeeklyDigest_Extended(t *testing.T) {
 	}
 	if body.StaleCount != 1 {
 		t.Errorf("StaleCount = %d, want 1", body.StaleCount)
+	}
+}
+
+func TestWeeklyDigest_AccomplishmentTelemetryAndSynthesis(t *testing.T) {
+	st := newStubStore()
+	now := time.Now().UTC()
+	ctx := context.Background()
+
+	// 1. Card captured 40 days ago, completed 2 days ago
+	st.cards[10] = port.Card{
+		ID:               10,
+		Title:            "Old Capture Shipped Now",
+		Status:           port.StatusDone,
+		Horizon:          "short-term",
+		CreatedAt:        now.AddDate(0, 0, -40),
+		UpdatedAt:        now.AddDate(0, 0, -2),
+		CompletedActions: []string{"Step A", "Step B"},
+	}
+
+	// 2. Card captured 50 days ago, completed in prior window (10 days ago)
+	st.cards[20] = port.Card{
+		ID:        20,
+		Title:     "Old Capture Shipped in Prior Window",
+		Status:    port.StatusDone,
+		Horizon:   "short-term",
+		CreatedAt: now.AddDate(0, 0, -50),
+		UpdatedAt: now.AddDate(0, 0, -10),
+	}
+
+	// 3. Card captured 30 days ago, researched in this window (3 days ago)
+	st.cards[30] = port.Card{
+		ID:              30,
+		Title:           "Deep Research Concluded",
+		Status:          port.StatusToDo,
+		Horizon:         "medium-term",
+		ResearchVerdict: "pursue",
+		ResearchState:   "done",
+		CreatedAt:       now.AddDate(0, 0, -30),
+		UpdatedAt:       now.AddDate(0, 0, -3),
+	}
+
+	// 4. Stale short-term card: untouched for 20 days
+	st.cards[40] = port.Card{
+		ID:        40,
+		Title:     "Bottleneck Item",
+		Status:    port.StatusInbox,
+		Horizon:   "short-term",
+		CreatedAt: now.AddDate(0, 0, -25),
+		UpdatedAt: now.AddDate(0, 0, -20),
+	}
+
+	// 5. Store cached synthesis under digest_synthesis_7
+	cachedJSON := `{"briefing":"High velocity execution period","themes":[{"title":"Core Engines","summary":"3 sparks","card_ids":[10,30]}]}`
+	if err := st.SetSetting(ctx, "digest_synthesis_7", cachedJSON); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	h := webHandler(st, &core.Service{Logf: t.Logf})
+
+	rr := doJSON(t, h, http.MethodGet, "/api/v1/digest?days=7", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+
+	var body struct {
+		OK                    bool           `json:"ok"`
+		WeekTotal             int            `json:"week_total"`
+		PrevTotal             int            `json:"prev_total"`
+		WeeklyWins            []port.Card    `json:"weekly_wins"`
+		PrevWins              int            `json:"prev_wins"`
+		CompletedActionsCount int            `json:"completed_actions_count"`
+		ResearchHarvest       []port.Card    `json:"research_harvest"`
+		StaleCount            int            `json:"stale_count"`
+		StaleCards            []port.Card    `json:"stale_cards"`
+		Synthesis             map[string]any `json:"synthesis"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+
+	if !body.OK {
+		t.Fatalf("expected ok = true")
+	}
+
+	// Wins must include card 10 even though CreatedAt was 40 days ago
+	if len(body.WeeklyWins) != 1 || body.WeeklyWins[0].ID != 10 {
+		t.Errorf("WeeklyWins = %+v, want [card 10]", body.WeeklyWins)
+	}
+
+	// PrevWins must count card 20
+	if body.PrevWins != 1 {
+		t.Errorf("PrevWins = %d, want 1", body.PrevWins)
+	}
+
+	// CompletedActionsCount must sum card 10's 2 actions
+	if body.CompletedActionsCount != 2 {
+		t.Errorf("CompletedActionsCount = %d, want 2", body.CompletedActionsCount)
+	}
+
+	// ResearchHarvest must include card 30
+	if len(body.ResearchHarvest) != 1 || body.ResearchHarvest[0].ID != 30 {
+		t.Errorf("ResearchHarvest = %+v, want [card 30]", body.ResearchHarvest)
+	}
+
+	// Stale items: card 40
+	if body.StaleCount != 1 || len(body.StaleCards) != 1 || body.StaleCards[0].ID != 40 {
+		t.Errorf("StaleCount = %d, StaleCards = %+v, want [card 40]", body.StaleCount, body.StaleCards)
+	}
+
+	// Cached synthesis returned
+	if body.Synthesis == nil || body.Synthesis["briefing"] != "High velocity execution period" {
+		t.Errorf("Synthesis = %+v, want cached briefing", body.Synthesis)
 	}
 }
 
