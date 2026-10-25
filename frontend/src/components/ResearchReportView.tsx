@@ -25,6 +25,7 @@ import { fetchCardResearchRuns, triggerResearch, fetchPlaybooks, submitResearchF
 import { useLocale } from '../i18n';
 import { enumLabel } from '../utils/cardEnumLabels';
 import { ResearchProgressStrip } from './ResearchProgressStrip';
+import { getPlaybookDisplayName, getPlaybookDisplayDesc } from './playbooks';
 
 interface ResearchReportViewProps {
   card: Card;
@@ -457,10 +458,10 @@ export const ResearchReportView: React.FC<ResearchReportViewProps> = ({
                       onClick={() => handleReRun(pb.id)}
                     >
                       <div className="pb-picker-item-main">
-                        <span className="pb-picker-name">{pb.name}</span>
+                        <span className="pb-picker-name">{getPlaybookDisplayName(pb, t)}</span>
                       </div>
                       <span className="pb-picker-desc">
-                        {pb.description || tp('research.report.steps', pb.steps?.length || 0)}
+                        {getPlaybookDisplayDesc(pb, t) || tp('research.report.steps', pb.steps?.length || 0)}
                       </span>
                     </button>
                   ))}

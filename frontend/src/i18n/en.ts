@@ -153,23 +153,61 @@ export const en = {
           label: 'Founder & Operator',
           badge: '🚀 Founder / Operator',
           description: 'Scaling products, go-to-market traction, hiring, and capital allocation',
+          goals:
+            'Early-stage founder scaling a high-growth company. Focused on product-market fit, enterprise go-to-market, customer acquisition, hiring leaders, and seed/Series A fundraising.',
+          skills:
+            'B2B Sales, Product Strategy, Financial Modeling, Executive Hiring, Unit Economics, GTM',
+          stack: 'HubSpot, Stripe, Notion, Linear, QuickBooks, Carta, Google Workspace',
+          interests:
+            'Enterprise PLG, Pricing Models, Venture Capital, Customer Retention, Operational Leverage',
+          constraints:
+            'High ROI initiatives only; lean team budget; prioritize rapid execution and tangible customer outcomes over perfection.',
         },
         finance: {
           label: 'Finance & Investing',
           badge: '📈 Finance & Markets',
           description: 'Macro analysis, valuation, risk hedging, fintech, and asset allocation',
+          goals:
+            'Independent investor and financial analyst tracking global macroeconomic shifts, market liquidity, fintech disruptors, and asymmetrical investment opportunities.',
+          skills:
+            'Fundamental Analysis, DCF Valuation, Macroeconomics, Portfolio Risk Management, Financial Statement Auditing',
+          stack:
+            'Bloomberg Terminal, Koyfin, TradingView, SEC EDGAR, Excel / Google Sheets, Substack',
+          interests:
+            'Macro Liquidity, Energy Transition, Crypto Infrastructure, Earnings Trends, High-Yield Debt, FinTech',
+          constraints:
+            'Rely on primary filings (10-K, 10-Q) and verified data; ignore unvetted social media speculation; flag balance sheet vulnerabilities.',
         },
         agriculture: {
           label: 'Agriculture & AgTech',
           badge: '🌾 AgTech & Bioeconomy',
           description:
             'Precision agriculture, soil microbiome, sustainable yields, and commodity logistics',
+          goals:
+            'AgTech innovator and agribusiness operator focused on sustainable food systems, farm robotics, soil regeneration, and resilient supply chains.',
+          skills:
+            'Agronomy, Precision Agriculture, Soil Science, Supply Chain Logistics, Farm Management, GIS Analysis',
+          stack:
+            'John Deere Operations Center, Climate FieldView, DroneDeploy, FarmOS, QGIS, Weather APIs',
+          interests:
+            'Regenerative Agriculture, Crop Yield Optimization, Autonomous Farm Machinery, Soil Microbiome, Grain Commodities',
+          constraints:
+            'Must support offline / low-connectivity field environments; ruggedized hardware; realistic CAPEX for commercial acreage.',
         },
         systems: {
           label: 'Systems & AI Engineer',
           badge: '⚡ Systems & AI',
           description:
             'Local AI pipelines, distributed backend services, homelabs, and privacy-first tooling',
+          goals:
+            'Software engineer and homelab enthusiast architecting local AI agent workflows, resilient microservices, and self-hosted privacy infrastructure.',
+          skills:
+            'TypeScript, Python, Go, Distributed Systems, Containerization, Local LLM Inference, Security Hardening',
+          stack: 'Linux, Docker, Kubernetes, PostgreSQL, Ollama, Obsidian, Neovim, WireGuard',
+          interests:
+            'Local AI Agents, High-Performance Computing, Edge Inference, Microservices, PKM, Open-Source Tools',
+          constraints:
+            'Open-source and self-hosted solutions prioritized; constrained hardware (32GB RAM homelab limit); zero telemetry or vendor lock-in.',
         },
       },
       budget: {
@@ -1990,6 +2028,62 @@ export const en = {
   },
   playbooks: {
     title: 'Playbooks',
+    builtins: {
+      1: {
+        name: 'Default Research Pipeline',
+        desc: 'Standard deep research pipeline (grounding, plan, search, read, claims, landscape, verdict)',
+      },
+      2: {
+        name: 'Claim check only',
+        desc: 'Fast claim verification pipeline without landscape or synthesis verdict',
+      },
+      3: {
+        name: 'Tech Stack Evaluator',
+        desc: 'Evaluates architecture, repo health, license, and alternatives',
+      },
+      4: {
+        name: 'Competitor Comparison',
+        desc: 'Builds a feature matrix, pricing comparison, and pros/cons',
+      },
+      5: {
+        name: 'Fact & Claim Checker',
+        desc: 'Verifies specific claims against authoritative sources',
+      },
+      6: {
+        name: 'Quick Executive Briefing',
+        desc: 'Fast 2-minute synthesis (TL;DR, target audience, key takeaways)',
+      },
+    },
+    steps: {
+      grounding: 'Grounding',
+      resolveReferences: 'Resolve References',
+      questionPlanning: 'Question Planning',
+      multiQuerySearch: 'Multi-query Search',
+      roundRobinReading: 'Round-robin Reading',
+      claimVerification: 'Claim Verification',
+      competitiveLandscape: 'Competitive Landscape',
+      synthesisVerdict: 'Synthesis & Verdict',
+      reportGeneration: 'Report Generation',
+      archPlanning: 'Architecture & Repo Health Planning',
+      techSearch: 'Technical & Ecosystem Search',
+      docReading: 'Documentation & Source Reading',
+      ecosystemMatrix: 'Ecosystem & Alternatives Matrix',
+      archVerdict: 'Architecture Assessment & Verdict',
+      marketPlanning: 'Market & Feature Planning',
+      competitorSearch: 'Competitor Intelligence Search',
+      productReview: 'Product & Review Deep Dive',
+      competitiveMatrix: 'Competitive Feature & Pricing Matrix',
+      competitiveVerdict: 'Competitive Advantage Verdict',
+      claimPlan: 'Claim Extraction & Verification Plan',
+      authSearch: 'Authoritative Source Search',
+      primaryEvidence: 'Primary Evidence Reading',
+      claimRating: 'Claim Verification & Evidence Rating',
+      accuracyVerdict: 'Factual Accuracy Verdict',
+      execPlan: 'Executive Focus Plan',
+      rapidSearch: 'Rapid Context Search',
+      highSignalReading: 'High-Signal Synthesis Reading',
+      execVerdict: 'Executive Synthesis & Action Points',
+    },
     manager: {
       title: 'Research Playbooks',
       subtitle:

@@ -72,11 +72,11 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
     parseTags(interests).join('').length;
 
   const handleApplyArchetype = (archetype: ProfileArchetype) => {
-    setGoals(archetype.goals);
-    setSkills(archetype.skills);
-    setStack(archetype.stack);
-    setInterests(archetype.interests);
-    setConstraints(archetype.constraints);
+    setGoals(archetype.goalsKey ? t(archetype.goalsKey) : archetype.goals);
+    setSkills(archetype.skillsKey ? t(archetype.skillsKey) : archetype.skills);
+    setStack(archetype.stackKey ? t(archetype.stackKey) : archetype.stack);
+    setInterests(archetype.interestsKey ? t(archetype.interestsKey) : archetype.interests);
+    setConstraints(archetype.constraintsKey ? t(archetype.constraintsKey) : archetype.constraints);
     onDirtyChange?.();
     showToast(t('settings.profile.toast.archetypeLoaded', { name: t(archetype.labelKey) }));
   };
@@ -149,6 +149,7 @@ export const UserProfileTab: React.FC<UserProfileTabProps> = ({
             {PROFILE_ARCHETYPES.map((arch) => (
               <button
                 key={arch.id}
+                data-testid={`archetype-${arch.id}`}
                 type="button"
                 className="archetype-preset-chip"
                 onClick={() => handleApplyArchetype(arch)}

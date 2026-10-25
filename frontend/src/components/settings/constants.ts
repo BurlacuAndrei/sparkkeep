@@ -138,6 +138,11 @@ export interface ProfileArchetype {
   labelKey: TranslationKey;
   badgeKey: TranslationKey;
   descriptionKey: TranslationKey;
+  goalsKey?: TranslationKey;
+  skillsKey?: TranslationKey;
+  stackKey?: TranslationKey;
+  interestsKey?: TranslationKey;
+  constraintsKey?: TranslationKey;
   goals: string;
   skills: string;
   stack: string;
@@ -146,13 +151,16 @@ export interface ProfileArchetype {
 }
 
 export const PROFILE_ARCHETYPES: ProfileArchetype[] = [
-  // shortcut: preset profile bodies below are English-only AI seed content;
-  // translate them once AI responses themselves are localized.
   {
     id: 'founder',
     labelKey: 'settings.profile.archetypes.founder.label',
     badgeKey: 'settings.profile.archetypes.founder.badge',
     descriptionKey: 'settings.profile.archetypes.founder.description',
+    goalsKey: 'settings.profile.archetypes.founder.goals',
+    skillsKey: 'settings.profile.archetypes.founder.skills',
+    stackKey: 'settings.profile.archetypes.founder.stack',
+    interestsKey: 'settings.profile.archetypes.founder.interests',
+    constraintsKey: 'settings.profile.archetypes.founder.constraints',
     goals: 'Early-stage founder scaling a high-growth company. Focused on product-market fit, enterprise go-to-market, customer acquisition, hiring leaders, and seed/Series A fundraising.',
     skills: 'B2B Sales, Product Strategy, Financial Modeling, Executive Hiring, Unit Economics, GTM',
     stack: 'HubSpot, Stripe, Notion, Linear, QuickBooks, Carta, Google Workspace',
@@ -164,6 +172,11 @@ export const PROFILE_ARCHETYPES: ProfileArchetype[] = [
     labelKey: 'settings.profile.archetypes.finance.label',
     badgeKey: 'settings.profile.archetypes.finance.badge',
     descriptionKey: 'settings.profile.archetypes.finance.description',
+    goalsKey: 'settings.profile.archetypes.finance.goals',
+    skillsKey: 'settings.profile.archetypes.finance.skills',
+    stackKey: 'settings.profile.archetypes.finance.stack',
+    interestsKey: 'settings.profile.archetypes.finance.interests',
+    constraintsKey: 'settings.profile.archetypes.finance.constraints',
     goals: 'Independent investor and financial analyst tracking global macroeconomic shifts, market liquidity, fintech disruptors, and asymmetrical investment opportunities.',
     skills: 'Fundamental Analysis, DCF Valuation, Macroeconomics, Portfolio Risk Management, Financial Statement Auditing',
     stack: 'Bloomberg Terminal, Koyfin, TradingView, SEC EDGAR, Excel / Google Sheets, Substack',
@@ -175,6 +188,11 @@ export const PROFILE_ARCHETYPES: ProfileArchetype[] = [
     labelKey: 'settings.profile.archetypes.agriculture.label',
     badgeKey: 'settings.profile.archetypes.agriculture.badge',
     descriptionKey: 'settings.profile.archetypes.agriculture.description',
+    goalsKey: 'settings.profile.archetypes.agriculture.goals',
+    skillsKey: 'settings.profile.archetypes.agriculture.skills',
+    stackKey: 'settings.profile.archetypes.agriculture.stack',
+    interestsKey: 'settings.profile.archetypes.agriculture.interests',
+    constraintsKey: 'settings.profile.archetypes.agriculture.constraints',
     goals: 'AgTech innovator and agribusiness operator focused on sustainable food systems, farm robotics, soil regeneration, and resilient supply chains.',
     skills: 'Agronomy, Precision Agriculture, Soil Science, Supply Chain Logistics, Farm Management, GIS Analysis',
     stack: 'John Deere Operations Center, Climate FieldView, DroneDeploy, FarmOS, QGIS, Weather APIs',
@@ -186,6 +204,11 @@ export const PROFILE_ARCHETYPES: ProfileArchetype[] = [
     labelKey: 'settings.profile.archetypes.systems.label',
     badgeKey: 'settings.profile.archetypes.systems.badge',
     descriptionKey: 'settings.profile.archetypes.systems.description',
+    goalsKey: 'settings.profile.archetypes.systems.goals',
+    skillsKey: 'settings.profile.archetypes.systems.skills',
+    stackKey: 'settings.profile.archetypes.systems.stack',
+    interestsKey: 'settings.profile.archetypes.systems.interests',
+    constraintsKey: 'settings.profile.archetypes.systems.constraints',
     goals: 'Software engineer and homelab enthusiast architecting local AI agent workflows, resilient microservices, and self-hosted privacy infrastructure.',
     skills: 'TypeScript, Python, Go, Distributed Systems, Containerization, Local LLM Inference, Security Hardening',
     stack: 'Linux, Docker, Kubernetes, PostgreSQL, Ollama, Obsidian, Neovim, WireGuard',

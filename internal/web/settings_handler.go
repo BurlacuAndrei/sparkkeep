@@ -294,7 +294,7 @@ func (a *api) setupDemo(w http.ResponseWriter, r *http.Request) {
 
 	// Seed showcase dataset
 	if a.svc != nil {
-		if err := a.svc.SeedDemoData(ctx); err != nil {
+		if err := a.svc.SeedDemoData(ctx, targetLocale); err != nil {
 			a.fail(w, err)
 			return
 		}

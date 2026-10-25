@@ -1007,7 +1007,7 @@ describe('PlaybookManager Playbook Templates & Prompt Freedom', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Default Research Pipeline')).toBeDefined();
+      expect(screen.getByText('Conductă de cercetare implicită')).toBeDefined();
     });
 
     expect(screen.getByText('Manuale de cercetare')).toBeDefined();

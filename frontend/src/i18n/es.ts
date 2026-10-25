@@ -162,24 +162,62 @@ export const es = {
           badge: '🚀 Fundador / Operador',
           description:
             'Escalar productos, tracción de mercado, contratación y asignación de capital',
+          goals:
+            'Fundador en etapa temprana que escala una empresa de alto crecimiento. Enfocado en product-market fit, go-to-market empresarial, adquisición de clientes, contratación y rondas semilla/Serie A.',
+          skills:
+            'Ventas B2B, Estrategia de producto, Modelado financiero, Contratación ejecutiva, Métricas unitarias, GTM',
+          stack: 'HubSpot, Stripe, Notion, Linear, QuickBooks, Carta, Google Workspace',
+          interests:
+            'Enterprise PLG, Modelos de precios, Capital de riesgo, Retención de clientes, Apalancamiento operativo',
+          constraints:
+            'Solo iniciativas de alto ROI; presupuesto de equipo ajustado; priorizar ejecución rápida y resultados tangibles sobre perfección.',
         },
         finance: {
           label: 'Finanzas e inversión',
           badge: '📈 Finanzas y mercados',
           description:
             'Análisis macro, valoración, cobertura de riesgo, fintech y asignación de activos',
+          goals:
+            'Inversor independiente y analista financiero que monitorea cambios macroeconómicos globales, liquidez del mercado, innovadores fintech y oportunidades de inversión asimétricas.',
+          skills:
+            'Análisis fundamental, Valoración DCF, Macroeconomía, Gestión de riesgos de cartera, Auditoría de estados financieros',
+          stack:
+            'Bloomberg Terminal, Koyfin, TradingView, SEC EDGAR, Excel / Google Sheets, Substack',
+          interests:
+            'Liquidez macro, Transición energética, Infraestructura cripto, Tendencias de resultados, Deuda de alto rendimiento, FinTech',
+          constraints:
+            'Confiar en presentaciones oficiales (10-K, 10-Q) y datos verificados; ignorar especulaciones en redes sociales; alertar vulnerabilidades de balance.',
         },
         agriculture: {
           label: 'Agricultura y AgTech',
           badge: '🌾 AgTech y bioeconomía',
           description:
             'Agricultura de precisión, microbioma del suelo, rendimientos sostenibles y logística de materias primas',
+          goals:
+            'Innovador de AgTech y operador agropecuario centrado en sistemas alimentarios sostenibles, robótica agrícola, regeneración del suelo y cadenas de suministro resilientes.',
+          skills:
+            'Agronomía, Agricultura de precisión, Ciencia del suelo, Logística de suministro, Gestión agrícola, Análisis GIS',
+          stack:
+            'John Deere Operations Center, Climate FieldView, DroneDeploy, FarmOS, QGIS, Weather APIs',
+          interests:
+            'Agricultura regenerativa, Optimización de rendimientos, Maquinaria agrícola autónoma, Microbioma del suelo, Materias primas de granos',
+          constraints:
+            'Debe admitir entornos de campo sin conexión / baja conectividad; hardware robusto; CAPEX realista para áreas comerciales.',
         },
         systems: {
           label: 'Ingeniero de sistemas e IA',
           badge: '⚡ Sistemas e IA',
           description:
             'Pipelines de IA locales, servicios backend distribuidos, homelabs y herramientas centradas en la privacidad',
+          goals:
+            'Ingeniero de software y entusiasta del homelab que diseña flujos de trabajo de agentes de IA locales, microservicios resilientes e infraestructura de privacidad autoalojada.',
+          skills:
+            'TypeScript, Python, Go, Sistemas distribuidos, Contenedores, Inferencia de LLM local, Fortalecimiento de seguridad',
+          stack: 'Linux, Docker, Kubernetes, PostgreSQL, Ollama, Obsidian, Neovim, WireGuard',
+          interests:
+            'Agentes de IA locales, Computación de alto rendimiento, Inferencia edge, Microservicios, PKM, Herramientas de código abierto',
+          constraints:
+            'Prioridad para soluciones autoalojadas y de código abierto; hardware limitado (máx 32GB RAM homelab); cero telemetría o dependencia de proveedor.',
         },
       },
       budget: {
@@ -2032,6 +2070,62 @@ export const es = {
   },
   playbooks: {
     title: 'Manuales',
+    builtins: {
+      1: {
+        name: 'Canal de investigación predeterminado',
+        desc: 'Canal estándar de investigación profunda (anclaje, planificación, búsqueda, lectura, afirmaciones, panorama, veredicto)',
+      },
+      2: {
+        name: 'Solo verificación de afirmaciones',
+        desc: 'Canal rápido de verificación de afirmaciones sin análisis de panorama ni veredicto de síntesis',
+      },
+      3: {
+        name: 'Evaluador de pila tecnológica',
+        desc: 'Evalúa la arquitectura, el estado del repositorio, la licencia y las alternativas',
+      },
+      4: {
+        name: 'Comparación de competidores',
+        desc: 'Construye una matriz de características, comparación de precios y pros y contras',
+      },
+      5: {
+        name: 'Verificador de hechos y afirmaciones',
+        desc: 'Verifica afirmaciones específicas frente a fuentes autorizadas',
+      },
+      6: {
+        name: 'Resumen ejecutivo rápido',
+        desc: 'Síntesis rápida de 2 minutos (resumen, público objetivo, puntos clave)',
+      },
+    },
+    steps: {
+      grounding: 'Anclaje de contexto',
+      resolveReferences: 'Resolver referencias',
+      questionPlanning: 'Planificación de preguntas',
+      multiQuerySearch: 'Búsqueda multiconsulta',
+      roundRobinReading: 'Lectura round-robin',
+      claimVerification: 'Verificación de afirmaciones',
+      competitiveLandscape: 'Panorama competitivo',
+      synthesisVerdict: 'Síntesis y veredicto',
+      reportGeneration: 'Generación de informe',
+      archPlanning: 'Planificación de arquitectura y salud del repositorio',
+      techSearch: 'Búsqueda técnica y del ecosistema',
+      docReading: 'Lectura de documentación y fuentes',
+      ecosystemMatrix: 'Matrice de ecosistema y alternativas',
+      archVerdict: 'Evaluación de arquitectura y veredicto',
+      marketPlanning: 'Planificación de mercado y funciones',
+      competitorSearch: 'Búsqueda de inteligencia competitiva',
+      productReview: 'Análisis profundo de producto y reseñas',
+      competitiveMatrix: 'Matriz competitiva de funciones y precios',
+      competitiveVerdict: 'Veredicto de ventaja competitiva',
+      claimPlan: 'Plan de extracción y verificación de afirmaciones',
+      authSearch: 'Búsqueda de fuentes autorizadas',
+      primaryEvidence: 'Lectura de evidencias primarias',
+      claimRating: 'Verificación de afirmaciones y calificación de evidencias',
+      accuracyVerdict: 'Veredicto de precisión fáctica',
+      execPlan: 'Plan de enfoque ejecutivo',
+      rapidSearch: 'Búsqueda rápida de contexto',
+      highSignalReading: 'Lectura de síntesis de alto valor',
+      execVerdict: 'Síntesis ejecutiva y puntos de acción',
+    },
     manager: {
       title: 'Manuales de investigación',
       subtitle:

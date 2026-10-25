@@ -12,6 +12,7 @@ import * as api from '../api';
 import { ResearchRule, QuietWindowConfig, Playbook } from '../types';
 import { useLocale } from '../i18n';
 import { CustomSelect } from './CustomSelect';
+import { getPlaybookDisplayName } from './playbooks';
 
 interface ResearchSchedulerProps {
   showToast: (msg: string) => void;
@@ -290,9 +291,11 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {rules.map((rule) => {
-              const pbName = rule.playbook_id
-                ? playbooks.find((p) => p.id === rule.playbook_id)?.name ||
-                  t('settings.schedule.rules.playbookFallback', { id: rule.playbook_id })
+              const targetPb = rule.playbook_id ? playbooks.find((p) => p.id === rule.playbook_id) : undefined;
+              const pbName = targetPb
+                ? getPlaybookDisplayName(targetPb, t)
+                : rule.playbook_id
+                ? t('settings.schedule.rules.playbookFallback', { id: rule.playbook_id })
                 : t('settings.schedule.rules.autoPlaybook');
 
               return (
@@ -531,7 +534,7 @@ export const ResearchScheduler: React.FC<ResearchSchedulerProps> = ({
                     { value: '', label: t('settings.schedule.modal.playbookAuto') },
                     ...playbooks.map((pb) => ({
                       value: String(pb.id),
-                      label: `${pb.name} ${pb.is_builtin ? t('settings.schedule.modal.builtIn') : ''}`,
+                      label: `${getPlaybookDisplayName(pb, t)} ${pb.is_builtin ? t('settings.schedule.modal.builtIn') : ''}`,
                     })),
                   ]}
                   ariaLabel={t('settings.schedule.modal.playbookAria')}

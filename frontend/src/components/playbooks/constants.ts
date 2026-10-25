@@ -742,3 +742,70 @@ export function buildUserStepTemplate(step: PlaybookStep): UserSavedStepTemplate
     max_queries: step.config?.max_queries ?? 2,
   };
 }
+
+export const STEP_TITLE_KEYS: Record<string, TranslationKey> = {
+  'Grounding': 'playbooks.steps.grounding',
+  'Resolve References': 'playbooks.steps.resolveReferences',
+  'Question Planning': 'playbooks.steps.questionPlanning',
+  'Multi-query Search': 'playbooks.steps.multiQuerySearch',
+  'Round-robin Reading': 'playbooks.steps.roundRobinReading',
+  'Claim Verification': 'playbooks.steps.claimVerification',
+  'Competitive Landscape': 'playbooks.steps.competitiveLandscape',
+  'Synthesis & Verdict': 'playbooks.steps.synthesisVerdict',
+  'Report Generation': 'playbooks.steps.reportGeneration',
+  'Architecture & Repo Health Planning': 'playbooks.steps.archPlanning',
+  'Technical & Ecosystem Search': 'playbooks.steps.techSearch',
+  'Documentation & Source Reading': 'playbooks.steps.docReading',
+  'Ecosystem & Alternatives Matrix': 'playbooks.steps.ecosystemMatrix',
+  'Architecture Assessment & Verdict': 'playbooks.steps.archVerdict',
+  'Market & Feature Planning': 'playbooks.steps.marketPlanning',
+  'Competitor Intelligence Search': 'playbooks.steps.competitorSearch',
+  'Product & Review Deep Dive': 'playbooks.steps.productReview',
+  'Competitive Feature & Pricing Matrix': 'playbooks.steps.competitiveMatrix',
+  'Competitive Advantage Verdict': 'playbooks.steps.competitiveVerdict',
+  'Claim Extraction & Verification Plan': 'playbooks.steps.claimPlan',
+  'Authoritative Source Search': 'playbooks.steps.authSearch',
+  'Primary Evidence Reading': 'playbooks.steps.primaryEvidence',
+  'Claim Verification & Evidence Rating': 'playbooks.steps.claimRating',
+  'Factual Accuracy Verdict': 'playbooks.steps.accuracyVerdict',
+  'Executive Focus Plan': 'playbooks.steps.execPlan',
+  'Rapid Context Search': 'playbooks.steps.rapidSearch',
+  'High-Signal Synthesis Reading': 'playbooks.steps.highSignalReading',
+  'Executive Synthesis & Action Points': 'playbooks.steps.execVerdict',
+};
+
+export function getPlaybookDisplayName(
+  pb: Playbook,
+  t: (key: TranslationKey, vars?: Record<string, string | number>) => string
+): string {
+  if (pb.is_builtin) {
+    const key = `playbooks.builtins.${pb.id}.name` as TranslationKey;
+    const localized = t(key);
+    if (localized && localized !== key) return localized;
+  }
+  return pb.name;
+}
+
+export function getPlaybookDisplayDesc(
+  pb: Playbook,
+  t: (key: TranslationKey, vars?: Record<string, string | number>) => string
+): string {
+  if (pb.is_builtin) {
+    const key = `playbooks.builtins.${pb.id}.desc` as TranslationKey;
+    const localized = t(key);
+    if (localized && localized !== key) return localized;
+  }
+  return pb.description;
+}
+
+export function getPlaybookStepDisplayName(
+  step: PlaybookStep,
+  _playbookId: number | undefined,
+  t: (key: TranslationKey, vars?: Record<string, string | number>) => string
+): string {
+  if (step.name && STEP_TITLE_KEYS[step.name]) {
+    const localized = t(STEP_TITLE_KEYS[step.name]);
+    if (localized && localized !== STEP_TITLE_KEYS[step.name]) return localized;
+  }
+  return step.name;
+}

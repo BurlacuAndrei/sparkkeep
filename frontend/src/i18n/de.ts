@@ -160,23 +160,61 @@ export const de = {
           badge: '🚀 Gründer / Operator',
           description:
             'Produkte skalieren, Go-to-Market-Traktion, Teamaufbau und Kapitalallokation',
+          goals:
+            'Gründer in der Frühphase beim Aufbau eines wachstumsstarken Unternehmens. Fokus auf Product-Market-Fit, Enterprise Go-to-Market, Kundenakquise, Führungskräfteeinstellung und Seed/Series-A-Finanzierung.',
+          skills:
+            'B2B-Vertrieb, Produktstrategie, Finanzmodellierung, Führungskräfte-Recruiting, Unit Economics, GTM',
+          stack: 'HubSpot, Stripe, Notion, Linear, QuickBooks, Carta, Google Workspace',
+          interests:
+            'Enterprise PLG, Preismodelle, Venture Capital, Kundenbindung, Operative Hebelwirkung',
+          constraints:
+            'Nur Initiativen mit hohem ROI; schlankes Teambudget; schnelle Umsetzung und spürbare Kundenergebnisse über Perfektion stellen.',
         },
         finance: {
           label: 'Finanzen & Investieren',
           badge: '📈 Finanzen & Märkte',
           description: 'Makroanalyse, Bewertung, Risikoabsicherung, Fintech und Vermögensallokation',
+          goals:
+            'Unabhängiger Investor und Finanzanalyst, der globale makroökonomische Verschiebungen, Marktliquidität, Fintech-Disruptoren und asymmetrische Anlagechancen verfolgt.',
+          skills:
+            'Fundamentalanalyse, DCF-Bewertung, Makroökonomie, Portfoliorisikomanagement, Jahresabschlussprüfung',
+          stack:
+            'Bloomberg Terminal, Koyfin, TradingView, SEC EDGAR, Excel / Google Sheets, Substack',
+          interests:
+            'Makroliquidität, Energiewende, Krypto-Infrastruktur, Gewinnentwicklung, Hochzinsanleihen, FinTech',
+          constraints:
+            'Auf Primärberichte (10-K, 10-Q) und verifizierte Daten stützen; ungeprüfte Spekulationen auf Social Media ignorieren; Bilanzrisiken aufzeigen.',
         },
         agriculture: {
           label: 'Landwirtschaft & AgTech',
           badge: '🌾 AgTech & Bioökonomie',
           description:
             'Präzisionslandwirtschaft, Bodenmikrobiom, nachhaltige Erträge und Rohstofflogistik',
+          goals:
+            'AgTech-Innovator und Agrarunternehmer mit Fokus auf nachhaltige Ernährungssysteme, Agrarrobotik, Bodenregeneration und widerstandsfähige Lieferketten.',
+          skills:
+            'Agronomie, Präzisionslandwirtschaft, Bodenkunde, Lieferkettenlogistik, Betriebsführung, GIS-Analyse',
+          stack:
+            'John Deere Operations Center, Climate FieldView, DroneDeploy, FarmOS, QGIS, Weather APIs',
+          interests:
+            'Regenerative Landwirtschaft, Ertragsoptimierung, Autonome Landmaschinen, Bodenmikrobiom, Agrarrohstoffe',
+          constraints:
+            'Muss in Offline-/netzarmen Feldumgebungen funktionieren; robuste Hardware; realistischer CAPEX für kommerzielle Flächen.',
         },
         systems: {
           label: 'Systeme & KI-Ingenieur',
           badge: '⚡ Systeme & KI',
           description:
             'Lokale KI-Pipelines, verteilte Backend-Dienste, Homelabs und datenschutzorientierte Werkzeuge',
+          goals:
+            'Software-Ingenieur und Homelab-Enthusiast, der lokale KI-Agenten-Workflows, robuste Microservices und selbstgehostete Datenschutz-Infrastruktur entwickelt.',
+          skills:
+            'TypeScript, Python, Go, Verteilte Systeme, Containerisierung, Lokale LLM-Inferenz, Sicherheits-Härtung',
+          stack: 'Linux, Docker, Kubernetes, PostgreSQL, Ollama, Obsidian, Neovim, WireGuard',
+          interests:
+            'Lokale KI-Agenten, High-Performance Computing, Edge-Inferenz, Microservices, PKM, Open-Source-Werkzeuge',
+          constraints:
+            'Open-Source- und selbstgehostete Lösungen bevorzugt; beschränkte Hardware (32 GB RAM Homelab-Limit); null Telemetrie oder Vendor-Lock-in.',
         },
       },
       budget: {
@@ -2021,6 +2059,62 @@ export const de = {
   },
   playbooks: {
     title: 'Playbooks',
+    builtins: {
+      1: {
+        name: 'Standard-Recherche-Pipeline',
+        desc: 'Standardmäßige Tiefenrecherche-Pipeline (Verankerung, Plan, Suche, Lesen, Behauptungen, Landschaft, Urteil)',
+      },
+      2: {
+        name: 'Nur Überprüfung von Behauptungen',
+        desc: 'Schnelle Pipeline zur Überprüfung von Behauptungen ohne Wettbewerbsanalyse oder Syntheseurteil',
+      },
+      3: {
+        name: 'Tech-Stack-Evaluator',
+        desc: 'Bewertet Architektur, Repository-Zustand, Lizenz und Alternativen',
+      },
+      4: {
+        name: 'Wettbewerber-Vergleich',
+        desc: 'Erstellt eine Funktionsmatrix, einen Preisvergleich und Vor-/Nachteile',
+      },
+      5: {
+        name: 'Fakten- und Behauptungsprüfer',
+        desc: 'Überprüft spezifische Behauptungen anhand verlässlicher Quellen',
+      },
+      6: {
+        name: 'Schnelles Executive Briefing',
+        desc: 'Schnelle 2-Minuten-Synthese (TL;DR, Zielgruppe, Kernpunkte)',
+      },
+    },
+    steps: {
+      grounding: 'Kontext-Verankerung',
+      resolveReferences: 'Referenzen auflösen',
+      questionPlanning: 'Fragenplanung',
+      multiQuerySearch: 'Multi-Query-Suche',
+      roundRobinReading: 'Round-Robin-Lesen',
+      claimVerification: 'Behauptungsüberprüfung',
+      competitiveLandscape: 'Wettbewerbslandschaft',
+      synthesisVerdict: 'Synthese & Urteil',
+      reportGeneration: 'Berichterstellung',
+      archPlanning: 'Planung von Architektur & Repository-Zustand',
+      techSearch: 'Technik- & Ökosystemsuche',
+      docReading: 'Dokumentations- & Quellenlektüre',
+      ecosystemMatrix: 'Ökosystem- & Alternativenmatrix',
+      archVerdict: 'Architekturbewertung & Urteil',
+      marketPlanning: 'Markt- & Feature-Planung',
+      competitorSearch: 'Wettbewerbsanalyse-Suche',
+      productReview: 'Deep-Dive zu Produkt & Bewertungen',
+      competitiveMatrix: 'Matrix für Wettbewerbsfunktionen & Preise',
+      competitiveVerdict: 'Wettbewerbsvorteil-Urteil',
+      claimPlan: 'Plan zur Behauptungsextraktion & -prüfung',
+      authSearch: 'Suche nach verlässlichen Quellen',
+      primaryEvidence: 'Lektüre primärer Nachweise',
+      claimRating: 'Behauptungsprüfung & Evidenzbewertung',
+      accuracyVerdict: 'Urteil zur faktischen Genauigkeit',
+      execPlan: 'Plan für leitende Zusammenfassung',
+      rapidSearch: 'Schnelle Kontextsuche',
+      highSignalReading: 'High-Signal-Synthese-Lektüre',
+      execVerdict: 'Executive-Synthese & Handlungspunkte',
+    },
     manager: {
       title: 'Recherche-Playbooks',
       subtitle:

@@ -16,6 +16,9 @@ import {
   TemplateDomain,
   TEMPLATE_DOMAINS,
   UserSavedStepTemplate,
+  getPlaybookDisplayName,
+  getPlaybookDisplayDesc,
+  getPlaybookStepDisplayName,
 } from './constants';
 
 export interface StepEditorModalProps {
@@ -679,7 +682,7 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                       <div className="pb-lib-top">
                         <span className="pb-lib-icon">🏛️</span>
                         <div className="pb-lib-title-box">
-                          <h5 className="pb-lib-name">{pb.name}</h5>
+                          <h5 className="pb-lib-name">{getPlaybookDisplayName(pb, t)}</h5>
                           <span className="pb-lib-policy">
                             {tp('playbooks.gallery.steps', pb.steps?.length || 0)}
                           </span>
@@ -687,14 +690,14 @@ export const PlaybookTemplateGalleryModal: React.FC<PlaybookTemplateGalleryModal
                       </div>
                     </div>
                     <p className="pb-lib-desc">
-                      {pb.description || t('playbooks.gallery.builtinDesc')}
+                      {getPlaybookDisplayDesc(pb, t) || t('playbooks.gallery.builtinDesc')}
                     </p>
                     <div className="pb-template-flow-strip">
                       <span className="pb-flow-label">{t('playbooks.gallery.pipeline')}</span>
                       <div className="pb-flow-badges">
                         {pb.steps?.map((s, idx) => (
                           <React.Fragment key={idx}>
-                            <span className="pb-flow-step-badge">{s.name}</span>
+                            <span className="pb-flow-step-badge">{getPlaybookStepDisplayName(s, pb.id, t)}</span>
                             {idx < (pb.steps?.length || 0) - 1 && (
                               <span className="pb-flow-arrow">→</span>
                             )}

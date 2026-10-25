@@ -157,23 +157,61 @@ export const ro = {
           label: 'Fondator și operator',
           badge: '🚀 Fondator / Operator',
           description: 'Produse în scalare, tracțiune pe piață, angajări și alocare de capital',
+          goals:
+            'Fondator la început de drum care dezvoltă o companie cu creștere rapidă. Axat pe product-market fit, expansiune enterprise go-to-market, achiziție de clienți, recrutare de lideri și finanțare seed/Series A.',
+          skills:
+            'Vânzări B2B, Strategie de produs, Modelare financiară, Recrutare executivă, Economia unității, GTM',
+          stack: 'HubSpot, Stripe, Notion, Linear, QuickBooks, Carta, Google Workspace',
+          interests:
+            'Enterprise PLG, Modele de preț, Capital de risc, Retenție clienți, Pârghie operațională',
+          constraints:
+            'Doar inițiative cu rentabilitate mare a investiției; buget restrâns; prioritizarea execuției rapide și a rezultatelor concrete pentru clienți.',
         },
         finance: {
           label: 'Finanțe și investiții',
           badge: '📈 Finanțe și piețe',
           description: 'Analiză macro, evaluare, acoperire de risc, fintech și alocare de active',
+          goals:
+            'Investitor independent și analist financiar care urmărește schimbările macroeconomice globale, lichiditatea pieței, inovatorii fintech și oportunitățile asimetrice.',
+          skills:
+            'Analiză fundamentală, Evaluare DCF, Macroeconomie, Managementul riscului de portofoliu, Auditul situațiilor financiare',
+          stack:
+            'Bloomberg Terminal, Koyfin, TradingView, SEC EDGAR, Excel / Google Sheets, Substack',
+          interests:
+            'Lichiditate macro, Tranziție energetică, Infrastructură cripto, Tendințe de profit, Datorii cu randament ridicat, FinTech',
+          constraints:
+            'Bazare pe rapoarte oficiale (10-K, 10-Q) și date verificate; ignorare speculații Neverificate pe rețele sociale; semnalare vulnerabilități bilanțiere.',
         },
         agriculture: {
           label: 'Agricultură și AgTech',
           badge: '🌾 AgTech și bioeconomie',
           description:
             'Agricultură de precizie, microbiomul solului, randamente sustenabile și logistică de mărfuri',
+          goals:
+            'Inovator AgTech și operator agribusiness axat pe sisteme alimentare sustenabile, robotică agricolă, regenerarea solului și lanțuri de aprovizionare reziliente.',
+          skills:
+            'Agronomie, Agricultură de precizie, Știința solului, Logistică aprovizionare, Managementul fermei, Analiză GIS',
+          stack:
+            'John Deere Operations Center, Climate FieldView, DroneDeploy, FarmOS, QGIS, Weather APIs',
+          interests:
+            'Agricultură regenerativă, Optimizarea randamentului culturilor, Utilaje agricole autonome, Microbiomul solului, Mărfuri cerealiere',
+          constraints:
+            'Trebuie să funcționeze offline / cu conectivitate redusă în teren; echipamente rezistente; CAPEX realist pentru suprafețe comerciale.',
         },
         systems: {
           label: 'Inginer de sisteme și AI',
           badge: '⚡ Sisteme și AI',
           description:
             'Fluxuri AI locale, servicii backend distribuite, homelab și instrumente cu prioritate pe confidențialitate',
+          goals:
+            'Inginer software și entuziast homelab care construiește fluxuri de agenți AI locali, microservicii reziliente și infrastructură privată găzduită pe cont propriu.',
+          skills:
+            'TypeScript, Python, Go, Sisteme distribuite, Containerizare, Inferență LLM locală, Consolidarea securității',
+          stack: 'Linux, Docker, Kubernetes, PostgreSQL, Ollama, Obsidian, Neovim, WireGuard',
+          interests:
+            'Agenți AI locali, Calcul de înaltă performanță, Inferență edge, Microservicii, PKM, Instrumente open-source',
+          constraints:
+            'Prioritizare soluții open-source și auto-găzduite; hardware constrâns (limită 32GB RAM homelab); zero telemetrie sau blocare de furnizor.',
         },
       },
       budget: {
@@ -2007,6 +2045,62 @@ export const ro = {
   },
   playbooks: {
     title: 'Manuale',
+    builtins: {
+      1: {
+        name: 'Conductă de cercetare implicită',
+        desc: 'Conductă standard de cercetare profundă (înrădăcinare, planificare, căutare, citire, afirmații, peisaj, decizie)',
+      },
+      2: {
+        name: 'Doar verificare afirmații',
+        desc: 'Conductă rapidă de verificare a afirmațiilor fără sinteză sau peisaj competitiv',
+      },
+      3: {
+        name: 'Evaluator de stivă tehnologică',
+        desc: 'Evaluează arhitectura, sănătatea depozitului, licența și alternativele',
+      },
+      4: {
+        name: 'Comparație între competitori',
+        desc: 'Construiește o matrice de funcționalități, comparare de prețuri și argumente pro/contra',
+      },
+      5: {
+        name: 'Verificator de fapte și afirmații',
+        desc: 'Verifică afirmațiile specifice împotriva surselor autoritare',
+      },
+      6: {
+        name: 'Sinteză executivă rapidă',
+        desc: 'Sinteză rapidă de 2 minute (TL;DR, public țintă, concluzii cheie)',
+      },
+    },
+    steps: {
+      grounding: 'Înrădăcinare context',
+      resolveReferences: 'Rezolvare referințe',
+      questionPlanning: 'Planificare întrebări',
+      multiQuerySearch: 'Căutare multi-interogare',
+      roundRobinReading: 'Citire round-robin',
+      claimVerification: 'Verificare afirmații',
+      competitiveLandscape: 'Peisaj competitiv',
+      synthesisVerdict: 'Sinteză și decizie',
+      reportGeneration: 'Generare raport',
+      archPlanning: 'Planificare arhitectură și sănătate depozit',
+      techSearch: 'Căutare tehnică și ecosistem',
+      docReading: 'Citire documentație și surse',
+      ecosystemMatrix: 'Matrice ecosistem și alternative',
+      archVerdict: 'Evaluare arhitectură și decizie',
+      marketPlanning: 'Planificare piață și funcționalități',
+      competitorSearch: 'Căutare inteligență concurențială',
+      productReview: 'Analiză aprofundată produs și recenzii',
+      competitiveMatrix: 'Matrice competitivă de funcționalități și prețuri',
+      competitiveVerdict: 'Decizie avantaj competitiv',
+      claimPlan: 'Plan extragere și verificare afirmații',
+      authSearch: 'Căutare surse autoritare',
+      primaryEvidence: 'Citire dovezi primare',
+      claimRating: 'Verificare afirmații și evaluare dovezi',
+      accuracyVerdict: 'Decizie acuratețe factuală',
+      execPlan: 'Plan de focalizare executivă',
+      rapidSearch: 'Căutare rapidă de context',
+      highSignalReading: 'Citire sinteză cu semnal înalt',
+      execVerdict: 'Sinteză executivă și puncte de acțiune',
+    },
     manager: {
       title: 'Manuale de cercetare',
       subtitle:

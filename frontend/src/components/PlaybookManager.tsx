@@ -13,6 +13,7 @@ import {
   UserSavedStepTemplate, validatePlaybook, exportPlaybookToFile,
   parseImportedPlaybook, buildUserStepTemplate, PlaybookCanvas,
   AddStepModal, PlaybookTemplateGalleryModal, ImportPlaybookModal,
+  getPlaybookDisplayName, getPlaybookDisplayDesc, getPlaybookStepDisplayName,
 } from './playbooks';
 
 // oxlint-disable-next-line react/only-export-components
@@ -98,7 +99,25 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
 
   const handleDuplicate = async (id: number) => {
     try {
-      const dup = await api.duplicatePlaybook(id);
+      const target = playbooks.find((p) => p.id === id);
+      let dup: Playbook;
+      if (target?.is_builtin) {
+        const locName = getPlaybookDisplayName(target, t);
+        const locDesc = getPlaybookDisplayDesc(target, t);
+        dup = await api.createPlaybook({
+          name: t('playbooks.manager.cloneName', { name: locName }),
+          description: locDesc,
+          is_builtin: false,
+          card_types: [...(target.card_types || [])],
+          version: 1,
+          steps: (target.steps || []).map((s) => ({
+            ...JSON.parse(JSON.stringify(s)),
+            name: getPlaybookStepDisplayName(s, target.id, t),
+          })),
+        });
+      } else {
+        dup = await api.duplicatePlaybook(id);
+      }
       showToast(t('playbooks.manager.toasts.duplicated', { name: dup.name }));
       await loadData();
       setEditingPlaybook(dup);
@@ -156,15 +175,24 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
   };
 
   const handleCloneBuiltin = (pb: Playbook) => {
+    const locName = getPlaybookDisplayName(pb, t);
+    const locDesc = getPlaybookDisplayDesc(pb, t);
     setEditingPlaybook((prev) => ({
-      id: prev?.id || 0, name: t('playbooks.manager.cloneName', { name: pb.name }), description: pb.description,
-      is_builtin: false, card_types: [...(pb.card_types || [])], version: prev?.version || 1,
-      steps: JSON.parse(JSON.stringify(pb.steps || [])),
+      id: prev?.id || 0,
+      name: t('playbooks.manager.cloneName', { name: locName }),
+      description: locDesc,
+      is_builtin: false,
+      card_types: [...(pb.card_types || [])],
+      version: prev?.version || 1,
+      steps: (pb.steps || []).map((s) => ({
+        ...JSON.parse(JSON.stringify(s)),
+        name: getPlaybookStepDisplayName(s, pb.id, t),
+      })),
     }));
     setIsTemplateGalleryOpen(false);
     setServerError(null);
     setExpandedSteps({});
-    showToast(t('playbooks.manager.toasts.cloneLoaded', { name: pb.name }));
+    showToast(t('playbooks.manager.toasts.cloneLoaded', { name: locName }));
   };
 
   const validationErrors = useMemo(() => validatePlaybook(editingPlaybook), [editingPlaybook]);
@@ -409,7 +437,7 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                     onChange={(val) => handleDefaultPlaybookChange(parseInt(val, 10))}
                     options={playbooks.map((p) => ({
                       value: String(p.id),
-                      label: `${p.name} ${
+                      label: `${getPlaybookDisplayName(p, t)} ${
                         p.is_builtin
                           ? t('playbooks.manager.builtInSuffix')
                           : t('playbooks.manager.customSuffix')
@@ -443,29 +471,29 @@ export const PlaybookManager: React.FC<PlaybookManagerProps> = ({ showToast, car
                         </div>
                         <span className="pb-card-steps">{tp('playbooks.manager.steps', p.steps?.length || 0)}</span>
                       </div>
-                      <h4 className="pb-card-name">{p.name}</h4>
-                      <p className="pb-card-desc">{p.description || t('playbooks.manager.builtInDesc')}</p>
+                      <h4 className="pb-card-name">{getPlaybookDisplayName(p, t)}</h4>
+                      <p className="pb-card-desc">{getPlaybookDisplayDesc(p, t) || t('playbooks.manager.builtInDesc')}</p>
 
                       {/* Mini-Pipeline Flow Strip */}
                       {p.steps && p.steps.length > 0 && (
                         <div className="pb-card-flow-strip">
-                          {p.steps.slice(0, 4).map((s, idx) => (
-                            <React.Fragment key={idx}>
-                              <span
-                                className="pb-card-flow-badge"
-                                title={
-                                  s.name ||
-                                  s.config?.output_heading ||
-                                  t('playbooks.manager.stepFallback', { index: idx + 1 })
-                                }
-                              >
-                                {s.name ||
-                                  s.config?.output_heading ||
-                                  t('playbooks.manager.stepFallback', { index: idx + 1 })}
-                              </span>
-                              {idx < Math.min(p.steps.length, 4) - 1 && <span className="pb-card-flow-arrow">→</span>}
-                            </React.Fragment>
-                          ))}
+                          {p.steps.slice(0, 4).map((s, idx) => {
+                            const stepTitle =
+                              getPlaybookStepDisplayName(s, p.id, t) ||
+                              s.config?.output_heading ||
+                              t('playbooks.manager.stepFallback', { index: idx + 1 });
+                            return (
+                              <React.Fragment key={idx}>
+                                <span
+                                  className="pb-card-flow-badge"
+                                  title={stepTitle}
+                                >
+                                  {stepTitle}
+                                </span>
+                                {idx < Math.min(p.steps.length, 4) - 1 && <span className="pb-card-flow-arrow">→</span>}
+                              </React.Fragment>
+                            );
+                          })}
                           {p.steps.length > 4 && (
                             <span className="pb-card-flow-more">
                               {tp('playbooks.manager.more', p.steps.length - 4)}
