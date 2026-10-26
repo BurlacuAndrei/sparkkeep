@@ -11,7 +11,7 @@
 ## 2. API & Model Discipline
 - **Shared Normalizers:** Parsing, canonicalization, URL cleaning, and entity validation must live in dedicated domain functions (Go: `analyze` / `port`; Frontend: `frontend/src/utils/cardUtils.tsx`), never written inline or copy-pasted across components or handlers.
 - **Provenance Encapsulation:** Multi-channel provenance tracking must use the standard `port.Provenance` construct (`Channel`, `ChatID`, `MsgID`).
-- **Zero Paywalls & Open Source Integrity:** Sparkkeep is 100% open-source under MIT. No gating, license tiers, or paywall metadata structures.
+- **Zero Paywalls & Open Source Integrity:** Sparkkeep is 100% open-source under AGPL-3.0. No gating, license tiers, or paywall metadata structures.
 
 ## 3. Frontend Quality & React Lifecycle
 - **Zero Console Warnings in Vitest:** All tests must run cleanly with zero un-wrapped `act(...)` or React state leak warnings. Asynchronous state changes must be awaited with `waitFor` or `await userEvent`.

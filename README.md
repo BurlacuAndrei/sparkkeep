@@ -19,7 +19,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0" /></a>
   <br />
   <!-- Community & Support -->
-  <a href="https://github.com/BurlacuAndrei/sparkkeep/discussions"><img src="https://img.shields.io/badge/Community-Discussions-blueviolet?logo=github" alt="Discussions" /></a>
+  <a href="https://github.com/BurlacuAndrei/sparkkeep/issues"><img src="https://img.shields.io/badge/Community-Issues-blueviolet?logo=github" alt="Issues" /></a>
   <a href="https://ko-fi.com/andreiburlacu"><img src="https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-ff5e5b?logo=ko-fi&logoColor=white" alt="Ko-fi" /></a>
   <a href="https://github.com/sponsors/BurlacuAndrei"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=github-sponsors&logoColor=white" alt="GitHub Sponsor" /></a>
 </p>
@@ -538,6 +538,6 @@ We welcome community contributions, bug reports, and suggestions!
 
 ## 📄 License & Transparency
 
-Sparkkeep is open-source software licensed under the [AGPL-3.0 License](LICENSE). It is free to self-host and free to use in open-source projects.
+Sparkkeep is open-source software licensed under the [AGPL-3.0 License](LICENSE). It is free to self-host and use internally; a commercial license is available where AGPL obligations cannot be met.
 
-All features are included: capture, multi-channel messaging, triage, LLM analysis, the Execution Board, intelligence digests, research playbooks, one-way Knowledge Sink exports (Obsidian, Notion, Joplin), and webhooks are 100% free and open-source. There are no paid tiers, no license keys, and no gated capabilities. A commercial license is available for closed-source or SaaS distribution; contact the maintainer for terms. For our architectural review, please refer to our internal [System Architecture](docs/design.md).
+All features are included: capture, multi-channel messaging, triage, LLM analysis, the Execution Board, intelligence digests, research playbooks, one-way Knowledge Sink exports (Obsidian, Notion, Joplin), and webhooks are 100% free and open-source. There are no paid feature tiers, no license keys, and no gated capabilities. A commercial license is available for closed-source or SaaS distribution; [open an issue](https://github.com/BurlacuAndrei/sparkkeep/issues) for terms. For our architectural review, please refer to our internal [System Architecture](docs/design.md).

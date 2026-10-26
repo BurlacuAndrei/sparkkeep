@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-Users collect, triage, and deeply research knowledge items in Sparkkeep, but want to store and synthesize their long-term notes in their existing Personal Knowledge Management (PKM) ecosystems—specifically Obsidian, Notion, and self-hosted Joplin. Previously, Sparkkeep advertised integrations for Obsidian and Notion under an older paid tier that has since been eliminated in favor of a 100% open-source MIT model. Currently, only a basic directory export to a local Obsidian vault exists, and it drops completed Research Dossiers, requires a local filesystem mount, and lacks single-card actions or automated triggers. Furthermore, users cannot easily bridge cards into lightweight desktop tools (Logseq, Things 3, Todoist, GitHub) or consume their curated cards and dossiers via RSS in external readers and automation pipelines.
+Users collect, triage, and deeply research knowledge items in Sparkkeep, but want to store and synthesize their long-term notes in their existing Personal Knowledge Management (PKM) ecosystems—specifically Obsidian, Notion, and self-hosted Joplin. Previously, Sparkkeep advertised integrations for Obsidian and Notion under an older paid tier that has since been eliminated in favor of a 100% open-source AGPL-3.0 model. Currently, only a basic directory export to a local Obsidian vault exists, and it drops completed Research Dossiers, requires a local filesystem mount, and lacks single-card actions or automated triggers. Furthermore, users cannot easily bridge cards into lightweight desktop tools (Logseq, Things 3, Todoist, GitHub) or consume their curated cards and dossiers via RSS in external readers and automation pipelines.
 
 ## Solution
 
@@ -12,7 +12,7 @@ Whenever a card is manually exported, promoted during triage (`doing` or `done`)
 
 ## User Stories
 
-1. As a user, I want all PKM and automation integrations to be 100% free and open-source under MIT, so that no features are gated behind paywalls or license keys.
+1. As a user, I want all PKM and automation integrations to be 100% free and open-source under AGPL-3.0, so that no features are gated behind paywalls or license keys.
 2. As an Obsidian user, I want Sparkkeep to export cards to my vault directory with full YAML frontmatter, executive summary, actions, and the complete Research Dossier, so that my research findings are preserved in my vault.
 3. As an Obsidian user, I want re-exporting a card whose title has been edited to update the existing file in place, so that my vault does not accumulate duplicate or orphaned markdown files.
 4. As a mobile or remote browser user, I want an "Open in Obsidian" action in the card modal using the `obsidian://new` URI scheme, so that I can instantly clip a card into my local Obsidian vault without configuring a server-side filesystem path.
