@@ -73,6 +73,8 @@ export const fr = {
         coffeeTitle: 'Offrez-moi un café sur Ko-fi',
         github: 'Mécène GitHub',
         githubTitle: 'Sponsorisez sur GitHub',
+        source: 'Code source',
+        sourceTitle: 'Code source AGPL-3.0',
       },
       footer: {
         unsaved: 'Modifications non enregistrées',

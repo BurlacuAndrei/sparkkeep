@@ -72,6 +72,8 @@ export const ptBR = {
         coffeeTitle: 'Pague-me um café no Ko-fi',
         github: 'Patrocinador no GitHub',
         githubTitle: 'Patrocine no GitHub',
+        source: 'Código-fonte',
+        sourceTitle: 'Código-fonte AGPL-3.0',
       },
       footer: {
         unsaved: 'Alterações não salvas',

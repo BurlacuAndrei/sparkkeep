@@ -15,6 +15,7 @@ import {
   Coffee,
   Heart,
   Plus,
+  Code,
 } from 'lucide-react';
 import * as api from '../api';
 import { LLMProfile, Playbook } from '../types';
@@ -708,6 +709,16 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                 >
                   <Heart size={13} color="#ea4aaa" />
                   <span>{t('settings.modal.support.github')}</span>
+                </a>
+                <a
+                  href="https://github.com/BurlacuAndrei/sparkkeep/releases"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="settings-support-link"
+                  title={t('settings.modal.support.sourceTitle')}
+                >
+                  <Code size={13} color="var(--accent-amber, #eab308)" />
+                  <span>{t('settings.modal.support.source')}</span>
                 </a>
               </div>
             </div>

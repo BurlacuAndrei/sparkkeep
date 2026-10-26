@@ -72,6 +72,8 @@ export const ro = {
         coffeeTitle: 'Cumpără-mi o cafea pe Ko-fi',
         github: 'Sponsor GitHub',
         githubTitle: 'Susține proiectul pe GitHub',
+        source: 'Cod sursă',
+        sourceTitle: 'Cod sursă AGPL-3.0',
       },
       footer: {
         unsaved: 'Modificări nesalvate',

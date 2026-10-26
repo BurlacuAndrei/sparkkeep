@@ -195,7 +195,7 @@ docker compose up -d
 Download the latest lightweight (~24MB) binary for Linux, macOS, or Windows from [Releases](https://github.com/BurlacuAndrei/sparkkeep/releases):
 
 ```bash
-# Example for Linux AMD64 (replace VERSION with the latest release, e.g. v0.9.2)
+# Example for Linux AMD64 (replace VERSION with the latest release, e.g. v1.0.0)
 tar -xzf sparkkeep-<VERSION>-linux-amd64.tar.gz
 ./sparkkeep-linux-amd64
 ```
