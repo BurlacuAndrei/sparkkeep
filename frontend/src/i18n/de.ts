@@ -74,6 +74,8 @@ export const de = {
         coffeeTitle: 'Kauf mir einen Kaffee auf Ko-fi',
         github: 'GitHub-Sponsor',
         githubTitle: 'Auf GitHub sponsern',
+        source: 'Quellcode',
+        sourceTitle: 'AGPL-3.0-Quellcode',
       },
       footer: {
         unsaved: 'Ungespeicherte Änderungen',

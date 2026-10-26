@@ -7,13 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-26
+
+### Changed
+- Relicensed from MIT to AGPL-3.0, with a commercial dual-license option for
+  organizations that cannot meet the AGPL terms.
+- Session cookies now expire after 30 days instead of 365 (user-visible: you
+  will need to sign in again sooner).
+- CI Go toolchain pinned to 1.26.10 to address the crypto/x509 advisory.
+- README now compares Sparkkeep Cloud with self-hosted deployment and includes
+  a library export and migration guide.
+
 ### Security
 - Harden authentication: login throttling, opaque HttpOnly session cookies
   (no credential in query strings), and the Secure cookie flag behind TLS.
-
-### Changed
-- Session cookies now expire after 30 days instead of 365 (user-visible: you
-  will need to sign in again sooner).
+- Bump vite to 8.3.5 and undici to 8.12.3 for security fixes.
 
 ## [0.9.2] - 2026-10-24
 

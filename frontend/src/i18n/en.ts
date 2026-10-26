@@ -68,6 +68,8 @@ export const en = {
         coffeeTitle: 'Buy me a coffee on Ko-fi',
         github: 'GitHub Sponsor',
         githubTitle: 'Sponsor on GitHub',
+        source: 'Source code',
+        sourceTitle: 'AGPL-3.0 source code',
       },
       footer: {
         unsaved: 'Unsaved changes',
