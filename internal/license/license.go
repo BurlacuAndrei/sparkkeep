@@ -1,8 +1,8 @@
-// Package license reports Sparkkeep's license status. Sparkkeep is MIT
+// Package license reports Sparkkeep's license status. Sparkkeep is AGPL-3.0
 // licensed with every feature included: there are no tiers, keys or gates.
 package license
 
-// TierCommunity is Sparkkeep's single license tier: MIT, everything included.
+// TierCommunity is Sparkkeep's single license tier: AGPL-3.0, everything included.
 const TierCommunity = "community"
 
 // LicenseStatus is the response shape of GET /api/v1/license/status.
@@ -23,7 +23,7 @@ var features = []string{
 	"deep_research_v2",
 }
 
-// Status reports the community/MIT status: every feature included, always
+// Status reports the community/AGPL-3.0 status: every feature included, always
 // valid.
 func Status() LicenseStatus {
 	return LicenseStatus{

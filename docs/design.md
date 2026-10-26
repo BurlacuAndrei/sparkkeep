@@ -11,7 +11,7 @@
 - **Embedded Web Application:** Modern React 19 + Vite + TypeScript frontend compiled and embedded directly into the Go executable via `//go:embed`.
 - **Bring Your Own Keys (BYOK):** Seamless integration with any OpenAI-compatible endpoint (OpenAI, DeepSeek, local Ollama, vLLM, LM Studio) without vendor lock-in.
 - **Channel Independence:** Multi-channel hub supports Telegram, OpenClaw (WhatsApp, Signal, iMessage, Matrix), Discord, Slack, and Webhooks with full provenance tracking.
-- **100% Permissive Open Source (MIT):** All capture, analysis, search, kanban, research playbooks, obsidian sync, and webhook automations are fully open-source and unrestricted under the MIT License.
+- **100% Open Source (AGPL-3.0):** All capture, analysis, search, kanban, research playbooks, obsidian sync, and webhook automations are fully open-source under the AGPL-3.0 License.
 
 ---
 
@@ -63,7 +63,7 @@ internal/analyze/            OpenAI-compatible LLM client, prompt templates, mod
 internal/research/           playbook step execution engine, search, synthesizer, reporter
 internal/obsidian/           local Obsidian note export and synchronization
 internal/webhook/            outbound HMAC-signed webhook dispatcher
-internal/license/            MIT status provider (all features; no gating)
+internal/license/            AGPL-3.0 status provider (all features; no gating)
 internal/store/              modular SQLite repository, migrations runner, FTS5 sync triggers
 internal/web/                domain HTTP handlers, auth middleware, embedded static file server
 frontend/                    React 19 + TypeScript + Vite SPA, CSS design tokens, Vitest harness
