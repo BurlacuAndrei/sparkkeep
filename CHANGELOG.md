@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- README rewritten as a short product pitch: quick start first, features
+  condensed, Sparkkeep Cloud reduced to one honest paragraph.
+- Configuration, operations (backup/restore, upgrade/rollback, export), and
+  localization guides moved to `docs/configuration.md`, `docs/operations.md`,
+  and `docs/localization.md`.
+
 ## [1.0.0] - 2026-10-26
 
 ### Changed
