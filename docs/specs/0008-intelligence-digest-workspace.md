@@ -2,7 +2,7 @@
 
 **Triage Label:** `ready-for-agent`  
 **Status:** Ready for Ticket Breakdown  
-**Related Documents:** [GLOSSARY.md](file:///home/capitanfg/media-server/nas/sparkkeep/GLOSSARY.md), [CODING_STANDARDS.md](file:///home/capitanfg/media-server/nas/sparkkeep/CODING_STANDARDS.md)
+**Related Documents:** [GLOSSARY.md](GLOSSARY.md), [CODING_STANDARDS.md](CODING_STANDARDS.md)
 
 ---
 
@@ -162,4 +162,4 @@ Transform the trimmed Digest page into a full-screen, widescreen **Intelligence 
 
 ## Further Notes
 
-- Reuse the existing [`BoardInspector`](file:///home/capitanfg/media-server/nas/sparkkeep/frontend/src/components/board/BoardInspector.tsx) component directly inside [`DigestView.tsx`](file:///home/capitanfg/media-server/nas/sparkkeep/frontend/src/components/DigestView.tsx) so card inspection, inline checklist toggling, and dossier reading share a single canonical implementation across both full-screen workspaces.
+- Reuse the existing [`BoardInspector`](frontend/src/components/board/BoardInspector.tsx) component directly inside [`DigestView.tsx`](frontend/src/components/DigestView.tsx) so card inspection, inline checklist toggling, and dossier reading share a single canonical implementation across both full-screen workspaces.

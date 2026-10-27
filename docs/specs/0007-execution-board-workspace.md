@@ -2,7 +2,7 @@
 
 **Triage Label:** `ready-for-agent`  
 **Status:** Ready for Ticket Breakdown  
-**Related Documents:** [GLOSSARY.md](file:///home/capitanfg/media-server/nas/sparkkeep/GLOSSARY.md), [CODING_STANDARDS.md](file:///home/capitanfg/media-server/nas/sparkkeep/CODING_STANDARDS.md)
+**Related Documents:** [GLOSSARY.md](GLOSSARY.md), [CODING_STANDARDS.md](CODING_STANDARDS.md)
 
 ---
 
@@ -151,5 +151,5 @@ Transform the static 3-column Kanban page into a first-class, widescreen **Execu
 
 ## Further Notes
 
-- Canonical domain terminology (**Execution Board**, **Board Inspector**, **Execution Swimlanes**, **Execution Pulse**, **Focus Spotlight**, **Inline Action Checklist**) is recorded in [`GLOSSARY.md`](file:///home/capitanfg/media-server/nas/sparkkeep/GLOSSARY.md).
-- Every frontend change must synchronize `internal/web/dist` via `npm run build` and pass `make check` per [`AGENTS.md`](file:///home/capitanfg/media-server/nas/sparkkeep/AGENTS.md) and [`CODING_STANDARDS.md`](file:///home/capitanfg/media-server/nas/sparkkeep/CODING_STANDARDS.md).
+- Canonical domain terminology (**Execution Board**, **Board Inspector**, **Execution Swimlanes**, **Execution Pulse**, **Focus Spotlight**, **Inline Action Checklist**) is recorded in [`GLOSSARY.md`](GLOSSARY.md).
+- Every frontend change must synchronize `internal/web/dist` via `npm run build` and pass `make check` per [`AGENTS.md`](AGENTS.md) and [`CODING_STANDARDS.md`](CODING_STANDARDS.md).

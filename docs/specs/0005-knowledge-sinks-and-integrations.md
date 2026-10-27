@@ -47,7 +47,7 @@ Whenever a card is manually exported, promoted during triage (`doing` or `done`)
 4. **Resilient Notion Block Chunker:** A dedicated Markdown-to-Notion parser converts Markdown into native Notion blocks, adhering strictly to Notion's ≤2,000 characters per block limit and batching requests in chunks of ≤100 blocks.
 5. **Joplin Dual-Mode Support:** Supports both headless Self-Hosted Joplin Server (`/api/sessions` + `/api/items/root:/...:/content` raw item push) and Joplin Desktop Clipper API (`127.0.0.1:41184` + token).
 6. **Token-Authenticated Outbox RSS:** Emits standard RSS 2.0 XML with full HTML-rendered synthesis and Research Dossier in `<content:encoded>`, authenticated via a constant-time validated query parameter (`?token=...`).
-7. **Modular Frontend Settings & Modal UI:** Sinks and client intents are managed under [`IntegrationsTab.tsx`](file:///home/capitanfg/media-server/nas/sparkkeep/frontend/src/components/settings/IntegrationsTab.tsx), and conditionally surfaced in [`CardHeaderActions.tsx`](file:///home/capitanfg/media-server/nas/sparkkeep/frontend/src/components/card-modal/CardHeaderActions.tsx) with toast status feedback.
+7. **Modular Frontend Settings & Modal UI:** Sinks and client intents are managed under [`IntegrationsTab.tsx`](frontend/src/components/settings/IntegrationsTab.tsx), and conditionally surfaced in [`CardHeaderActions.tsx`](frontend/src/components/card-modal/CardHeaderActions.tsx) with toast status feedback.
 
 ## Testing Decisions
 
@@ -67,6 +67,6 @@ Whenever a card is manually exported, promoted during triage (`doing` or `done`)
 
 ## Further Notes
 
-- All changes adhere strictly to [`CODING_STANDARDS.md`](file:///home/capitanfg/media-server/nas/sparkkeep/CODING_STANDARDS.md) (zero paywalls, core orchestration, Vitest act cleanliness, `make check` passing).
-- Architecture Decision Record is recorded at [`docs/adr/0005-one-way-stateless-knowledge-sinks.md`](file:///home/capitanfg/media-server/nas/sparkkeep/docs/adr/0005-one-way-stateless-knowledge-sinks.md).
-- Ubiquitous language is recorded in [`GLOSSARY.md`](file:///home/capitanfg/media-server/nas/sparkkeep/GLOSSARY.md).
+- All changes adhere strictly to [`CODING_STANDARDS.md`](CODING_STANDARDS.md) (zero paywalls, core orchestration, Vitest act cleanliness, `make check` passing).
+- Architecture Decision Record is recorded at [`docs/adr/0005-one-way-stateless-knowledge-sinks.md`](docs/adr/0005-one-way-stateless-knowledge-sinks.md).
+- Ubiquitous language is recorded in [`GLOSSARY.md`](GLOSSARY.md).

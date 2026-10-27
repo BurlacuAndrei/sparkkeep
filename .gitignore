@@ -11,3 +11,5 @@ docker-compose.override.yml
 data/
 .opencode/
 .superpowers/
+# Local planning scratch
+.scratch/
