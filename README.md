@@ -96,7 +96,7 @@ make build
 
 ### Rather not run it yourself?
 
-[**Sparkkeep Cloud**](https://github.com/BurlacuAndrei/sparkkeep/issues/new?template=cloud_and_commercial.md) is a managed hosting option for people who want the same application without maintaining a server. It runs this exact AGPL-3.0 build with no feature gating — the self-hosted edition is never deprecated or held back. [Request early access or ask about a commercial license](https://github.com/BurlacuAndrei/sparkkeep/issues/new?template=cloud_and_commercial.md).
+[**Sparkkeep Cloud**](https://github.com/BurlacuAndrei/sparkkeep/issues/new?template=cloud_and_commercial.md) is an upcoming managed cloud service offering the Sparkkeep workflow with multi-user accounts, managed AI/search infrastructure, and zero server or API-key maintenance. The self-hosted edition remains complete and never held back. [Request early access or ask about a commercial license](https://github.com/BurlacuAndrei/sparkkeep/issues/new?template=cloud_and_commercial.md).
 
 ## What you get
 

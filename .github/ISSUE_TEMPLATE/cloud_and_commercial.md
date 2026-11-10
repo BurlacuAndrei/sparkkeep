@@ -7,7 +7,7 @@ assignees: ''
 ---
 
 ### Inquiry Type
-- [ ] **Sparkkeep Cloud Early Access** (managed single-tenant hosting, zero server maintenance)
+- [ ] **Sparkkeep Cloud Early Access** (managed cloud service with user accounts & managed infrastructure, zero server maintenance)
 - [ ] **Commercial License** (closed-source or SaaS distribution outside AGPL-3.0 obligations)
 - [ ] **Sponsorship / Priority Integration Request**
 

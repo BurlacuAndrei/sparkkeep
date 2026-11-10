@@ -68,3 +68,7 @@ This command runs:
 7. `go test -race ./...` (Runs all Go unit, integration, and concurrency tests with race detector enabled)
 
 Ensure all checks pass with zero errors and zero warnings before opening your PR.
+
+## 📄 Contributor License Grant
+
+By submitting a pull request or contribution to this repository, you agree to grant the project maintainer ([@BurlacuAndrei](https://github.com/BurlacuAndrei)) a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use, modify, sublicense, and distribute your contribution under both the [AGPL-3.0](LICENSE) license and any commercial or managed cloud licenses (including Sparkkeep Cloud).
