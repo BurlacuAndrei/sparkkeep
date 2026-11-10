@@ -47,6 +47,15 @@ func TestSlackNotifyWebhook(t *testing.T) {
 	if !ok || len(blocks) != 3 {
 		t.Fatalf("expected 3 blocks, got %+v", receivedPayload)
 	}
+
+	// Test digest notification
+	err = adapter.Notify(context.Background(), port.Notification{Kind: "digest", Text: "Weekly Slack Digest"})
+	if err != nil {
+		t.Fatalf("Notify digest failed: %v", err)
+	}
+	if receivedPayload["text"] != "Weekly Slack Digest" {
+		t.Errorf("expected text 'Weekly Slack Digest', got %v", receivedPayload["text"])
+	}
 }
 
 func TestSlackNotifyWebhook_EmptyNotesAndSummary(t *testing.T) {

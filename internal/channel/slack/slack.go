@@ -239,7 +239,7 @@ func (a *Adapter) buildBlockPayload(ctx context.Context, n port.Notification) ma
 		}
 		return res
 
-	case "morning_digest":
+	case "morning_digest", "digest":
 		res := map[string]any{
 			"text": n.Text,
 		}

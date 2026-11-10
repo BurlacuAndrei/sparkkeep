@@ -223,7 +223,7 @@ func (a *Adapter) formatNotification(ctx context.Context, n port.Notification) s
 	case "duplicate":
 		fmt.Fprintf(&b, "ℹ️ %s\n", n.Text)
 
-	case "morning_digest":
+	case "morning_digest", "digest":
 		b.WriteString(n.Text)
 
 	default:

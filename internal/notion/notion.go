@@ -135,8 +135,8 @@ func (c *Client) TestConnection(ctx context.Context) (SinkTestResult, error) {
 // Property schema for database provisioning.
 type databaseProperty struct {
 	ID          string         `json:"id,omitempty"`
-	Name        string         `json:"name"`
-	Type        string         `json:"type"`
+	Name        string         `json:"name,omitempty"`
+	Type        string         `json:"type,omitempty"`
 	Number      map[string]any `json:"number,omitempty"`
 	Select      map[string]any `json:"select,omitempty"`
 	MultiSelect map[string]any `json:"multi_select,omitempty"`

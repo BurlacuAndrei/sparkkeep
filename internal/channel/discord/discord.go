@@ -309,7 +309,7 @@ func (a *Adapter) buildMessagePayload(ctx context.Context, n port.Notification) 
 	case "duplicate":
 		return discordMessage{Content: "ℹ️ " + n.Text}
 
-	case "morning_digest":
+	case "morning_digest", "digest":
 		return discordMessage{Content: n.Text}
 
 	default:

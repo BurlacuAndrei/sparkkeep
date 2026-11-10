@@ -788,6 +788,22 @@ func TestNotifyVariants(t *testing.T) {
 	if len(sent) != 1 || !slices.Contains(sent, "Notify Card\nSummary text") {
 		t.Fatalf("unexpected done sent: %v", sent)
 	}
+
+	// 3. Notify digest
+	sent = stubTelegram(t, func() *Adapter {
+		return &Adapter{Token: "tok", OwnerID: 1, Service: &testStubService{Store: newStubStore()}}
+	}, func(a *Adapter) {
+		err := a.Notify(context.Background(), port.Notification{
+			Kind: "digest",
+			Text: "Weekly Intelligence Digest\nSparks: 5",
+		})
+		if err != nil {
+			t.Fatalf("Notify digest: %v", err)
+		}
+	})
+	if len(sent) != 1 || sent[0] != "Weekly Intelligence Digest\nSparks: 5" {
+		t.Fatalf("unexpected digest sent: %v", sent)
+	}
 }
 
 func TestTelegramNotificationCounts(t *testing.T) {

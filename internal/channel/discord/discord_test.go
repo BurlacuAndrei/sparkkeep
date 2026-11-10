@@ -91,6 +91,15 @@ func TestDiscordNotify(t *testing.T) {
 	if buttons[0].Label != "Short" || buttons[0].CustomID != "card:42:commit:short-term" {
 		t.Errorf("unexpected button 0: %+v", buttons[0])
 	}
+
+	// Test digest notification
+	err = adapter.Notify(context.Background(), port.Notification{Kind: "digest", Text: "Weekly Digest Text"})
+	if err != nil {
+		t.Fatalf("Notify digest failed: %v", err)
+	}
+	if receivedMsg.Content != "Weekly Digest Text" {
+		t.Errorf("expected Content 'Weekly Digest Text', got %q", receivedMsg.Content)
+	}
 }
 
 func signRequest(t *testing.T, priv ed25519.PrivateKey, timestamp string, body []byte) (string, string) {

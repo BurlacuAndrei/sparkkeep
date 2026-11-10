@@ -359,17 +359,22 @@ func (c *Client) authenticate(ctx context.Context) error {
 	}
 
 	var result struct {
+		ID    string `json:"id"`
 		Token string `json:"token"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return err
 	}
 
-	if result.Token == "" {
+	sessionToken := result.Token
+	if sessionToken == "" {
+		sessionToken = result.ID
+	}
+	if sessionToken == "" {
 		return errors.New("empty token returned from Joplin server")
 	}
 
-	c.token = result.Token
+	c.token = sessionToken
 	return nil
 }
 

@@ -490,6 +490,22 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 	obsidianVaultPath, _ := a.store.GetSetting(ctx, "obsidian_vault_path")
 	obsidianAutoExport, _ := a.store.GetSetting(ctx, "obsidian_auto_export")
 
+	notionToken, _ := a.store.GetSetting(ctx, "notion_token")
+	notionDBID, _ := a.store.GetSetting(ctx, "notion_database_id")
+	notionAutoExport, _ := a.store.GetSetting(ctx, "notion_auto_export")
+
+	joplinMode, _ := a.store.GetSetting(ctx, "joplin_mode")
+	joplinBaseURL, _ := a.store.GetSetting(ctx, "joplin_base_url")
+	joplinToken, _ := a.store.GetSetting(ctx, "joplin_token")
+	joplinEmail, _ := a.store.GetSetting(ctx, "joplin_email")
+	joplinPassword, _ := a.store.GetSetting(ctx, "joplin_password")
+	joplinAutoExport, _ := a.store.GetSetting(ctx, "joplin_auto_export")
+
+	webhookURL, _ := a.store.GetSetting(ctx, "webhook_url")
+	webhookSecret, _ := a.store.GetSetting(ctx, "webhook_secret")
+	clientIntents, _ := a.store.GetSetting(ctx, "client_intents_enabled")
+	githubRepo, _ := a.store.GetSetting(ctx, "github_repo")
+
 	interfaceLocale, _ := a.store.GetSetting(ctx, "interface_locale")
 	if interfaceLocale == "" || !port.IsValidInterfaceLocale(interfaceLocale) {
 		interfaceLocale = port.DefaultInterfaceLocale
@@ -529,6 +545,19 @@ func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
 			"slack_channel_id":       slackChanID,
 			"obsidian_vault_path":    obsidianVaultPath,
 			"obsidian_auto_export":   obsidianAutoExport == "true",
+			"notion_token":           notionToken,
+			"notion_database_id":     notionDBID,
+			"notion_auto_export":     notionAutoExport == "true",
+			"joplin_mode":            joplinMode,
+			"joplin_base_url":        joplinBaseURL,
+			"joplin_token":           joplinToken,
+			"joplin_email":           joplinEmail,
+			"joplin_password":        joplinPassword,
+			"joplin_auto_export":     joplinAutoExport == "true",
+			"webhook_url":            webhookURL,
+			"webhook_secret":         webhookSecret,
+			"client_intents_enabled": clientIntents,
+			"github_repo":            githubRepo,
 		},
 	})
 }
@@ -562,6 +591,19 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 		SlackChannelID     *string            `json:"slack_channel_id,omitempty"`
 		ObsidianVaultPath  *string            `json:"obsidian_vault_path,omitempty"`
 		ObsidianAutoExport *bool              `json:"obsidian_auto_export,omitempty"`
+		NotionToken        *string            `json:"notion_token,omitempty"`
+		NotionDatabaseID   *string            `json:"notion_database_id,omitempty"`
+		NotionAutoExport   *bool              `json:"notion_auto_export,omitempty"`
+		JoplinMode         *string            `json:"joplin_mode,omitempty"`
+		JoplinBaseURL      *string            `json:"joplin_base_url,omitempty"`
+		JoplinToken        *string            `json:"joplin_token,omitempty"`
+		JoplinEmail        *string            `json:"joplin_email,omitempty"`
+		JoplinPassword     *string            `json:"joplin_password,omitempty"`
+		JoplinAutoExport   *bool              `json:"joplin_auto_export,omitempty"`
+		WebhookURL         *string            `json:"webhook_url,omitempty"`
+		WebhookSecret      *string            `json:"webhook_secret,omitempty"`
+		ClientIntents      *string            `json:"client_intents_enabled,omitempty"`
+		GithubRepo         *string            `json:"github_repo,omitempty"`
 		InterfaceLocale    *string            `json:"interface_locale,omitempty"`
 	}
 	if err := decodeJSON(w, r, &b); err != nil {
@@ -728,6 +770,56 @@ func (a *api) patchSettings(w http.ResponseWriter, r *http.Request) {
 			val = "true"
 		}
 		_ = a.store.SetSetting(ctx, "obsidian_auto_export", val)
+	}
+
+	if b.NotionToken != nil {
+		_ = a.store.SetSetting(ctx, "notion_token", strings.TrimSpace(*b.NotionToken))
+	}
+	if b.NotionDatabaseID != nil {
+		_ = a.store.SetSetting(ctx, "notion_database_id", strings.TrimSpace(*b.NotionDatabaseID))
+	}
+	if b.NotionAutoExport != nil {
+		val := "false"
+		if *b.NotionAutoExport {
+			val = "true"
+		}
+		_ = a.store.SetSetting(ctx, "notion_auto_export", val)
+	}
+
+	if b.JoplinMode != nil {
+		_ = a.store.SetSetting(ctx, "joplin_mode", strings.TrimSpace(*b.JoplinMode))
+	}
+	if b.JoplinBaseURL != nil {
+		_ = a.store.SetSetting(ctx, "joplin_base_url", strings.TrimSpace(*b.JoplinBaseURL))
+	}
+	if b.JoplinToken != nil {
+		_ = a.store.SetSetting(ctx, "joplin_token", strings.TrimSpace(*b.JoplinToken))
+	}
+	if b.JoplinEmail != nil {
+		_ = a.store.SetSetting(ctx, "joplin_email", strings.TrimSpace(*b.JoplinEmail))
+	}
+	if b.JoplinPassword != nil {
+		_ = a.store.SetSetting(ctx, "joplin_password", strings.TrimSpace(*b.JoplinPassword))
+	}
+	if b.JoplinAutoExport != nil {
+		val := "false"
+		if *b.JoplinAutoExport {
+			val = "true"
+		}
+		_ = a.store.SetSetting(ctx, "joplin_auto_export", val)
+	}
+
+	if b.WebhookURL != nil {
+		_ = a.store.SetSetting(ctx, "webhook_url", strings.TrimSpace(*b.WebhookURL))
+	}
+	if b.WebhookSecret != nil {
+		_ = a.store.SetSetting(ctx, "webhook_secret", strings.TrimSpace(*b.WebhookSecret))
+	}
+	if b.ClientIntents != nil {
+		_ = a.store.SetSetting(ctx, "client_intents_enabled", strings.TrimSpace(*b.ClientIntents))
+	}
+	if b.GithubRepo != nil {
+		_ = a.store.SetSetting(ctx, "github_repo", strings.TrimSpace(*b.GithubRepo))
 	}
 
 	channelsChanged := b.TGToken != nil ||

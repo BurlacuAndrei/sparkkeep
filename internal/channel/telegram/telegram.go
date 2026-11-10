@@ -282,7 +282,7 @@ func (a *Adapter) Notify(ctx context.Context, n port.Notification) error {
 		return err
 	case "research_done", "research_failed":
 		return a.sendResearch(ctx, n)
-	case "morning_digest":
+	case "morning_digest", "digest":
 		_, err := a.sendMessage(ctx, n.Text, 0, nil)
 		return err
 	default: // done / retry / hello: plain card summary
