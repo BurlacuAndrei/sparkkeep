@@ -72,8 +72,8 @@ export const ro = {
         coffeeTitle: 'Cumpără-mi o cafea pe Ko-fi',
         github: 'Sponsor GitHub',
         githubTitle: 'Susține proiectul pe GitHub',
-        source: 'Cod sursă',
-        sourceTitle: 'Cod sursă AGPL-3.0',
+        source: 'Stea pe GitHub',
+        sourceTitle: 'Oferă o stea pe GitHub (AGPL-3.0)',
       },
       footer: {
         unsaved: 'Modificări nesalvate',
@@ -612,8 +612,7 @@ export const ro = {
         databasePlaceholder: 'ID de bază de date de 32 de caractere din URL-ul Notion',
         databaseHint: 'Se găsește în URL-ul bazei de date:',
         databaseHintAfter: '— segmentul de 32 de caractere dinaintea',
-        autoExport:
-          'Export automat la modificările cardurilor (necesită sincronizarea din fundal din tichetul 06)',
+        autoExport: 'Export automat la schimbarea statusului și la finalizarea cercetării',
         autoExportHint: 'Când este activ, cardurile noi sau actualizate sunt sincronizate automat în Notion.',
         howTitle: 'Cum funcționează:',
         howProperties:
@@ -671,8 +670,7 @@ export const ro = {
         tokenLabel: 'Token Clipper (mod desktop)',
         tokenHint:
           'Token din Joplin Desktop → Opțiuni → Web Clipper → „Authorization token”. Joplin trebuie să ruleze cu serviciul Web Clipper activat.',
-        autoExport:
-          'Export automat la modificările cardurilor (necesită sincronizarea din fundal din tichetul 06)',
+        autoExport: 'Export automat la schimbarea statusului și la finalizarea cercetării',
         autoExportHint: 'Când este activ, cardurile noi sau actualizate sunt sincronizate automat în Joplin.',
         howTitle: 'Cum funcționează:',
         howNotebook: 'Notele sunt create într-un caiet Sparkkeep (creat automat).',

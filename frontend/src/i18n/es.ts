@@ -73,8 +73,8 @@ export const es = {
         coffeeTitle: 'Invítame a un café en Ko-fi',
         github: 'Patrocina en GitHub',
         githubTitle: 'Patrocina en GitHub',
-        source: 'Código fuente',
-        sourceTitle: 'Código fuente AGPL-3.0',
+        source: 'Estrella en GitHub',
+        sourceTitle: 'Dar una estrella en GitHub (AGPL-3.0)',
       },
       footer: {
         unsaved: 'Cambios sin guardar',
@@ -617,8 +617,7 @@ export const es = {
         databasePlaceholder: 'ID de 32 caracteres de la URL de Notion',
         databaseHint: 'Se encuentra en la URL de la base de datos:',
         databaseHintAfter: '— el segmento de 32 caracteres anterior a',
-        autoExport:
-          'Exportar automáticamente al cambiar tarjetas (requiere la sincronización en segundo plano del ticket 06)',
+        autoExport: 'Exportar automáticamente al cambiar de estado y al completar la investigación',
         autoExportHint:
           'Si está activado, las tarjetas nuevas y actualizadas se sincronizan automáticamente con Notion.',
         howTitle: 'Cómo funciona:',
@@ -679,8 +678,7 @@ export const es = {
         tokenLabel: 'Token del Clipper (modo escritorio)',
         tokenHint:
           'Token de Joplin Desktop → Opciones → Web Clipper → "Authorization token". Joplin debe estar en ejecución con el servicio Web Clipper activado.',
-        autoExport:
-          'Exportar automáticamente al cambiar tarjetas (requiere la sincronización en segundo plano del ticket 06)',
+        autoExport: 'Exportar automáticamente al cambiar de estado y al completar la investigación',
         autoExportHint:
           'Si está activado, las tarjetas nuevas y actualizadas se sincronizan automáticamente con Joplin.',
         howTitle: 'Cómo funciona:',

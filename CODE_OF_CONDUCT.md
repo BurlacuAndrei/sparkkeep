@@ -59,8 +59,8 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders at security@sparkkeep.dev or via GitHub Private
-Vulnerability/Advisory reporting. All complaints will be reviewed and
+reported to the project maintainer via [GitHub Security Advisories](https://github.com/BurlacuAndrei/sparkkeep/security/advisories/new)
+or by contacting [@BurlacuAndrei](https://github.com/BurlacuAndrei) directly. All complaints will be reviewed and
 investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the

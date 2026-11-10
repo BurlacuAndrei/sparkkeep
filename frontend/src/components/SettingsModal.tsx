@@ -711,7 +711,7 @@ export function SettingsModal({ onClose, showToast, initialTab }: SettingsModalP
                   <span>{t('settings.modal.support.github')}</span>
                 </a>
                 <a
-                  href="https://github.com/BurlacuAndrei/sparkkeep/releases"
+                  href="https://github.com/BurlacuAndrei/sparkkeep"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="settings-support-link"

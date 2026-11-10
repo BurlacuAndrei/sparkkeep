@@ -74,8 +74,8 @@ export const de = {
         coffeeTitle: 'Kauf mir einen Kaffee auf Ko-fi',
         github: 'GitHub-Sponsor',
         githubTitle: 'Auf GitHub sponsern',
-        source: 'Quellcode',
-        sourceTitle: 'AGPL-3.0-Quellcode',
+        source: 'Stern auf GitHub',
+        sourceTitle: 'Sparkkeep auf GitHub markieren (AGPL-3.0)',
       },
       footer: {
         unsaved: 'Ungespeicherte Änderungen',
@@ -616,8 +616,7 @@ export const de = {
         databasePlaceholder: '32-stellige Datenbank-ID aus der Notion-URL',
         databaseHint: 'Zu finden in der Datenbank-URL:',
         databaseHintAfter: '— das 32-stellige Segment vor',
-        autoExport:
-          'Automatischer Export bei Kartenänderungen (erfordert Hintergrund-Sync aus Ticket 06)',
+        autoExport: 'Automatischer Export bei Statuswechsel & abgeschlossener Recherche',
         autoExportHint:
           'Wenn aktiviert, werden neue und geänderte Karten automatisch mit Notion synchronisiert.',
         howTitle: 'So funktioniert es:',
@@ -677,8 +676,7 @@ export const de = {
         tokenLabel: 'Clipper-Token (Desktop-Modus)',
         tokenHint:
           'Token aus Joplin Desktop → Optionen → Web Clipper → „Authorization token“. Joplin muss mit aktiviertem Web-Clipper-Dienst laufen.',
-        autoExport:
-          'Automatischer Export bei Kartenänderungen (erfordert Hintergrund-Sync aus Ticket 06)',
+        autoExport: 'Automatischer Export bei Statuswechsel & abgeschlossener Recherche',
         autoExportHint:
           'Wenn aktiviert, werden neue und geänderte Karten automatisch mit Joplin synchronisiert.',
         howTitle: 'So funktioniert es:',

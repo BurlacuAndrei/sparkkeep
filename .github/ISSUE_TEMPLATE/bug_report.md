@@ -22,7 +22,7 @@ A clear and concise description of what you expected to happen.
 If applicable, add screenshots or Docker log snippets (`docker compose logs sparkkeep`).
 
 ### Environment
-- **Sparkkeep Version:** (e.g. `1.0.0` or git commit)
+- **Sparkkeep Version:** (e.g. `0.1.0` or git commit)
 - **Deployment Method:** [Docker / Standalone Binary / From Source]
 - **OS:** [Linux / macOS / Windows]
 - **Browser:** [Chrome / Firefox / Safari]

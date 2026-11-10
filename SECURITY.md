@@ -2,16 +2,14 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.9.x   | :white_check_mark: |
-| < 0.9   | :x:                |
+| 0.1.x   | :white_check_mark: |
 
 ## Reporting Security Issues
 
 We take the security of Sparkkeep seriously. If you discover a security vulnerability, please do **not** open a public issue.
 
-Instead, please report it via one of these private channels:
-- **Email:** Send details to **`security@sparkkeep.dev`**
-- **GitHub Private Vulnerability Reporting:** Navigate to the **Security** tab of this repository and click **Report a vulnerability**.
+Instead, please report it privately via:
+- **GitHub Private Vulnerability Reporting:** Navigate to the [**Security Advisories**](https://github.com/BurlacuAndrei/sparkkeep/security/advisories/new) tab of this repository and click **Report a vulnerability**.
 
 ### What to include in your report:
 - A description of the vulnerability and its potential impact.

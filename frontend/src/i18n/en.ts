@@ -68,8 +68,8 @@ export const en = {
         coffeeTitle: 'Buy me a coffee on Ko-fi',
         github: 'GitHub Sponsor',
         githubTitle: 'Sponsor on GitHub',
-        source: 'Source code',
-        sourceTitle: 'AGPL-3.0 source code',
+        source: 'Star on GitHub',
+        sourceTitle: 'Star Sparkkeep on GitHub (AGPL-3.0)',
       },
       footer: {
         unsaved: 'Unsaved changes',
@@ -605,7 +605,7 @@ export const en = {
         databasePlaceholder: '32-char database ID from Notion URL',
         databaseHint: 'Found in the database URL:',
         databaseHintAfter: '— the 32-char segment before',
-        autoExport: 'Auto-export on card changes (requires Ticket 06 background sync)',
+        autoExport: 'Auto-export on status change & research completion',
         autoExportHint: 'When enabled, new/updated cards are automatically synced to Notion.',
         howTitle: 'How it works:',
         howProperties:
@@ -661,7 +661,7 @@ export const en = {
         tokenLabel: 'Clipper Token (Desktop Mode)',
         tokenHint:
           'Token from Joplin Desktop → Options → Web Clipper → "Authorization token". Joplin must be running with the Web Clipper service enabled.',
-        autoExport: 'Auto-export on card changes (requires Ticket 06 background sync)',
+        autoExport: 'Auto-export on status change & research completion',
         autoExportHint: 'When enabled, new/updated cards are automatically synced to Joplin.',
         howTitle: 'How it works:',
         howNotebook: 'Notes are created in a Sparkkeep notebook (auto-created).',

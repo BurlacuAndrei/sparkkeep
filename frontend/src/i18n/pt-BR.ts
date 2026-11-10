@@ -72,8 +72,8 @@ export const ptBR = {
         coffeeTitle: 'Pague-me um café no Ko-fi',
         github: 'Patrocinador no GitHub',
         githubTitle: 'Patrocine no GitHub',
-        source: 'Código-fonte',
-        sourceTitle: 'Código-fonte AGPL-3.0',
+        source: 'Estrela no GitHub',
+        sourceTitle: 'Dar uma estrela no GitHub (AGPL-3.0)',
       },
       footer: {
         unsaved: 'Alterações não salvas',
@@ -612,7 +612,7 @@ export const ptBR = {
         databasePlaceholder: 'ID de 32 caracteres da URL do Notion',
         databaseHint: 'Encontrado na URL do banco de dados:',
         databaseHintAfter: '— o segmento de 32 caracteres antes de',
-        autoExport: 'Exportar automaticamente em mudanças de card (requer sincronização em segundo plano do Ticket 06)',
+        autoExport: 'Exportar automaticamente em mudanças de status e conclusão de pesquisa',
         autoExportHint: 'Quando ativado, cards novos e atualizados são sincronizados automaticamente com o Notion.',
         howTitle: 'Como funciona:',
         howProperties:
@@ -668,7 +668,7 @@ export const ptBR = {
         tokenLabel: 'Token do Clipper (modo desktop)',
         tokenHint:
           'Token em Joplin Desktop → Options → Web Clipper → "Authorization token". O Joplin precisa estar em execução com o serviço Web Clipper ativado.',
-        autoExport: 'Exportar automaticamente em mudanças de card (requer sincronização em segundo plano do Ticket 06)',
+        autoExport: 'Exportar automaticamente em mudanças de status e conclusão de pesquisa',
         autoExportHint: 'Quando ativado, cards novos e atualizados são sincronizados automaticamente com o Joplin.',
         howTitle: 'Como funciona:',
         howNotebook: 'As notas são criadas em um caderno Sparkkeep (criado automaticamente).',

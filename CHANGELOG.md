@@ -7,51 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- README rewritten as a short product pitch: quick start first, features
-  condensed, Sparkkeep Cloud reduced to one honest paragraph.
-- Configuration, operations (backup/restore, upgrade/rollback, export), and
-  localization guides moved to `docs/configuration.md`, `docs/operations.md`,
-  and `docs/localization.md`.
+## [0.1.0] - 2026-11-10
 
-## [1.0.0] - 2026-10-26
-
-### Changed
-- Relicensed from MIT to AGPL-3.0, with a commercial dual-license option for
-  organizations that cannot meet the AGPL terms.
-- Session cookies now expire after 30 days instead of 365 (user-visible: you
-  will need to sign in again sooner).
-- CI Go toolchain pinned to 1.26.10 to address the crypto/x509 advisory.
-- README now compares Sparkkeep Cloud with self-hosted deployment and includes
-  a library export and migration guide.
-
-### Security
-- Harden authentication: login throttling, opaque HttpOnly session cookies
-  (no credential in query strings), and the Secure cookie flag behind TLS.
-- Bump vite to 8.3.5 and undici to 8.12.3 for security fixes.
-
-## [0.9.2] - 2026-10-24
+Initial public release of Sparkkeep under AGPL-3.0.
 
 ### Added
-- Spanish, Brazilian Portuguese, French, and German interface languages. All
-  six locales (English, Romanian, Spanish, Portuguese (Brasil), French, German)
-  now ship complete catalogs.
-- Per-locale plural rules: Romanian one/few/other, Portuguese (Brasil) and
-  French one for counts up to 1 including 0, matching `Intl.PluralRules`.
-- Regional browser-language detection: `pt` → `pt-BR`, `de-AT` → `de`,
-  `es-419` → `es`, `fr-CA` → `fr`.
-- Plural-aware counts across scheduler, triage, and card age surfaces.
-
-## [0.9.1] - 2026-10-23
-
-### Added
-- Multilanguage UI: English and Romanian, with a language switcher in
-  Settings → Appearance and browser-language detection on first run.
-- Localized app shell, cards, research, digest, playbooks, and settings
-  surfaces, with plural-aware counts and `Intl` date/number formatting.
-
-## [0.9.0] - 2026-10-14
-
-First release: self-hosted capture and action engine with multi-channel
-ingestion, LLM triage, kanban/triage-deck UI, deterministic research playbooks,
-and embedded SQLite storage.
+- **Self-hosted capture & action engine**: pure-Go SQLite (`modernc.org/sqlite`)
+  with WAL mode and FTS5 full-text search, embedded React 19 UI (`//go:embed`),
+  and multi-arch Docker / standalone binaries.
+- **Omni-channel ingestion & interactive chat triage**: two-way Telegram bot,
+  Discord embeds and ActionRows, Slack Block Kit, universal inbound webhook,
+  Chrome/Firefox Web Clipper extension, and URL-less Subject Cards.
+- **Privacy-first BYOK AI pipeline**: noise gate, structured card synthesis
+  (TL;DR, value proposition, actionable checklist), and per-role routing across
+  Ollama, LM Studio, vLLM, OpenAI, DeepSeek, or any OpenAI-compatible endpoint.
+- **Execution Board & Swipeable Triage Deck**: keyboard-driven backlog triage,
+  Focus Spotlight, 7-day Execution Pulse, horizon/taxonomy swimlanes, and a
+  docked board inspector.
+- **Deterministic Deep Research & Playbook Studio**: bounded research pipelines
+  with SearXNG web search, 5-Pillar Research Health Linter, cost estimator,
+  zero-cost dry runs, cited dossiers, and Pursue / Watch / Skip verdicts.
+- **Intelligence Digest**: 7/14/30-day accomplishment telemetry, period wins
+  showcase, stale bottleneck resolution, and executive retrospective synthesis.
+- **Knowledge Sinks & Outbox**: idempotent one-way sync and lifecycle auto-export
+  to Obsidian, Notion, and Joplin, plus authenticated RSS outbox, Markdown/ZIP
+  exports, and client intents for Logseq, Things 3, Todoist, and GitHub.
+- **Operations & Security**: login throttling, opaque `HttpOnly` 30-day session
+  cookies, `/livez`, `/readyz`, `/metrics`, and online `backup` / `restore` CLI.
+- **Six UI languages**: complete localized catalogs and plural rules for English,
+  Romanian, Spanish, Brazilian Portuguese, French, and German.

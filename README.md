@@ -19,6 +19,7 @@ One binary. One SQLite file. No Postgres, no Redis, no cloud account.
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0" /></a>
   <br />
   <!-- Community & Support -->
+  <a href="https://github.com/BurlacuAndrei/sparkkeep/stargazers"><img src="https://img.shields.io/github/stars/BurlacuAndrei/sparkkeep?style=flat&logo=github&color=eab308" alt="GitHub Stars" /></a>
   <a href="https://github.com/BurlacuAndrei/sparkkeep/issues"><img src="https://img.shields.io/badge/Community-Issues-blueviolet?logo=github" alt="Issues" /></a>
   <a href="https://ko-fi.com/andreiburlacu"><img src="https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-ff5e5b?logo=ko-fi&logoColor=white" alt="Ko-fi" /></a>
   <a href="https://github.com/sponsors/BurlacuAndrei"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=github-sponsors&logoColor=white" alt="GitHub Sponsor" /></a>
@@ -95,7 +96,7 @@ make build
 
 ### Rather not run it yourself?
 
-[**Sparkkeep Cloud**](https://github.com/BurlacuAndrei/sparkkeep/issues) is a managed hosting option for people who want the same application without maintaining a server. It runs this exact AGPL-3.0 build with no feature gating — the self-hosted edition is never deprecated or held back. Cloud has no public signup or price list yet; open an issue if you want to be told when it opens, or to ask about a commercial license.
+[**Sparkkeep Cloud**](https://github.com/BurlacuAndrei/sparkkeep/issues/new?template=cloud_and_commercial.md) is a managed hosting option for people who want the same application without maintaining a server. It runs this exact AGPL-3.0 build with no feature gating — the self-hosted edition is never deprecated or held back. [Request early access or ask about a commercial license](https://github.com/BurlacuAndrei/sparkkeep/issues/new?template=cloud_and_commercial.md).
 
 ## What you get
 
@@ -156,9 +157,15 @@ Go 1.26 standard-library HTTP, pure-Go SQLite (`modernc.org/sqlite`, no CGO), Re
 
 Sparkkeep is free and open source under [AGPL-3.0](LICENSE). If it earns a place in your workflow:
 
-- ☕ [Buy me a coffee on Ko-fi](https://ko-fi.com/andreiburlacu)
-- 💖 [Sponsor on GitHub](https://github.com/sponsors/BurlacuAndrei)
+- ⭐ [**Star the repository on GitHub**](https://github.com/BurlacuAndrei/sparkkeep) — the fastest zero-cost way to help others discover Sparkkeep
+- ☕ [**Buy me a coffee on Ko-fi**](https://ko-fi.com/andreiburlacu)
+- 💖 [**Sponsor on GitHub**](https://github.com/sponsors/BurlacuAndrei)
+
+**Supporter perks:**
+- **README Supporter Wall** — your name, handle, or company badge listed in the repository
+- **Priority Triage** — priority review on feature requests, bug reports, and new knowledge-sink integrations
+- **Sparkkeep Cloud Early Access** — first-wave invite and founding credit when managed hosting opens
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
-A commercial license is available for closed-source or SaaS distribution where AGPL obligations cannot be met; [open an issue](https://github.com/BurlacuAndrei/sparkkeep/issues) for terms. Self-hosting and internal use need no license key, now or later.
+A commercial license is available for closed-source or SaaS distribution where AGPL obligations cannot be met; [open a commercial inquiry](https://github.com/BurlacuAndrei/sparkkeep/issues/new?template=cloud_and_commercial.md) for terms. Self-hosting and internal use need no license key, now or later.

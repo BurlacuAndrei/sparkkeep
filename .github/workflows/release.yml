@@ -161,4 +161,4 @@ jobs:
             release-assets/checksums.txt
           generate_release_notes: true
           draft: false
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
