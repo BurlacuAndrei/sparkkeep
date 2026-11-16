@@ -26,7 +26,7 @@ One binary. One SQLite file. No Postgres, no Redis, no cloud account.
 </p>
 
 <p align="center">
-  <img src="docs/assets/dashboard-hero.png" alt="Sparkkeep Execution Board with Focus Spotlight and Execution Pulse" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+  <img src="docs/assets/demo.gif" alt="Sparkkeep Interactive UI Walkthrough" width="100%" style="border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
 </p>
 
 ## Bookmark managers are graveyards
